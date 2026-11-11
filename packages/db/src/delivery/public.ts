@@ -1,5 +1,9 @@
 import { failure } from "../shared/failures.js";
-import type { PublicContentEntry, PublicGlobalContent } from "@lacecms/application";
+import type {
+  PublicContentEntry,
+  PublicGlobalContent,
+  PublicRecordContent,
+} from "@lacecms/application";
 import type { ContentEntry, MediaMetadata } from "@lacecms/domain";
 import type { EntryRow } from "../content/entries.js";
 import { MEDIA_COLUMNS_SQL, mediaMetadata } from "../media/catalog.js";
@@ -26,6 +30,22 @@ export const PUBLIC_ROUTE_SQL = `select e.id, e.model_key, e.draft_snapshot_id, 
    from published_routes r
    join content_entries e on e.id = r.entry_id and e.published_snapshot_id = r.snapshot_id
    join content_snapshots s on s.id = r.snapshot_id`;
+
+/**
+ * Whether published collection entry `e` has no published route: the stored
+ * invariant that identifies an entry of a route-less collection, because a
+ * routed entry's route is written atomically with its publication.
+ */
+export const ROUTE_LESS_PUBLISHED_SQL = `not exists (select 1 from published_routes rr
+                  where rr.entry_id = e.id and rr.snapshot_id = e.published_snapshot_id)`;
+
+/** Published entries of route-less collections; reads no route. */
+export const PUBLIC_RECORD_SQL = `select e.id, e.model_key, e.draft_snapshot_id, e.published_snapshot_id,
+        s.created_at as published_created_at, ${PUBLIC_INTERNAL_LINKS_JSON_SQL} as internal_links_json
+   from content_models m
+   cross join content_entries e on e.model_key = m.key
+   join content_snapshots s on s.id = e.published_snapshot_id
+  where m.kind = 'collection' and ${ROUTE_LESS_PUBLISHED_SQL}`;
 
 /** Published route-less globals; never joins `published_routes`. */
 export const PUBLIC_GLOBAL_SQL = `select e.id, e.model_key, e.draft_snapshot_id, e.published_snapshot_id,
@@ -99,6 +119,21 @@ export function publicGlobalContent(
 ): PublicGlobalContent {
   const entry = entries.get(row.id);
   if (entry === undefined) failure("Published global references an unreadable entry.");
+  return Object.freeze({
+    entry: publicEntry(entry),
+    internalLinks: Object.freeze(JSON.parse(row.internal_links_json)),
+    media: Object.freeze([...(media.get(row.published_snapshot_id ?? "") ?? [])]),
+  });
+}
+
+/** Projects a published route-less collection row into a public record with its media. */
+export function publicRecordContent(
+  row: PublicGlobalRow,
+  entries: ReadonlyMap<string, ContentEntry>,
+  media: ReadonlyMap<string, readonly MediaMetadata[]>,
+): PublicRecordContent {
+  const entry = entries.get(row.id);
+  if (entry === undefined) failure("Published record references an unreadable entry.");
   return Object.freeze({
     entry: publicEntry(entry),
     internalLinks: Object.freeze(JSON.parse(row.internal_links_json)),

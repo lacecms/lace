@@ -55,7 +55,9 @@ export function contentModelRoute(model: NormalizedContentModel): ContentModelRo
     case "page":
       return { key, kind: "page", path: model.path };
     case "collection":
-      return { key, kind: "collection", route: model.route };
+      return model.route === undefined
+        ? { key, kind: "collection" }
+        : { key, kind: "collection", route: model.route };
     case "global":
       return { key, kind: "global" };
     default:
@@ -114,7 +116,9 @@ export function normalizeDraftCandidate(
       ...(draft.slug === undefined ? {} : { slug: draft.slug }),
       title: systemTitle(model, draft.title),
     },
-    model,
+    model.kind === "collection" && model.route === undefined
+      ? { ...model, routeLess: true }
+      : model,
     registry,
     mode,
   );

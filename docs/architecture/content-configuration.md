@@ -31,15 +31,17 @@ Pages, collection entries and globals share storage, snapshot, block,
 validation and publication behavior. Model keys are unique across all three
 kinds, and the kind is part of a model's structure: sync refuses a change
 between any two kinds, also through `renamedFrom`
-([content-domain-rules], [configuration-synchronization]).
+([content-domain-rules], [configuration-synchronization]). A collection
+without `route` ([ADR 0031](../adr/0031-route-less-collections.md)) has no slug,
+published route, `seo` or `entry:` link targets; its entries are export `records`.
 
 ### System fields and routes
 
 - `title` is required for every entry, also in drafts, because it is
   relational and needed by entry lists. A global's title is system-owned:
   saving a global stores the model label (or key) ([content-use-cases]).
-- `slug` is `NULL` for pages and globals, and a global rejects a submitted
-  slug. A collection draft may lack it; publication requires it.
+- `slug` is `NULL` for pages, globals and route-less entries, which reject a
+  submitted slug. A routed collection draft may lack it; publication needs it.
 - The admin may suggest a normalized slug, but the API validates submitted
   values rather than silently rewriting them.
 
@@ -299,7 +301,7 @@ with the configured structure and classifies every difference
 | validated | tighten a constraint, optional to required | apply only if every stored value satisfies it |
 | destructive | remove or rename a field, disallow a block type, disable SEO | apply only when no snapshot holds the data, or with an explicit hint |
 | migration | change an allowed block's definition | apply when no snapshot holds the block type; otherwise needs a block version increase and migrations |
-| breaking | change a field type, path or route | refuse (path or route: while published) |
+| breaking | change a field type, path or route (also adding or removing one) | refuse (path or route: while published; route removal also while snapshots hold slugs or incoming links) |
 
 A required field added without a default is accepted: published snapshots stay
 valid as published, and each entry's next publication enforces it.

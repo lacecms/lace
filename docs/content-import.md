@@ -19,6 +19,9 @@ are [ADR 0016](adr/0016-import-credentials.md) (import tokens) and
 - "Unchanged" uses the shared `normalizeDraftCandidate`, so the CLI and the
   server must be the same release. The server's model and block versions must
   equal the local `lace.config.ts`.
+- Entries of a collection without a route carry no `slug` and are matched only
+  through the state-file mapping: without one they are planned as `create`,
+  so importing them again with a new state file creates duplicates.
 - The token comes only from `LACE_IMPORT_TOKEN` and never appears in output,
   the state file or diagnostics.
 - Conditional fields need no import-specific handling: `--validate-only` and

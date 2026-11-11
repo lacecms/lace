@@ -5,6 +5,7 @@ import type { CompleteDraftInput, ContentUseCaseDependencies } from "./use-case-
 import { normalizeDraftCandidate } from "./draft-normalization.js";
 import type { NormalizedDraft } from "./draft-normalization.js";
 import { internalLinkIssuePath } from "./internal-links.js";
+import { markRouteLessTargets, routeLessModelKeys } from "./route-less-links.js";
 import { collectMedia, internalLinks as collectInternalLinks } from "./publication-projection.js";
 
 export async function validateDraft(
@@ -59,12 +60,17 @@ export async function validateDraft(
   if (internalLinks.length > 0) {
     if (dependencies.content.resolveLinkTargets === undefined)
       throw new DomainError("CONTENT_INVALID_STATE", "Internal link validation is unavailable.");
-    const statuses = await dependencies.content.resolveLinkTargets([
-      ...new Set(internalLinks.map((reference) => reference.targetId)),
-    ]);
+    const statuses = markRouteLessTargets(
+      await dependencies.content.resolveLinkTargets([
+        ...new Set(internalLinks.map((reference) => reference.targetId)),
+      ]),
+      routeLessModelKeys(dependencies.config.content),
+    );
+    const routable =
+      model.kind === "page" || (model.kind === "collection" && model.route !== undefined);
     const issues = internalLinks.flatMap((reference) => {
       const status = statuses[reference.targetId];
-      const self = publishingEntryId === reference.targetId && model.kind !== "global";
+      const self = publishingEntryId === reference.targetId && routable;
       const nonRoutable = status?.state === "non-routable";
       if (
         !nonRoutable &&
@@ -75,7 +81,7 @@ export async function validateDraft(
         {
           code: nonRoutable ? "internal_link_non_routable" : "internal_link_unavailable",
           message: nonRoutable
-            ? "must target a page or collection entry."
+            ? "must target a page or an entry of a collection with a route."
             : "must target an entry with a published route.",
           path: internalLinkIssuePath(
             reference,

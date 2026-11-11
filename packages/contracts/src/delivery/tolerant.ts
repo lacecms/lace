@@ -8,6 +8,8 @@ import {
   buildExportFormatVersionSchema,
   exportEntrySchema,
   exportGlobalSchema,
+  exportRecordSchema,
+  exportRecordsSchema,
   buildExportSchema,
   buildExportContinuationPageSchema,
   buildExportFirstPageSchema,
@@ -21,6 +23,8 @@ import {
   publicGlobalContentSchema,
   publicMediaSchema,
   publicMediaDictionarySchema,
+  publicRecordSchema,
+  publicRecordListSchema,
 } from "./public.js";
 
 type AnySchema = v.GenericSchema;
@@ -120,12 +124,18 @@ function tolerantBuild<Schema extends AnySchema>(schema: Schema): Schema {
   const substitutions = new Map(tolerantSubstitutions);
   substitutions.set(exportEntrySchema, tolerant(publicEntrySchema));
   substitutions.set(exportGlobalSchema, tolerant(publicGlobalSchema));
+  substitutions.set(exportRecordSchema, tolerant(publicRecordSchema));
+  // Format 2 exports from APIs before route-less collections carry no records.
+  substitutions.set(
+    exportRecordsSchema,
+    v.optional(v.array(toTolerantSchema(exportRecordSchema, substitutions)), () => []),
+  );
   return v.pipe(
     v.unknown(),
     v.check((value) => {
       if (value === null || typeof value !== "object") return false;
       const input = value as Record<string, unknown>;
-      return [input.entries, input.globals ?? []].every(
+      return [input.entries, input.globals ?? [], input.records ?? []].every(
         (items) =>
           Array.isArray(items) &&
           items.every(
@@ -154,5 +164,7 @@ export const tolerantPublicSchemas = Object.freeze({
   publicGlobalContent: tolerant(publicGlobalContentSchema),
   publicMedia: tolerant(publicMediaSchema),
   publicMediaDictionary: tolerant(publicMediaDictionarySchema),
+  publicRecord: tolerant(publicRecordSchema),
+  publicRecordList: tolerant(publicRecordListSchema),
   seoValue: tolerant(seoValueSchema),
 });

@@ -46,7 +46,8 @@ responses return published entries").
   the deletion guard.
 - The globals read is anonymous, reads by model key without
   `published_routes`, and answers `404` for an unknown key, a page or
-  collection key, or an unpublished global.
+  collection key, or an unpublished global. `records/:modelKey` lists route-less
+  collection entries the same way, newest publication first.
 - Entries of SEO-enabled models carry `seo` even when nothing is set; other
   entries and globals never carry it.
 - `media` resolves exactly the media referenced by the returned published
@@ -68,7 +69,8 @@ request builds, validates or serializes the whole site
 export is delivered in bounded keyset pages"):
 
 - Entries are ordered by `published_routes.path` and paged by an opaque keyset
-  cursor that binds the published-state version and the last delivered path.
+  cursor that binds the published-state version and the last delivered path;
+  additive format-2 `records` (route-less entries) follow by model key and ID.
 - A page ends at `limit` entries (default and maximum 100) or before its stored
   JSON (fields, SEO, visible block data and settings; on the first page also
   the globals) would exceed a fixed 4,000,000-byte budget. An oversized entry

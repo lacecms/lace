@@ -24,32 +24,13 @@
   Settle in the spec: the allowed names, validation in configuration and the
   admin fallback for an unknown name.
 
-- **Route-less collections (from the tatianae.com rc2 mapping, 2026-11-10;
-  selected 2026-11-10 as the fourth owner-inserted change after RF6):** a collection always needs a `route`
-  with one `:slug` segment, and every entry needs a slug before publication.
-  Data that is only listed on another page, such as About CV rows,
-  testimonials or press mentions, gets URLs nobody renders. Today the site
-  works around this in three ways:
-  - a dummy route (`/cv/:slug`);
-  - a hand-made slug for every row;
-  - a sitemap filter (`sitemapResponse(site, { include })`) that leaves the
-    model out so the 404 URLs are not listed.
-
-  Candidate: a collection without `route`. Its entries have no slug, never
-  enter `published_routes` and are left out of path lookup and the sitemap.
-  Like globals, they are read through the site view by model key, but there
-  can be many of them. Settle in the spec:
-  - the kind boundary: whether adding or removing a route is breaking,
-    following the existing route and kind rules;
-  - internal links to such entries (`entry:` targets need a published route
-    today);
-  - SEO opt-in, which is rejected without a route;
-  - the admin slug UI;
-  - export format and SDK typing;
-  - Node/D1 parity.
-
-  Related, but separate: bulk publication for many small entries (see "bulk
-  list actions" below).
+- **Optional slugs on route-less records (deferred 2026-11-11):**
+  `route-less-collections` ships collections without `route` whose entries
+  carry no slug. A record lookup key, if a site ever needs one, is a compatible
+  relaxation: an optional slug with per-model uniqueness among published
+  records (a uniqueness store and migration on Node and D1) and a
+  `bySlug`-style record lookup. Related, but separate: bulk publication for many
+  small entries (see "bulk list actions" below).
 
 - **Shared video primitive (deferred from SM5D, 2026-11-01):** `videoEmbed`
   and gallery video items each carry their own registry markup and ambient

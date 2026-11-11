@@ -112,6 +112,30 @@ describe("import apply", () => {
     expect(writes(server)).toEqual([]);
   });
 
+  test("route-less entries match only through the state file", async () => {
+    const server = await api();
+    const directory = await writePackage({
+      formatVersion: 1,
+      media: [],
+      entries: [
+        { key: "q1", model: "quotes", title: "One", fields: { text: "First" }, blocks: [] },
+        { key: "q2", model: "quotes", title: "Two", fields: { text: "Second" }, blocks: [] },
+      ],
+    });
+    const first = await run(directory, server, ["--publish", "--json"]);
+    expect(first.data.plan.entries.map((entry) => [entry.key, entry.action])).toEqual([
+      ["q1", "create"],
+      ["q2", "create"],
+    ]);
+    const listed = await server.session("/api/v1/admin/models/quotes/entries");
+    expect(listed.body.items).toHaveLength(2);
+    const rerun = await run(directory, server, ["--publish", "--json"]);
+    expect(rerun.data.plan.summary).toMatchObject({ create: 0, unchanged: 2, published: 2 });
+    await unlink(join(directory, "lace-import.state.json"));
+    const stateless = await run(directory, server, ["--dry-run", "--json"]);
+    expect(stateless.data.plan.entries.map((entry) => entry.action)).toEqual(["create", "create"]);
+  });
+
   test("drafts edited after the import conflict unless --overwrite; equal edits stay unchanged", async () => {
     const server = await api();
     const directory = await writePackage();

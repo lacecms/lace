@@ -7,7 +7,12 @@ import {
 } from "../shared/primitives.js";
 import { internalLinkManifestSchema } from "../content/links.js";
 import { modelSeoSchema, seoDefaultsSchema } from "../content/models.js";
-import { publicEntrySchema, publicGlobalSchema, publicMediaDictionarySchema } from "./public.js";
+import {
+  publicEntrySchema,
+  publicGlobalSchema,
+  publicMediaDictionarySchema,
+  publicRecordSchema,
+} from "./public.js";
 
 /**
  * SEO configuration a site resolver needs: the fallback fields of every
@@ -35,6 +40,17 @@ export const exportGlobalSchema = v.strictObject({
   ...publicGlobalSchema.entries,
   internalLinks: internalLinkManifestSchema,
 });
+export const exportRecordSchema = v.strictObject({
+  ...publicRecordSchema.entries,
+  internalLinks: internalLinkManifestSchema,
+});
+
+/**
+ * Published route-less collection entries. Added within format 2: the API
+ * always sends the key and strict schemas require it; tolerant consumers read
+ * a missing key as an empty list.
+ */
+export const exportRecordsSchema = v.array(exportRecordSchema);
 
 /**
  * The assembled build export: the union of the pages of one page sequence, as
@@ -46,6 +62,7 @@ export const buildExportSchema = v.strictObject({
   formatVersion: buildExportFormatVersionSchema,
   globals: v.array(exportGlobalSchema),
   media: publicMediaDictionarySchema,
+  records: exportRecordsSchema,
   seo: exportSeoSchema,
   version: nonNegativeIntegerSchema,
 });
@@ -72,8 +89,10 @@ const buildExportPageEntries = {
   formatVersion: buildExportFormatVersionSchema,
   /** Exactly the media delivered by this page's entries (and globals on the first page). */
   media: publicMediaDictionarySchema,
-  /** Present exactly when further entries remain. */
+  /** Present exactly when further entries or records remain. */
   nextCursor: v.optional(opaqueCursorSchema),
+  /** Route-less records by model key and entry ID, only after the last routed entry. */
+  records: exportRecordsSchema,
   version: nonNegativeIntegerSchema,
 };
 

@@ -14,8 +14,9 @@ The decoded identifier SHALL have 1–255 UTF-16 code units, contain no control
 characters or unpaired surrogates, and round-trip exactly through `encodeURIComponent`; malformed
 escapes, noncanonical encodings, an empty identifier and unencoded query/fragment
 suffixes SHALL fail. IDs SHALL be opaque, not restricted to UUIDs or ULIDs.
-References SHALL target only this installation's page/collection entries.
-Globals SHALL be permitted sources but SHALL NOT be targets. No descriptor
+References SHALL target only this installation's page entries and entries of
+collections that declare a route. Globals and entries of route-less
+collections SHALL be permitted sources but SHALL NOT be targets. No descriptor
 kind, object-valued reference field or automatic path-to-ID conversion is added.
 Provider-restricted URL fields, rich text, SEO canonical URLs, media values and
 ordinary text that happens to start with `entry:` SHALL retain their contracts.
@@ -35,6 +36,13 @@ ordinary text that happens to start with `entry:` SHALL retain their contracts.
 #### Scenario: Canonical opaque identifiers
 - **WHEN** identifier `a/b` is selected and stored as `entry:a%2Fb`
 - **THEN** it resolves to the entry with ID `a/b`, while `entry:`, `entry:%ZZ`, `entry:post-a#x` and `entry:%70ost-a` fail field validation
+
+#### Scenario: A route-less entry is a source but not a target
+- **WHEN** an entry of the route-less `testimonials` collection links to the
+  published page `about`, and a page draft stores `entry:<testimonial-id>`
+- **THEN** the testimonial saves and publishes with a delivered reference to
+  `about`, and the page draft save fails with a `non-routable` issue at the
+  URL field path
 
 ### Requirement: Every declared URL location participates consistently
 Reference discovery SHALL follow normalized descriptors through model/global
@@ -69,7 +77,8 @@ hidden blocks SHALL retain existing behavior.
 ### Requirement: Drafts retain unresolved destinations and publication is strict
 A syntactically valid reference to a missing or unpublished entry SHALL be
 saveable in a draft and SHALL retain its original ID with a path-local warning.
-A known global target SHALL be rejected as non-routable. Publication SHALL
+A known global target, or a known entry of a route-less collection, SHALL be
+rejected as non-routable in draft and publish mode. Publication SHALL
 require every delivered internal reference to have a published route at commit
 time, except that a self-reference SHALL use the publishing entry's candidate
 route. Invalid targets SHALL produce field-path issues without changing the
@@ -92,6 +101,12 @@ SHALL be validated syntactically without network availability or anchor checks.
 #### Scenario: A route is reused by a different entry
 - **WHEN** a deleted target's old slug is assigned to a new entry with another ID
 - **THEN** references to the original ID stay unresolved and do not silently retarget
+
+#### Scenario: Linking to a route-less entry
+- **WHEN** a draft or publication submits a reference to an existing entry of
+  a route-less collection
+- **THEN** it fails with a path-local non-routable issue and the entry, routes,
+  published version and build queue are unchanged
 
 ### Requirement: Incoming usages require informed lifecycle confirmation
 Delete and unpublish SHALL expose a paginated impact view of all current draft

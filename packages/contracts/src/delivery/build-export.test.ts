@@ -69,6 +69,9 @@ describe("paged build export contract", () => {
         entries: [{ entry: contentEntry("a", "collection"), media: [mediaItem("m1")], path: "/a" }],
         globals: [{ entry: contentEntry("settings", "global"), media: [mediaItem("m2")] }],
         nextCursor: "cursor-1",
+        records: [
+          { entry: contentEntry("t1", "collection"), internalLinks: [], media: [mediaItem("m3")] },
+        ],
         version: 7,
       },
       urlFor,
@@ -81,10 +84,19 @@ describe("paged build export contract", () => {
       seo: { defaults: null, models: {} },
       version: 7,
     });
-    expect(Object.keys(first.media)).toEqual(["m1", "m2"]);
+    expect(Object.keys(first.media)).toEqual(["m1", "m2", "m3"]);
+    expect(first.records).toMatchObject([
+      { id: "t1", modelKey: expect.any(String), title: expect.any(String) },
+    ]);
+    expect(first.records[0]).not.toHaveProperty("path");
+    expect(first.records[0]).not.toHaveProperty("slug");
 
     const continuation = toBuildExportContinuationPageDto(
-      { entries: [{ entry: contentEntry("b", "collection"), media: [], path: "/b" }], version: 7 },
+      {
+        entries: [{ entry: contentEntry("b", "collection"), media: [], path: "/b" }],
+        records: [],
+        version: 7,
+      },
       urlFor,
     );
     expect(v.parse(buildExportContinuationPageSchema, continuation)).toEqual(continuation);
@@ -92,7 +104,10 @@ describe("paged build export contract", () => {
     expect(continuation).not.toHaveProperty("globals");
     expect(continuation).not.toHaveProperty("seo");
     expect(() =>
-      toBuildExportContinuationPageDto({ entries: [], globals: [], version: 7 }, urlFor),
+      toBuildExportContinuationPageDto(
+        { entries: [], globals: [], records: [], version: 7 },
+        urlFor,
+      ),
     ).toThrow(TypeError);
 
     for (const key of ["globals", "seo"]) {

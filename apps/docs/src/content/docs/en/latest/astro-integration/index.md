@@ -21,7 +21,7 @@ Follow the generated `docs/lace-astro-site.md` to create the server-only loader,
 
 Import transport helpers from `@lacecms/sdk`, framework-neutral helpers from `@lacecms/render`, descriptors from `@lacecms/content`, and Astro components from `@lacecms/astro`. The Astro package does not re-export every other package's API. Use `LaceBlocks` with the installed block map and `RichText` for validated rich-text rendering. Missing renderers or invalid block data should fail a build rather than emit a silently incomplete website.
 
-Pages need corresponding Astro files. A collection uses `getStaticPaths`; a config route alone does not create it. Resolve published globals for shared site content and provide an explicit fallback for an unpublished optional global. Use the loader's metadata/path helpers for SEO, canonical URLs, robots and sitemap behavior. Set the public build-site URL deliberately, and disable indexing for staging.
+Pages need corresponding Astro files. A collection uses `getStaticPaths`; a config route alone does not create it. A collection without a `route` needs no route files: list its entries with `site.records(modelKey)` (records have a title, fields, blocks, `media()`/`image()` and `link()`, but no path or slug, and are never in the sitemap; `site.records` needs `@lacecms/sdk` from this release). Resolve published globals for shared site content and provide an explicit fallback for an unpublished optional global. Use the loader's metadata/path helpers for SEO, canonical URLs, robots and sitemap behavior. Set the public build-site URL deliberately, and disable indexing for staging.
 
 ## Optimize images
 

@@ -11,6 +11,7 @@ import type {
   OpaqueCursor,
   PublicContentEntry,
   PublicGlobalContent,
+  PublicRecordContent,
 } from "@lacecms/application";
 import { BuildExportCursorError, BuildExportVersionChangedError } from "@lacecms/domain";
 import type {
@@ -31,6 +32,32 @@ export class InMemoryContentStoreDelivery extends InMemoryContentStoreEntries {
       .filter(({ entry }) => entry.model.key === input.modelKey)
       .map(({ entry, path }) => this.publicView(entry, path));
     return this.page(entries, input.after, input.limit, `public:${input.modelKey}`);
+  }
+
+  public async listPublicRecords(
+    input: ListPublicContentInput,
+  ): Promise<CursorPage<PublicRecordContent>> {
+    const records = this.publicRecords()
+      .filter((entry) => entry.model.key === input.modelKey)
+      .sort(
+        (left, right) =>
+          right.published!.createdAt - left.published!.createdAt ||
+          (left.id < right.id ? 1 : left.id > right.id ? -1 : 0),
+      )
+      .map((entry) => this.publicGlobalView(entry));
+    return this.page(records, input.after, input.limit, `public-records:${input.modelKey}`);
+  }
+
+  /** Published entries of route-less collections ordered by model key and entry ID. */
+  private publicRecords(): readonly ContentEntry[] {
+    return [...this.entries.values()]
+      .filter(
+        (entry) =>
+          entry.model.kind === "collection" &&
+          entry.model.route === undefined &&
+          entry.published !== undefined,
+      )
+      .sort((left, right) => compareRecord(recordPosition(left), recordPosition(right)));
   }
 
   public async publishedContentVersion(): Promise<number> {
@@ -129,37 +156,71 @@ export class InMemoryContentStoreDelivery extends InMemoryContentStoreEntries {
     const remaining = this.publicEntries()
       .filter(({ path }) => after === undefined || path > after.path)
       .sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
+    const remainingRecords = this.publicRecords().filter(
+      (entry) =>
+        after?.record === undefined || compareRecord(recordPosition(entry), after.record) > 0,
+    );
     const { count, more } = selectBuildExportPage(
-      remaining
+      [...remaining.map(({ entry }) => entry), ...remainingRecords]
         .slice(0, limit + 1)
-        .map(({ entry }) => ({ bytes: storedExportBytes(entry.published!) })),
+        .map((entry) => ({ bytes: storedExportBytes(entry.published!) })),
       limit,
       (globals ?? []).reduce((total, entry) => total + storedExportBytes(entry.published!), 0),
     );
-    const selected = remaining.slice(0, count);
-    const last = selected.at(-1);
+    const routeCount = Math.min(count, remaining.length);
+    const selected = remaining.slice(0, routeCount);
+    const selectedRecords = remainingRecords.slice(0, count - routeCount);
+    const lastPath = selected.at(-1)?.path ?? after?.path ?? "";
+    const lastRecord = selectedRecords.at(-1);
+    const recordCursor = lastRecord === undefined ? after?.record : recordPosition(lastRecord);
     return Object.freeze({
       entries: Object.freeze(selected.map(({ entry, path }) => this.publicView(entry, path))),
       ...(globals === undefined
         ? {}
         : { globals: Object.freeze(globals.map((entry) => this.publicGlobalView(entry))) }),
-      ...(more && last !== undefined
+      ...(more
         ? {
             nextCursor: opaqueCursor(
-              `${BUILD_EXPORT_CURSOR_PREFIX}${this.publicVersion}:${last.path}`,
+              `${BUILD_EXPORT_CURSOR_PREFIX}${this.publicVersion}:${lastPath}${
+                recordCursor === undefined ? "" : `#${JSON.stringify(recordCursor)}`
+              }`,
             ),
           }
         : {}),
+      records: Object.freeze(selectedRecords.map((entry) => this.publicGlobalView(entry))),
       version: this.publicVersion,
     });
   }
 
-  private decodeExportCursor(cursor: OpaqueCursor): { path: string; version: number } {
-    const match = /^build-export:(0|[1-9][0-9]*):(.*)$/su.exec(cursor);
+  private decodeExportCursor(cursor: OpaqueCursor): {
+    path: string;
+    record?: RecordPosition;
+    version: number;
+  } {
+    const match = /^build-export:(0|[1-9][0-9]*):([^#]*)(?:#(.*))?$/su.exec(cursor);
     const version = Number(match?.[1]);
     if (match === null || !Number.isSafeInteger(version)) {
       throw new BuildExportCursorError("Cursor is unsupported or belongs to a different list.");
     }
-    return { path: match[2]!, version };
+    return {
+      path: match[2]!,
+      ...(match[3] === undefined ? {} : { record: JSON.parse(match[3]) as RecordPosition }),
+      version,
+    };
   }
+}
+
+type RecordPosition = readonly [modelKey: string, entryId: string];
+
+function recordPosition(entry: ContentEntry): RecordPosition {
+  return [entry.model.key, entry.id];
+}
+
+/** Binary order of (model key, entry ID), like SQLite's row-value comparison. */
+function compareRecord(left: RecordPosition, right: RecordPosition): number {
+  for (const index of [0, 1] as const) {
+    if (left[index] < right[index]) return -1;
+    if (left[index] > right[index]) return 1;
+  }
+  return 0;
 }

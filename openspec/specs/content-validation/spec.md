@@ -174,8 +174,8 @@ in one block's JSON data. Complete aggregate validation SHALL require each
 block to identify its stable key, type, schema version, and JSON data, and SHALL
 delegate type/version, uniqueness, allowed-block, and block-field semantics to
 the supplied block registry and model. Draft validation SHALL require a title;
-publish validation SHALL additionally require a slug for a collection entry and
-all required model and block fields. Size, count, and semantic failures SHALL
+publish validation SHALL additionally require a slug for an entry of a
+collection that declares a route, and all required model and block fields. Size, count, and semantic failures SHALL
 identify the affected system field, fields payload, or block path.
 
 #### Scenario: Validate a bounded draft payload
@@ -194,8 +194,8 @@ identify the affected system field, fields payload, or block path.
 
 #### Scenario: Require a collection slug at publication
 
-- **WHEN** a collection entry with a valid title is validated for publish
-  without a slug
+- **WHEN** an entry of a routed collection with a valid title is validated for
+  publish without a slug
 - **THEN** validation rejects the missing slug at the slug path
 
 ### Requirement: Entry payloads accept the global kind without a slug
@@ -368,3 +368,21 @@ Cloudflare SHALL produce identical results and normalized output.
 #### Scenario: Block data rules
 - **WHEN** block data declares visibility and an API caller saves the block on Node and on Cloudflare
 - **THEN** both runtimes accept or reject the same values at the same `blocks/<index>/data` paths
+
+### Requirement: Entry payloads of a route-less collection carry no slug
+Entry payload validation SHALL distinguish an entry of a collection that
+declares a route from an entry of a route-less collection. A route-less entry
+SHALL NOT carry a slug in draft or publish mode; a supplied slug, including an
+empty string, SHALL fail with the stable issue `slug_not_allowed` at the slug
+path. Publish validation of a route-less entry SHALL require no slug and SHALL
+enforce the title, required model and block fields and every shared limit.
+
+#### Scenario: Publish a route-less entry without a slug
+- **WHEN** an entry of the route-less `testimonials` collection with a title
+  and every required field is validated for publish without a slug
+- **THEN** validation succeeds
+
+#### Scenario: Reject a route-less slug
+- **WHEN** an entry payload of the route-less `testimonials` collection
+  supplies the slug `ada` in draft or publish mode
+- **THEN** validation fails with `slug_not_allowed` at the slug path

@@ -61,6 +61,7 @@ export function EntryListTable({
   onDeleted,
   onSortChange,
   onFilterField,
+  routed = true,
   sort,
 }: {
   readonly busy?: boolean;
@@ -75,6 +76,8 @@ export function EntryListTable({
   readonly onDeleted?: () => void;
   readonly onSortChange: (sort: ContentEntrySortDto) => void;
   readonly onFilterField?: (field: string) => void;
+  /** False for a route-less collection, whose rows show no slug or no-slug note. */
+  readonly routed?: boolean;
   readonly sort: ContentEntrySortDto;
 }) {
   const columns = useMemo(
@@ -90,7 +93,7 @@ export function EntryListTable({
               >
                 {row.original.title}
               </Link>
-              {row.original.slug === undefined ? (
+              {!routed ? undefined : row.original.slug === undefined ? (
                 <span className="text-xs text-muted-foreground italic">No slug</span>
               ) : (
                 <span className="font-mono text-xs text-muted-foreground">{row.original.slug}</span>
@@ -172,7 +175,7 @@ export function EntryListTable({
             ]
           : []),
       ]),
-    [canManage, canPublish, listColumns, modelKey, now, onDeleted],
+    [canManage, canPublish, listColumns, modelKey, now, onDeleted, routed],
   );
   const sorting: SortingState = [sortingFromSort(sort)];
   const table = useTable({

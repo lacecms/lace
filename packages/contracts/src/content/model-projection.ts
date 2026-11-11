@@ -104,7 +104,9 @@ export function toContentModelRouteDto(route: ContentModelRoute) {
     case "page":
       return { kind: "page" as const, key: route.key, path: route.path };
     case "collection":
-      return { kind: "collection" as const, key: route.key, route: route.route };
+      return route.route === undefined
+        ? { kind: "collection" as const, key: route.key }
+        : { kind: "collection" as const, key: route.key, route: route.route };
     case "global":
       return { kind: "global" as const, key: route.key };
     default:

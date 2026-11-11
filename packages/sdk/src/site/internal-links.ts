@@ -47,9 +47,10 @@ function atPointer(root: unknown, pointer: string): unknown {
 
 /** O(entries + locations) setup; lookups are pure O(1), with no target requests. */
 export function publishedLinks(
-  exported: Pick<BuildExportDto, "entries" | "globals">,
+  exported: Pick<BuildExportDto, "entries" | "globals"> & Partial<Pick<BuildExportDto, "records">>,
 ): PublishedLinkLookup & { readonly linkDiagnostics: LinkDiagnostics } {
-  const sources = [...exported.entries, ...exported.globals];
+  // Records and globals are link sources but never targets: they have no route.
+  const sources = [...exported.entries, ...(exported.records ?? []), ...exported.globals];
   const identities = new Set<string>();
   const routes = new Map<string, string>();
   for (const source of sources) {

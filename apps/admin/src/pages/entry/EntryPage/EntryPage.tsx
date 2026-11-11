@@ -288,7 +288,9 @@ export function EntryPage() {
     error instanceof AdminClientError && (error.issues?.length ?? 0) > 0;
   const titleError = form.formState.errors.title;
   const slugError = form.formState.errors.slug;
-  const hasEntryFields = model.kind === "collection" || Object.keys(model.fields).length > 0;
+  // Only a routed collection has the slug control; route-less entries carry no slug.
+  const hasSlug = model.kind === "collection" && model.route !== undefined;
+  const hasEntryFields = hasSlug || Object.keys(model.fields).length > 0;
   // A model without block types (and no leftover blocks) has nothing for the
   // main column, so its fields take the place of the Blocks section.
   const hasBlockSection =
@@ -301,7 +303,7 @@ export function EntryPage() {
       <h2 className="m-0 text-sm font-semibold" id="entry-fields-title">
         Fields
       </h2>
-      {model.kind === "collection" ? (
+      {hasSlug ? (
         <div className="grid gap-1.5">
           <label className="text-sm font-medium" htmlFor="system-slug">
             Slug

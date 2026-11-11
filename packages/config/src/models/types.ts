@@ -116,7 +116,11 @@ export interface CollectionModelInput<
   /** Ordered scalar field keys shown as columns in admin entry lists. */
   readonly listFields?: readonly (keyof Fields & string)[];
   readonly listOptions?: CollectionListOptions<Fields>;
-  readonly route: string;
+  /**
+   * Canonical route with one `:slug` segment. Omit it for a route-less
+   * collection, whose entries have no slug, path or SEO group.
+   */
+  readonly route?: string;
 }
 
 /** Fields of the declaring global that supply site-wide SEO defaults. */
@@ -190,7 +194,8 @@ export type CollectionModelDefinition<Fields extends FieldMap = FieldMap> =
       readonly kind: "collection";
       readonly listFields?: readonly (keyof Fields & string)[];
       readonly listOptions?: CollectionListOptions;
-      readonly route: string;
+      /** Absent for a route-less collection. */
+      readonly route?: string;
     };
 
 /** A normalized route-less singleton model for site-wide content. */

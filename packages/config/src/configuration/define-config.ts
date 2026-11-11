@@ -33,7 +33,10 @@ function assertUniqueModels(models: readonly ContentModelDefinition[]): void {
   const currentKeys = new Map<string, ContentModelDefinition>();
   const formerKeys = new Map<string, ContentModelDefinition>();
   const pagePaths = new Map<string, PageModelDefinition>();
-  const collectionRoutes = new Map<string, CollectionModelDefinition>();
+  const collectionRoutes = new Map<
+    string,
+    CollectionModelDefinition & { readonly route: string }
+  >();
   let seoDefaultsGlobal: GlobalModelDefinition | undefined;
 
   for (const model of models) {
@@ -69,13 +72,14 @@ function assertUniqueModels(models: readonly ContentModelDefinition[]): void {
         break;
       }
       case "collection": {
+        if (model.route === undefined) break;
         const duplicateRoute = collectionRoutes.get(model.route);
         if (duplicateRoute !== undefined) {
           fail(
             `collections "${duplicateRoute.key}" and "${model.key}" share route "${model.route}".`,
           );
         }
-        collectionRoutes.set(model.route, model);
+        collectionRoutes.set(model.route, { ...model, route: model.route });
         break;
       }
       case "global":

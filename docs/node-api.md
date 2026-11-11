@@ -165,6 +165,9 @@ call in `lace.config.ts`. A global is route-less site-wide content (for
 example site settings): sync creates its single draft, it is never served by
 path, and `GET /api/v1/public/globals/:modelKey` (or `getGlobal()` in
 `@lacecms/sdk`) returns `{global, media}` once it is published, `404` before.
+A collection without `route` is route-less: its entries have no slug or path,
+`GET /api/v1/public/records/:modelKey` (or `listRecords()`) lists the published
+ones, and the build export carries them as `records`.
 A page or collection may declare `seo: true` (or name fallback fields with
 `seo: { description, image }`) to store per-entry SEO values; its public
 entries and export entries then carry `seo`, and the export's `seo` section

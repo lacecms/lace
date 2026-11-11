@@ -1309,14 +1309,16 @@ test("bounds Node build-export queries and selects the entry-list index", async 
         globals: [],
         version: 2,
       });
-      // Version with global sizes, candidates, the shared protocol's version
-      // re-read (same transaction), routes, globals, snapshots, blocks and
-      // delivered media: fixed, independent of the entry count.
-      expect(statements.length).toBeLessThanOrEqual(8);
+      // Version with global sizes, entry and record candidates, the shared
+      // protocol's version re-read (same transaction), routes, records, globals,
+      // snapshots, blocks and delivered media: fixed, independent of the entry count.
+      expect(statements.length).toBeLessThanOrEqual(10);
       expect(statements.join("\n")).not.toMatch(/ in \(\?/u);
       const mediaStatement = statements.find((sql) => sql.includes("public_snapshot_id"));
       expect(
-        database.connection.prepare(`explain query plan ${mediaStatement}`).all("", "/blog/post-b"),
+        database.connection
+          .prepare(`explain query plan ${mediaStatement}`)
+          .all("", "/blog/post-b", "", "", "", ""),
       ).not.toEqual(
         expect.arrayContaining([
           expect.objectContaining({ detail: expect.stringMatching(/^SCAN r\b/u) }),
@@ -1390,9 +1392,13 @@ test("reads each Node build-export page from one snapshot despite concurrent com
         if (!committed && sql.includes("hidden = 0 and")) {
           committed = true;
           writer.connection.transaction(() => {
+            // An unpublication removes the route and the publication together.
             writer.connection
               .prepare("delete from published_routes where path = ?")
               .run("/blog/post-b");
+            writer.connection
+              .prepare("update content_entries set published_snapshot_id = null where id = ?")
+              .run("post-b");
             writer.connection
               .prepare("update published_state set version = version + 1 where singleton_key = 1")
               .run();
@@ -1419,6 +1425,9 @@ test("reads each Node build-export page from one snapshot despite concurrent com
           "insert into published_routes (path, entry_id, snapshot_id, updated_at) values (?, ?, ?, ?)",
         )
         .run("/blog/post-b", "post-b", "post-b-published", 50);
+      writer.connection
+        .prepare("update content_entries set published_snapshot_id = ? where id = ?")
+        .run("post-b-published", "post-b");
       const before = await repository.exportBuildContentPage({ limit: 1 });
       expect(before).toMatchObject({ entries: [{ path: "/blog/post-a" }], version: 3 });
       writer.connection

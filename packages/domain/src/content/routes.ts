@@ -20,6 +20,13 @@ export interface CollectionContentModelRoute {
   readonly route: string;
 }
 
+/** A collection without a route: many entries, no slug and never a public path. */
+export interface RouteLessCollectionContentModelRoute {
+  readonly key: ContentModelKey;
+  readonly kind: "collection";
+  readonly route?: undefined;
+}
+
 /** A route-less singleton model, read by its key and never by path. */
 export interface GlobalContentModelRoute {
   readonly key: ContentModelKey;
@@ -27,7 +34,22 @@ export interface GlobalContentModelRoute {
 }
 
 export type RoutableContentModelRoute = CollectionContentModelRoute | PageContentModelRoute;
-export type ContentModelRoute = GlobalContentModelRoute | RoutableContentModelRoute;
+export type ContentModelRoute =
+  | GlobalContentModelRoute
+  | RouteLessCollectionContentModelRoute
+  | RoutableContentModelRoute;
+
+/** A model has a public route when it is a page or a collection that declares a route. */
+export function hasPublicRoute(model: ContentModelRoute): model is RoutableContentModelRoute {
+  return model.kind === "page" || (model.kind === "collection" && model.route !== undefined);
+}
+
+/** A collection without a route, whose entries carry no slug. */
+export function isRouteLessCollection(
+  model: ContentModelRoute,
+): model is RouteLessCollectionContentModelRoute {
+  return model.kind === "collection" && model.route === undefined;
+}
 
 /** Page and global models are configuration-defined singletons. */
 export function isSingletonKind(kind: ContentModelKind): boolean {
@@ -69,9 +91,9 @@ export function resolveContentPublicPath(model: RoutableContentModelRoute, slug?
     : resolveCollectionPublicPath(model.route, slug ?? "");
 }
 
-/** Resolves an entry's public path, or `undefined` for a route-less global. */
+/** Resolves an entry's public path, or `undefined` for a global or a route-less collection. */
 export function contentPublicPath(model: ContentModelRoute, slug?: string): string | undefined {
-  return model.kind === "global" ? undefined : resolveContentPublicPath(model, slug);
+  return hasPublicRoute(model) ? resolveContentPublicPath(model, slug) : undefined;
 }
 
 /** Rejects a route held by another entry while permitting an entry to retain its own path. */

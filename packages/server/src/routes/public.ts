@@ -8,7 +8,12 @@ import {
   validationResponse,
 } from "../shared/http.js";
 import { collectionItemParams, modelKeyParams, pagination, publicPath } from "../shared/request.js";
-import { collectionModel, globalModel, pageModel } from "../shared/content-config.js";
+import {
+  collectionModel,
+  globalModel,
+  pageModel,
+  routeLessCollectionModel,
+} from "../shared/content-config.js";
 import { collectionPathFailure } from "@lacecms/contracts";
 import {
   buildExportContinuationPageSchema,
@@ -20,11 +25,13 @@ import {
   publicContentEntrySchema,
   publicGlobalContentSchema,
   publicContentListSchema,
+  publicRecordListSchema,
   toBuildExportContinuationPageDto,
   toBuildExportFirstPageDto,
   toPublicContentEntryDto,
   toPublicGlobalContentDto,
   toPublicContentListDto,
+  toPublicRecordListDto,
   versionFromEntityTag,
 } from "@lacecms/contracts";
 import { Hono } from "hono";
@@ -81,6 +88,30 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
             publicContentEntrySchema,
             toPublicContentEntryDto(entry, publicMediaUrl(), { seoModels }),
           );
+    },
+  );
+
+  app.get(
+    "/api/v1/public/records/:modelKey",
+    describeRoute({
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(publicRecordListSchema) } },
+          description: "Published records of a route-less collection",
+        },
+      },
+      summary: "List published records of a route-less collection",
+      tags: ["public"],
+    }),
+    validator("param", modelKeyParams, validationHook),
+    async (context) => {
+      const model = routeLessCollectionModel(capabilities.config, context.req.param("modelKey"));
+      if (model === undefined) return notFound();
+      const page = await capabilities.publicContent.listPublicRecords({
+        modelKey: model.key as never,
+        ...pagination(context.req.raw),
+      });
+      return response(publicRecordListSchema, toPublicRecordListDto(page, publicMediaUrl()));
     },
   );
 

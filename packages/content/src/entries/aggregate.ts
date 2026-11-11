@@ -43,6 +43,8 @@ export interface EntryPayloadInput {
   readonly blocks: readonly EntryBlockData[];
   readonly fields: JsonObject;
   readonly kind: ContentModelKind;
+  /** True for an entry of a collection without a route: it carries no slug. */
+  readonly routeLess?: boolean;
   readonly slug?: string;
   readonly title: string;
 }
@@ -76,9 +78,13 @@ export function validateEntryPayload(
   if (input.kind === "global" && input.slug !== undefined) {
     invalid(["slug"], "slug_not_allowed", "is not allowed for a global.");
   }
+  if (input.kind === "collection" && input.routeLess === true && input.slug !== undefined) {
+    invalid(["slug"], "slug_not_allowed", "is not allowed for a collection without a route.");
+  }
   if (
     mode === "publish" &&
     input.kind === "collection" &&
+    input.routeLess !== true &&
     (input.slug === undefined || input.slug.length === 0)
   ) {
     invalid(["slug"], "missing_slug", "is required for collection publication.");
@@ -108,6 +114,8 @@ export interface EntryAggregateModel {
   readonly blocks: readonly string[];
   readonly fields: ModelFieldDefinitions;
   readonly kind: ContentModelKind;
+  /** True for a collection without a route, whose entries carry no slug. */
+  readonly routeLess?: boolean;
   /** Conditional-field rules over the model's own fields. */
   readonly visibility?: FieldVisibility;
 }
@@ -169,6 +177,7 @@ export function validateEntryAggregate(
       blocks: input.blocks,
       fields: {},
       kind: input.kind,
+      ...(model.routeLess === true ? { routeLess: true } : {}),
       ...(input.slug === undefined ? {} : { slug: input.slug }),
       title: input.title,
     },

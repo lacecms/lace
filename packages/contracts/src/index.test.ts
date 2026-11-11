@@ -59,7 +59,7 @@ describe("shared REST contract DTOs", () => {
     ).toMatchObject({ items: [{ id: "entry-1" }], nextCursor: "opaque-next-page" });
 
     const exportDto = toBuildExportDto(
-      { entries: [{ entry, media: [], path: "/blog/welcome" }], version: 7 },
+      { entries: [{ entry, media: [], path: "/blog/welcome" }], records: [], version: 7 },
       (id) => mediaUrl("https://lace.example/", id),
     );
     expect(v.parse(buildExportSchema, exportDto)).toEqual(exportDto);
@@ -230,6 +230,7 @@ describe("admin entry list contracts", () => {
           { entry, media: [{ id: "media-2", mimeType: "image/png" }], path: "/blog/welcome" },
         ],
         globals: [{ entry: globalEntry, media: [{ id: "media-1", mimeType: "image/png" }] }],
+        records: [],
         version: 3,
       },
       urlFor,

@@ -218,11 +218,13 @@ no-models, missing-singleton, and API-error states SHALL be preserved.
 
 ### Requirement: Collection lists present entry state without internal identifiers
 Each collection entry row SHALL show the entry title as a link to its editor,
-the entry slug (or a neutral note when it has none), the derived status (draft,
+for a collection that declares a route the entry slug (or a neutral note when
+it has none), the derived status (draft,
 published, or changed), a value for each of the model's configured list fields
 in configuration order, the publication date for published or changed entries,
 and the relative last-edit time with the last editor's display name, with the
-absolute time available to assistive technology and on hover. List-field
+absolute time available to assistive technology and on hover. Rows of a
+route-less collection SHALL show neither a slug nor a no-slug note. List-field
 column headers SHALL use the field label, falling back to its key. List-field
 values SHALL be formatted by field type: booleans as yes or no, numbers with
 locale grouping, dates and datetimes as readable dates, select values by their
@@ -249,6 +251,12 @@ row data.
 - **WHEN** any role views a collection list
 - **THEN** no cell, header, or control label contains the entry ID or the
   editor's user ID
+
+#### Scenario: A route-less collection list
+- **WHEN** any role opens the list of the route-less `testimonials` collection
+- **THEN** each row shows the title link, status, list-field values,
+  publication date and last edit, and no slug cell, slug column or no-slug
+  note
 
 ### Requirement: Collection list search, status filter, and sort are URL state
 The collection route SHALL keep its title/slug search term, status filter, and

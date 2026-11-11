@@ -40,6 +40,7 @@ export default await defineConfig({
       },
       seo: { description: "summary" },
     }),
+    defineCollection({ key: "quotes", version: 1, fields: { text: field.textarea() } }),
   ],
 });
 `;
@@ -75,6 +76,7 @@ export async function fixtureConfig(postsVersion = 1) {
         },
         seo: { description: "summary" },
       }),
+      defineCollection({ key: "quotes", version: 1, fields: { text: field.textarea() } }),
     ],
   });
   return {

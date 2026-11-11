@@ -23,6 +23,7 @@ import type {
   MediaUsageEntry,
   PublicContentEntry,
   PublicGlobalContent,
+  PublicRecordContent,
   SiteBuildRecord,
 } from "@lacecms/application";
 import { MAX_PAGE_SIZE } from "@lacecms/content";
@@ -39,13 +40,18 @@ import {
   assertBuildExportVersion,
   BUILD_EXPORT_CANDIDATES_SQL,
   BUILD_EXPORT_FIRST_PAGE_VERSION_SQL,
+  BUILD_EXPORT_RECORD_CANDIDATES_SQL,
   BUILD_EXPORT_VERSION_SQL,
   buildExportPage,
   buildExportPageRange,
   buildExportPageSql,
   decodeBuildExportCursor,
 } from "../builds/export.js";
-import type { BuildExportCandidateRow, BuildExportPageRange } from "../builds/export.js";
+import type {
+  BuildExportCandidateRow,
+  BuildExportPageRange,
+  BuildExportRecordCandidateRow,
+} from "../builds/export.js";
 import { siteBuildRecord } from "../builds/site-builds.js";
 import type { SiteBuildRow } from "../builds/site-builds.js";
 import { BLOCK_COLUMNS_SQL } from "../content/blocks.js";
@@ -62,9 +68,11 @@ import type { SnapshotRow, StoredSnapshot } from "../content/snapshots.js";
 import {
   PUBLIC_GLOBAL_SQL,
   PUBLIC_MEDIA_SQL,
+  PUBLIC_RECORD_SQL,
   PUBLIC_ROUTE_SQL,
   publicContentEntry,
   publicGlobalContent,
+  publicRecordContent,
   publicSnapshotMedia,
   publicSnapshotMediaSql,
 } from "../delivery/public.js";
@@ -178,6 +186,33 @@ export class SqlContentReader implements ContentLinkReadPort {
     const entries = await this.hydrate(pageRows);
     const media = await this.publicMedia(pageRows);
     const items = pageRows.map((row) => publicContentEntry(row, entries, media));
+    const last = pageRows.at(-1);
+    return Object.freeze({
+      items: Object.freeze(items),
+      ...(rows.length > limit && last !== undefined
+        ? { nextCursor: encodeCursor(cursorKind, last.published_created_at, last.id) }
+        : {}),
+    });
+  }
+
+  public async listPublicRecords(
+    input: ListPublicContentInput,
+  ): Promise<CursorPage<PublicRecordContent>> {
+    const limit = assertPageSize(input.limit);
+    const cursorKind = `public-records:${input.modelKey}`;
+    const after = input.after === undefined ? undefined : decodeCursor(input.after, cursorKind);
+    const rows = await this.sql.all<PublicGlobalRow>(
+      `${PUBLIC_RECORD_SQL} and e.model_key = ?
+          ${after === undefined ? "" : "and (s.created_at < ? or (s.created_at = ? and e.id < ?))"}
+        order by s.created_at desc, e.id desc limit ?`,
+      ...(after === undefined
+        ? [input.modelKey, limit + 1]
+        : [input.modelKey, after.timestamp, after.timestamp, after.id, limit + 1]),
+    );
+    const pageRows = rows.slice(0, limit);
+    const entries = await this.hydrate(pageRows);
+    const media = await this.publicMedia(pageRows);
+    const items = pageRows.map((row) => publicRecordContent(row, entries, media));
     const last = pageRows.at(-1);
     return Object.freeze({
       items: Object.freeze(items),
@@ -331,9 +366,9 @@ export class SqlContentReader implements ContentLinkReadPort {
   }
 
   /**
-   * Reads one page as two dependent read groups with at most eight statements:
-   * the version and candidate sizes, then the version again with the page's
-   * range-bounded rows. The runtime runs both groups as one consistent read,
+   * Reads one page as two dependent read groups with at most ten statements:
+   * the version and the entry and record candidate sizes, then the version
+   * again with the page's range-bounded rows. The runtime runs both groups as one consistent read,
    * and each version increment is atomic with every published-state change,
    * so equal versions prove one published state.
    */
@@ -344,48 +379,59 @@ export class SqlContentReader implements ContentLinkReadPort {
     const after = input.after === undefined ? undefined : decodeBuildExportCursor(input.after);
     const first = after === undefined;
     const from = after?.path ?? "";
+    const fromRecord = after?.record ?? (["", ""] as const);
     const sql = buildExportPageSql(first);
     let expected = 0;
     let range: BuildExportPageRange | undefined;
-    const [, [versionRows, routes, snapshots, blocks, media, globals]] = await this.sql.readGroups(
-      [
-        { sql: first ? BUILD_EXPORT_FIRST_PAGE_VERSION_SQL : BUILD_EXPORT_VERSION_SQL, params: [] },
-        { sql: BUILD_EXPORT_CANDIDATES_SQL, params: [from, limit + 1] },
-      ],
-      ([stateRows, candidateRows]) => {
-        const state = stateRows![0] as {
-          readonly globals_bytes?: number;
-          readonly version: number;
-        };
-        expected = after?.version ?? state.version;
-        assertBuildExportVersion(expected, state.version);
-        const pageRange = buildExportPageRange(
-          from,
-          candidateRows as readonly BuildExportCandidateRow[],
-          limit,
-          state.globals_bytes ?? 0,
-        );
-        range = pageRange;
-        const ranged = (statement: string): SqlReadStatement => ({
-          sql: statement,
-          params: [pageRange.after, pageRange.last],
-        });
-        return [
-          { sql: BUILD_EXPORT_VERSION_SQL, params: [] },
-          ranged(sql.routes),
-          ranged(sql.snapshots),
-          ranged(sql.blocks),
-          ranged(sql.media),
-          ...(sql.globals === undefined ? [] : [{ sql: sql.globals, params: [] }]),
-        ];
-      },
-    );
+    const [, [versionRows, routes, records, snapshots, blocks, media, globals]] =
+      await this.sql.readGroups(
+        [
+          {
+            sql: first ? BUILD_EXPORT_FIRST_PAGE_VERSION_SQL : BUILD_EXPORT_VERSION_SQL,
+            params: [],
+          },
+          { sql: BUILD_EXPORT_CANDIDATES_SQL, params: [from, limit + 1] },
+          { sql: BUILD_EXPORT_RECORD_CANDIDATES_SQL, params: [...fromRecord, limit + 1] },
+        ],
+        ([stateRows, candidateRows, recordCandidateRows]) => {
+          const state = stateRows![0] as {
+            readonly globals_bytes?: number;
+            readonly version: number;
+          };
+          expected = after?.version ?? state.version;
+          assertBuildExportVersion(expected, state.version);
+          const pageRange = buildExportPageRange(
+            from,
+            candidateRows as readonly BuildExportCandidateRow[],
+            limit,
+            state.globals_bytes ?? 0,
+            fromRecord,
+            recordCandidateRows as readonly BuildExportRecordCandidateRow[],
+          );
+          range = pageRange;
+          const recordRange = [...pageRange.afterRecord, ...pageRange.lastRecord];
+          const ranged = (statement: string): SqlReadStatement => ({
+            sql: statement,
+            params: [pageRange.after, pageRange.last, ...recordRange],
+          });
+          return [
+            { sql: BUILD_EXPORT_VERSION_SQL, params: [] },
+            { sql: sql.routes, params: [pageRange.after, pageRange.last] },
+            { sql: sql.records, params: recordRange },
+            ranged(sql.snapshots),
+            ranged(sql.blocks),
+            ranged(sql.media),
+            ...(sql.globals === undefined ? [] : [{ sql: sql.globals, params: [] }]),
+          ];
+        },
+      );
     assertBuildExportVersion(expected, (versionRows![0] as { readonly version: number }).version);
     return buildExportPage(
       {
         blocks: blocks as readonly BlockRow[],
         ...(globals === undefined ? {} : { globals: globals as readonly PublicGlobalRow[] }),
         media: media as readonly Record<string, unknown>[],
+        records: records as readonly PublicGlobalRow[],
         routes: routes as readonly PublicRow[],
         snapshots: snapshots as readonly SnapshotRow[],
       },

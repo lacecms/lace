@@ -111,5 +111,10 @@ test("preserves every repository contract case in order", () => {
     "returns publication and unpublication results equal to a later load",
     "refuses a stale publication as a revision conflict before link validation",
     "caps site-build and dispatcher claims per call and leaves the rest claimable",
+    "publishes route-less entries without routes and requests builds",
+    "reads route-less records newest publication first",
+    "exports records after the routed entries across pages",
+    "route-less entries are not routable link targets",
+    "synchronization guards removing a collection route",
   ]);
 });

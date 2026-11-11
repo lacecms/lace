@@ -285,3 +285,12 @@ const invalidSeoDefaults: import("../index.js").SeoDefaultsInput<typeof seoField
   siteName: "count",
 };
 void [seoKeys, seoDefaults, invalidSeo, invalidSeoDefaults];
+
+const routeLess = defineCollection({
+  fields: { quote: field.textarea({ required: true }) },
+  key: "testimonials",
+  listFields: ["quote"],
+  version: 1,
+});
+const routeLessRoute: string | undefined = routeLess.route;
+void routeLessRoute;

@@ -72,7 +72,12 @@ function hasMatchingBlockDefinitions<
 
 export const contentModelRouteSchema = v.union([
   v.strictObject({ kind: v.literal("page"), key: identifierSchema, path: v.string() }),
-  v.strictObject({ kind: v.literal("collection"), key: identifierSchema, route: v.string() }),
+  v.strictObject({
+    kind: v.literal("collection"),
+    key: identifierSchema,
+    /** Absent for a route-less collection. */
+    route: v.optional(v.string()),
+  }),
   v.strictObject({ kind: v.literal("global"), key: identifierSchema }),
 ]);
 
@@ -165,6 +170,13 @@ export const contentModelSchema = v.pipe(
     "List options must name supported collection fields.",
   ),
   v.check(hasGlobalRouting, "A global model carries no path or route."),
+  v.check(
+    (model) =>
+      model.kind !== "collection" ||
+      model.route !== undefined ||
+      (model.path === undefined && model.seo === undefined),
+    "A route-less collection carries no path or seo.",
+  ),
   v.check(
     (model) =>
       model.kind === "global" ? model.seo === undefined : model.seoDefaults === undefined,

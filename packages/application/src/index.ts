@@ -28,6 +28,7 @@ export * from "./ports/security.js";
 export * from "./content/authority.js";
 export * from "./content/collection-queries.js";
 export * from "./content/internal-links.js";
+export { routeLessModelKeys } from "./content/route-less-links.js";
 export * from "./content/published-projection.js";
 export * from "./content/use-case-inputs.js";
 export {

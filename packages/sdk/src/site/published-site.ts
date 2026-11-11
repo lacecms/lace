@@ -117,6 +117,20 @@ export interface PublishedGlobal extends PublishedMediaLookup, PublishedLinkLook
   readonly publishedAt: string;
 }
 
+/**
+ * The published content of one entry of a route-less collection: listed by
+ * model key, with a title but no path, slug or SEO group.
+ */
+export interface PublishedRecord extends PublishedMediaLookup, PublishedLinkLookup {
+  readonly internalLinks: readonly Readonly<PublicEntryDto["internalLinks"][number]>[];
+  readonly blocks: readonly PublishedBlock[];
+  readonly fields: PublicEntryDto["fields"];
+  readonly id: string;
+  readonly modelKey: string;
+  readonly publishedAt: string;
+  readonly title: string;
+}
+
 /** An immutable view of one published build export. */
 export interface PublishedSite extends PublishedMediaLookup, PublishedLinkLookup {
   readonly linkDiagnostics: LinkDiagnostics;
@@ -130,6 +144,11 @@ export interface PublishedSite extends PublishedMediaLookup, PublishedLinkLookup
   /** False when the deployment switched indexing off (`LACE_SITE_INDEXING=off`). */
   readonly indexing: boolean;
   mediaUrl(mediaId: string): string;
+  /**
+   * Published records of a route-less collection, newest publication first;
+   * empty for any other model. Records never appear in entry lookups or the sitemap.
+   */
+  records(modelKey: string): readonly PublishedRecord[];
   /** The entry's SEO metadata with fallbacks and site defaults applied. */
   seo(entry: PublishedEntry): ResolvedSeo;
   /** The site base URL ending with `/`, or `undefined` when `LACE_BUILD_SITE_URL` is not set. */
@@ -395,6 +414,52 @@ export function createPublishedSiteLoader(
         }),
       );
     }
+    const recordsByModel = new Map<string, PublishedRecord[]>();
+    const recordIds = new Set<string>();
+    for (const record of exported.records) {
+      if (byModel.has(record.modelKey) || globals.has(record.modelKey))
+        failure(
+          "invalid_export",
+          `The build export contains records of ${record.modelKey}, which also has entries or a global.`,
+        );
+      if (recordIds.has(record.id))
+        failure("invalid_export", `The build export contains record ${record.id} more than once.`);
+      recordIds.add(record.id);
+      const modelRecords = recordsByModel.get(record.modelKey) ?? [];
+      modelRecords.push(
+        Object.freeze({
+          internalLinks: record.internalLinks,
+          blocks: Object.freeze(
+            [...record.blocks]
+              .sort((left, right) => left.position - right.position)
+              .map((block) => Object.freeze(block)),
+          ),
+          fields: record.fields,
+          id: record.id,
+          image: lookup.image,
+          media: lookup.media,
+          link: links.link,
+          modelKey: record.modelKey,
+          publishedAt: record.publishedAt,
+          title: record.title,
+        }),
+      );
+      recordsByModel.set(record.modelKey, modelRecords);
+    }
+    const recordListings = new Map<string, readonly PublishedRecord[]>();
+    for (const [modelKey, modelRecords] of recordsByModel) {
+      recordListings.set(
+        modelKey,
+        Object.freeze(
+          modelRecords.sort(
+            (left, right) =>
+              compareCodeUnits(right.publishedAt, left.publishedAt) ||
+              compareCodeUnits(right.id, left.id),
+          ),
+        ),
+      );
+    }
+    const noRecords: readonly PublishedRecord[] = Object.freeze([]);
     const listings = new Map<string, readonly PublishedEntry[]>();
     for (const [modelKey, modelEntries] of byModel) {
       listings.set(
@@ -438,6 +503,7 @@ export function createPublishedSiteLoader(
       media: lookup.media,
       mediaUrl: (mediaId: string) =>
         resolved.get(mediaId)?.url ?? mediaClient.getPublicMediaUrl(mediaId),
+      records: (modelKey: string) => recordListings.get(modelKey) ?? noRecords,
       seo: (entry: PublishedEntry) =>
         resolveSeo({
           ...(defaults === undefined ? {} : { defaults }),

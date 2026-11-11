@@ -28,8 +28,8 @@ export function draftValues(model: ContentModelDto, entry: ContentEntryDto): Dra
     }),
     fields: initialModelFieldValues(model, entry.draft.fields),
     ...(model.seo === undefined ? {} : { seo: seoFormValues(entry.draft.seo) }),
-    // The slug input holds "" for a slugless collection entry, so the baseline must match it.
-    ...(model.kind === "collection"
+    // The slug input holds "" for a slugless routed collection entry, so the baseline must match it.
+    ...(model.kind === "collection" && model.route !== undefined
       ? { slug: entry.draft.slug ?? "" }
       : entry.draft.slug === undefined
         ? {}
@@ -44,6 +44,7 @@ export function resolvedPublicPath(
   entry: ContentEntryDto,
 ): string | undefined {
   if (model.kind === "page") return model.path;
+  if (model.kind !== "collection" || model.route === undefined) return undefined;
   const slug = (entry.published ?? entry.draft).slug;
   return slug === undefined ? undefined : model.route?.replace(":slug", slug);
 }

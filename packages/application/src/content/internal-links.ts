@@ -9,13 +9,18 @@ import type {
   ContentLinkReadPort,
 } from "../ports/links.js";
 import { authorizeContentOperation } from "./authority.js";
+import { markRouteLessTargets } from "./route-less-links.js";
 import { isInternalLinkTargetId, MAX_LINK_RESOLVE_IDS } from "@lacecms/content";
 import { DomainError } from "@lacecms/domain";
 import type { Actor } from "@lacecms/domain";
 
 /** Permissions are checked before input validation or any adapter call. */
 export class ContentLinkUseCases {
-  public constructor(private readonly links: ContentLinkReadPort) {}
+  /** `routeLessKeys` names configured collections without a route; they are never targets. */
+  public constructor(
+    private readonly links: ContentLinkReadPort,
+    private readonly routeLessKeys: readonly string[] = [],
+  ) {}
   public resolve(
     actor: Actor,
     ids: readonly string[],
@@ -30,7 +35,9 @@ export class ContentLinkUseCases {
         "CONTENT_INVALID_STATE",
         `Link target IDs must be valid, distinct and at most ${MAX_LINK_RESOLVE_IDS}.`,
       );
-    return this.links.resolveLinkTargets(ids);
+    return this.links
+      .resolveLinkTargets(ids)
+      .then((statuses) => markRouteLessTargets(statuses, this.routeLessKeys));
   }
   public list(actor: Actor, query: LinkTargetQuery): Promise<LinkTargetPage> {
     authorizeContentOperation(actor, "listLinkTargets");
@@ -40,9 +47,12 @@ export class ContentLinkUseCases {
       (query.status !== undefined && query.status !== "published" && query.status !== "unpublished")
     )
       throw new DomainError("CONTENT_INVALID_STATE", "Invalid link target query.");
+    if (query.modelKey !== undefined && this.routeLessKeys.includes(query.modelKey))
+      return Promise.resolve({ items: [] });
     return this.links.listLinkTargets({
       ...query,
       ...(query.search === undefined ? {} : { search: query.search.trim() }),
+      ...(this.routeLessKeys.length === 0 ? {} : { excludedModelKeys: this.routeLessKeys }),
     });
   }
   public impact(actor: Actor, query: LinkImpactQuery): Promise<LinkImpactPage> {

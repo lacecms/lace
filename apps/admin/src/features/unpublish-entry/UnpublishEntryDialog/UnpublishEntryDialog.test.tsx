@@ -10,8 +10,10 @@ function Harness({
   kind = "collection",
   onReload = () => undefined,
   onUnpublished = () => undefined,
+  routeLess = false,
 }: {
   readonly kind?: "collection" | "global" | "page";
+  readonly routeLess?: boolean;
   readonly onReload?: () => void;
   readonly onUnpublished?: () => void;
 }) {
@@ -30,8 +32,11 @@ function Harness({
         onReload={onReload}
         onUnpublished={onUnpublished}
         open={open}
-        publicPath={kind === "global" ? undefined : kind === "page" ? "/about" : "/posts/first"}
+        publicPath={
+          kind === "global" || routeLess ? undefined : kind === "page" ? "/about" : "/posts/first"
+        }
         returnFocus={trigger}
+        routeLess={routeLess}
       />
     </>
   );
@@ -124,4 +129,13 @@ test("a stale publication keeps the dialog open with the error and offers a relo
   await user.click(within(dialog).getByRole("button", { name: "Reload entry" }));
   expect(onReload).toHaveBeenCalledTimes(1);
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+});
+
+test("states that a route-less entry leaves the pages that list it", async () => {
+  const user = userEvent.setup();
+  renderInRouter(<Harness routeLess />, { client: stubClient() });
+  await user.click(await screen.findByRole("button", { name: "Open unpublish" }));
+  expect(screen.getByRole("dialog", { name: "Unpublish this entry?" })).toHaveAccessibleDescription(
+    "The entry disappears from the pages that list it after the next site build. The draft and any unsaved changes are kept; publishing again makes the current draft public.",
+  );
 });

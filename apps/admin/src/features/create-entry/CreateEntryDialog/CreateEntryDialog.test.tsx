@@ -118,3 +118,23 @@ test("CE9B manual slug mode survives failure, clear and title changes until re-e
   expect(slug).toHaveValue("");
   expect(dialog.getByText(/Enter a slug manually/)).toBeVisible();
 });
+
+test("a route-less collection creates an entry from its title only", async () => {
+  const user = userEvent.setup();
+  const createEntry = vi.fn(async () => ({ ...draftEntry, id: "entry-new" }));
+  renderInRouter(<CreateEntryDialog modelKey="testimonials" routed={false} />, {
+    client: client({ createEntry, loadEntry: async () => draftEntry }),
+  });
+  await user.click(await screen.findByRole("button", { name: "Create entry" }));
+  const dialog = screen.getByRole("dialog", { name: "Create entry" });
+  expect(dialog).toHaveAccessibleDescription(
+    "Add a draft to testimonials. Edit its fields in the editor.",
+  );
+  expect(within(dialog).queryByLabelText("Slug")).not.toBeInTheDocument();
+  expect(within(dialog).queryByLabelText("Suggest from title")).not.toBeInTheDocument();
+  await user.type(within(dialog).getByLabelText("Title"), "Ada Lovelace");
+  await user.click(within(dialog).getByRole("button", { name: "Create entry" }));
+  await waitFor(() =>
+    expect(createEntry).toHaveBeenCalledWith("testimonials", "Ada Lovelace", undefined),
+  );
+});

@@ -3,6 +3,7 @@ import { expect, test } from "vitest";
 import {
   BUILD_EXPORT_CANDIDATES_SQL,
   BUILD_EXPORT_FIRST_PAGE_VERSION_SQL,
+  BUILD_EXPORT_RECORD_CANDIDATES_SQL,
   BUILD_EXPORT_VERSION_SQL,
   encodeBuildExportCursor,
 } from "../builds/export.js";
@@ -58,14 +59,17 @@ test("a build-export page is read through one two-group read", async () => {
   const page = await new SqlContentReader(fake.sql, noModels).exportBuildContentPage({
     limit: 10,
   });
-  expect(page).toEqual({ entries: [], globals: [], version: 3 });
+  expect(page).toEqual({ entries: [], globals: [], records: [], version: 3 });
   expect(fake.calls).toEqual([]);
-  expect(fake.groups.map((group) => group.length)).toEqual([2, 6]);
+  expect(fake.groups.map((group) => group.length)).toEqual([3, 7]);
   expect(fake.groups[0]![0]!.sql).toBe(BUILD_EXPORT_FIRST_PAGE_VERSION_SQL);
+  expect(fake.groups[0]![2]!.sql).toBe(BUILD_EXPORT_RECORD_CANDIDATES_SQL);
+  expect(fake.groups[0]![2]!.params).toEqual(["", "", 11]);
   expect(fake.groups[1]![0]!.sql).toBe(BUILD_EXPORT_VERSION_SQL);
-  expect(fake.groups[1]!.slice(1, 5).every((statement) => statement.params.length === 2)).toBe(
-    true,
-  );
+  // Routes bind the path range, records the record range, the rest both.
+  expect(fake.groups[1]!.slice(1, 6).map((statement) => statement.params.length)).toEqual([
+    2, 4, 6, 6, 6,
+  ]);
 });
 
 test("a continuation page omits globals and fails before the second group on a stale cursor", async () => {
@@ -74,8 +78,17 @@ test("a continuation page omits globals and fails before the second group on a s
     after: encodeBuildExportCursor(3, "/a"),
     limit: 10,
   });
-  expect(continued.groups.map((group) => group.length)).toEqual([2, 5]);
+  expect(continued.groups.map((group) => group.length)).toEqual([3, 6]);
   expect(continued.groups[0]![1]!.params).toEqual(["/a", 11]);
+
+  const records = fakeSql();
+  await new SqlContentReader(records.sql, noModels).exportBuildContentPage({
+    after: encodeBuildExportCursor(3, "/a", ["cv", "cv-1"]),
+    limit: 10,
+  });
+  expect(records.groups[0]![2]!.params).toEqual(["cv", "cv-1", 11]);
+  // An empty page keeps its record position as an empty record range.
+  expect(records.groups[1]![2]!.params).toEqual(["cv", "cv-1", "cv", "cv-1"]);
 
   const stale = fakeSql({ firstVersion: 4 });
   await expect(

@@ -91,7 +91,7 @@ describe("admin entry list contracts", () => {
     ).toEqual(["hero-1"]);
     expect(
       toBuildExportDto(
-        { entries: [{ entry: envelopeEntry, media: [], path: "/a" }], version: 1 },
+        { entries: [{ entry: envelopeEntry, media: [], path: "/a" }], records: [], version: 1 },
         urlFor,
       ).entries[0].blocks.map((value) => value.key),
     ).toEqual(["hero-1"]);

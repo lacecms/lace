@@ -92,7 +92,7 @@
     "site/src/pages/blog/[slug].astro": "2d4bf5e874fe7245a9daddb99e5805985c7c0a3aab2c57b80888fbfec03c0e6b",
     "site/src/pages/index.astro": "7bdca3a771427d706b739523eeb9c8cefd3f97a825eaef575c6fc65a38446375",
     "site/src/pages/robots.txt.ts": "a3c432a9365821dda7565cc7bcf7e36ff5195d7275015cec07b3d3114b16cc8e",
-    "site/src/pages/sitemap.xml.ts": "eac427f2c4b44645a88faff420ee731ba704eec81b3393fb6648bd9a4e7505ea",
+    "site/src/pages/sitemap.xml.ts": "2dade5b1ae9f84988a188408cdb78aa63a3dab97185cf7cc3ee19c33ae718d77",
     "site/src/styles/global.css": "2e62eb00fcddfdfed4b6475b370923aa897e99d9f6091e4e309cde5c7eef4a1a",
     "site/tsconfig.json": "90f5def2f40919bf2a15d31fc4b4f1f180cb577ceff1a3288ff4153a4cd38ab6",
     "worker/.dev.vars.example": "94b509386ffeaa9ad97d77a23c4f1e171bc8c30b201e609158cdd7e43815c1e3",

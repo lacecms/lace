@@ -3175,7 +3175,7 @@
                               "type": "string"
                             }
                           },
-                          "required": ["kind", "key", "route"],
+                          "required": ["kind", "key"],
                           "type": "object"
                         },
                         {
@@ -3758,7 +3758,7 @@
                               "type": "string"
                             }
                           },
-                          "required": ["kind", "key", "route"],
+                          "required": ["kind", "key"],
                           "type": "object"
                         },
                         {
@@ -4228,7 +4228,7 @@
                               "type": "string"
                             }
                           },
-                          "required": ["kind", "key", "route"],
+                          "required": ["kind", "key"],
                           "type": "object"
                         },
                         {
@@ -5001,7 +5001,7 @@
                                   "type": "string"
                                 }
                               },
-                              "required": ["kind", "key", "route"],
+                              "required": ["kind", "key"],
                               "type": "object"
                             },
                             {
@@ -5478,7 +5478,7 @@
                               "type": "string"
                             }
                           },
-                          "required": ["kind", "key", "route"],
+                          "required": ["kind", "key"],
                           "type": "object"
                         },
                         {
@@ -5996,7 +5996,7 @@
                                   "type": "string"
                                 }
                               },
-                              "required": ["kind", "key", "route"],
+                              "required": ["kind", "key"],
                               "type": "object"
                             },
                             {
@@ -9394,7 +9394,7 @@
                               "type": "string"
                             }
                           },
-                          "required": ["kind", "key", "route"],
+                          "required": ["kind", "key"],
                           "type": "object"
                         },
                         {
@@ -11401,6 +11401,108 @@
                           "minLength": 1,
                           "type": "string"
                         },
+                        "records": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "blocks": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "anchor": {
+                                      "type": "string"
+                                    },
+                                    "className": {
+                                      "type": "string"
+                                    },
+                                    "data": {},
+                                    "key": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "position": {
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "schemaVersion": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "settings": {
+                                      "default": {}
+                                    },
+                                    "type": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["data", "key", "position", "schemaVersion", "type"],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              "fields": {},
+                              "id": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "internalLinks": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "area": {
+                                      "enum": ["fields", "data"]
+                                    },
+                                    "pointer": {
+                                      "minLength": 1,
+                                      "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                                      "type": "string"
+                                    },
+                                    "sourceKey": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "targetId": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["sourceKey", "area", "pointer", "targetId"],
+                                  "type": "object"
+                                },
+                                "maxItems": 200,
+                                "type": "array"
+                              },
+                              "modelKey": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "publishedAt": {},
+                              "title": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "internalLinks",
+                              "blocks",
+                              "fields",
+                              "id",
+                              "modelKey",
+                              "publishedAt",
+                              "title"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
                         "seo": {
                           "additionalProperties": false,
                           "properties": {
@@ -11517,6 +11619,7 @@
                         "entries",
                         "formatVersion",
                         "media",
+                        "records",
                         "version",
                         "globals",
                         "seo"
@@ -11799,12 +11902,114 @@
                           "minLength": 1,
                           "type": "string"
                         },
+                        "records": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "blocks": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "anchor": {
+                                      "type": "string"
+                                    },
+                                    "className": {
+                                      "type": "string"
+                                    },
+                                    "data": {},
+                                    "key": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "position": {
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "schemaVersion": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "settings": {
+                                      "default": {}
+                                    },
+                                    "type": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["data", "key", "position", "schemaVersion", "type"],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              "fields": {},
+                              "id": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "internalLinks": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "area": {
+                                      "enum": ["fields", "data"]
+                                    },
+                                    "pointer": {
+                                      "minLength": 1,
+                                      "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                                      "type": "string"
+                                    },
+                                    "sourceKey": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "targetId": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["sourceKey", "area", "pointer", "targetId"],
+                                  "type": "object"
+                                },
+                                "maxItems": 200,
+                                "type": "array"
+                              },
+                              "modelKey": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "publishedAt": {},
+                              "title": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "internalLinks",
+                              "blocks",
+                              "fields",
+                              "id",
+                              "modelKey",
+                              "publishedAt",
+                              "title"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
                         "version": {
                           "minimum": 0,
                           "type": "integer"
                         }
                       },
-                      "required": ["entries", "formatVersion", "media", "version"],
+                      "required": ["entries", "formatVersion", "media", "records", "version"],
                       "type": "object"
                     }
                   ]
@@ -13394,6 +13599,257 @@
           }
         },
         "summary": "Read a published page",
+        "tags": ["public"]
+      }
+    },
+    "/api/v1/public/records/{modelKey}": {
+      "get": {
+        "operationId": "getApiV1PublicRecordsByModelKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "modelKey",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "blocks": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "anchor": {
+                                  "type": "string"
+                                },
+                                "className": {
+                                  "type": "string"
+                                },
+                                "data": {},
+                                "key": {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "position": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "schemaVersion": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "settings": {
+                                  "default": {}
+                                },
+                                "type": {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["data", "key", "position", "schemaVersion", "type"],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "fields": {},
+                          "id": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "internalLinks": {
+                            "default": [],
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "area": {
+                                  "enum": ["fields", "data"]
+                                },
+                                "pointer": {
+                                  "minLength": 1,
+                                  "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                                  "type": "string"
+                                },
+                                "sourceKey": {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "targetId": {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["sourceKey", "area", "pointer", "targetId"],
+                              "type": "object"
+                            },
+                            "maxItems": 200,
+                            "type": "array"
+                          },
+                          "modelKey": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "publishedAt": {},
+                          "title": {
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": ["blocks", "fields", "id", "modelKey", "publishedAt", "title"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "media": {
+                      "additionalProperties": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "alt": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "caption": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "focalPoint": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "x": {
+                                    "type": "number"
+                                  },
+                                  "y": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": ["x", "y"],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "height": {
+                            "anyOf": [
+                              {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "mimeType": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "width": {
+                            "anyOf": [
+                              {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "alt",
+                          "caption",
+                          "focalPoint",
+                          "height",
+                          "id",
+                          "mimeType",
+                          "url",
+                          "width"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "object"
+                    },
+                    "nextCursor": {
+                      "maxLength": 4096,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["items", "media"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Published records of a route-less collection"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {},
+                    "error": {
+                      "items": {},
+                      "type": "array"
+                    },
+                    "success": {
+                      "enum": [false],
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success", "error", "data"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List published records of a route-less collection",
         "tags": ["public"]
       }
     },

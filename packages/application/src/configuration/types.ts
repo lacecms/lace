@@ -55,6 +55,8 @@ export interface StructuralChange {
   /** Changed field-definition properties, for `field-changed`. */
   readonly properties?: readonly string[];
   readonly scope: "block" | "field" | "model";
+  /** A `route-changed` change that removes a collection's route (it becomes route-less). */
+  readonly routeRemoved?: true;
   readonly target: string;
   readonly schemaPath?: string;
   /** Baseline and configured block versions of a `block-definition-changed` change. */
@@ -133,6 +135,10 @@ export interface ConfigurationSyncSnapshot {
   readonly fields: JsonObject;
   /** Whether the snapshot holds an SEO group; absent means it holds none. */
   readonly hasSeo?: boolean;
+  /** Internal reference locations in current snapshots that target this entry. */
+  readonly incomingLinks?: number;
+  /** The stored slug; absent when the snapshot has none. */
+  readonly slug?: string;
   readonly revision: number;
   readonly snapshotId: string;
   readonly state: "draft" | "published";
@@ -165,6 +171,8 @@ export interface ModelSnapshotEvidence {
   readonly oversized: ConfigurationSyncSnapshotFindings;
   /** Snapshots holding an SEO group; present when SEO is being disabled. */
   readonly seoHolders?: SnapshotHolders;
+  /** Snapshots holding a slug or targeted by links; present when a route is removed. */
+  readonly routeRemoval?: ConfigurationSyncSnapshotFindings;
   readonly snapshots: SnapshotStateCounts;
   /** Published snapshots whose hidden values the published projection removes, by target. */
   readonly prunes?: Readonly<Record<string, SnapshotStateCounts>>;
@@ -463,6 +471,7 @@ export type ConfigurationSyncDiagnosticCode =
   | "RENAME_SOURCE_STILL_CONFIGURED"
   | "REMOVAL_HAS_ENTRIES"
   | "ROUTE_CHANGE_HAS_PUBLISHED"
+  | "ROUTE_REMOVAL_HAS_SLUGS_OR_LINKS"
   | "SEO_REMOVAL_HAS_DATA"
   | "SNAPSHOT_EVIDENCE_STALE"
   | "STRUCTURE_BASELINE_MISSING"

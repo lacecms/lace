@@ -239,9 +239,11 @@ result for a first-page `304`.
 The build-export operation SHALL follow `nextCursor` from the first page until
 no cursor remains, sending the caller's optional page size on every request.
 It SHALL return one assembled export `{formatVersion, version, entries,
-globals, media, seo}`:
+records, globals, media, seo}`:
 
 - `entries`: the concatenation of all page entries;
+- `records`: the concatenation of all page records, treating a page without
+  `records` as holding none;
 - `globals` and `seo`: those of the first page;
 - `media`: the merge of all page media dictionaries, keyed in ascending ID
   order.
@@ -252,6 +254,9 @@ export, when any of these holds:
 - a page carries a different `version` or `formatVersion` than the first page;
 - a page's entry paths do not strictly continue the previous page's ascending
   path order;
+- a page's records do not strictly continue the previous records' ascending
+  order by model key and then identifier, or an entry follows a record in
+  delivery order;
 - the same media ID resolves to different items on two pages;
 - a continuation page carries `globals` or `seo`, or the first page lacks
   them.
@@ -286,6 +291,19 @@ reject with that HTTP error. A caller SHALL be able to disable restarts.
 - **THEN** the SDK rejects the traversal with a contract error and returns no
   export
 
+#### Scenario: Records follow the routed entries
+- **WHEN** the API serves a first page with the last routed entries followed
+  by records of `cv` and `testimonials`, and a continuation page with more
+  `testimonials` records
+- **THEN** the SDK returns all entries in path order and all records in model
+  key and identifier order
+
+#### Scenario: Entries after records
+- **WHEN** a continuation page carries a routed entry after an earlier page
+  delivered records
+- **THEN** the SDK rejects the traversal with a contract error and returns no
+  export
+
 ### Requirement: The SDK reads link-aware format 2 exports and manifests
 The SDK SHALL support build-export format 2, preserve validated
 `internalLinks` on every entry/global and assemble them with their source across
@@ -302,3 +320,27 @@ added to public SDK reads.
 #### Scenario: Entry without a manifest
 - **WHEN** an export page holds an entry without `internalLinks`
 - **THEN** the SDK rejects the page with a contract error and returns no export
+
+### Requirement: Public SDK reads published records
+The SDK SHALL expose `listRecords(modelKey, options?)` with the optional
+cursor and limit of the collection read. It SHALL validate the model key as a
+public identifier, request only `/api/v1/public/records/:modelKey`, and return
+the validated `{items, media, nextCursor?}` response. A `404` SHALL surface as
+the SDK's typed API error. The build-export operation SHALL return the
+export's `records` list, empty when the response omits it, with each record's
+`internalLinks` manifest.
+
+#### Scenario: A client reads records
+- **WHEN** a client calls `listRecords("testimonials")` and testimonials are
+  published
+- **THEN** the SDK requests `/api/v1/public/records/testimonials` and returns
+  the records and their media dictionary
+
+#### Scenario: A malformed record
+- **WHEN** the API returns a record carrying a `path` or `slug` key under the
+  strict variant
+- **THEN** the SDK fails with its contract-violation error
+
+#### Scenario: An export from an API without records
+- **WHEN** a format 2 export carries no `records` key
+- **THEN** the SDK returns the export with an empty `records` list

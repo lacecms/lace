@@ -31,7 +31,7 @@ export { itemSummary } from "./item-summary.js";
 export { entryActions, hasEntryActions, type EntryActions } from "./entry-actions.js";
 export { EntryStatusBadge } from "./EntryStatusBadge/index.js";
 export { useEntryOverview } from "./overview.js";
-export { isSingletonModel } from "./model-kind.js";
+export { hasPublicRoute, isRouteLessCollection, isSingletonModel } from "./model-kind.js";
 export {
   blockLevelProblems,
   PUBLICATION_ISSUE_TYPE,

@@ -78,8 +78,22 @@ export function defineCollection<
     ...(listFields.length === 0
       ? {}
       : { listFields: listFields as readonly (keyof Fields & string)[] }),
-    route: normalizeCollectionRoute(input.route),
-    ...normalizeRoutableSeo(input, common.fields),
+    ...(input.route === undefined
+      ? routeLessOptions(input)
+      : {
+          route: normalizeCollectionRoute(input.route),
+          ...normalizeRoutableSeo(input, common.fields),
+        }),
   };
   return deepFreeze(definition) as CollectionModelDefinition<Fields> & ModelVisibility<Visibility>;
+}
+
+/** A route-less collection has no slug-based route and therefore no SEO group. */
+function routeLessOptions(input: { readonly key: string; readonly seo?: unknown }): {
+  readonly removedSeo?: true;
+} {
+  if (input.seo !== undefined) {
+    fail(`collection "${input.key}" must not declare seo without a route.`);
+  }
+  return normalizeRoutableSeo(input, {});
 }

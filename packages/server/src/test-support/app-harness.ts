@@ -198,6 +198,7 @@ export async function fixture({
         return store.exportBuildContentPage(input);
       },
       listPublic: store.listPublic.bind(store),
+      listPublicRecords: store.listPublicRecords.bind(store),
       loadPublic: store.loadPublic.bind(store),
       loadPublicGlobal: store.loadPublicGlobal.bind(store),
       loadPublicMedia: store.loadPublicMedia.bind(store),

@@ -14,7 +14,11 @@ export interface DecodedSortCursor {
   readonly value: number | string;
 }
 
-export function parseCursorObject(value: string): Record<string, unknown> {
+/** Parses a cursor object of four required keys plus any of `optionalKeys`. */
+export function parseCursorObject(
+  value: string,
+  optionalKeys: readonly string[] = [],
+): Record<string, unknown> {
   if (!/^[A-Za-z0-9_-]+$/u.test(value)) failure("Cursor is not base64url encoded.");
   try {
     const parsed: unknown = JSON.parse(decodeBase64Url(value));
@@ -22,7 +26,9 @@ export function parseCursorObject(value: string): Record<string, unknown> {
       parsed === null ||
       typeof parsed !== "object" ||
       Array.isArray(parsed) ||
-      Object.keys(parsed).length !== 4
+      Object.keys(parsed).length -
+        optionalKeys.filter((key) => Object.hasOwn(parsed, key)).length !==
+        4
     ) {
       failure("Cursor has an invalid shape.");
     }

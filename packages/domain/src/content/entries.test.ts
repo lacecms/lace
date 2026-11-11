@@ -13,6 +13,7 @@ import { expectDomainError, present } from "../test-support/assertions.js";
 import type { ContentBlock, ContentBlockInput } from "./blocks.js";
 import {
   assertCollectionEntryOperation,
+  assertEntryCreationAllowed,
   createContentEntry,
   publishContentEntry,
   requireMutableDraft,
@@ -22,7 +23,7 @@ import {
   unpublishContentEntry,
 } from "./entries.js";
 import type { ContentEntry, DraftSnapshot } from "./entries.js";
-import { contentPublicPath } from "./routes.js";
+import { contentPublicPath, hasPublicRoute, isRouteLessCollection } from "./routes.js";
 import { normalizeEntrySeo } from "./seo.js";
 
 const admin: Actor = { id: actorId("admin-1"), role: "admin" };
@@ -206,6 +207,27 @@ test("treats a global as a route-less singleton", () => {
       () => assertCollectionEntryOperation(global, operation),
       "CONTENT_PAGE_SINGLETON",
     );
+  }
+});
+
+test("treats a route-less collection entry as many entries without a public path", () => {
+  const testimonials = { key: contentModelKey("testimonials"), kind: "collection" } as const;
+  expect(contentPublicPath(testimonials)).toBeUndefined();
+  expect(contentPublicPath(testimonials, "ignored")).toBeUndefined();
+  expect(hasPublicRoute(testimonials)).toBe(false);
+  expect(isRouteLessCollection(testimonials)).toBe(true);
+  const posts = {
+    key: contentModelKey("posts"),
+    kind: "collection",
+    route: "/blog/:slug",
+  } as const;
+  expect(hasPublicRoute(posts)).toBe(true);
+  expect(isRouteLessCollection(posts)).toBe(false);
+  expect(hasPublicRoute({ key: contentModelKey("settings"), kind: "global" })).toBe(false);
+  expect(() => assertEntryCreationAllowed("collection", 3)).not.toThrow();
+  const routeLessEntry: Pick<ContentEntry, "model"> = { model: testimonials };
+  for (const operation of ["delete", "duplicate"] as const) {
+    expect(() => assertCollectionEntryOperation(routeLessEntry, operation)).not.toThrow();
   }
 });
 

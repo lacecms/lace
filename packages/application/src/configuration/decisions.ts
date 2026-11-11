@@ -333,6 +333,18 @@ export function decideEvolution(
           { affectedCount: stored.publishedSnapshotCount, changeClass: change.class },
         );
       }
+      const removal = change.routeRemoved === true ? evidence?.routeRemoval : undefined;
+      if (removal !== undefined && removal.count > 0) {
+        refuse(
+          "ROUTE_REMOVAL_HAS_SLUGS_OR_LINKS",
+          `Model ${modelKey} removes its route while ${removal.count} snapshots hold a slug or are linked internally; clear those slugs and links first.`,
+          {
+            affectedCount: removal.count,
+            changeClass: change.class,
+            snapshots: removal.snapshots,
+          },
+        );
+      }
     } else if (change.class === "breaking") {
       refuse(
         "FIELD_CHANGE_UNSUPPORTED",

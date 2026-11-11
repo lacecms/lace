@@ -22,6 +22,8 @@ export type LinkTargetStatus =
 export type RoutableLinkTarget = Extract<LinkTargetStatus, { readonly title: string }>;
 
 export interface LinkTargetQuery {
+  /** Model keys left out of the picker: configured collections without a route. */
+  readonly excludedModelKeys?: readonly string[];
   readonly modelKey?: string;
   readonly status?: "published" | "unpublished";
   readonly search?: string;

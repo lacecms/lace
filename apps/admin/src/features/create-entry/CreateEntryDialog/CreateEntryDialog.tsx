@@ -28,9 +28,12 @@ import { TextField } from "../../../shared/ui/TextField/index.js";
 export function CreateEntryDialog({
   collectionLabel,
   modelKey,
+  routed = true,
 }: {
   readonly collectionLabel?: string;
   readonly modelKey: string;
+  /** False for a route-less collection, whose entries have no slug. */
+  readonly routed?: boolean;
 }) {
   const client = useAdminClient();
   const queryClient = useQueryClient();
@@ -39,7 +42,7 @@ export function CreateEntryDialog({
   const [title, setTitle] = useState("");
   const [manualSlug, setManualSlug] = useState("");
   const [automaticSlug, setAutomaticSlug] = useState(true);
-  const slug = automaticSlug ? suggestSlug(title) : manualSlug;
+  const slug = !routed ? "" : automaticSlug ? suggestSlug(title) : manualSlug;
   const trimmedTitle = title.trim();
   const create = useMutation({
     mutationFn: () => client.createEntry(modelKey, trimmedTitle, slug === "" ? undefined : slug),
@@ -75,7 +78,9 @@ export function CreateEntryDialog({
         <DialogHeader>
           <DialogTitle>Create entry</DialogTitle>
           <DialogDescription>
-            {`Add a draft to ${collectionLabel ?? modelKey}. Choose its slug here and edit its fields in the editor.`}
+            {routed
+              ? `Add a draft to ${collectionLabel ?? modelKey}. Choose its slug here and edit its fields in the editor.`
+              : `Add a draft to ${collectionLabel ?? modelKey}. Edit its fields in the editor.`}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -93,34 +98,38 @@ export function CreateEntryDialog({
             required
             value={title}
           />
-          <TextField
-            label="Slug"
-            aria-describedby="create-slug-guidance"
-            disabled={create.isPending}
-            maxLength={MAX_SLUG_LENGTH}
-            onChange={(event) => {
-              setManualSlug(event.currentTarget.value);
-              setAutomaticSlug(false);
-            }}
-            value={slug}
-          />
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={automaticSlug}
-              disabled={create.isPending}
-              onChange={(event) => {
-                setManualSlug(slug);
-                setAutomaticSlug(event.currentTarget.checked);
-              }}
-            />
-            Suggest from title
-          </label>
-          <p className="text-xs text-muted-foreground" id="create-slug-guidance">
-            {slug === ""
-              ? "Enter a slug manually if the title has no Latin letters or digits. You can also leave it empty for now."
-              : "Use lowercase letters, digits and hyphens. Availability is checked by the server."}
-          </p>
+          {routed ? (
+            <>
+              <TextField
+                label="Slug"
+                aria-describedby="create-slug-guidance"
+                disabled={create.isPending}
+                maxLength={MAX_SLUG_LENGTH}
+                onChange={(event) => {
+                  setManualSlug(event.currentTarget.value);
+                  setAutomaticSlug(false);
+                }}
+                value={slug}
+              />
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={automaticSlug}
+                  disabled={create.isPending}
+                  onChange={(event) => {
+                    setManualSlug(slug);
+                    setAutomaticSlug(event.currentTarget.checked);
+                  }}
+                />
+                Suggest from title
+              </label>
+              <p className="text-xs text-muted-foreground" id="create-slug-guidance">
+                {slug === ""
+                  ? "Enter a slug manually if the title has no Latin letters or digits. You can also leave it empty for now."
+                  : "Use lowercase letters, digits and hyphens. Availability is checked by the server."}
+              </p>
+            </>
+          ) : undefined}
           {create.error === null ? undefined : (
             <ErrorState
               description={errorDescription(create.error)}

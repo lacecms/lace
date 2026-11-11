@@ -171,7 +171,11 @@ export function CollectionEntries({
           )}
         </div>
         {canManage && !empty ? (
-          <CreateEntryDialog collectionLabel={title} modelKey={modelKey} />
+          <CreateEntryDialog
+            collectionLabel={title}
+            modelKey={modelKey}
+            routed={model.route !== undefined}
+          />
         ) : undefined}
       </div>
       {model.listOptions?.sortableFields?.length ? (
@@ -309,7 +313,11 @@ export function CollectionEntries({
         <EmptyState
           action={
             canManage ? (
-              <CreateEntryDialog collectionLabel={title} modelKey={modelKey} />
+              <CreateEntryDialog
+                collectionLabel={title}
+                modelKey={modelKey}
+                routed={model.route !== undefined}
+              />
             ) : undefined
           }
           description={
@@ -344,6 +352,7 @@ export function CollectionEntries({
             onDeleted={focusHeading}
             onSortChange={(sort) => change({ sort })}
             onFilterField={openFilters}
+            routed={model.route !== undefined}
             sort={sort}
           />
           {entries.isFetchNextPageError && expired ? (
