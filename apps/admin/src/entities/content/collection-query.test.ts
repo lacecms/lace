@@ -6,7 +6,11 @@ import {
   filterParityFilterableFields,
   filterParityUnlistedField,
 } from "@lacecms/test-utils/filter-parity";
-import { resolveCollectionListSearch, collectionFilterProblem } from "./collection-query.js";
+import {
+  collectionFilterProblem,
+  defaultCollectionSort,
+  resolveCollectionListSearch,
+} from "./collection-query.js";
 import {
   CLOUDFLARE_LIST_QUERY_LIMITS,
   NODE_LIST_QUERY_LIMITS,
@@ -48,6 +52,23 @@ test("metadata resolves hidden fields and drops only unsupported or over-budget 
     resolveCollectionListSearch(query, { ...model, listOptions: undefined }).sort,
   ).toBeUndefined();
   expect(collectionFilterProblem(model, { field: "n", op: "range", min: 2, max: 1 })).toBeDefined();
+});
+
+test("the model's own default sort is dropped from the URL search; other sorts stay", () => {
+  const ordered: ContentModelDto = {
+    ...model,
+    listOptions: { sortableFields: ["hidden"], defaultSort: "field:hidden" },
+  };
+  expect(defaultCollectionSort(ordered)).toBe("field:hidden");
+  expect(defaultCollectionSort(model)).toBe("-updatedAt");
+  expect(resolveCollectionListSearch({ sort: "field:hidden" }, ordered).sort).toBeUndefined();
+  expect(resolveCollectionListSearch({ sort: "-updatedAt" }, ordered).sort).toBe("-updatedAt");
+  expect(resolveCollectionListSearch({ sort: "-field:hidden" }, ordered).sort).toBe(
+    "-field:hidden",
+  );
+  // Without a configured default, -updatedAt is the default and stays out of the URL.
+  expect(resolveCollectionListSearch({ sort: "-updatedAt" }, model).sort).toBeUndefined();
+  expect(resolveCollectionListSearch({ sort: "title" }, model).sort).toBe("title");
 });
 
 test("the condition editor follows the shared filter parity table", () => {

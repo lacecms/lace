@@ -2,7 +2,9 @@ import { COLLECTION_MATCHING_VERSION, NODE_LIST_QUERY_LIMITS } from "@lacecms/co
 import type { ListQueryLimits } from "@lacecms/content";
 import {
   canonicalizeJson,
+  CONTENT_ENTRY_SYSTEM_SORTS,
   FIELD_KEY_PATTERN,
+  FIELD_KEY_SOURCE,
   MAX_FILTER_SELECT_VALUES,
   MAX_FILTER_TEXT_LENGTH,
 } from "@lacecms/content";
@@ -153,22 +155,48 @@ const targets = v.pipe(
   v.maxLength(16),
   v.check((keys) => new Set(keys).size === keys.length, "Query targets must be distinct."),
 );
+export const contentEntrySystemSortSchema = v.picklist(CONTENT_ENTRY_SYSTEM_SORTS);
+export const contentEntrySortSchema = v.union([
+  contentEntrySystemSortSchema,
+  v.pipe(v.string(), v.regex(new RegExp(`^-?field:${FIELD_KEY_SOURCE}$`, "u"))),
+]);
+
+/** The configured key of a `field:`/`-field:` sort, or undefined for a system sort. */
+export function sortFieldKey(sort: string): string | undefined {
+  const sortKey = sort.startsWith("-") ? sort.slice(1) : sort;
+  return sortKey.startsWith("field:") ? sortKey.slice(6) : undefined;
+}
+
 export const collectionListOptionsSchema = v.pipe(
   v.strictObject({
     sortableFields: v.optional(targets),
     filterableFields: v.optional(targets),
     searchableFields: v.optional(targets),
+    defaultSort: v.optional(
+      v.pipe(
+        contentEntrySortSchema,
+        v.check((sort) => sort !== "-updatedAt", "The implicit default sort must be omitted."),
+        v.description(
+          "Admin list order for requests without sort; a field sort names an entry of sortableFields.",
+        ),
+      ),
+    ),
   }),
   v.check(
     (options) => Object.values(options).some((value) => value !== undefined),
     "Empty options must be omitted.",
   ),
+  v.check((options) => {
+    const field = options.defaultSort === undefined ? undefined : sortFieldKey(options.defaultSort);
+    return field === undefined || (options.sortableFields ?? []).includes(field);
+  }, "A field default sort must be sortable."),
 );
 export type CollectionListOptionsDto = v.InferOutput<typeof collectionListOptionsSchema>;
 export interface CollectionListOptionsSource {
   readonly sortableFields?: readonly string[] | undefined;
   readonly filterableFields?: readonly string[] | undefined;
   readonly searchableFields?: readonly string[] | undefined;
+  readonly defaultSort?: string | undefined;
 }
 
 /** Set-like query operands have one identity independent of editor order. */

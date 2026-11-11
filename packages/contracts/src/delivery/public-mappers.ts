@@ -13,6 +13,8 @@ import type {
   PublicGlobalDto,
   PublicGlobalContentDto,
   PublicContentListDto,
+  PublicRecordDto,
+  PublicRecordListDto,
 } from "./public.js";
 
 /** A published entry with the media its published snapshot references. */
@@ -90,6 +92,24 @@ export function toPublicGlobalDto(
   };
 }
 
+/** Maps the published snapshot of a route-less collection entry; no path or slug. */
+export function toPublicRecordDto(
+  entry: ContentEntry,
+  internalLinks: readonly PublicInternalLinkReference[] = [],
+): PublicRecordDto {
+  const snapshot = entry.published;
+  if (snapshot === undefined) throw new TypeError("A public record requires a published snapshot.");
+  return {
+    internalLinks: internalLinks.map((item) => ({ ...item })),
+    blocks: publicBlocks(snapshot.blocks),
+    fields: snapshot.fields,
+    id: entry.id,
+    modelKey: entry.model.key,
+    publishedAt: toIsoTimestamp(snapshot.createdAt),
+    title: snapshot.title,
+  };
+}
+
 export function toPublicMediaDto(media: PublicMediaSource, url: string): PublicMediaDto {
   return {
     alt: media.alt ?? null,
@@ -164,5 +184,26 @@ export function toPublicGlobalContentDto(
   return {
     global: toPublicGlobalDto(value.entry, value.internalLinks),
     media: toPublicMediaDictionary(value.media, urlFor),
+  };
+}
+
+/** A published route-less collection entry and the media its publication references. */
+export interface PublicRecordSource {
+  readonly internalLinks: readonly PublicInternalLinkReference[];
+  readonly entry: ContentEntry;
+  readonly media: readonly PublicMediaSource[];
+}
+
+export function toPublicRecordListDto(
+  value: { readonly items: readonly PublicRecordSource[]; readonly nextCursor?: string },
+  urlFor: PublicMediaUrl,
+): PublicRecordListDto {
+  return {
+    items: value.items.map(({ entry, internalLinks }) => toPublicRecordDto(entry, internalLinks)),
+    media: toPublicMediaDictionary(
+      value.items.flatMap((item) => item.media),
+      urlFor,
+    ),
+    ...(value.nextCursor === undefined ? {} : { nextCursor: value.nextCursor as OpaqueCursorDto }),
   };
 }

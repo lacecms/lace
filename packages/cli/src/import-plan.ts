@@ -281,6 +281,8 @@ async function findEntry(
     const current = await readEntry(client, entry.key, recorded.id);
     if (current?.model.key === model.key && current.draft.slug === entry.slug) return current;
   }
+  // A route-less entry has no slug to look up: only its state-file mapping matches it.
+  if (model.kind === "collection" && model.route === undefined) return undefined;
   const items = await listEntries(
     client,
     entry.key,

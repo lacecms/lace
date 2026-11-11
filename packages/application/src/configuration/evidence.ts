@@ -22,6 +22,7 @@ import {
 export function changeNeedsEvidence(change: StructuralChange): boolean {
   return (
     change.backfill === true ||
+    change.routeRemoved === true ||
     change.kind.startsWith("field-visibility-") ||
     change.class === "destructive" ||
     change.class === "migration" ||
@@ -151,6 +152,11 @@ export function createSnapshotEvidenceAccumulator(request: ConfigurationSyncScan
   const seoHolders = request.changes.some((change) => change.kind === "seo-disabled")
     ? emptyHolders()
     : undefined;
+  const routeRemoval: MutableFindings | undefined = request.changes.some(
+    (change) => change.routeRemoved === true,
+  )
+    ? { count: 0, snapshots: [] }
+    : undefined;
   for (const change of request.changes) {
     if (change.kind === "field-removed") removedFields.add(change.target);
     if (change.kind === "field-renamed" && change.from !== undefined) {
@@ -172,6 +178,11 @@ export function createSnapshotEvidenceAccumulator(request: ConfigurationSyncScan
       for (const snapshot of page) {
         snapshots[snapshot.state] += 1;
         if (seoHolders !== undefined && snapshot.hasSeo === true) addHolder(seoHolders, snapshot);
+        if (
+          routeRemoval !== undefined &&
+          (snapshot.slug !== undefined || (snapshot.incomingLinks ?? 0) > 0)
+        )
+          addFinding(routeRemoval, snapshot);
         const types = new Set(snapshot.blocks.map((block) => block.type));
         for (const type of blockTypes) {
           if (types.has(type)) addHolder(blockHolders[type]!, snapshot);
@@ -264,6 +275,7 @@ export function createSnapshotEvidenceAccumulator(request: ConfigurationSyncScan
         ...(seoHolders === undefined
           ? {}
           : { seoHolders: freezeHolders({ seo: seoHolders }).seo! }),
+        ...(routeRemoval === undefined ? {} : { routeRemoval: freezeFindings(routeRemoval) }),
         snapshots: Object.freeze({ ...snapshots }),
         ...(Object.keys(prunes).length === 0 ? {} : { prunes: freezeCounts(prunes) }),
         violations: Object.freeze(

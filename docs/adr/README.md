@@ -3,7 +3,7 @@
 These records govern decisions within the [architecture](../architecture/README.md)
 and [accepted specifications](../../openspec/specs/). See the
 [internal index](../README.md) for document ownership. Status follows each
-record: all twenty-eight decisions remain accepted; none names a superseding ADR.
+record: ADR 0029 is amended by ADR 0030; every other decision remains accepted.
 An `amended` or `superseded` decision must identify its amendment or successor.
 
 | Number | Title | Status | Superseding ADR |
@@ -36,4 +36,6 @@ An `amended` or `superseded` decision must identify its amendment or successor.
 | 0026 | [Code-defined models with draft and published snapshots](0026-code-defined-models-two-snapshots.md) | accepted | — |
 | 0027 | [Publication through an outbox-triggered rebuild](0027-outbox-triggered-rebuild.md) | accepted | — |
 | 0028 | [Spec-driven delivery and workspace toolchain](0028-spec-driven-delivery-toolchain.md) | accepted | — |
-| 0029 | [rc1 is the oldest supported state](0029-rc1-baseline.md) | accepted | — |
+| 0029 | [rc1 is the oldest supported state](0029-rc1-baseline.md) | amended | [0030](0030-rc2-oldest-supported.md) |
+| 0030 | [rc2 is the oldest supported release](0030-rc2-oldest-supported.md) | accepted | — |
+| 0031 | [Route-less collections](0031-route-less-collections.md) | accepted | — |

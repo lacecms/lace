@@ -152,7 +152,11 @@ export function routeForModel(model: NormalizedContentModel): ContentModelRoute 
     case "page":
       return Object.freeze({ key, kind: "page", path: model.path });
     case "collection":
-      return Object.freeze({ key, kind: "collection", route: model.route });
+      return Object.freeze(
+        model.route === undefined
+          ? { key, kind: "collection" as const }
+          : { key, kind: "collection" as const, route: model.route },
+      );
     case "global":
       return Object.freeze({ key, kind: "global" });
     default:

@@ -105,7 +105,7 @@ function SeoTextControl({
         </span>
       )}
       <p className="m-0 text-xs text-muted-foreground" id={ids.count}>
-        {`${count} / ${recommended} characters (recommended). Limit: ${kind === "title" ? MAX_SEO_TITLE_LENGTH : MAX_SEO_DESCRIPTION_LENGTH} characters.`}
+        {`${count} / ${recommended} recommended · ${kind === "title" ? MAX_SEO_TITLE_LENGTH : MAX_SEO_DESCRIPTION_LENGTH} max`}
       </p>
       {long ? (
         <p

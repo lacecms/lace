@@ -11,12 +11,19 @@ import {
   toPublicEntryDto,
   toPublicGlobalDto,
   toPublicMediaDictionary,
+  toPublicRecordDto,
 } from "./public-mappers.js";
-import type { PublicEntrySource, PublicGlobalSource, PublicMediaUrl } from "./public-mappers.js";
+import type {
+  PublicEntrySource,
+  PublicGlobalSource,
+  PublicMediaUrl,
+  PublicRecordSource,
+} from "./public-mappers.js";
 
 export interface BuildExportSource {
   readonly entries: readonly PublicEntrySource[];
   readonly globals?: readonly PublicGlobalSource[];
+  readonly records: readonly PublicRecordSource[];
   readonly version: number;
 }
 
@@ -51,10 +58,17 @@ function exportPageEntries(
     ),
     formatVersion: BUILD_EXPORT_FORMAT_VERSION,
     media: toPublicMediaDictionary(
-      [...value.entries.flatMap((item) => item.media), ...globals.flatMap((item) => item.media)],
+      [
+        ...value.entries.flatMap((item) => item.media),
+        ...value.records.flatMap((item) => item.media),
+        ...globals.flatMap((item) => item.media),
+      ],
       urlFor,
     ),
     ...(value.nextCursor === undefined ? {} : { nextCursor: value.nextCursor as OpaqueCursorDto }),
+    records: value.records.map(({ entry, internalLinks }) =>
+      toPublicRecordDto(entry, internalLinks),
+    ),
     version: value.version,
   };
 }
@@ -92,7 +106,12 @@ export function toBuildExportDto(
   seo: ExportSeoDto = { defaults: null, models: {} },
 ): BuildExportDto {
   const { nextCursor: _nextCursor, ...page } = toBuildExportFirstPageDto(
-    { entries: value.entries, globals: value.globals ?? [], version: value.version },
+    {
+      entries: value.entries,
+      globals: value.globals ?? [],
+      records: value.records,
+      version: value.version,
+    },
     urlFor,
     seo,
   );

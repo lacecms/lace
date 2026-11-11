@@ -5,7 +5,7 @@ announce publication. See [release status and evidence](docs/alpha-release.md).
 
 ## 0.1.0-rc2
 
-- The database starts from one baseline migration: an rc1 database is refused with `SCHEMA_UNSUPPORTED` and must be recreated, then content synchronized and restored ([upgrade guide](docs/compatibility.md#upgrading-from-rc1)).
+- The database starts from one baseline migration: an rc1 database is refused with `SCHEMA_UNSUPPORTED` and must be recreated, then content synchronized and restored ([upgrade guide](docs/compatibility.md)).
 - Support for releases before rc1 is removed: built-in block identity migrations, build-export format 1, the legacy structure hash and manifests without a site record.
 - Errors are more precise: MCP account and rate-limit failures have their own codes (`RATE_LIMITED`), an unexpected setup failure returns `500` instead of `404`, and a public collection slug over 100 characters returns `422`.
 - Public contracts are tightened: admin entry/media list `limit` is documented as 1–100, four `…Source` inputs are required, `jsonValueSchema`/`jsonObjectSchema` refuse arrays with named properties, `hasMatchingBlockDefinitions` matches blocks by type in any order, the security ports are split (`AccountSecurityPort`, `SessionSecurityPort`, `TokenSecurityPort`) and `@lacecms/platform-node` no longer exports `./test`.

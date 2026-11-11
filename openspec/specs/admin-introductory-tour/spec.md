@@ -29,8 +29,8 @@ SHALL open its first step; Skip SHALL dismiss the offer.
 
 ### Requirement: Tour content matches navigation and effective role permissions
 Tour steps SHALL use the current shell navigation and the resolved session
-permissions, never the role name. Pages, Collections and Site SHALL be
-included only when their respective navigation groups exist; the Site step
+permissions, never the role name. Pages, Collections and Globals SHALL be
+included only when their respective navigation groups exist; the Globals step
 SHALL explain that each global holds site-wide content with one entry, opened
 from navigation, that appears on every page that shows it after publication. Content guidance SHALL explain
 saved drafts and published content. Guidance for sessions with `content:write`
@@ -60,10 +60,10 @@ no mutation requests.
 - **THEN** it describes read-only content, media preview, and build inspection without instructions to save, publish, upload, select media into editable fields, request/retry builds, manage users/settings, or create tokens
 
 #### Scenario: A tour with globals configured
-- **WHEN** any role starts the tour while the Site navigation group exists
-- **THEN** it includes a Site step after Collections that describes globals as
+- **WHEN** any role starts the tour while the Globals navigation group exists
+- **THEN** it includes a Globals step after Collections that describes globals as
   site-wide content with one entry each, and a configuration without globals
-  produces no Site step
+  produces no Globals step
 
 ### Requirement: Introductory controls preserve the current work
 The tour SHALL provide Back and Next between steps, Finish on the last step,

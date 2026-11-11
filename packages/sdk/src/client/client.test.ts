@@ -499,11 +499,13 @@ test("rejects a build export in a newer format with upgrade guidance", async () 
   expect(failure.message).not.toContain("build-secret");
 
   const supported = await client.getBuildExport();
+  // An API before route-less collections sends no records; the export holds none.
   expect(supported.export).toEqual({
     entries: [],
     formatVersion: 2,
     globals: [],
     media: {},
+    records: [],
     seo: { defaults: null, models: {} },
     version: 4,
   });
@@ -746,4 +748,81 @@ test("reads single build-export pages and calls the first-page hook first", asyn
   ).rejects.toThrow("stop");
   expect(seen).toEqual([7]);
   expect(hooked.requests).toHaveLength(1);
+});
+
+function exportRecord(id, modelKey = "testimonials") {
+  return {
+    blocks: [],
+    fields: { quote: id },
+    id,
+    internalLinks: [],
+    modelKey,
+    publishedAt: timestamp,
+    title: id,
+  };
+}
+
+test("lists published records of a route-less collection", async () => {
+  const record = { ...exportRecord("t1"), internalLinks: [] };
+  const mock = queuedFetch([
+    json({ items: [record], media: {}, nextCursor: "next" }),
+    json({ items: [{ ...record, path: "/t1" }], media: {} }),
+    json({ error: { code: "NOT_FOUND", message: "Not found." } }, { status: 404 }),
+  ]);
+  const client = createLaceClient({ baseUrl: "https://cms.example/", fetch: mock.fetch });
+  await expect(client.listRecords("testimonials", { limit: 1 })).resolves.toEqual({
+    items: [record],
+    media: {},
+    nextCursor: "next",
+  });
+  // The tolerant variant drops a key a newer API might add.
+  await expect(client.listRecords("testimonials")).resolves.toMatchObject({
+    items: [{ id: "t1" }],
+  });
+  await expect(client.listRecords("posts")).rejects.toMatchObject({ status: 404 });
+  expect(() => client.listRecords("")).toThrow(TypeError);
+  expect(mock.requests.map((request) => request.url)).toEqual([
+    "https://cms.example/api/v1/public/records/testimonials?limit=1",
+    "https://cms.example/api/v1/public/records/testimonials",
+    "https://cms.example/api/v1/public/records/posts",
+  ]);
+});
+
+test("assembles records after the routed entries across pages", async () => {
+  const mock = queuedFetch([
+    page(firstPage(9, ["/a"], { nextCursor: "c1", records: [exportRecord("c1", "cv")] })),
+    page(
+      nextPage(9, [], {
+        records: [exportRecord("t1"), exportRecord("t2")],
+      }),
+    ),
+  ]);
+  const client = createLaceClient({
+    baseUrl: "https://cms.example/",
+    fetch: mock.fetch,
+    token: "t",
+  });
+  const result = await client.getBuildExport();
+  expect(result.export.entries.map((entry) => entry.path)).toEqual(["/a"]);
+  expect(result.export.records.map((record) => record.id)).toEqual(["c1", "t1", "t2"]);
+});
+
+test("rejects records out of order and entries after records", async () => {
+  for (const pages of [
+    [
+      firstPage(9, ["/a"], { nextCursor: "c1", records: [exportRecord("t2")] }),
+      nextPage(9, [], { records: [exportRecord("t1")] }),
+    ],
+    [
+      firstPage(9, ["/a"], { nextCursor: "c1", records: [exportRecord("t1")] }),
+      nextPage(9, ["/b"], { records: [] }),
+    ],
+  ]) {
+    const client = createLaceClient({
+      baseUrl: "https://cms.example/",
+      fetch: queuedFetch(pages.map(page)).fetch,
+      token: "t",
+    });
+    await expect(client.getBuildExport()).rejects.toBeInstanceOf(LaceContractError);
+  }
 });

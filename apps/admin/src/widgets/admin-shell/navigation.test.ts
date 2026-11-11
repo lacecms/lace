@@ -15,7 +15,7 @@ test("navigation groups follow configured models and the role matrix", () => {
   expect(labels(navigationGroups(sessionFor({ id: "user-1", role: "admin" }), models))).toEqual([
     ["Pages", ["Home"]],
     ["Collections", ["posts"]],
-    ["Site", ["Site settings"]],
+    ["Globals", ["Site settings"]],
     ["Library", ["Media", "Builds"]],
     ["Admin", ["Users", "Settings"]],
   ]);
@@ -23,7 +23,7 @@ test("navigation groups follow configured models and the role matrix", () => {
     expect(labels(navigationGroups(sessionFor({ id: "user-1", role: role }), models))).toEqual([
       ["Pages", ["Home"]],
       ["Collections", ["posts"]],
-      ["Site", ["Site settings"]],
+      ["Globals", ["Site settings"]],
       ["Library", ["Media", "Builds"]],
     ]);
   expect(

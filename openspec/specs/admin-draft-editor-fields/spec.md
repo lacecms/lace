@@ -601,7 +601,7 @@ Every applicable descriptor control SHALL show a visible required marker and exp
 - **THEN** "Required for publication only." is visible text with the field
 
 ### Requirement: Ordinary text counters distinguish declared hard limits from SEO advice
-Text and textarea controls SHALL show a visible current count, including zero for an absent value, measured using raw UTF-16 length, associated with the control. The count SHALL be shown right-aligned in the field's label row rather than on a line of its own and SHALL be visible regardless of focus. When minLength or maxLength is declared, the counter and associated constraint guidance SHALL identify the declared bounds as validation limits. Unbounded fields SHALL show a count without inventing a limit. Counts SHALL be available in read-only inspection and absent from per-keystroke live announcements. Counter rendering SHALL NOT truncate input, block typing or replace existing save/publication validation. SEO counters SHALL explicitly identify 60/160 as recommendations, retain trimmed code-point counting, explain their separate existing hard limits and remain visible.
+Text and textarea controls SHALL show a visible current count, measured using raw UTF-16 length, associated with the control. A control with declared minLength or maxLength SHALL show its count, including zero for an absent value, at all times; an unbounded control SHALL show its count only while its value is non-empty. The count SHALL be shown right-aligned in the field's label row rather than on a line of its own and SHALL be visible regardless of focus. When minLength or maxLength is declared, the counter and associated constraint guidance SHALL identify the declared bounds as validation limits. Unbounded fields SHALL show a count without inventing a limit. Counts SHALL be available in read-only inspection and absent from per-keystroke live announcements. Counter rendering SHALL NOT truncate input, block typing or replace existing save/publication validation. SEO counters SHALL explicitly identify 60/160 as recommendations, retain trimmed code-point counting, state their separate existing hard limits on the same line (for example "15 / 60 recommended · 200 max") and remain visible.
 
 #### Scenario: Declared maximum and failed save
 - **WHEN** a writer enters an ordinary text value longer than maxLength
@@ -621,7 +621,11 @@ Text and textarea controls SHALL show a visible current count, including zero fo
 
 #### Scenario: Counter sits in the label row
 - **WHEN** a writer views an empty unbounded caption field, types "Hi" and moves focus away
-- **THEN** "0 characters" and then "2 characters" are visible on the field's label row throughout, the field occupies no extra line for it, and the control's accessible description includes the count
+- **THEN** no count is shown while the field is empty, "2 characters" is then visible on the field's label row after focus leaves, the field occupies no extra line for it, and the control's accessible description includes the count
+
+#### Scenario: A bounded empty field shows its count
+- **WHEN** a writer views an empty optional text field declaring maxLength 80
+- **THEN** its label row shows "0 characters" and its guidance identifies 80 as the validation maximum
 
 ### Requirement: Visual layouts preserve recursive form state and error access
 The admin SHALL render declared sections with accessible headings and tabs with labelled tablists/panels in metadata order. The first tab SHALL initially be selected; Left/Right, Home and End SHALL select and focus tabs with the standard tabs keyboard behavior. Narrow viewports SHALL retain access to all tab controls and fields without page-level horizontal overflow. Unlisted fields SHALL follow the layout in declaration order. Each form owner and list item SHALL own independent navigation state. Model layouts SHALL affect only model fields, block data layouts only the Content panel, and settings layouts only declared settings inside the existing Settings panel; SEO and system/envelope controls SHALL retain their established behavior.

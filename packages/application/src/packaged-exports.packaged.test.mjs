@@ -136,6 +136,7 @@ test("packaged entry point keeps its public exports", async () => {
     "requireSettingsManager",
     "requireUsersManager",
     "resolveCollectionQuery",
+    "routeLessModelKeys",
     "sanitizeMediaFilename",
     "selectBuildExportPage",
     "sendTestEmail",

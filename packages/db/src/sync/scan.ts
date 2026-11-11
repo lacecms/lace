@@ -12,6 +12,9 @@ export interface SyncSnapshotRow {
   readonly fields_json: string;
   /** 1 when the snapshot holds an SEO group. */
   readonly has_seo: number;
+  /** Internal reference locations in current snapshots that target the entry. */
+  readonly incoming_links?: number;
+  readonly slug?: string | null;
   readonly id: string;
   readonly revision: number;
   readonly state: string;
@@ -30,7 +33,12 @@ export interface SyncBlockRow {
 
 /** Binds model key, exclusive snapshot-ID cursor, and page limit. */
 export const SYNC_SNAPSHOTS_SQL = `select ${SNAPSHOT_INTERNAL_LINKS_JSON_SQL} as internal_links_json, s.id, s.entry_id, s.revision, s.title, s.fields_json,
-        s.seo_json is not null as has_seo,
+        s.seo_json is not null as has_seo, s.slug,
+        (select count(*) from content_entry_link_references lr
+           join content_snapshots ls on ls.id = lr.snapshot_id
+           join content_entries le on le.id = ls.entry_id
+          where lr.target_entry_id = s.entry_id
+            and lr.snapshot_id in (le.draft_snapshot_id, le.published_snapshot_id)) as incoming_links,
         (select coalesce(json_group_array(json_object('sourceKey',r.source_key,'fieldPath',r.field_path,'mediaId',r.media_id)), '[]') from content_media_references r where r.snapshot_id=s.id) as references_json,
         case when e.published_snapshot_id = s.id then 'published' else 'draft' end as state
    from content_snapshots s
@@ -79,6 +87,10 @@ export function syncSnapshotPage(
         ConfigurationSyncSnapshot["references"]
       >,
       hasSeo: row.has_seo === 1,
+      ...(row.incoming_links === undefined || row.incoming_links === 0
+        ? {}
+        : { incomingLinks: Number(row.incoming_links) }),
+      ...(row.slug === undefined || row.slug === null ? {} : { slug: row.slug }),
       revision: row.revision,
       snapshotId: row.id,
       state: row.state === "published" ? "published" : "draft",

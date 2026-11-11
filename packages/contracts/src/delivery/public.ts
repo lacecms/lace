@@ -60,6 +60,27 @@ export const publicGlobalSchema = v.strictObject({
   publishedAt: isoTimestampSchema,
 });
 
+/**
+ * One published entry of a route-less collection; no path, slug, SEO, draft,
+ * or editorial data.
+ */
+export const publicRecordSchema = v.strictObject({
+  internalLinks: optionalInternalLinksSchema,
+  blocks: v.array(publicBlockSchema),
+  fields: jsonObjectSchema,
+  id: identifierSchema,
+  modelKey: identifierSchema,
+  publishedAt: isoTimestampSchema,
+  title: v.pipe(v.string(), v.minLength(1), v.maxLength(MAX_TITLE_LENGTH)),
+});
+
+/** A page of published records of one route-less collection. */
+export const publicRecordListSchema = v.strictObject({
+  items: v.array(publicRecordSchema),
+  media: publicMediaDictionarySchema,
+  nextCursor: v.optional(opaqueCursorSchema),
+});
+
 export const publicGlobalContentSchema = v.strictObject({
   global: publicGlobalSchema,
   media: publicMediaDictionarySchema,
@@ -81,3 +102,5 @@ export type PublicContentEntryDto = v.InferOutput<typeof publicContentEntrySchem
 export type PublicGlobalDto = v.InferOutput<typeof publicGlobalSchema>;
 export type PublicGlobalContentDto = v.InferOutput<typeof publicGlobalContentSchema>;
 export type PublicContentListDto = v.InferOutput<typeof publicContentListSchema>;
+export type PublicRecordDto = v.InferOutput<typeof publicRecordSchema>;
+export type PublicRecordListDto = v.InferOutput<typeof publicRecordListSchema>;

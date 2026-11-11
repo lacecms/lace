@@ -45,6 +45,7 @@ import type {
   PublishContentEntryCommand,
   PublishContentEntryResult,
   PublicContentEntry,
+  PublicRecordContent,
   PublicGlobalContent,
   PublicContentReadPort,
   RevertContentDraftCommand,
@@ -289,6 +290,12 @@ export class NodeContentRepository
 
   public async listPublic(input: ListPublicContentInput): Promise<CursorPage<PublicContentEntry>> {
     return this.reader.listPublic(input);
+  }
+
+  public async listPublicRecords(
+    input: ListPublicContentInput,
+  ): Promise<CursorPage<PublicRecordContent>> {
+    return this.reader.listPublicRecords(input);
   }
 
   public async publishedContentVersion(): Promise<number> {

@@ -355,18 +355,19 @@ A search SHALL match entries whose draft title or draft slug contains the term,
 using ordinary literal LIKE with ASCII-insensitive and non-ASCII-sensitive matching, also including configured searchable draft fields. `status` SHALL be one of `draft`,
 `published`, or `changed` and SHALL restrict items to that status. `sort` SHALL
 be one of `updatedAt`, `-updatedAt`, `title`, `-title`, `publishedAt`, or
-`-publishedAt`, or configured `field:<key>` / `-field:<key>`. A leading `-` means descending, and the default SHALL be
-`-updatedAt`. Title ordering SHALL be case-insensitive for ASCII letters.
+`-publishedAt`, or configured `field:<key>` / `-field:<key>`. A leading `-` means descending. A request without `sort` SHALL use the
+collection's configured `defaultSort` from collection-query-options; for a collection without
+one, and for pages and globals, the default SHALL be `-updatedAt`. Title ordering SHALL be case-insensitive for ASCII letters.
 Publication-time ordering SHALL treat never-published entries as earliest.
 Every order SHALL break ties by entry ID in the same direction. An unsupported
 status or sort, an over-long term, or an invalid limit SHALL return the stable
 `VALIDATION_FAILED` envelope with a JSON Pointer naming the parameter. A
 continuation cursor SHALL be accepted only with the same model, search term,
-status, sort, canonical filters and effective list-query configuration that produced it; otherwise the request SHALL fail validation
+status, effective sort (the requested sort, otherwise the default applied to the request), canonical filters and effective list-query configuration that produced it; otherwise the request SHALL fail validation
 without returning a page. The generated OpenAPI document SHALL describe these
 parameters and the list response schema.
 
-`filters` SHALL be a JSON-encoded array of strict typed filter objects as defined by collection-query-options; omission or [] means no field filters. Each object SHALL carry `field` and `op`, plus only the operator's operands: `value`, `values`, `min`/`max`, or `from`/`to`. Raw filters SHALL be bounded to 8192 UTF-8 bytes before parsing. Duplicate query parameters SHALL fail validation. The API SHALL return 422 VALIDATION_FAILED for malformed or disallowed queries with value-free issues at /filters, /filters/<index>/<member>, or /sort as appropriate. It SHALL not accept client-supplied search target lists. Per-status totals SHALL apply q and all field filters but not the selected status, cursor or page limit. Shared metadata schemas SHALL expose listOptions; generated OpenAPI SHALL document the complete grammar and bounds. Cursor fingerprints SHALL treat reordered filters and select-value lists as equivalent and reject configuration changes that alter effective query semantics, matching-version changes and runtime-policy changes.
+`filters` SHALL be a JSON-encoded array of strict typed filter objects as defined by collection-query-options; omission or [] means no field filters. Each object SHALL carry `field` and `op`, plus only the operator's operands: `value`, `values`, `min`/`max`, or `from`/`to`. Raw filters SHALL be bounded to 8192 UTF-8 bytes before parsing. Duplicate query parameters SHALL fail validation. The API SHALL return 422 VALIDATION_FAILED for malformed or disallowed queries with value-free issues at /filters, /filters/<index>/<member>, or /sort as appropriate. It SHALL not accept client-supplied search target lists. Per-status totals SHALL apply q and all field filters but not the selected status, cursor or page limit. Shared metadata schemas SHALL expose listOptions, including defaultSort; generated OpenAPI SHALL document the complete grammar and bounds. Cursor fingerprints SHALL treat reordered filters and select-value lists as equivalent and reject configuration changes that alter effective query semantics, matching-version changes and runtime-policy changes.
 
 Custom field cursors SHALL remain within the existing 4096-character transport
 bound. Custom string sorts SHALL use the indexed entry/draft/revision anchor
@@ -434,6 +435,18 @@ API SHALL NOT truncate or let D1 discover an oversized LIKE pattern.
 #### Scenario: Over-budget Cloudflare search fails safely
 - **WHEN** q or contains exceeds either Cloudflare's character ceiling or final escaped 50-byte pattern budget
 - **THEN** the API returns value-free 422 validation at /q or /filters/<index>/value before list SQL, while Node accepts the same operand when within its 200-code-unit bound
+
+#### Scenario: A request without sort uses the collection default
+- **WHEN** a collection declares `defaultSort` `field:order` and a client lists its entries without `sort`
+- **THEN** the entries are ordered by draft `order` ascending with missing values last and ID ties, exactly as for `sort=field:order`, on Node and Cloudflare
+
+#### Scenario: An explicit sort overrides the collection default
+- **WHEN** the same client requests `sort=-updatedAt`
+- **THEN** the entries are ordered by last edit descending, and a cursor from that page is rejected when reused without `sort`
+
+#### Scenario: A changed default invalidates an omitted-sort cursor
+- **WHEN** a client continues a page requested without `sort` after synchronization changed the collection's `defaultSort`
+- **THEN** the API returns 422 VALIDATION_FAILED at /after, and the same request without after returns a first page in the new default order
 
 ### Requirement: Admin entry details name the last editor
 Admin entry responses from load, create, complete-draft save, and publication
@@ -780,7 +793,7 @@ admin media DTO and `build` is the existing build dispatch outcome: `{status:
 Public page, collection-slug and path reads SHALL return `{entry, media}`, and
 the public collection read SHALL return `{items, media, nextCursor?}`. The
 build export SHALL return pages whose assembled content is
-`{formatVersion, entries, globals, media, seo, version}`. Each public entry
+`{formatVersion, entries, records, globals, media, seo, version}`. Each public entry
 SHALL be exactly `{id, modelKey, path, slug?, title, fields, blocks,
 publishedAt, seo?}`, taken only from the entry's current published snapshot:
 
@@ -795,10 +808,13 @@ A public block SHALL carry `anchor` and `className` only when set and SHALL
 never carry `hidden`; both contract variants SHALL reject a public block that
 carries a `hidden` key, because ignoring it would deliver hidden content. Contract validation SHALL treat a missing `settings` key
 as `{}`; the API SHALL always send it. The export's `entries` SHALL contain
-only routed entries, and its first page's `globals` SHALL contain every
-published global as a public global ordered by model key. The API SHALL always
-send `globals` on the first page, and the first-page and assembled export
-schemas SHALL require it.
+only routed entries, its `records` SHALL contain every published entry of a
+route-less collection as a public record, and its first page's `globals` SHALL
+contain every published global as a public global ordered by model key. The
+API SHALL always send `globals` on the first page, and the first-page and
+assembled export schemas SHALL require it. The API SHALL always send `records`
+on every page; the strict page and assembled export variants SHALL require it,
+and the tolerant variants SHALL treat a missing `records` as an empty list.
 
 Public responses SHALL NOT contain `draft`, `published`, `model`, revision,
 editor or other editorial keys. The strict contract variant SHALL reject
@@ -849,6 +865,20 @@ shape. Each public entry route and the build-export route SHALL document their
 - **WHEN** a client validates a public block that has no `settings` key
 - **THEN** validation succeeds and yields `settings: {}`, and a block that
   carries `hidden` is rejected by both the strict and the tolerant variant
+
+#### Scenario: The export carries records
+- **WHEN** a build client reads the export of a site with a published page,
+  two published entries of the route-less `testimonials` collection and one
+  unpublished `testimonials` draft
+- **THEN** `entries` contains the page only, `records` contains the two
+  published testimonials and no draft, and `media` resolves the media of all
+  three
+
+#### Scenario: A tolerant consumer reads an export without records
+- **WHEN** a consumer validates a format 2 export page without `records` with
+  the tolerant variant
+- **THEN** validation succeeds with an empty `records` list, while the strict
+  variant rejects the page
 
 ### Requirement: Public content responses resolve referenced media
 Every public content response SHALL carry a `media` object keyed by media ID
@@ -1130,26 +1160,32 @@ It SHALL reject any other query parameter, an invalid cursor or an invalid
 limit with the shared validation error.
 
 A request without `after` SHALL return the **first page**:
-`{formatVersion, version, entries, globals, seo, media, nextCursor?}`.
+`{formatVersion, version, entries, records, globals, seo, media, nextCursor?}`.
 A request with `after` SHALL return a **continuation page**:
-`{formatVersion, version, entries, media, nextCursor?}`. A continuation page
+`{formatVersion, version, entries, records, media, nextCursor?}`. A continuation page
 SHALL carry neither `globals` nor `seo`.
 
 Paging rules:
 
 - `entries` SHALL be the routed public entries ordered by path, continuing
   strictly after the cursor's last path.
+- `records` SHALL be the published entries of route-less collections ordered
+  by model key and then entry ID. A page SHALL deliver records only after the
+  last routed entry has been delivered, on that page or an earlier one, and
+  SHALL continue strictly after the cursor's last record.
 - The first page SHALL carry every published global and the export SEO
   section.
-- `media` SHALL resolve exactly the media delivered by the entries and globals
-  of that page.
-- A page SHALL hold at most `limit` entries. It SHALL end before an entry
-  would raise the page's stored entry JSON above the server's fixed byte
-  budget. A page SHALL nevertheless hold at least one entry whenever entries
-  remain after the cursor.
-- `nextCursor` SHALL be present exactly when further entries remain.
+- `media` SHALL resolve exactly the media delivered by the entries, records
+  and globals of that page.
+- A page SHALL hold at most `limit` entries and records together. It SHALL
+  end before an entry or record would raise the page's stored JSON above the
+  server's fixed byte budget. A page SHALL nevertheless hold at least one
+  entry or record whenever any remain after the cursor.
+- `nextCursor` SHALL be present exactly when further entries or records
+  remain.
 - The cursor SHALL bind the published-state version of the page sequence and
-  the last delivered path. Clients SHALL NOT need to decode it.
+  the last delivered path, or the model key and entry ID of the last
+  delivered record. Clients SHALL NOT need to decode it.
 - A continuation request whose cursor version differs from the current
   published-state version SHALL fail with HTTP 409 and
   `BUILD_EXPORT_VERSION_CHANGED`, with details
@@ -1162,7 +1198,7 @@ media or SEO section, that content SHALL be the union of the pages of one
 sequence. The page schemas SHALL exist in strict and tolerant variants under
 the same rules as the other public read representations. The API SHALL
 validate every page with the strict variant before sending it. The assembled
-export `{formatVersion, version, entries, globals, media, seo}` SHALL remain a
+export `{formatVersion, version, entries, records, globals, media, seo}` SHALL remain a
 shared schema for consumers and tests.
 
 #### Scenario: A small site fits one page
@@ -1200,6 +1236,18 @@ shared schema for consumers and tests.
   collection list, or an unknown query parameter
 - **THEN** the API returns the shared validation error and reads no content
 
+#### Scenario: Records continue after the routed entries
+- **WHEN** a site has 150 routed entries and 80 records and the client reads
+  with the default limit, following `nextCursor`
+- **THEN** the first page holds 100 entries, the second holds the remaining 50
+  entries followed by 50 records, the third holds 30 records, and records
+  appear in model key and entry ID order without repetition
+
+#### Scenario: A site with only records
+- **WHEN** a site has no routed entries and three records
+- **THEN** the first page holds empty `entries`, the three records, the
+  globals and the SEO section, and has no `nextCursor`
+
 ### Requirement: Admin media deletion accepts a draft detach option
 `DELETE /api/v1/admin/media/:mediaId` SHALL accept an optional `detach` query
 parameter whose only valid value is `drafts`. Any other value, or a repeated
@@ -1235,9 +1283,11 @@ The authenticated API SHALL expose:
   `action`/`limit`, rejecting a mixture of source-page and location-page cursors.
 Search SHALL be a documented normalized title-prefix search, not a site-wide
 substring scan. Picker targets SHALL expose ID, model key/kind, display title,
-publication status and current published path when present; globals SHALL be
-excluded. Resolver states SHALL be `published`, `unpublished`, `missing` and
-`non-routable`, without fabricating a missing title.
+publication status and current published path when present; globals and
+entries of route-less collections SHALL be excluded, also when `modelKey`
+names a route-less collection. Resolver states SHALL be `published`, `unpublished`, `missing` and
+`non-routable`, without fabricating a missing title; globals and entries of
+route-less collections SHALL resolve as `non-routable`.
 `status` SHALL accept only `published` or `unpublished`; omission SHALL include
 both. Source-page responses SHALL use `mode: sources`, at most the requested
 groups and at most 10 initial locations per group with `nextLocationsCursor`.
@@ -1261,6 +1311,12 @@ or foreign cursors SHALL fail strict validation before content reads.
 #### Scenario: Batch resolver and viewer
 - **WHEN** a viewer resolves 200 IDs in one valid request
 - **THEN** it returns their permitted statuses in one response and grants no mutation permission
+
+#### Scenario: Route-less entries are not picker targets
+- **WHEN** an editor lists link targets without a model filter, or with
+  `modelKey=testimonials` naming a route-less collection
+- **THEN** no entry of a route-less collection is returned, and resolving the
+  ID of a testimonial returns `non-routable` with its model key
 
 ### Requirement: Delete and unpublish accept an explicit link impact acknowledgment
 Existing delete and unpublish requests SHALL accept optional
@@ -1872,3 +1928,43 @@ The generated versioned OpenAPI document SHALL describe the existing user list, 
 #### Scenario: Existing authorization is preserved
 - **WHEN** an anonymous or insufficiently authorized caller invokes an operation documented by this requirement
 - **THEN** the existing session and permission checks continue to deny the request with the existing sanitized failure response
+
+### Requirement: Route-less collections have explicit admin and public contracts
+The admin content-model DTO SHALL accept `kind: "collection"` without `route`,
+and contract validation SHALL reject a route-less collection DTO carrying
+`path` or `seo`. Admin entry DTOs of a route-less collection SHALL carry
+`model: {kind: "collection", key}` and no slug. `GET
+/api/v1/public/records/:modelKey` SHALL be an anonymous public read with the
+optional `after` and `limit` parameters of the public collection read,
+returning `{items, media, nextCursor?}`. Each item SHALL be a public record,
+exactly `{id, modelKey, title, fields, blocks, publishedAt}` from the entry's
+current published snapshot, with the block shape and ordering of public
+entries and no path, slug, SEO, draft or editorial key. Items SHALL be ordered
+by publication time descending, then entry ID descending, and `media` SHALL be
+the public media dictionary of the page's records. The route SHALL return
+`404 NOT_FOUND` when the key is malformed, names no configured model, or names
+a page, a global or a collection that declares a route. The public collection
+list and collection-slug reads SHALL return `404 NOT_FOUND` for a route-less
+collection, and no path read SHALL return a route-less entry. A build-export
+record SHALL be a public record with its `internalLinks` manifest. Adding
+`records` SHALL keep the build export at `formatVersion: 2`. The route SHALL
+document its 200 response schema in the generated OpenAPI document, and both
+runtimes SHALL return the same shape.
+
+#### Scenario: Published records are read
+- **WHEN** an anonymous client reads `/api/v1/public/records/testimonials`
+  after two testimonials were published, the second one later
+- **THEN** the response lists the second testimonial first, each with title,
+  fields, ordered blocks and publication time, no path or slug, and the
+  resolved media
+
+#### Scenario: Records of a routed model
+- **WHEN** a client reads `/api/v1/public/records/posts` where `posts` declares
+  a route, or `/api/v1/public/collections/testimonials`
+- **THEN** both responses are `404 NOT_FOUND`
+
+#### Scenario: A route-less model DTO
+- **WHEN** an authenticated client lists content models including
+  `testimonials`
+- **THEN** its DTO has `kind: "collection"`, its list metadata, and no `path`,
+  `route` or `seo`

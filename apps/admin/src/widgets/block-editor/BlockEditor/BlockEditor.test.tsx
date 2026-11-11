@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { userEvent, type UserEvent } from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 import { builtInBlocks, toBlockMetadata } from "@lacecms/content";
@@ -242,7 +242,7 @@ const existingBlocks = [
   { data: { heading: "Third" }, key: "01ARZ3NDEKTSV4RRFFQ69G5FA3", position: 300, type: "hero" },
 ].map((block) => ({ ...block, hidden: false, schemaVersion: 1, settings: {} }));
 
-function mountCards() {
+function mountCards(blocks: readonly unknown[] = existingBlocks) {
   const saveDraft = vi.fn(
     async (_entryId: string, input: Parameters<AdminClient["saveDraft"]>[1]) => ({
       ...draftEntry,
@@ -263,10 +263,11 @@ function mountCards() {
           listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
           items: [models.items[0]!, cardModel],
         }) as never,
-      loadEntry: async () => ({
-        ...draftEntry,
-        draft: { ...draftEntry.draft, blocks: existingBlocks },
-      }),
+      loadEntry: async () =>
+        ({
+          ...draftEntry,
+          draft: { ...draftEntry.draft, blocks },
+        }) as never,
       saveDraft: saveDraft as unknown as AdminClient["saveDraft"],
     }),
   );
@@ -358,6 +359,62 @@ test("the active highlight follows the block being edited", async () => {
   await user.click(within(cards[0]!).getByRole("textbox", { name: "Heading" }));
   expect(cards[0]).toHaveAttribute("data-active", "true");
   expect(cards[2]).not.toHaveAttribute("data-active");
+});
+
+test("the highlight clears outside the block list but not inside a block's menu", async () => {
+  const user = userEvent.setup();
+  mountCards();
+  await screen.findByRole("heading", { name: "Edit posts" });
+  const cards = screen.getAllByRole("article");
+  const active = () => cards.filter((card) => card.dataset.active === "true");
+  await user.click(within(cards[1]!).getByRole("textbox", { name: "Heading" }));
+  expect(active()).toEqual([cards[1]]);
+  await user.click(screen.getByLabelText("Slug"));
+  expect(active()).toEqual([]);
+
+  await user.click(within(cards[1]!).getByRole("textbox", { name: "Heading" }));
+  const trigger = within(cards[1]!).getByRole("button", { name: "Actions for Hero block" });
+  trigger.focus();
+  await user.keyboard("{Enter}");
+  await user.hover(screen.getByRole("menuitem", { name: "Duplicate" }));
+  expect(active()).toEqual([cards[1]]);
+  await user.keyboard("{Escape}");
+  expect(active()).toEqual([cards[1]]);
+
+  act(() => screen.getByLabelText("Slug").focus());
+  expect(active()).toEqual([]);
+});
+
+test("collapse all and expand all change only presentation", async () => {
+  const user = userEvent.setup();
+  mountCards();
+  await screen.findByRole("heading", { name: "Edit posts" });
+  await user.click(screen.getByRole("button", { name: "Collapse all blocks" }));
+  expect(screen.getAllByRole("button", { name: "Expand Hero block" })).toHaveLength(3);
+  expect(screen.queryByRole("button", { name: "Collapse all blocks" })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Expand all blocks" }));
+  expect(screen.getAllByRole("button", { name: "Collapse Hero block" })).toHaveLength(3);
+  expect(screen.getByText("Saved revision 2")).toBeInTheDocument();
+  expect(screen.queryByText("Unsaved changes")).toBeNull();
+});
+
+test("collapse all keeps a block with a problem open", async () => {
+  const user = userEvent.setup();
+  mountCards([
+    ...existingBlocks.slice(0, 2),
+    { ...existingBlocks[2]!, key: "01ARZ3NDEKTSV4RRFFQ69G5FA9", type: "retired" },
+  ]);
+  await screen.findByRole("heading", { name: "Edit posts" });
+  await user.click(screen.getByRole("button", { name: "Collapse all blocks" }));
+  expect(screen.getAllByRole("button", { name: "Expand Hero block" })).toHaveLength(2);
+  expect(screen.getByText("Has problems")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Expand all blocks" })).toBeInTheDocument();
+});
+
+test("a single block offers no bulk collapse control", async () => {
+  mountCards(existingBlocks.slice(0, 1));
+  await screen.findByRole("heading", { name: "Edit posts" });
+  expect(screen.queryByRole("button", { name: /all blocks/u })).toBeNull();
 });
 
 test("a block whose type the model no longer allows renders with its error and can be removed", async () => {

@@ -22,6 +22,9 @@ import {
   publicSnapshotMedia,
   publicContentEntry,
   publicGlobalContent,
+  publicRecordContent,
+  PUBLIC_RECORD_SQL,
+  ROUTE_LESS_PUBLISHED_SQL,
 } from "../delivery/public.js";
 import type { PublicRow, PublicGlobalRow } from "../delivery/public.js";
 
@@ -60,11 +63,34 @@ export const BUILD_EXPORT_CANDIDATES_SQL = `select r.path, ${STORED_EXPORT_BYTES
   order by r.path asc
   limit ?`;
 
+/**
+ * Binds the exclusive record position (model key, entry ID) and a row limit;
+ * published route-less collection entries after it, with their sizes.
+ */
+export const BUILD_EXPORT_RECORD_CANDIDATES_SQL = `select e.model_key, e.id, ${STORED_EXPORT_BYTES_SQL} as stored_bytes
+   from content_models m
+   cross join content_entries e on e.model_key = m.key
+   join content_snapshots s on s.id = e.published_snapshot_id
+  where m.kind = 'collection' and ${ROUTE_LESS_PUBLISHED_SQL}
+    and (e.model_key, e.id) > (?, ?)
+  order by e.model_key asc, e.id asc
+  limit ?`;
+
 /** Binds the exclusive first and inclusive last path of a page. */
 const EXPORT_RANGE_SNAPSHOTS_SQL = `select pr.snapshot_id
      from published_routes pr
      join content_entries pe on pe.id = pr.entry_id and pe.published_snapshot_id = pr.snapshot_id
     where pr.path > ? and pr.path <= ?`;
+
+/** The page's record range: (model key, entry ID) after the first and up to the last. */
+const RECORD_RANGE_SQL = "(e.model_key, e.id) > (?, ?) and (e.model_key, e.id) <= (?, ?)";
+
+/** Binds the exclusive first and inclusive last record position of a page. */
+const EXPORT_RECORD_SNAPSHOTS_SQL = `select e.published_snapshot_id
+     from content_models m
+     cross join content_entries e on e.model_key = m.key
+    where m.kind = 'collection' and e.published_snapshot_id is not null
+      and ${RECORD_RANGE_SQL} and ${ROUTE_LESS_PUBLISHED_SQL}`;
 
 /**
  * Global models drive these reads (`cross join` fixes SQLite's join order), so
@@ -76,21 +102,23 @@ const EXPORT_GLOBAL_SNAPSHOTS_SQL = `select ge.published_snapshot_id
     where gm.kind = 'global' and ge.published_snapshot_id is not null`;
 
 function exportSnapshotFilter(column: string, globals: boolean): string {
-  return `(${column} in (${EXPORT_RANGE_SNAPSHOTS_SQL})${
+  return `(${column} in (${EXPORT_RANGE_SNAPSHOTS_SQL}) or ${column} in (${EXPORT_RECORD_SNAPSHOTS_SQL})${
     globals ? ` or ${column} in (${EXPORT_GLOBAL_SNAPSHOTS_SQL})` : ""
   })`;
 }
 
 /**
  * Range-bounded statements that read one build-export page without identifier
- * lists. Every statement except the global rows binds the page's exclusive
- * first and inclusive last path, so the statement count and bindings stay
- * constant however many entries, blocks and media the page holds.
+ * lists. `routes` binds the page's exclusive first and inclusive last path,
+ * `records` its record range, and blocks, media and snapshots both ranges
+ * (path range first), so the statement count and bindings stay constant
+ * however many entries, records, blocks and media the page holds.
  */
 export function buildExportPageSql(globals: boolean): {
   readonly blocks: string;
   readonly globals?: string;
   readonly media: string;
+  readonly records: string;
   readonly routes: string;
   readonly snapshots: string;
 } {
@@ -115,6 +143,7 @@ export function buildExportPageSql(globals: boolean): {
   where ${exportSnapshotFilter("r.snapshot_id", globals)}
     and m.status = 'active' and ${DELIVERED_REFERENCE_SQL}
   order by r.snapshot_id asc, m.id asc`,
+    records: `${PUBLIC_RECORD_SQL} and ${RECORD_RANGE_SQL} order by e.model_key asc, e.id asc`,
     routes: `${PUBLIC_ROUTE_SQL} where r.path > ? and r.path <= ? order by r.path asc`,
     snapshots: `${SNAPSHOT_COLUMNS_SQL} where ${exportSnapshotFilter("s.id", globals)}`,
   };
@@ -122,9 +151,16 @@ export function buildExportPageSql(globals: boolean): {
 
 export const BUILD_EXPORT_CURSOR_KIND = "build-export";
 
+/** A record position: model key and entry ID; empty strings precede every record. */
+export type BuildExportRecordPosition = readonly [modelKey: string, entryId: string];
+
+const BEFORE_RECORDS: BuildExportRecordPosition = ["", ""];
+
 export interface DecodedBuildExportCursor {
   /** The last delivered path; the empty string selects every routed path. */
   readonly path: string;
+  /** The last delivered record; absent while routed entries are delivered. */
+  readonly record?: BuildExportRecordPosition;
   /** The published-state version the page sequence is bound to. */
   readonly version: number;
 }
@@ -133,12 +169,14 @@ export interface DecodedBuildExportCursor {
 export function encodeBuildExportCursor(
   version: number,
   lastPath: string,
+  lastRecord?: BuildExportRecordPosition,
 ): ReturnType<typeof opaqueCursor> {
   return opaqueCursor(
     encodeBase64Url(
       JSON.stringify({
         id: lastPath,
         kind: BUILD_EXPORT_CURSOR_KIND,
+        ...(lastRecord === undefined ? {} : { record: [...lastRecord] }),
         value: version,
         version: SQL_CURSOR_VERSION,
       }),
@@ -149,7 +187,7 @@ export function encodeBuildExportCursor(
 export function decodeBuildExportCursor(value: string): DecodedBuildExportCursor {
   let candidate: Record<string, unknown>;
   try {
-    candidate = parseCursorObject(value);
+    candidate = parseCursorObject(value, ["record"]);
   } catch (error) {
     if (error instanceof DomainError) throw new BuildExportCursorError(error.message);
     throw error;
@@ -161,11 +199,26 @@ export function decodeBuildExportCursor(value: string): DecodedBuildExportCursor
     (candidate.id !== "" && !candidate.id.startsWith("/")) ||
     typeof candidate.value !== "number" ||
     !Number.isSafeInteger(candidate.value) ||
-    candidate.value < 0
+    candidate.value < 0 ||
+    (candidate.record !== undefined && !isRecordPosition(candidate.record))
   ) {
     throw new BuildExportCursorError("Cursor is unsupported or belongs to a different list.");
   }
-  return { path: candidate.id, version: candidate.value };
+  return {
+    path: candidate.id,
+    ...(candidate.record === undefined
+      ? {}
+      : { record: candidate.record as BuildExportRecordPosition }),
+    version: candidate.value,
+  };
+}
+
+function isRecordPosition(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length === 2 &&
+    value.every((part) => typeof part === "string" && part.length > 0)
+  );
 }
 
 /** Candidate row of `BUILD_EXPORT_CANDIDATES_SQL`. */
@@ -174,27 +227,55 @@ export interface BuildExportCandidateRow {
   readonly stored_bytes: number;
 }
 
-/** The page's path range chosen from candidate rows read with `limit + 1` rows. */
+/** Candidate row of `BUILD_EXPORT_RECORD_CANDIDATES_SQL`. */
+export interface BuildExportRecordCandidateRow {
+  readonly id: string;
+  readonly model_key: string;
+  readonly stored_bytes: number;
+}
+
+/** The page's path and record ranges chosen from candidates read with `limit + 1` rows each. */
 export interface BuildExportPageRange {
   /** Exclusive lower path bound. */
   readonly after: string;
+  /** Exclusive lower record bound. */
+  readonly afterRecord: BuildExportRecordPosition;
   /** Inclusive upper path bound; equals `after` when the page holds no entry. */
   readonly last: string;
+  /** Inclusive upper record bound; equals `afterRecord` when the page holds no record. */
+  readonly lastRecord: BuildExportRecordPosition;
   readonly more: boolean;
 }
 
+/**
+ * Chooses one page over the routed candidates followed by the record
+ * candidates: records follow only after the last routed entry, and the limit
+ * and byte budget cover both.
+ */
 export function buildExportPageRange(
   after: string,
   candidates: readonly BuildExportCandidateRow[],
   limit: number,
   globalsBytes: number,
+  afterRecord: BuildExportRecordPosition = BEFORE_RECORDS,
+  recordCandidates: readonly BuildExportRecordCandidateRow[] = [],
 ): BuildExportPageRange {
+  const ordered = [...candidates, ...recordCandidates].slice(0, limit + 1);
   const { count, more } = selectBuildExportPage(
-    candidates.map((row) => ({ bytes: Number(row.stored_bytes) })),
+    ordered.map((row) => ({ bytes: Number(row.stored_bytes) })),
     limit,
     globalsBytes,
   );
-  return { after, last: count === 0 ? after : candidates[count - 1]!.path, more };
+  const routeCount = Math.min(count, candidates.length);
+  const recordCount = count - routeCount;
+  const lastRecord = recordCandidates[recordCount - 1];
+  return {
+    after,
+    afterRecord,
+    last: routeCount === 0 ? after : candidates[routeCount - 1]!.path,
+    lastRecord: lastRecord === undefined ? afterRecord : [lastRecord.model_key, lastRecord.id],
+    more,
+  };
 }
 
 /** Fails a page whose read observed a published state other than the expected one. */
@@ -207,6 +288,7 @@ export interface BuildExportPageRows {
   readonly blocks: readonly BlockRow[];
   readonly globals?: readonly PublicGlobalRow[];
   readonly media: readonly Record<string, unknown>[];
+  readonly records: readonly PublicGlobalRow[];
   readonly routes: readonly PublicRow[];
   readonly snapshots: readonly SnapshotRow[];
 }
@@ -226,7 +308,7 @@ export function buildExportPage(
     ...row,
     draft_snapshot_id: row.published_snapshot_id,
   });
-  const entryRows = [...rows.routes, ...(rows.globals ?? [])].map(published);
+  const entryRows = [...rows.routes, ...rows.records, ...(rows.globals ?? [])].map(published);
   const entries = hydrateEntries(
     entryRows,
     storedSnapshots(rows.snapshots, rows.blocks),
@@ -242,7 +324,16 @@ export function buildExportPage(
             rows.globals.map((row) => publicGlobalContent(row, entries, media)),
           ),
         }),
-    ...(range.more ? { nextCursor: encodeBuildExportCursor(version, range.last) } : {}),
+    records: Object.freeze(rows.records.map((row) => publicRecordContent(row, entries, media))),
+    ...(range.more
+      ? {
+          nextCursor: encodeBuildExportCursor(
+            version,
+            range.last,
+            range.lastRecord[0] === "" ? undefined : range.lastRecord,
+          ),
+        }
+      : {}),
     version,
   });
 }

@@ -24,12 +24,25 @@
 :where([data-lace-block="gallery"]) figure {
   margin: 0;
 }
-:where([data-lace-block="gallery"]) [data-lace-part="media"] {
+/* Fill images take the 4:3 crop; natural images keep their own width and
+   proportions, never wider than their cell. */
+:where([data-lace-block="gallery"]) [data-lace-size="fill"] [data-lace-part="media"] {
   aspect-ratio: 4 / 3;
   display: block;
   height: auto;
   object-fit: cover;
   width: 100%;
+}
+:where([data-lace-block="gallery"]) [data-lace-size="natural"] [data-lace-part="media"] {
+  display: block;
+  height: auto;
+  max-width: 100%;
+  width: auto;
+}
+:where([data-lace-block="gallery"])
+  [data-lace-placement="end"][data-lace-size="natural"]
+  [data-lace-part="media"] {
+  margin-inline-start: auto;
 }
 
 /* Lightbox: the image opens the original full screen in a native dialog. */

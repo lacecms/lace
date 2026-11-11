@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
+import { verifyNaturalGalleryImage } from "./gallery-layout.browser.mjs";
 import { verifyVideoEmbeds } from "./video-embed.browser.mjs";
 
 const exec = promisify(execFile);
@@ -330,10 +331,10 @@ test("the fixture build emits published static routes without CMS access", async
   // opens its original in its own dialog, except the linked item, which opens
   // its link.
   const media = (id) => `https://cms.example.test/lace/api/v1/public/media/${id}`;
-  const galleryItem = (index, alt, id, width, height, caption) => {
+  const galleryItem = (index, alt, id, width, height, caption, placement, size) => {
     const dialog = `lace-lightbox-first-post-entry-post-gallery-${index}`;
     return (
-      `<li data-lace-part="item" data-lace-layout-item data-lace-kind="image"><figure><button aria-haspopup="dialog" aria-label="Open full-size image: ${alt}" command="show-modal" commandfor="${dialog}" data-lace-part="lightbox-trigger" type="button">` +
+      `<li data-lace-part="item" data-lace-layout-item data-lace-kind="image" data-lace-placement="${placement}" data-lace-size="${size}"><figure><button aria-haspopup="dialog" aria-label="Open full-size image: ${alt}" command="show-modal" commandfor="${dialog}" data-lace-part="lightbox-trigger" type="button">` +
       `<img alt="${alt}" data-lace-part="media" decoding="async" height="${height}" loading="lazy" src="${media(id)}" width="${width}"></button>` +
       `<dialog aria-label="${alt}" closedby="any" data-lace-part="lightbox" id="${dialog}"><button command="close" commandfor="${dialog}" data-lace-part="lightbox-close" type="button">Close</button>` +
       `<img alt="${alt}" data-lace-part="lightbox-media" decoding="async" height="${height}" loading="lazy" src="${media(id)}" width="${width}"></dialog>` +
@@ -345,12 +346,21 @@ test("the fixture build emits published static routes without CMS access", async
   };
   expect(post).toContain(
     '<section class="gallery" data-lace-block="gallery" data-lace-block-key="post-gallery" data-lace-layout-container><h2 data-lace-part="title">From the studio</h2><ul data-lace-part="items" data-lace-layout="grid" data-lace-wrap="true" data-lace-preset="auto" role="list">' +
-      galleryItem(0, "Media library description", "post-media", 800, 600, "Media library caption") +
-      '<li data-lace-part="item" data-lace-layout-item data-lace-kind="image"><figure><a data-lace-part="link" href="https://lace.example/desk">' +
+      galleryItem(
+        0,
+        "Media library description",
+        "post-media",
+        800,
+        600,
+        "Media library caption",
+        "auto",
+        "fill",
+      ) +
+      '<li data-lace-part="item" data-lace-layout-item data-lace-kind="image" data-lace-placement="end" data-lace-size="fill"><figure><a data-lace-part="link" href="https://lace.example/desk">' +
       `<img alt="A quiet desk" data-lace-part="media" decoding="async" height="480" loading="lazy" src="${media("note-media")}" width="640"></a>` +
       '<figcaption data-lace-part="caption">The note desk</figcaption></figure></li>' +
-      galleryItem(2, "A looping sketch", "sketch-media", 600, 400) +
-      '<li data-lace-part="item" data-lace-layout-item data-lace-kind="video"><figure data-lace-video data-lace-aspect-ratio="1:1" data-lace-playback="ambient"><div data-lace-video-area>' +
+      galleryItem(2, "A looping sketch", "sketch-media", 600, 400, undefined, "full", "natural") +
+      '<li data-lace-part="item" data-lace-layout-item data-lace-kind="video" data-lace-placement="auto"><figure data-lace-video data-lace-aspect-ratio="1:1" data-lace-playback="ambient"><div data-lace-video-area>' +
       '<template data-lace-video-template><iframe src="https://player.vimeo.com/video/76979871?h=abc123def" title="Studio loop"',
   );
   // The ambient video item ships templates and a no-script player, never a live ambient iframe.
@@ -407,6 +417,17 @@ test("the fixture build emits published static routes without CMS access", async
   expect(cssFor(about)).toContain("[data-lace-block=hero]");
   expect(cssFor(post)).toContain("@layer lace-layout");
   expect(cssFor(post)).toContain("--lace-list-gap:1rem");
+  // The theme crops only fill images; natural images keep their own proportions.
+  const css = cssFor(post);
+  expect(css).toMatch(
+    /\[data-lace-size=fill\] \[data-lace-part=media\]\{aspect-ratio:4\/3;[^}]*object-fit:cover/u,
+  );
+  expect(css).toMatch(/\[data-lace-size=natural\] \[data-lace-part=media\]\{[^}]*max-width:100%/u);
+  expect(css).not.toMatch(
+    /\[data-lace-size=natural\] \[data-lace-part=media\]\{[^}]*aspect-ratio/u,
+  );
+  expect(css).not.toMatch(/\]\) \[data-lace-part=media\]\{aspect-ratio/u);
+  expect(css).toContain("[data-lace-placement=full]");
   // Without LACE_PUBLIC_BASE_URL the site keeps the media URLs of the export;
   // without a media origin there are no variants. The hero loads eagerly.
   expect(home).toContain(
@@ -577,6 +598,8 @@ test("a fixture build against a served media origin renders WebP variants, place
   expect(attribute(galleryImages[0], "sizes")).toBe(
     "(min-width: 64rem) 20rem, (min-width: 32rem) 50vw, 100vw",
   );
+  // The natural sketch requests no more than its own width.
+  expect(attribute(galleryImages[2], "sizes")).toBe("(max-width: 600px) 100vw, 600px");
   for (const tag of [hero, postImage, ...galleryImages, ...images(note)]) {
     for (const [url] of variants(tag)) {
       expect(url).toMatch(/^\/_astro\/.+\.webp$/u);
@@ -614,7 +637,9 @@ test("a fixture build against a served media origin renders WebP variants, place
   expect(new Set(requests)).toEqual(
     new Set(["hero-media", "note-media", "post-media", "sketch-media"]),
   );
-}, 60_000);
+  // The natural sketch keeps its width when it fits and shrinks without overflow.
+  await verifyNaturalGalleryImage(siteRoot);
+}, 90_000);
 
 test("a live build reads one export, keeps the token out of output and rejects unrenderable blocks", async () => {
   const token = "lace_build_reference-site-sentinel";

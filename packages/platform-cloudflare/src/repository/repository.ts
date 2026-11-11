@@ -44,6 +44,7 @@ import type {
   MediaReadPort,
   MediaUsageEntry,
   PublicContentEntry,
+  PublicRecordContent,
   PublicGlobalContent,
   PublicContentReadPort,
   PublishContentEntryCommand,
@@ -194,6 +195,12 @@ export class D1ContentRepository
 
   public async listPublic(input: ListPublicContentInput): Promise<CursorPage<PublicContentEntry>> {
     return this.reader.listPublic(input);
+  }
+
+  public async listPublicRecords(
+    input: ListPublicContentInput,
+  ): Promise<CursorPage<PublicRecordContent>> {
+    return this.reader.listPublicRecords(input);
   }
 
   public async publishedContentVersion(): Promise<number> {

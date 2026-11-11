@@ -364,10 +364,14 @@
             "images": [
               {
                 "kind": "image",
+                "size": "fill",
+                "placement": "auto",
                 "media": "post-media"
               },
               {
                 "kind": "image",
+                "size": "fill",
+                "placement": "end",
                 "alt": "A quiet desk",
                 "caption": "The note desk",
                 "link": "https://lace.example/desk",
@@ -375,11 +379,14 @@
               },
               {
                 "kind": "image",
+                "size": "natural",
+                "placement": "full",
                 "alt": "A looping sketch",
                 "media": "sketch-media"
               },
               {
                 "kind": "video",
+                "placement": "auto",
                 "videoUrl": "https://vimeo.com/76979871/abc123def",
                 "videoTitle": "Studio loop",
                 "playback": "ambient",
@@ -391,7 +398,7 @@
           },
           "key": "post-gallery",
           "position": 3,
-          "schemaVersion": 5,
+          "schemaVersion": 6,
           "settings": {
             "lightbox": true,
             "layoutMode": "grid",
@@ -515,13 +522,14 @@
         },
         {
           "type": "gallery",
-          "schemaVersion": 5,
+          "schemaVersion": 6,
           "key": "about-gallery-0",
           "position": 7000,
           "data": {
             "images": [
               {
                 "kind": "video",
+                "placement": "auto",
                 "videoUrl": "https://vimeo.com/76979871/abc123def",
                 "videoTitle": "Gallery loop 0",
                 "playback": "ambient",
@@ -529,6 +537,7 @@
               },
               {
                 "kind": "video",
+                "placement": "auto",
                 "videoUrl": "https://youtu.be/dQw4w9WgXcQ",
                 "videoTitle": "Gallery player",
                 "playback": "player",
@@ -546,13 +555,14 @@
         },
         {
           "type": "gallery",
-          "schemaVersion": 5,
+          "schemaVersion": 6,
           "key": "about-gallery-1",
           "position": 8000,
           "data": {
             "images": [
               {
                 "kind": "video",
+                "placement": "auto",
                 "videoUrl": "https://vimeo.com/76979871/abc123def",
                 "videoTitle": "Gallery loop 1",
                 "playback": "ambient",

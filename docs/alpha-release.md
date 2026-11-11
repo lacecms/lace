@@ -2,10 +2,10 @@
 
 The selected candidate and its coordinates are defined in `release/alpha.json`;
 the npm channel is `next`. The current candidate is `0.1.0-rc2` (ownership
-template `0.47.0`). `0.1.0-rc1` (template `0.46.0`) is the oldest supported
-release; earlier prereleases stay recorded in `publishedVersions` as published
-and immutable, but are not supported (see
-[compatibility](./compatibility.md#upgrading-from-rc1)). Preparation and
+template `0.47.0`), which is also the oldest supported release; earlier
+prereleases, including `0.1.0-rc1`, stay recorded in `publishedVersions` as
+published and immutable, but are not supported (see
+[compatibility](./compatibility.md#upgrading-from-rc2)). Preparation and
 acceptance never publish, and each candidate needs its own fresh evidence.
 Record the date of every read-only registry check: an unused version is
 availability evidence, not a reservation or publishing right.
@@ -285,4 +285,4 @@ and remove remaining files. Changed scope or remaining artifact bytes cause
 refusal. A successful retry removes its journal.
 
 Public release notes live in [CHANGELOG.md](../CHANGELOG.md); detailed upgrade
-instructions live in [compatibility](compatibility.md#upgrading-from-rc1).
+instructions live in [compatibility](compatibility.md#upgrading-from-rc2).

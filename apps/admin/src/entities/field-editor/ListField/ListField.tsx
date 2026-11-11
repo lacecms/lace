@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { Badge } from "../../../shared/ui/Badge/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
+import { inSentence } from "../create-label.js";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -561,7 +562,7 @@ export function ListField(
               size="sm"
               variant="outline"
             >
-              Create {label}
+              Create {inSentence(label)}
             </Button>
           ) : null}
         </>

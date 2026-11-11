@@ -171,29 +171,6 @@ After generation the generator SHALL print the selected mode and path. For exist
 - **WHEN** generation with `--cloudflare` succeeds
 - **THEN** the output names the Cloudflare Worker section of `docs/lace-operations.md`
 
-### Requirement: Upgrade instructions cover only the latest published template
-The generated `.lace/upgrade-instructions.json` SHALL describe only the
-database and configuration steps from the latest published template to the
-current template, and SHALL NOT keep entries for upgrades from older
-templates. Its database steps SHALL state that the baseline migration replaces
-every earlier migration, so a database created before the baseline is
-exported if its content must be kept, recreated, migrated, synchronized and
-bootstrapped again. The generated operations guide SHALL describe the baseline
-migration and SHALL NOT name numbered migrations that are no longer checked
-in.
-
-#### Scenario: rc1 project reads the next template's instructions
-- **WHEN** an operator plans an upgrade of an rc1 (template `0.46.0`) project
-  to the current template
-- **THEN** the upgrade guidance names the database recreation step for the
-  baseline and the current template's configuration step, and no step for a
-  template older than rc1
-
-#### Scenario: Generated guide names no removed migration
-- **WHEN** a project is generated in any site mode
-- **THEN** its operations guide mentions the baseline migration and no
-  migration file that is not checked in
-
 ### Requirement: The starter project delivers a configured site
 The generated `lace.config.ts` SHALL register every built-in block, SHALL declare a `home` page and a `posts` collection that allow every built-in block, SHALL enable SEO with `seo: true` on `home` and `seo: { description: "summary" }` on `posts`, SHALL declare a `settings` global labelled "Site settings" with a required text field `siteName` and optional `tagline`, `description` (textarea) and `image` (media) fields whose `seoDefaults` map `siteName`, `description` and `image`, and SHALL declare a `navigation` global labelled "Navigation" with no fields that allows only the `navigation` block. In starter mode the user-owned site SHALL contain:
 
@@ -231,23 +208,6 @@ The managed web proxy SHALL serve site responses with `Cache-Control: no-cache`,
 #### Scenario: Project starts without email settings
 - **WHEN** a project is generated and started with an `.env` copied from `.env.example`
 - **THEN** the API starts with email delivery reported as not configured
-
-### Requirement: Delivered guides describe the current release
-The generator SHALL deliver as managed, classified and hashed files the operations guide, the Astro site guide, the MCP guide and the scenario guides: both Compose guides in every site mode and the Cloudflare guide only with `--cloudflare`; mode and Cloudflare rendering SHALL omit absent-file links and unavailable scripts. Generator completion output SHALL link to the scenario entry points. The guides and the user-owned README SHALL direct operators to `lace add block` for installing, updating and scaffolding block components. The Compose guides SHALL instruct operators to stop the `api` and `dispatcher` services before a host command that opens the SQLite database and to start them again afterwards. The Cloudflare guide SHALL document the local consumer journey, local and remote doctor, recovery and the deploy-hook provider prerequisite. The guides SHALL explain email provider selection, the Workers Paid requirement and sending-domain onboarding for the Cloudflare provider, the Resend option, SMTP transport security, the Settings test action and setting secrets with the runtime's secret mechanism. The Astro site guide SHALL document `site.global()` and its fallback pattern, `site.seo()`, `site.url`, `<LaceSeo>`, the sitemap and robots helpers, the `anchor`, `className` and typed `settings` block props, every built-in block, image variants, placeholders, the lightbox and link precedence; the operations guide SHALL describe the styling contract, the asset cache lifetime, the builder cache and how to reset it, and the Pages workflow cache.
-
-The guides SHALL describe the current release and upgrades from the oldest supported release only. They SHALL NOT describe the behavior or upgrade steps of releases older than rc1 or name database migrations that are not checked in.
-
-#### Scenario: Deterministic guide variants
-- **WHEN** generation runs twice for each of the three site modes with and without Cloudflare
-- **THEN** trees, managed guide hashes and manifests match the reviewed snapshots for that variant
-
-#### Scenario: Host database command with the stack running
-- **WHEN** an operator follows a generated Compose guide to sync configuration or re-issue a setup token after starting the Compose API
-- **THEN** the guide directs them to stop `api` and `dispatcher`, run the host command, and start the services again
-
-#### Scenario: No pre-rc1 history in delivered guides
-- **WHEN** a project is generated in any site mode, with or without `--cloudflare`
-- **THEN** its guides and README name no alpha release, no template older than rc1 and no removed migration
 
 ### Requirement: Cloudflare operator credentials stay in a private file
 Cloudflare generation SHALL deliver managed `docs/cloudflare-operator.env.example` with credential-free placeholders for account ID, D1 ID, token and Worker configuration. The private runtime copy `.lace/cloudflare-operator.env` SHALL be ignored and user-owned, absent from the managed upgrade inventory and never generated with a usable token. Generated `.env.example` SHALL NOT invite storing the remote token in root dotenv; local Cloudflare configuration SHALL remain available. Generation without Cloudflare SHALL deliver no operator example and no remote credential placeholders encouraging implicit Wrangler loading. Generated `cf:*` scripts SHALL remain local-only.
@@ -290,3 +250,44 @@ The generated project SHALL include documented commands to run its Node developm
 #### Scenario: Unpublished release preparation
 - **WHEN** a contributor generates a project before the prepared release set is published
 - **THEN** the guide identifies its exact release coordinates and publication prerequisite without claiming registry availability or directing ordinary consumers to manual tarball substitutions
+
+### Requirement: Upgrade instructions start at the latest published template
+The generated `.lace/upgrade-instructions.json` SHALL describe only the
+database and configuration steps from the latest published template to the
+current template, and SHALL NOT keep entries for upgrades from older
+templates. Its database steps SHALL state that a database created by the
+latest published release already starts from the baseline migration and is
+upgraded by applying forward migrations with `lace db migrate`, without
+recreation, and that a database created before rc2 predates the baseline, is
+refused and is not supported. The generated operations guide SHALL describe the baseline
+migration and SHALL NOT name numbered migrations that are no longer checked
+in.
+
+#### Scenario: Latest published template project reads the next template's instructions
+- **WHEN** an operator plans an upgrade of a project on the latest published template (rc2, template `0.47.0`)
+  to the current template
+- **THEN** the upgrade guidance names forward migration with `lace db migrate`
+  without database recreation and the current template's configuration step,
+  and no step for an older template
+
+#### Scenario: Generated operations guide names only checked-in migrations
+- **WHEN** a project is generated in any site mode
+- **THEN** its operations guide mentions the baseline migration and no
+  migration file that is not checked in
+
+### Requirement: Delivered guides describe the current and supported releases
+The generator SHALL deliver as managed, classified and hashed files the operations guide, the Astro site guide, the MCP guide and the scenario guides: both Compose guides in every site mode and the Cloudflare guide only with `--cloudflare`; mode and Cloudflare rendering SHALL omit absent-file links and unavailable scripts. Generator completion output SHALL link to the scenario entry points. The guides and the user-owned README SHALL direct operators to `lace add block` for installing, updating and scaffolding block components. The Compose guides SHALL instruct operators to stop the `api` and `dispatcher` services before a host command that opens the SQLite database and to start them again afterwards. The Cloudflare guide SHALL document the local consumer journey, local and remote doctor, recovery and the deploy-hook provider prerequisite. The guides SHALL explain email provider selection, the Workers Paid requirement and sending-domain onboarding for the Cloudflare provider, the Resend option, SMTP transport security, the Settings test action and setting secrets with the runtime's secret mechanism. The Astro site guide SHALL document `site.global()` and its fallback pattern, `site.seo()`, `site.url`, `<LaceSeo>`, the sitemap and robots helpers, the `anchor`, `className` and typed `settings` block props, every built-in block, image variants, placeholders, the lightbox and link precedence; the operations guide SHALL describe the styling contract, the asset cache lifetime, the builder cache and how to reset it, and the Pages workflow cache.
+
+The guides SHALL describe the current release and upgrades from the oldest supported release only. They SHALL NOT describe the behavior or upgrade steps of releases older than rc2 or name database migrations that are not checked in.
+
+#### Scenario: Deterministic delivered guide variants
+- **WHEN** generation runs twice for each of the three site modes with and without Cloudflare
+- **THEN** trees, managed guide hashes and manifests match the reviewed snapshots for that variant
+
+#### Scenario: Host database command while the Compose stack runs
+- **WHEN** an operator follows a generated Compose guide to sync configuration or re-issue a setup token after starting the Compose API
+- **THEN** the guide directs them to stop `api` and `dispatcher`, run the host command, and start the services again
+
+#### Scenario: No unsupported release history in delivered guides
+- **WHEN** a project is generated in any site mode, with or without `--cloudflare`
+- **THEN** its guides and README name no alpha release, no rc1 upgrade, no template older than rc2 and no removed migration

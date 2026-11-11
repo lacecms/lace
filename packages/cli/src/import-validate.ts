@@ -67,6 +67,7 @@ export function modelFacts(model: NormalizedContentModel): ImportModelFacts {
   return {
     key: model.key,
     kind: model.kind,
+    ...(model.kind === "collection" && model.route === undefined ? { routeLess: true } : {}),
     seo: model.kind !== "global" && model.seo !== undefined,
   };
 }

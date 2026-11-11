@@ -51,6 +51,15 @@ export async function startCollectionQueryBackend(kind) {
         },
       }),
       defineCollection({ key: "legacy", label: "Legacy", route: "/legacy/:slug", version: 1 }),
+      defineCollection({
+        key: "projects",
+        label: "Projects",
+        route: "/projects/:slug",
+        version: 1,
+        fields: { order: field.number({ label: "Order" }) },
+        listFields: ["order"],
+        listOptions: { sortableFields: ["order"], defaultSort: "field:order" },
+      }),
     ],
   });
   let repository, dispose;
@@ -106,6 +115,20 @@ export async function startCollectionQueryBackend(kind) {
         featured: i % 2 === 0,
         category: i % 2 === 0 ? "news" : "events",
       },
+    });
+  // Created in reverse order, so the default order differs from the last edit.
+  for (const [name, order] of [
+    ["Gamma", 3],
+    ["Alpha", 1],
+    ["Beta", 2],
+  ])
+    await content.create({
+      actor: admin,
+      modelKey: "projects",
+      title: name,
+      slug: name.toLowerCase(),
+      blocks: [],
+      fields: { order },
     });
   const requests = [];
   const responses = [];

@@ -202,13 +202,13 @@ The public block reference SHALL describe the gallery block: item kinds, the fie
   and their typed component compiles because it narrows items by `kind` and
   checks `media`
 
-### Requirement: Upgrade guidance starts at the oldest supported release
-English/latest, the delivered consumer guidance and the permanent compatibility guide SHALL describe upgrades from rc1 (`0.1.0-rc1`) and later releases only. They SHALL explain that the database starts from one baseline migration, so an rc1 database is recreated rather than migrated, with the backup, recreation, migration, synchronization, bootstrap and content restoration steps for Node and Cloudflare; coordinated package, image and source adoption; and backup-based rollback without promising a package-only downgrade. Sections that describe upgrades between releases older than rc1 or the adoption of features already present in rc1 SHALL NOT remain. Documentation SHALL preserve English/latest routes and SHALL NOT claim publication or real-deployment readiness from preparation alone. The reviewed changelog SHALL provide concise release notes linked to the permanent upgrade guide.
+### Requirement: Upgrade guidance covers only the oldest supported release onward
+English/latest, the delivered consumer guidance and the permanent compatibility guide SHALL describe upgrades from rc2 (`0.1.0-rc2`) and later releases only. They SHALL explain that an rc2 database already starts from the baseline migration and is upgraded by explicit forward migrations, without recreation, together with backup, coordinated package, image and source adoption, configuration synchronization and a site rebuild for Node and Cloudflare, and backup-based rollback without promising a package-only downgrade. They SHALL state that installations older than rc2 are not supported and that their pre-baseline databases are refused. Sections that describe upgrades from rc1 or between older releases, or the adoption of features already present in rc2, SHALL NOT remain. Documentation SHALL preserve English/latest routes and SHALL NOT claim publication or real-deployment readiness from preparation alone. The reviewed changelog SHALL provide concise release notes linked to the permanent upgrade guide.
 
-#### Scenario: rc1 operator upgrades
-- **WHEN** an operator on rc1 follows the upgrade guidance
-- **THEN** they can identify the database recreation, coordinated package and image update, configuration synchronization and rollback boundary
+#### Scenario: Operator on the oldest supported release upgrades
+- **WHEN** an operator on rc2, the oldest supported release, follows the upgrade guidance
+- **THEN** they can identify the backup, coordinated package and image update, forward database migration without recreation, configuration synchronization, site rebuild and rollback boundary
 
-#### Scenario: Reader looks for pre-rc1 upgrade steps
+#### Scenario: Reader looks for unsupported upgrade steps
 - **WHEN** a reader searches the public operations, deployment, reference and Astro integration pages or the compatibility guide
-- **THEN** no alpha-by-alpha upgrade section or pre-rc1 feature-adoption section remains, and the guidance names rc1 as the oldest supported release
+- **THEN** no rc1 database recreation, alpha-by-alpha upgrade or pre-rc2 feature-adoption section remains, and the guidance names rc2 as the oldest supported release

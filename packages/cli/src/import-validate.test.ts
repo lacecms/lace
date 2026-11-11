@@ -128,7 +128,13 @@ describe("local package validation", () => {
       });
       await writeFile(join(directory, "lace.config.ts"), configSource);
       const loaded = await loadImportConfiguration(directory);
-      expect([...loaded.models.keys()].sort()).toEqual(["about", "home", "posts", "settings"]);
+      expect([...loaded.models.keys()].sort()).toEqual([
+        "about",
+        "home",
+        "posts",
+        "quotes",
+        "settings",
+      ]);
       expect(loaded.blocks.get("image").version).toBe(4);
     } finally {
       await rm(directory, { recursive: true, force: true });

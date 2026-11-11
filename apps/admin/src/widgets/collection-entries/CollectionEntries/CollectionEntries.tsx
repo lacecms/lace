@@ -18,12 +18,12 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { defaultCollectionSort } from "../../../entities/content/index.js";
 import { can, useSession, useSessionRecovery } from "../../../entities/session/index.js";
 import { CreateEntryDialog } from "../../../features/create-entry/index.js";
 import {
   AdminClientError,
   adminQueryKeys,
-  DEFAULT_ENTRY_SORT,
   errorDescription,
   technicalDetails,
   useAdminClient,
@@ -59,14 +59,14 @@ type CanonicalQuery = {
   readonly status?: ContentEntryStatusDto;
 };
 
-/** Drops blank and default values so equivalent lists share one URL and cache entry. */
-function normalized(query: CollectionListQuery): CanonicalQuery {
+/** Drops blank and default values so equivalent lists share one URL. */
+function normalized(query: CollectionListQuery, defaultSort: ContentEntrySortDto): CanonicalQuery {
   const q = query.q?.trim() ?? "";
   return {
     ...(query.filters?.length ? { filters: query.filters } : {}),
     ...(q.length > 0 ? { q } : {}),
     ...(query.status === undefined ? {} : { status: query.status }),
-    ...(query.sort === undefined || query.sort === DEFAULT_ENTRY_SORT ? {} : { sort: query.sort }),
+    ...(query.sort === undefined || query.sort === defaultSort ? {} : { sort: query.sort }),
   };
 }
 
@@ -86,7 +86,12 @@ export function CollectionEntries({
   readonly onQueryChange: (query: CanonicalQuery) => void;
   readonly query: CollectionListQuery;
 }) {
-  const query = normalized(rawQuery);
+  const defaultSort = defaultCollectionSort(model);
+  const query = normalized(rawQuery, defaultSort);
+  // Requests and cache entries name the effective sort, so a page loaded under
+  // an older default is never reused; only the URL omits the default.
+  const sort = query.sort ?? defaultSort;
+  const request = { ...query, sort };
   const client = useAdminClient();
   const queryClient = useQueryClient();
   const [filterField, setFilterField] = useState<string>();
@@ -101,7 +106,7 @@ export function CollectionEntries({
   const modelKey = model.key;
   const title = model.label ?? model.key;
   const queryKey = adminQueryKeys.entryList(modelKey, {
-    ...query,
+    ...request,
     listQueryLimits,
     capabilities: collectionCapabilityIdentity(model, listQueryLimits),
   });
@@ -117,7 +122,7 @@ export function CollectionEntries({
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     initialPageParam: undefined as string | undefined,
     placeholderData: keepPreviousData,
-    queryFn: ({ pageParam }) => client.listEntries(modelKey, pageParam, query),
+    queryFn: ({ pageParam }) => client.listEntries(modelKey, pageParam, request),
     queryKey,
     retry: false,
   });
@@ -128,7 +133,8 @@ export function CollectionEntries({
     // The editor asks for this after deleting an entry and returning here.
     if (consumeFocusRequest(collectionFocusTarget(modelKey))) heading.current?.focus();
   }, [modelKey]);
-  const change = (next: CollectionListQuery) => onQueryChange(normalized({ ...query, ...next }));
+  const change = (next: CollectionListQuery) =>
+    onQueryChange(normalized({ ...query, ...next }, defaultSort));
 
   const items = entries.data?.pages.flatMap((page) => page.items) ?? [];
   const totals = entries.data?.pages[0]?.totals;
@@ -165,7 +171,11 @@ export function CollectionEntries({
           )}
         </div>
         {canManage && !empty ? (
-          <CreateEntryDialog collectionLabel={title} modelKey={modelKey} />
+          <CreateEntryDialog
+            collectionLabel={title}
+            modelKey={modelKey}
+            routed={model.route !== undefined}
+          />
         ) : undefined}
       </div>
       {model.listOptions?.sortableFields?.length ? (
@@ -174,7 +184,7 @@ export function CollectionEntries({
           <select
             aria-label="Sort entries"
             className="h-9 rounded-md border border-input bg-background px-3"
-            value={query.sort ?? DEFAULT_ENTRY_SORT}
+            value={sort}
             onChange={(event) => change({ sort: event.target.value as ContentEntrySortDto })}
           >
             {[
@@ -303,7 +313,11 @@ export function CollectionEntries({
         <EmptyState
           action={
             canManage ? (
-              <CreateEntryDialog collectionLabel={title} modelKey={modelKey} />
+              <CreateEntryDialog
+                collectionLabel={title}
+                modelKey={modelKey}
+                routed={model.route !== undefined}
+              />
             ) : undefined
           }
           description={
@@ -338,7 +352,8 @@ export function CollectionEntries({
             onDeleted={focusHeading}
             onSortChange={(sort) => change({ sort })}
             onFilterField={openFilters}
-            sort={query.sort ?? DEFAULT_ENTRY_SORT}
+            routed={model.route !== undefined}
+            sort={sort}
           />
           {entries.isFetchNextPageError && expired ? (
             <div role="alert" className="grid justify-items-start gap-2">

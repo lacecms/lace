@@ -288,7 +288,90 @@ export function EntryPage() {
     error instanceof AdminClientError && (error.issues?.length ?? 0) > 0;
   const titleError = form.formState.errors.title;
   const slugError = form.formState.errors.slug;
-  const hasEntryFields = model.kind === "collection" || Object.keys(model.fields).length > 0;
+  // Only a routed collection has the slug control; route-less entries carry no slug.
+  const hasSlug = model.kind === "collection" && model.route !== undefined;
+  const hasEntryFields = hasSlug || Object.keys(model.fields).length > 0;
+  // A model without block types (and no leftover blocks) has nothing for the
+  // main column, so its fields take the place of the Blocks section.
+  const hasBlockSection =
+    (model.blockDefinitions ?? []).length > 0 || currentEntry.draft.blocks.length > 0;
+  const fieldsCard = hasEntryFields ? (
+    <section
+      aria-labelledby="entry-fields-title"
+      className="grid gap-4 rounded-lg border border-border bg-card p-4 text-card-foreground shadow-xs"
+    >
+      <h2 className="m-0 text-sm font-semibold" id="entry-fields-title">
+        Fields
+      </h2>
+      {hasSlug ? (
+        <div className="grid gap-1.5">
+          <label className="text-sm font-medium" htmlFor="system-slug">
+            Slug
+          </label>
+          <Input
+            aria-describedby={slugError === undefined ? undefined : "system-slug-error"}
+            aria-invalid={slugError === undefined ? undefined : true}
+            disabled={readOnly || busy}
+            id="system-slug"
+            {...form.register("slug", {
+              onChange: () => {
+                if (suggestingSlug) setSlugManuallyEdited(true);
+              },
+            })}
+          />
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              disabled={readOnly || busy}
+              checked={suggestingSlug}
+              className="size-3.5 accent-primary"
+              onChange={(event) => {
+                const enabled = event.currentTarget.checked;
+                suggestingSlugRef.current = enabled;
+                setSuggestingSlug(enabled);
+                setSlugManuallyEdited(false);
+                if (enabled)
+                  form.setValue("slug", suggestSlug(form.getValues("title")), {
+                    shouldDirty: true,
+                  });
+              }}
+              type="checkbox"
+            />
+            Suggest from title
+          </label>
+          {slugError === undefined ? undefined : (
+            <p className={`${fieldErrorClass} text-xs`} id="system-slug-error" role="alert">
+              {slugError.message}
+            </p>
+          )}
+        </div>
+      ) : undefined}
+      <FieldLayout
+        fields={model.fields}
+        layout={model.layout}
+        errors={errors}
+        label="Entry fields"
+        visibleKeys={renderedModelFields}
+        renderField={(key) => {
+          const definition = model.fields[key]!;
+          return (
+            <FieldRenderer
+              annotation={
+                shownModelFields.has(key) || renderedModelFields?.has(key) !== true
+                  ? seoDefaultsAnnotation(model, key)
+                  : hiddenFieldNote(model.fields, model.visibility, key)
+              }
+              control={form.control}
+              definition={definition}
+              error={errors?.[key]?.message}
+              fieldKey={key}
+              key={key}
+              name={`fields.${key}`}
+            />
+          );
+        }}
+      />
+    </section>
+  ) : undefined;
   return (
     <>
       <ShellHeaderActions>
@@ -369,10 +452,8 @@ export function EntryPage() {
           >
             <div className="contents">
               <div className="grid min-w-0 content-start gap-4">
-                <h1
-                  className="m-0 text-xs font-medium tracking-wide text-muted-foreground uppercase"
-                  id="entry-title"
-                >
+                {/* The breadcrumbs and title already show the entry visibly. */}
+                <h1 className="sr-only" id="entry-title">
                   Edit {model.label ?? model.key}
                 </h1>
                 {problems.length === 0 ? undefined : (
@@ -435,7 +516,7 @@ export function EntryPage() {
                     <Input
                       aria-describedby={titleError === undefined ? undefined : "system-title-error"}
                       aria-invalid={titleError === undefined ? undefined : true}
-                      className="-mx-2 h-auto border-transparent bg-transparent px-2 py-1 text-2xl font-semibold tracking-tight shadow-none hover:border-input"
+                      className="-mx-2 h-auto border-transparent bg-transparent px-2 py-1 text-2xl font-semibold tracking-tight shadow-none hover:border-input dark:bg-transparent dark:hover:bg-input/30 dark:focus-visible:bg-input/30"
                       disabled={readOnly || busy}
                       id="system-title"
                       placeholder="Untitled"
@@ -453,14 +534,18 @@ export function EntryPage() {
                   </div>
                 )}
                 <EntryListBudget control={form.control} model={model} />
-                <BlockEditor
-                  control={form.control}
-                  errors={blockErrors}
-                  getValues={form.getValues}
-                  linkBase={blockLinkBase}
-                  model={model}
-                  readOnly={readOnly}
-                />
+                {hasBlockSection ? (
+                  <BlockEditor
+                    control={form.control}
+                    errors={blockErrors}
+                    getValues={form.getValues}
+                    linkBase={blockLinkBase}
+                    model={model}
+                    readOnly={readOnly}
+                  />
+                ) : (
+                  fieldsCard
+                )}
               </div>
               <aside aria-label="Entry details" className="grid min-w-0 content-start gap-4">
                 <EntryPublicationDetails
@@ -485,89 +570,7 @@ export function EntryPage() {
                     </div>
                   ) : undefined}
                 </EntryPublicationDetails>
-                {hasEntryFields ? (
-                  <section
-                    aria-labelledby="entry-fields-title"
-                    className="grid gap-4 rounded-lg border border-border bg-card p-4 text-card-foreground shadow-xs"
-                  >
-                    <h2 className="m-0 text-sm font-semibold" id="entry-fields-title">
-                      Fields
-                    </h2>
-                    {model.kind === "collection" ? (
-                      <div className="grid gap-1.5">
-                        <label className="text-sm font-medium" htmlFor="system-slug">
-                          Slug
-                        </label>
-                        <Input
-                          aria-describedby={
-                            slugError === undefined ? undefined : "system-slug-error"
-                          }
-                          aria-invalid={slugError === undefined ? undefined : true}
-                          disabled={readOnly || busy}
-                          id="system-slug"
-                          {...form.register("slug", {
-                            onChange: () => {
-                              if (suggestingSlug) setSlugManuallyEdited(true);
-                            },
-                          })}
-                        />
-                        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <input
-                            disabled={readOnly || busy}
-                            checked={suggestingSlug}
-                            className="size-3.5 accent-primary"
-                            onChange={(event) => {
-                              const enabled = event.currentTarget.checked;
-                              suggestingSlugRef.current = enabled;
-                              setSuggestingSlug(enabled);
-                              setSlugManuallyEdited(false);
-                              if (enabled)
-                                form.setValue("slug", suggestSlug(form.getValues("title")), {
-                                  shouldDirty: true,
-                                });
-                            }}
-                            type="checkbox"
-                          />
-                          Suggest from title
-                        </label>
-                        {slugError === undefined ? undefined : (
-                          <p
-                            className={`${fieldErrorClass} text-xs`}
-                            id="system-slug-error"
-                            role="alert"
-                          >
-                            {slugError.message}
-                          </p>
-                        )}
-                      </div>
-                    ) : undefined}
-                    <FieldLayout
-                      fields={model.fields}
-                      layout={model.layout}
-                      errors={errors}
-                      label="Entry fields"
-                      visibleKeys={renderedModelFields}
-                      renderField={(key) => {
-                        const definition = model.fields[key]!;
-                        return (
-                          <FieldRenderer
-                            annotation={
-                              shownModelFields.has(key) || renderedModelFields?.has(key) !== true
-                                ? seoDefaultsAnnotation(model, key)
-                                : hiddenFieldNote(model.fields, model.visibility, key)
-                            }
-                            control={form.control}
-                            definition={definition}
-                            error={errors?.[key]?.message}
-                            fieldKey={key}
-                            key={key}
-                            name={`fields.${key}`}
-                          />
-                        );
-                      }}
-                    />
-                  </section>
-                ) : undefined}
+                {hasBlockSection ? fieldsCard : undefined}
                 {model.seo === undefined ? undefined : (
                   <fieldset className="min-w-0 border-0 p-0" disabled={readOnly || busy}>
                     <EntrySeoCard

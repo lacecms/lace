@@ -122,13 +122,15 @@ export const routes = new Map<string, ContentModelRoute>([
   ["posts", { key: contentModelKey("posts"), kind: "collection", route: "/blog/:slug" }],
   ["home", { key: contentModelKey("home"), kind: "page", path: "/" }],
   ["settings", { key: contentModelKey("settings"), kind: "global" }],
+  ["testimonials", { key: contentModelKey("testimonials"), kind: "collection" }],
 ]);
 
-export type ContractModelKey = "home" | "posts" | "settings";
+export type ContractModelKey = "home" | "posts" | "settings" | "testimonials";
 export const CONTRACT_MODELS: Readonly<Record<ContractModelKey, readonly [string, string]>> = {
   home: ["page", "Home"],
   posts: ["collection", "Posts"],
   settings: ["global", "Site settings"],
+  testimonials: ["collection", "Testimonials"],
 };
 export const resolveRoute = (key: string): ContentModelRoute | undefined => routes.get(key);
 export const noModels = (): undefined => undefined;

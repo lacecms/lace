@@ -24,6 +24,7 @@ import type {
   PublicationIdempotencyKey,
   PublicationRequestFingerprint,
 } from "../shared/brands.js";
+import { CONTENT_ENTRY_SYSTEM_SORTS } from "@lacecms/content";
 import type { CursorPage } from "../shared/pagination.js";
 import type { ActorSummary } from "../shared/actors.js";
 import type { LinkImpactAcknowledgment } from "./links.js";
@@ -66,6 +67,11 @@ export interface PublicContentReadPort {
   loadPublicGlobal(modelKey: ContentModelKey): Promise<PublicGlobalContent | null>;
   loadPublicMedia(id: string): Promise<MediaMetadata | null>;
   listPublic(input: ListPublicContentInput): Promise<CursorPage<PublicContentEntry>>;
+  /**
+   * Lists the published entries of a route-less collection, newest publication
+   * first, without consulting published routes.
+   */
+  listPublicRecords(input: ListPublicContentInput): Promise<CursorPage<PublicRecordContent>>;
   publishedContentVersion(): Promise<number>;
 }
 
@@ -89,14 +95,7 @@ export type ContentEntrySort =
   | `field:${string}`
   | `-field:${string}`;
 
-export const CONTENT_ENTRY_SORTS: readonly ContentEntrySort[] = Object.freeze([
-  "-publishedAt",
-  "-title",
-  "-updatedAt",
-  "publishedAt",
-  "title",
-  "updatedAt",
-]);
+export const CONTENT_ENTRY_SORTS: readonly ContentEntrySort[] = CONTENT_ENTRY_SYSTEM_SORTS;
 
 export const DEFAULT_CONTENT_ENTRY_SORT: ContentEntrySort = "-updatedAt";
 
@@ -300,6 +299,18 @@ export interface ListPublicContentInput {
   readonly modelKey: ContentModelKey;
 }
 
+/**
+ * A published entry of a route-less collection: no path or slug, read by model
+ * key like a global, any number per model.
+ */
+export interface PublicRecordContent {
+  readonly internalLinks: readonly PublicInternalLinkReference[];
+  /** Published-only projection; never exposes the mutable draft. */
+  readonly entry: ContentEntry;
+  /** Active media referenced by the record's current published snapshot. */
+  readonly media: readonly MediaMetadata[];
+}
+
 /** A published route-less global with the media its publication references. */
 export interface PublicGlobalContent {
   readonly internalLinks: readonly PublicInternalLinkReference[];
@@ -322,7 +333,12 @@ export interface BuildContentExportPage {
   readonly entries: readonly PublicContentEntry[];
   /** Published globals ordered by model key; on the first page only. */
   readonly globals?: readonly PublicGlobalContent[];
-  /** Present exactly when further entries remain. */
+  /**
+   * Published route-less collection entries ordered by model key and entry ID,
+   * delivered only after the last routed entry.
+   */
+  readonly records: readonly PublicRecordContent[];
+  /** Present exactly when further entries or records remain. */
   readonly nextCursor?: OpaqueCursor;
   /** The published-state version every page of the sequence was read at. */
   readonly version: number;

@@ -82,9 +82,9 @@ export function ContentPage() {
         </section>
       )}
       {globals.length === 0 ? undefined : (
-        <section aria-labelledby="site-title" className="grid scroll-mt-4 gap-3" id="site">
-          <h2 className={sectionHeadingClass} id="site-title">
-            Site
+        <section aria-labelledby="globals-title" className="grid scroll-mt-4 gap-3" id="globals">
+          <h2 className={sectionHeadingClass} id="globals-title">
+            Globals
           </h2>
           <ul className={gridClass}>
             {globals.map((model) => (

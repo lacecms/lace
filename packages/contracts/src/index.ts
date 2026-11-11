@@ -120,6 +120,8 @@ export {
   toPublicContentEntryDto,
   toPublicContentListDto,
   toPublicGlobalContentDto,
+  toPublicRecordDto,
+  toPublicRecordListDto,
 } from "./delivery/public-mappers.js";
 export type {
   PublicEntrySource,
@@ -127,6 +129,7 @@ export type {
   PublicMediaUrl,
   PublicSeoOptions,
   PublicGlobalSource,
+  PublicRecordSource,
 } from "./delivery/public-mappers.js";
 export * from "./delivery/build-export-mappers.js";
 export * from "./builds/site-builds.js";

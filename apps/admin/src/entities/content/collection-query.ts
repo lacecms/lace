@@ -17,6 +17,7 @@ import {
   type ListQueryLimits,
 } from "@lacecms/contracts";
 import * as v from "valibot";
+import { DEFAULT_ENTRY_SORT } from "../../shared/api/index.js";
 
 /** Shared order for filter controls and server operator validation. */
 export function fieldFilterOperations(type: FieldType): readonly string[] {
@@ -61,7 +62,15 @@ export function listQueryBudgetHint(limits: ListQueryLimits): string {
   return `Up to ${limits.maxSearchLength} UTF-16 characters${limits.maxLikePatternBytes === null ? "" : ` and ${limits.maxLikePatternBytes} UTF-8 bytes after escaping %, _ and backslash, including 2 substring bytes`}. ASCII case is ignored; Cyrillic and other non-ASCII case is retained.`;
 }
 
-/** Resolve only after model/runtime metadata arrives; retain each valid peer. */
+/** The order of a collection list whose URL names no sort. */
+export function defaultCollectionSort(model: ContentModelDto): ContentEntrySortDto {
+  return (model.listOptions?.defaultSort as ContentEntrySortDto | undefined) ?? DEFAULT_ENTRY_SORT;
+}
+
+/**
+ * Resolve only after model/runtime metadata arrives; retain each valid peer.
+ * The model's default sort is dropped so equivalent lists share one URL.
+ */
 export function resolveCollectionListSearch(
   search: CollectionListSearch,
   model: ContentModelDto,
@@ -72,7 +81,9 @@ export function resolveCollectionListSearch(
     sortField?.startsWith("field:") &&
     !model.listOptions?.sortableFields?.includes(sortField.slice(6))
       ? undefined
-      : search.sort;
+      : search.sort === defaultCollectionSort(model)
+        ? undefined
+        : search.sort;
   const filters = canonicalCollectionFilters(
     (search.filters ?? []).filter(
       (filter) => collectionFilterProblem(model, filter, limits) === undefined,

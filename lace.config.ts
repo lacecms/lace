@@ -16,7 +16,7 @@ export default await defineConfig({
   content: [
     definePage({
       key: "home",
-      version: 12,
+      version: 13,
       label: "Home",
       path: "/",
       blocks: [
@@ -34,7 +34,7 @@ export default await defineConfig({
     }),
     definePage({
       key: "about",
-      version: 11,
+      version: 12,
       label: "About",
       path: "/about",
       blocks: [
@@ -52,7 +52,7 @@ export default await defineConfig({
     }),
     defineCollection({
       key: "posts",
-      version: 12,
+      version: 13,
       label: "Posts",
       route: "/blog/:slug",
       fields: {
@@ -84,7 +84,7 @@ export default await defineConfig({
     }),
     defineCollection({
       key: "notes",
-      version: 11,
+      version: 12,
       label: "Notes",
       route: "/notes/:slug",
       fields: { summary: field.text(), relatedUrl: field.url({ label: "Related page" }) },
@@ -107,15 +107,12 @@ export default await defineConfig({
       label: "Site settings",
       description: "Site name, tagline and the search and social defaults of every page.",
       fields: {
-        helpUrl: field.url({ label: "Help page" }),
         siteName: field.text({ label: "Site name", required: true }),
         tagline: field.text({ label: "Tagline" }),
-        titleTemplate: field.text({
-          label: "Title template",
-          description: "Page titles use it; %s stands for the page title.",
-        }),
+        titleTemplate: field.text({ label: "Title template" }),
         description: field.textarea({ label: "Site description" }),
         image: field.media({ label: "Share image" }),
+        helpUrl: field.url({ label: "Help page" }),
       },
       seoDefaults: {
         siteName: "siteName",

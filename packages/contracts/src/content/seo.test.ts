@@ -147,6 +147,7 @@ describe("admin entry list contracts", () => {
             media: [],
           },
         ],
+        records: [],
         version: 4,
       },
       urlFor,
@@ -164,7 +165,7 @@ describe("admin entry list contracts", () => {
         globals: [{ ...exportDto.globals[0], seo: toSeoDto(undefined) }],
       }).success,
     ).toBe(false);
-    expect(toBuildExportDto({ entries: [], version: 1 }, urlFor).seo).toEqual({
+    expect(toBuildExportDto({ entries: [], records: [], version: 1 }, urlFor).seo).toEqual({
       defaults: null,
       models: {},
     });

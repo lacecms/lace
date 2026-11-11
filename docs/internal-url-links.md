@@ -35,7 +35,10 @@ cancelable, literal title-prefix search with bounded continuation pages.
 A normalized snapshot may contain at most 200 reference occurrences across its
 fields and block data, including hidden blocks and defaults. Repeated references
 to one target count separately. Drafts may retain absent/unpublished targets;
-known global targets are rejected because globals have no route. Publication
+known global targets and entries of collections without a route are rejected
+as `non-routable` because they have no route; both remain valid link sources,
+and the picker never lists them (the application passes the route-less model
+keys to the picker query; persistence knows only the model kind). Publication
 requires every delivered target to have a published route, including a valid
 candidate route for a self-reference. Hidden references remain tracked but do
 not block publication for unavailable targets.

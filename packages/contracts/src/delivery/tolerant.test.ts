@@ -20,6 +20,8 @@ import {
   publicGlobalSchema,
   publicMediaDictionarySchema,
   publicMediaSchema,
+  publicRecordListSchema,
+  publicRecordSchema,
 } from "./public.js";
 import { tolerantPublicSchemas } from "./tolerant.js";
 
@@ -87,6 +89,16 @@ const global = {
   publishedAt,
 };
 
+const record = {
+  internalLinks: [],
+  blocks: [block({ key: "quote-1" })],
+  fields: { quote: "Great" },
+  id: "testimonial-1",
+  modelKey: "testimonials",
+  publishedAt,
+  title: "Ada",
+};
+
 const exportSeo = {
   defaults: {
     description: null,
@@ -106,13 +118,21 @@ const fixtures = {
       formatVersion: 2,
       globals: [global],
       media,
+      records: [record],
       seo: exportSeo,
       version: 9,
     },
   ],
   buildExportContinuationPage: [
     buildExportContinuationPageSchema,
-    { entries: [entry], formatVersion: 2, media, nextCursor: "next", version: 9 },
+    {
+      entries: [entry],
+      formatVersion: 2,
+      media,
+      nextCursor: "next",
+      records: [record],
+      version: 9,
+    },
   ],
   buildExportFirstPage: [
     buildExportFirstPageSchema,
@@ -122,6 +142,7 @@ const fixtures = {
       globals: [global],
       media,
       nextCursor: "next",
+      records: [],
       seo: exportSeo,
       version: 9,
     },
@@ -139,6 +160,8 @@ const fixtures = {
   publicGlobalContent: [publicGlobalContentSchema, { global, media }],
   publicMedia: [publicMediaSchema, media["media-1"]],
   publicMediaDictionary: [publicMediaDictionarySchema, media],
+  publicRecord: [publicRecordSchema, record],
+  publicRecordList: [publicRecordListSchema, { items: [record], media, nextCursor: "next" }],
   seoValue: [seoValueSchema, entry.seo],
 };
 
@@ -183,6 +206,23 @@ function without(value, path, key) {
 }
 
 describe("strict and tolerant public read schemas", () => {
+  test("a format 2 export without records reads as empty only in tolerant variants", () => {
+    const { records: _records, ...older } = fixtures.buildExport[1];
+    expect(v.safeParse(buildExportSchema, older).success).toBe(false);
+    expect(v.parse(tolerantPublicSchemas.buildExport, older).records).toEqual([]);
+    const { records: _pageRecords, ...olderPage } = fixtures.buildExportContinuationPage[1];
+    expect(v.safeParse(buildExportContinuationPageSchema, olderPage).success).toBe(false);
+    expect(v.parse(tolerantPublicSchemas.buildExportContinuationPage, olderPage).records).toEqual(
+      [],
+    );
+    const unlinked = {
+      ...fixtures.buildExport[1],
+      records: [{ ...record, internalLinks: undefined }],
+    };
+    delete unlinked.records[0].internalLinks;
+    expect(v.safeParse(tolerantPublicSchemas.buildExport, unlinked).success).toBe(false);
+  });
+
   test("every public read schema has a tolerant variant", () => {
     expect(Object.keys(tolerantPublicSchemas).sort()).toEqual(Object.keys(fixtures).sort());
     expect(Object.isFrozen(tolerantPublicSchemas)).toBe(true);

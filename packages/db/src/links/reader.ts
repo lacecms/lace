@@ -176,7 +176,9 @@ export class SqlContentLinkReader implements ContentLinkReadPort {
       (input.status !== undefined && !["published", "unpublished"].includes(input.status))
     )
       invalid();
+    const excluded = [...(input.excludedModelKeys ?? [])];
     const scope = await sha256CanonicalJson([
+      ...(excluded.length === 0 ? [] : [excluded]),
       input.modelKey ?? null,
       input.status ?? null,
       search,
@@ -191,10 +193,12 @@ export class SqlContentLinkReader implements ContentLinkReadPort {
       join content_entries e on e.id=s.entry_id and e.draft_snapshot_id=s.id join content_models m on m.key=e.model_key
       left join published_routes p on p.entry_id=e.id and p.snapshot_id=e.published_snapshot_id
       where s.title like ? escape '\\' and m.kind in ('page','collection')
+      and e.model_key not in (select value from json_each(?))
       and (? is null or e.model_key=?) and (? is null or (case when p.path is null then 'unpublished' else 'published' end)=?)
       and (? is null or s.title collate nocase > ? or (s.title collate nocase = ? and s.id > ?))
       order by s.title collate nocase, s.id limit ?`,
       pattern,
+      JSON.stringify(excluded),
       input.modelKey ?? null,
       input.modelKey ?? null,
       input.status ?? null,

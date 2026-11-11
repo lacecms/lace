@@ -137,6 +137,38 @@ describe("configured collection query contracts", async () => {
       true,
     );
   });
+  test("metadata carries a default sort that names a sortable field or a system sort", () => {
+    const source = {
+      kind: "collection",
+      key: "projects",
+      version: 1,
+      blocks: [],
+      fields: { order: field.number(), text: field.text() },
+      listOptions: { sortableFields: ["order"], defaultSort: "field:order" },
+    };
+    const mapped = toContentModelDto(source);
+    expect(mapped.listOptions).toEqual({ sortableFields: ["order"], defaultSort: "field:order" });
+    expect(v.safeParse(contentModelSchema, mapped).success).toBe(true);
+    for (const valid of [
+      { defaultSort: "title" },
+      { sortableFields: ["order"], defaultSort: "-field:order" },
+    ])
+      expect(v.safeParse(options, valid).success).toBe(true);
+    for (const invalid of [
+      { defaultSort: "field:order" },
+      { sortableFields: ["order"], defaultSort: "field:text" },
+      { sortableFields: ["order"], defaultSort: "author" },
+      { defaultSort: "-updatedAt" },
+      { defaultSort: 1 },
+    ])
+      expect(v.safeParse(options, invalid).success, JSON.stringify(invalid)).toBe(false);
+    expect(
+      v.safeParse(contentModelSchema, {
+        ...mapped,
+        listOptions: { sortableFields: ["missing"], defaultSort: "field:missing" },
+      }).success,
+    ).toBe(false);
+  });
 });
 
 test("effective capability identity ignores labels and columns but includes select choices", async () => {

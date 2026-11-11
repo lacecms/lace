@@ -47,6 +47,8 @@ test("build-export cursors round-trip and reject foreign or malformed values", (
   }
 });
 
+const noRecords = ["", "", "", ""];
+
 test("build-export SQL measures stored bytes and reads a page by path range", () => {
   const database = new DatabaseSync(":memory:");
   database.exec(`
@@ -116,21 +118,29 @@ test("build-export SQL measures stored bytes and reads a page by path range", ()
   const publicRoute = all(buildExportPageSql(true).routes, "", "/a")[0];
   expect(JSON.parse(publicRoute.internal_links_json)).toEqual(manifest);
   const range = buildExportPageRange("", candidates.slice(0, 3), 2, 7);
-  expect(range).toEqual({ after: "", last: "/b", more: true });
+  expect(range).toEqual({
+    after: "",
+    afterRecord: ["", ""],
+    last: "/b",
+    lastRecord: ["", ""],
+    more: true,
+  });
   const first = buildExportPageSql(true);
   expect(all(first.routes, range.after, range.last).map((row) => row.path)).toEqual(["/a", "/b"]);
   expect(all(first.globals).map((row) => row.id)).toEqual(["g"]);
   expect(
-    all(first.snapshots, range.after, range.last)
+    all(first.snapshots, range.after, range.last, ...noRecords)
       .map((row) => row.id)
       .sort(),
   ).toEqual(["a-p", "b-p", "g-p"]);
-  expect(all(first.blocks, range.after, range.last).map((row) => row.block_key)).toEqual([
-    "k1",
-    "k3",
-  ]);
   expect(
-    all(first.media, range.after, range.last).map((row) => [row.public_snapshot_id, row.id]),
+    all(first.blocks, range.after, range.last, ...noRecords).map((row) => row.block_key),
+  ).toEqual(["k1", "k3"]);
+  expect(
+    all(first.media, range.after, range.last, ...noRecords).map((row) => [
+      row.public_snapshot_id,
+      row.id,
+    ]),
   ).toEqual([
     ["a-p", "m1"],
     ["b-p", "m3"],
@@ -138,12 +148,20 @@ test("build-export SQL measures stored bytes and reads a page by path range", ()
   ]);
   const next = buildExportPageSql(false);
   expect(next.globals).toBeUndefined();
-  expect(all(next.snapshots, "/b", "/c").map((row) => row.id)).toEqual(["c-p"]);
-  expect(all(next.media, "/b", "/c")).toEqual([]);
+  expect(all(next.snapshots, "/b", "/c", ...noRecords).map((row) => row.id)).toEqual(["c-p"]);
+  expect(all(next.media, "/b", "/c", ...noRecords)).toEqual([]);
   expect(buildExportPageRange("/b", [{ path: "/c", stored_bytes: 2 }], 2, 0)).toEqual({
     after: "/b",
+    afterRecord: ["", ""],
     last: "/c",
+    lastRecord: ["", ""],
     more: false,
   });
-  expect(buildExportPageRange("", [], 100, 7)).toEqual({ after: "", last: "", more: false });
+  expect(buildExportPageRange("", [], 100, 7)).toEqual({
+    after: "",
+    afterRecord: ["", ""],
+    last: "",
+    lastRecord: ["", ""],
+    more: false,
+  });
 });

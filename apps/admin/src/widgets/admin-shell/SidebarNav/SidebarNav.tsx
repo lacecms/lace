@@ -139,7 +139,7 @@ function SingletonLink({
     <Link
       activeOptions={{ includeHash: true }}
       className={itemClass}
-      hash={item.kind === "page" ? "pages" : "site"}
+      hash={item.kind === "page" ? "pages" : "globals"}
       onClick={onNavigate}
       to="/content"
     >

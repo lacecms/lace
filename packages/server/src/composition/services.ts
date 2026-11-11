@@ -1,6 +1,7 @@
 import {
   AccountUseCases,
   ContentLinkUseCases,
+  routeLessModelKeys,
   ContentUseCases,
   MediaUseCases,
   OAuthConnectionUseCases,
@@ -143,7 +144,7 @@ export function composeLaceServices(input: LaceServicesInput): LaceServices {
     publicMedia: repository,
     storage: input.storage,
   });
-  const links = new ContentLinkUseCases(repository);
+  const links = new ContentLinkUseCases(repository, routeLessModelKeys(input.config.content));
   const builds = new SiteBuildUseCases({ builds: repository, clock });
   const publicBaseUrl = input.http.publicBaseUrl.href;
   const requests = input.limits.requests;

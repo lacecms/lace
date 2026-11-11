@@ -50,7 +50,7 @@ const initial = {
       {
         key: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
         type: "gallery",
-        schemaVersion: 5,
+        schemaVersion: 6,
         position: 1000,
         hidden: false,
         data: { images: [] },
@@ -230,7 +230,7 @@ test("revert restores inactive settings from the published snapshot", async () =
           ...settings,
           layoutMode: "flex-column",
           layoutWrap: false,
-          layoutPreset: "featured-first",
+          layoutPreset: "wide-narrow",
         },
       },
     ],
@@ -259,9 +259,9 @@ test("revert restores inactive settings from the published snapshot", async () =
   const block = await openSettings(user);
   expect(within(block).getByRole("radio", { name: "Vertical" })).toBeChecked();
   expect(within(block).getByRole("switch", { name: "Wrap items" })).not.toBeChecked();
-  expect(within(block).queryByRole("radio", { name: "Featured first" })).not.toBeInTheDocument();
+  expect(within(block).queryByRole("radio", { name: "Wide + narrow" })).not.toBeInTheDocument();
   await user.click(within(block).getByRole("radio", { name: "Grid" }));
-  expect(within(block).getByRole("radio", { name: "Featured first" })).toBeChecked();
+  expect(within(block).getByRole("radio", { name: "Wide + narrow" })).toBeChecked();
 }, 15000);
 
 test("save and publish carries the inactive preset through the ordinary lifecycle", async () => {
@@ -362,7 +362,9 @@ test("a gallery's Add picks several images at once and saves them in order", asy
       aspectRatio: "16:9",
       kind: "image",
       media,
-      playback: "player",
+      placement: "auto",
+      playback: "ambient",
+      size: "fill",
     })),
   });
 });

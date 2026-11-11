@@ -65,7 +65,7 @@ const galleryBlock = {
   hidden: false,
   key: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   position: 1000,
-  schemaVersion: 5,
+  schemaVersion: 6,
   settings: { layoutMode: "grid", layoutPreset: "auto", layoutWrap: true, lightbox: false },
   type: "gallery",
 };
@@ -188,7 +188,9 @@ test("twenty tagged images join a gallery in one step", async ({ page }) => {
       aspectRatio: "16:9",
       kind: "image",
       media: item.id,
-      playback: "player",
+      placement: "auto",
+      playback: "ambient",
+      size: "fill",
     })),
   );
 });

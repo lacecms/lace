@@ -226,3 +226,54 @@ test("entry lists pass an exact collection slug and refuse it for singleton mode
     });
   expect(calls).toHaveLength(2);
 });
+
+test("a request without sort uses the collection's configured default", async () => {
+  const { ContentUseCases } = await import("../index.js");
+  const fields = { order: field.number(), summary: field.text() };
+  const config = await defineConfig({
+    content: [
+      defineCollection({
+        key: "projects",
+        route: "/projects/:slug",
+        version: 1,
+        fields,
+        listOptions: { sortableFields: ["order"], defaultSort: "field:order" },
+      }),
+      defineCollection({
+        key: "titled",
+        route: "/titled/:slug",
+        version: 1,
+        listOptions: { defaultSort: "title" },
+      }),
+      defineCollection({ key: "posts", route: "/posts/:slug", version: 1, fields }),
+      definePage({ key: "home", path: "/", version: 1 }),
+      defineGlobal({ key: "settings", version: 1 }),
+    ],
+  });
+  const calls = [];
+  const page = { items: [], totals: { all: 0, changed: 0, draft: 0, published: 0 } };
+  const useCases = new ContentUseCases({
+    config: config.runtime,
+    content: {
+      list: async (query) => {
+        calls.push(query);
+        return page;
+      },
+    },
+  });
+  const actor = { id: "reader", role: "viewer" };
+  const sortOf = async (modelKey, sort) => {
+    await useCases.list({ actor, limit: 5, modelKey, ...(sort === undefined ? {} : { sort }) });
+    return calls.at(-1).sort;
+  };
+  // The default is the explicit sort, with its resolved field target.
+  expect(await sortOf("projects")).toBe("field:order");
+  expect(calls.at(-1).query.sortableFields).toEqual([{ key: "order", type: "number" }]);
+  expect(await sortOf("titled")).toBe("title");
+  // An explicit sort, including the old default, always wins.
+  expect(await sortOf("projects", "-updatedAt")).toBe("-updatedAt");
+  expect(await sortOf("projects", "-field:order")).toBe("-field:order");
+  // Collections without a default, pages and globals keep -updatedAt.
+  for (const modelKey of ["posts", "home", "settings"])
+    expect(await sortOf(modelKey)).toBe("-updatedAt");
+});

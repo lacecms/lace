@@ -74,7 +74,7 @@ test("LIST1 real API saves, publishes and validates Gallery layout scalars", asy
     blocks: [
       {
         type: "gallery",
-        schemaVersion: 5,
+        schemaVersion: 6,
         key: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
         position: 1000,
         data: {
@@ -110,6 +110,7 @@ test("LIST1 real API saves, publishes and validates Gallery layout scalars", asy
     { layoutMode: "bad" },
     { layoutWrap: "yes" },
     { layoutMode: "flex-row", layoutPreset: "bad" },
+    { layoutPreset: "featured-first" },
   ]) {
     await call(
       `${path}/draft`,
@@ -135,8 +136,9 @@ test("LIST1 real API saves, publishes and validates Gallery layout scalars", asy
     kind: "video",
     videoUrl: "https://vimeo.com/76979871",
     videoTitle: "Studio tour",
-    playback: "player",
+    playback: "ambient",
     aspectRatio: "16:9",
+    placement: "auto",
   });
   const duplicate = await call(`${path}/duplicate`, {}, "POST", 201);
   expect(duplicate.draft.blocks[0].settings).toEqual(publicEntry.blocks[0].settings);

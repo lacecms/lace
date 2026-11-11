@@ -70,13 +70,14 @@ test("generates deterministic owned source and hashed managed files", async () =
     await readFile(join(left.path, ".lace/upgrade-instructions.json"), "utf8"),
   );
   expect(instructions).toMatchObject({ schemaVersion: 1, templateVersion: TEMPLATE_VERSION });
-  // Instructions describe only the upgrade from the latest published template (rc1).
+  // Instructions describe only the upgrade from the latest published template (rc2).
   expect(instructions.configuration).toHaveLength(1);
-  expect(instructions.configuration[0]).toMatch(/^Template 0\.47\.0: .*baseline migration/u);
+  expect(instructions.configuration[0]).toMatch(/^Template 0\.48\.0: .*rc2 .*pnpm content:sync/u);
   expect(instructions.database).toHaveLength(1);
   expect(instructions.database[0]).toMatch(
-    /baseline migration.*SCHEMA_UNSUPPORTED.*pnpm db:migrate.*pnpm content:sync/u,
+    /rc2 database.*baseline migration.*pnpm db:migrate.*SCHEMA_UNSUPPORTED/u,
   );
+  expect(instructions.database[0]).not.toMatch(/remove the SQLite database|create a new D1/u);
   expect(JSON.stringify(instructions)).not.toMatch(/\b00(?:0\d|1[0-5])_[a-z_]+/u);
 
   expect(files).not.toContain("wrangler.jsonc");
@@ -299,7 +300,7 @@ test("alpha generation selects exact compatible packages and overridable images"
   const environment = await readFile(join(project.path, ".env.example"), "utf8");
   expect(environment).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-rc2");
   expect(environment).toContain("LACE_BUILDER_IMAGE=ghcr.io/lacecms/builder:0.1.0-rc2");
-  expect(TEMPLATE_VERSION).toBe("0.47.0");
+  expect(TEMPLATE_VERSION).toBe("0.48.0");
   const compose = await readFile(join(project.path, "docker-compose.yml"), "utf8");
   expect(compose).toContain("image: ${LACE_API_IMAGE:");
   expect(compose).toContain("LACE_API_DOCS_ENABLED: ${LACE_API_DOCS_ENABLED:-false}");

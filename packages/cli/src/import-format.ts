@@ -151,10 +151,15 @@ export function parseImportPackage(value: unknown): ImportPackage {
 export interface ImportModelFacts {
   readonly key: string;
   readonly kind: "collection" | "global" | "page";
+  /** True for a collection without a route: its entries carry no slug. */
+  readonly routeLess?: boolean;
   readonly seo: boolean;
 }
 
-/** Model-kind rules: slug, title and SEO per kind, one entry per singleton or slug. */
+/**
+ * Model-kind rules: slug, title and SEO per kind, one entry per singleton or
+ * routed slug; entries of a route-less collection are told apart by key only.
+ */
 export function modelRuleIssues(
   pkg: ImportPackage,
   models: ReadonlyMap<string, ImportModelFacts>,
@@ -168,16 +173,24 @@ export function modelRuleIssues(
       issues.push({ pointer: at("model"), message: "names no model in lace.config.ts." });
       continue;
     }
-    if (model.kind === "collection" && entry.slug === undefined)
+    const routed = model.kind === "collection" && model.routeLess !== true;
+    if (routed && entry.slug === undefined)
       issues.push({ pointer: at("slug"), message: "is required for a collection entry." });
-    if (model.kind !== "collection" && entry.slug !== undefined)
-      issues.push({ pointer: at("slug"), message: `is not allowed for a ${model.kind}.` });
+    if (!routed && entry.slug !== undefined)
+      issues.push({
+        pointer: at("slug"),
+        message:
+          model.kind === "collection"
+            ? "is not allowed for a collection without a route."
+            : `is not allowed for a ${model.kind}.`,
+      });
     if (model.kind === "global" && entry.title !== undefined)
       issues.push({ pointer: at("title"), message: "is not allowed for a global." });
     if (model.kind !== "global" && entry.title === undefined)
       issues.push({ pointer: at("title"), message: `is required for a ${model.kind}.` });
     if (entry.seo !== undefined && !model.seo)
       issues.push({ pointer: at("seo"), message: "is not enabled for this model." });
+    if (model.kind === "collection" && !routed) continue;
     const identity =
       model.kind === "collection" ? `${entry.model}\u0000${entry.slug}` : entry.model;
     if (seen.has(identity))

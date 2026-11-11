@@ -154,16 +154,12 @@ test("an admin edits SEO values with the keyboard alone", async ({ page }) => {
 
   await tabTo(page, title);
   await page.keyboard.type("A very long search title that keeps going well past sixty chars");
-  await expect(
-    card.getByText("63 / 60 characters (recommended). Limit: 200 characters."),
-  ).toBeVisible();
+  await expect(card.getByText("63 / 60 recommended · 200 max")).toBeVisible();
   await expect(
     card.getByText("Search results may shorten titles longer than 60 characters."),
   ).toBeVisible();
   await retype(page, "Hello from Lace");
-  await expect(
-    card.getByText("15 / 60 characters (recommended). Limit: 200 characters."),
-  ).toBeVisible();
+  await expect(card.getByText("15 / 60 recommended · 200 max")).toBeVisible();
   await expect(card.getByText(/may shorten titles/u)).toHaveCount(0);
   await expect(preview).toContainText("Hello from Lace");
 

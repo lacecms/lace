@@ -412,7 +412,15 @@ export function diffContentModelStructures(
   }
   for (const property of ["path", "route"]) {
     if (!same(baseline[property], target[property])) {
-      changes.push({ class: "breaking", kind: "route-changed", scope: "model", target: property });
+      changes.push({
+        class: "breaking",
+        kind: "route-changed",
+        scope: "model",
+        target: property,
+        ...(property === "route" && baseline.route !== undefined && target.route === undefined
+          ? { routeRemoved: true as const }
+          : {}),
+      });
     }
   }
   const modelProperties = new Set([...Object.keys(baseline), ...Object.keys(target)]);

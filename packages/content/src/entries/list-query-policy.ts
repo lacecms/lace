@@ -14,6 +14,17 @@ export const CLOUDFLARE_LIST_QUERY_LIMITS: ListQueryLimits = Object.freeze({
 });
 export const COLLECTION_MATCHING_VERSION = "sqlite-like-v1";
 
+/** System admin entry-list sorts; a leading `-` sorts descending. */
+export const CONTENT_ENTRY_SYSTEM_SORTS = Object.freeze([
+  "-publishedAt",
+  "-title",
+  "-updatedAt",
+  "publishedAt",
+  "title",
+  "updatedAt",
+] as const);
+export type ContentEntrySystemSort = (typeof CONTENT_ENTRY_SYSTEM_SORTS)[number];
+
 /** Escapes a literal substring for ordinary SQLite LIKE ... ESCAPE '\\'. */
 export function literalLikePattern(value: string): string {
   return `%${value.replace(/[\\%_]/gu, "\\$&")}%`;

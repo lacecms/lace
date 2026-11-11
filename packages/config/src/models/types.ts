@@ -1,4 +1,5 @@
 import type {
+  ContentEntrySystemSort,
   ListQueryableFieldType,
   SearchableFieldType,
   SeoTextFieldType,
@@ -91,11 +92,21 @@ export type ListQueryFieldKey<Fields extends FieldMap, Types extends FieldDefini
   [Key in keyof Fields & string]: Extract<Fields[Key]["type"], Types> extends never ? never : Key;
 }[keyof Fields & string];
 
+/**
+ * The admin list order used when a request names no sort: a system sort or a
+ * field sort. A field default must also be listed in `sortableFields`.
+ */
+export type CollectionDefaultSort<Fields extends FieldMap = FieldMap> =
+  | ContentEntrySystemSort
+  | `field:${ListQueryFieldKey<Fields, ListQueryableFieldType>}`
+  | `-field:${ListQueryFieldKey<Fields, ListQueryableFieldType>}`;
+
 /** Independent admin query capabilities; visibility grants no capability. */
 export interface CollectionListOptions<Fields extends FieldMap = FieldMap> {
   readonly sortableFields?: readonly ListQueryFieldKey<Fields, ListQueryableFieldType>[];
   readonly filterableFields?: readonly ListQueryFieldKey<Fields, ListQueryableFieldType>[];
   readonly searchableFields?: readonly ListQueryFieldKey<Fields, SearchableFieldType>[];
+  readonly defaultSort?: CollectionDefaultSort<Fields>;
 }
 
 /** Input accepted by `defineCollection`. */
@@ -105,7 +116,11 @@ export interface CollectionModelInput<
   /** Ordered scalar field keys shown as columns in admin entry lists. */
   readonly listFields?: readonly (keyof Fields & string)[];
   readonly listOptions?: CollectionListOptions<Fields>;
-  readonly route: string;
+  /**
+   * Canonical route with one `:slug` segment. Omit it for a route-less
+   * collection, whose entries have no slug, path or SEO group.
+   */
+  readonly route?: string;
 }
 
 /** Fields of the declaring global that supply site-wide SEO defaults. */
@@ -179,7 +194,8 @@ export type CollectionModelDefinition<Fields extends FieldMap = FieldMap> =
       readonly kind: "collection";
       readonly listFields?: readonly (keyof Fields & string)[];
       readonly listOptions?: CollectionListOptions;
-      readonly route: string;
+      /** Absent for a route-less collection. */
+      readonly route?: string;
     };
 
 /** A normalized route-less singleton model for site-wide content. */

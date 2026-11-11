@@ -290,3 +290,22 @@ test("an unpublication's build uses its own wording", async () => {
     ),
   );
 });
+
+test("a route-less entry shows no public URL", async () => {
+  const collection = models.items[1]!;
+  const { route: _route, ...routeLess } = collection;
+  renderInRouter(
+    <EntryPublicationDetails
+      entry={{
+        ...draftEntry,
+        published: { ...draftEntry.draft, id: "published-1", state: "published" },
+      }}
+      latestBuild={undefined}
+      model={{ ...routeLess, key: "testimonials" }}
+    />,
+  );
+  const region = await screen.findByRole("region", { name: "Publication status" });
+  expect(region).not.toHaveTextContent("Public URL");
+  expect(region).not.toHaveTextContent("No public URL yet");
+  expect(within(region).queryByRole("link", { name: /Open on site/u })).not.toBeInTheDocument();
+});

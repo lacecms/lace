@@ -160,3 +160,59 @@ test("listOptions are projection-only while consumer keys remain structural", as
     present((await nested("b")).content[0]).structureHash,
   );
 });
+
+test("defaultSort accepts system sorts and sortable field sorts", async () => {
+  const fields = { author: field.text(), order: field.number(), publishedAt: field.date() };
+  const model = (listOptions: object) => postModel({ fields, listOptions });
+  expect(model({ sortableFields: ["order"], defaultSort: "field:order" }).listOptions).toEqual({
+    sortableFields: ["order"],
+    defaultSort: "field:order",
+  });
+  expect(model({ sortableFields: ["order"], defaultSort: "-field:order" }).listOptions).toEqual({
+    sortableFields: ["order"],
+    defaultSort: "-field:order",
+  });
+  // A system default needs no sortable fields and keeps listOptions nonempty.
+  for (const defaultSort of ["title", "-title", "updatedAt", "publishedAt", "-publishedAt"])
+    expect(model({ defaultSort }).listOptions).toEqual({ defaultSort });
+  const config = async (listOptions?: object) =>
+    defineConfig({
+      blocks,
+      content: [postModel({ fields, ...(listOptions === undefined ? {} : { listOptions }) })],
+    });
+  const [absent, implicit, withFields, implicitWithFields, ordered] = await Promise.all([
+    config(),
+    config({ defaultSort: "-updatedAt" }),
+    config({ sortableFields: ["order"] }),
+    config({ sortableFields: ["order"], defaultSort: "-updatedAt" }),
+    config({ sortableFields: ["order"], defaultSort: "field:order" }),
+  ]);
+  // The documented default normalizes to omission, keeping metadata and hashes.
+  expect(implicit.public).toEqual(absent.public);
+  expect(implicit.projectionHash).toBe(absent.projectionHash);
+  expect(implicitWithFields.public).toEqual(withFields.public);
+  expect(implicitWithFields.projectionHash).toBe(withFields.projectionHash);
+  // A default is projection-only and outside the public identity.
+  expect(ordered.structureHash).toBe(withFields.structureHash);
+  expect(ordered.projectionHash).not.toBe(withFields.projectionHash);
+  expect(present(ordered.runtime.content[0]).publicProjectionHash).toBe(
+    present(withFields.runtime.content[0]).publicProjectionHash,
+  );
+  expect(JSON.parse(JSON.stringify(ordered.public.content[0])).listOptions).toEqual({
+    sortableFields: ["order"],
+    defaultSort: "field:order",
+  });
+});
+
+test.each([
+  [{ defaultSort: "field:order" }, /must be listed in listOptions.sortableFields/u],
+  [{ sortableFields: ["order"], defaultSort: "field:author" }, /"author" must be listed/u],
+  [{ sortableFields: ["order"], defaultSort: "author" }, /system sort/u],
+  [{ sortableFields: ["order"], defaultSort: "field:" }, /system sort/u],
+  [{ sortableFields: ["order"], defaultSort: 3 }, /sort string/u],
+  [{ sortableFields: ["order"], defaultSort: null }, /sort string/u],
+])("rejects an invalid defaultSort %j", (listOptions, message) => {
+  expect(() =>
+    postModel({ fields: { author: field.text(), order: field.number() }, listOptions }),
+  ).toThrow(message);
+});

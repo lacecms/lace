@@ -112,11 +112,20 @@ contract(
     const block = {
       key: blockKey("gallery-0"),
       type: "gallery",
-      schemaVersion: 5,
+      schemaVersion: 6,
       position: 1000,
       hidden: false,
       data: {
-        images: [{ kind: "image", ...data.images[0], aspectRatio: "16:9", playback: "player" }],
+        images: [
+          {
+            kind: "image",
+            ...data.images[0],
+            aspectRatio: "16:9",
+            placement: "auto",
+            playback: "ambient",
+            size: "fill",
+          },
+        ],
       },
       settings,
     };
@@ -184,7 +193,10 @@ contract(
     const published = (await repository.load({ entryId: migrated.id }))!;
     expect(published.draft.blocks[0]!.data).toEqual(saved.draft.blocks[0]!.data);
     expect(published.published!.blocks[0]!.data).toEqual({
-      images: [{ kind: "image", ...data.images[0] }, { ...video }],
+      images: [
+        { kind: "image", ...data.images[0], placement: "auto", size: "fill" },
+        { ...video, placement: "auto" },
+      ],
     });
     expect(
       (await mediaRows()).filter((row) => row.snapshot_id === published.published!.id),

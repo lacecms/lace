@@ -297,6 +297,7 @@ test("serves the build export in version-bound keyset pages", async () => {
     "formatVersion",
     "media",
     "nextCursor",
+    "records",
     "version",
   ]);
   expect(second.body.entries.map((entry) => entry.path)).toEqual(["/blog/c", "/blog/d"]);

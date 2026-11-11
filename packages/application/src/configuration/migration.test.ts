@@ -678,6 +678,100 @@ test("refuses stored built-in blocks below their version because built-ins decla
   expect(JSON.stringify(state.entries)).toBe(before);
 });
 
+test("synchronizes a stored rc2 featured-first gallery to version 6", async () => {
+  // The rc2 (version 5) gallery shape, reduced to what the stored data uses.
+  const galleryV5 = defineBlock({
+    fields: {
+      images: field.list({
+        item: field.group({
+          fields: {
+            kind: field.select({ defaultValue: "image", options: ["image", "video"] }),
+            media: field.media(),
+            playback: field.select({ defaultValue: "player", options: ["player", "ambient"] }),
+            videoTitle: field.text(),
+            videoUrl: field.url(),
+          },
+        }),
+      }),
+    },
+    settings: {
+      layoutPreset: field.select({
+        defaultValue: "auto",
+        options: ["auto", "columns-2", "featured-first"],
+      }),
+    },
+    type: "gallery",
+    version: 5,
+  });
+  const galleryConfig = (definition, version) =>
+    defineConfig({
+      blocks: [definition],
+      content: [
+        defineCollection({ blocks: ["gallery"], key: "posts", route: "/blog/:slug", version }),
+      ],
+    });
+  const baseline = (await galleryConfig(galleryV5, 1)).runtime.content[0];
+  const target = await galleryConfig(builtInBlocks.gallery, 2);
+  const model = target.runtime.content[0];
+  const video = { kind: "video", videoTitle: "Tour", videoUrl: "https://vimeo.com/76979871" };
+  const gallery = () => ({
+    data: { images: [{ media: "m1" }, { kind: "image", media: "m2" }, { ...video }] },
+    hidden: false,
+    key: "b1",
+    position: 0,
+    settings: { layoutMode: "grid", layoutPreset: "featured-first", lightbox: false },
+    schemaVersion: 5,
+    type: "gallery",
+  });
+  const references = [
+    { fieldPath: "/images/0/media", mediaId: "m1", sourceKey: "b1" },
+    { fieldPath: "/images/1/media", mediaId: "m2", sourceKey: "b1" },
+  ];
+  const state = store(baseline, [
+    {
+      draft: snap("d1", "draft", 2, [gallery()], references),
+      entryId: "e1",
+      published: snap("p1", "published", 2, [gallery()], references),
+    },
+  ]);
+
+  const prepared = await prepareConfigurationSynchronization({
+    blocks: target.runtime.blocks,
+    models: [model],
+    state,
+  });
+  expect(prepared.plan.isValid).toBe(true);
+  expect(prepared.plan.operations[0].evolution.migrations).toEqual([
+    { blockType: "gallery", blocks: 2, draft: 1, fromVersions: [5], published: 1, toVersion: 6 },
+  ]);
+  const result = await applyPreparedConfigurationSynchronization({
+    blocks: target.runtime.blocks,
+    clock: { now: () => 500 },
+    ids: { next: () => "id" },
+    models: [model],
+    prepared,
+    target: state,
+  });
+  expect(result).toMatchObject({
+    migrated: { blocks: 2, drafts: 1, published: 1 },
+    status: "applied",
+  });
+  for (const snapshot of [state.entries[0].draft, state.entries[0].published]) {
+    expect(snapshot.blocks[0]).toMatchObject({
+      data: {
+        images: [
+          { media: "m1", placement: "full" },
+          { kind: "image", media: "m2" },
+          { ...video, playback: "player" },
+        ],
+      },
+      schemaVersion: 6,
+      settings: { layoutMode: "grid", layoutPreset: "columns-2", lightbox: false },
+    });
+    expect(snapshot.references).toEqual(references);
+  }
+});
+
 test("checks complete resulting composite budgets and nested prior-media locations", () => {
   const migrated = defineBlock({
     type: "note",

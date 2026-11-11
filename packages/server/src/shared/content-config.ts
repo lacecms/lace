@@ -28,7 +28,8 @@ export type ServerContentModel =
       readonly kind: "collection";
       readonly listFields?: readonly string[];
       readonly listOptions?: Parameters<typeof toContentModelDto>[0]["listOptions"];
-      readonly route: string;
+      /** Absent for a route-less collection. */
+      readonly route?: string;
       readonly seo?: ServerModelSeo;
     })
   | (ServerModelBase & { readonly kind: "global"; readonly seoDefaults?: ServerSeoDefaults })
@@ -66,12 +67,26 @@ export function globalModel(
   return model?.kind === "global" ? model : undefined;
 }
 
+type ServerCollectionModel = Extract<ServerContentModel, { readonly kind: "collection" }>;
+
+/** A collection that declares a route; route-less collections answer as unknown. */
 export function collectionModel(
   config: ServerConfig,
   key: string,
-): Extract<ServerContentModel, { readonly kind: "collection" }> | undefined {
+): (ServerCollectionModel & { readonly route: string }) | undefined {
   const model = contentModel(config, key);
-  return model?.kind === "collection" ? model : undefined;
+  return model?.kind === "collection" && model.route !== undefined
+    ? { ...model, route: model.route }
+    : undefined;
+}
+
+/** A collection without a route, whose published entries are public records. */
+export function routeLessCollectionModel(
+  config: ServerConfig,
+  key: string,
+): ServerCollectionModel | undefined {
+  const model = contentModel(config, key);
+  return model?.kind === "collection" && model.route === undefined ? model : undefined;
 }
 
 /** The export's SEO section: fallback fields of SEO-enabled models and the defaults global. */

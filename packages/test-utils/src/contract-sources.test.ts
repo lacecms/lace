@@ -8,6 +8,7 @@ import type {
   MediaUsageLocation,
   PublicContentEntry,
   PublicGlobalContent,
+  PublicRecordContent,
   BuildContentExportPage,
 } from "@lacecms/application";
 import type { CollectionListOptions } from "@lacecms/config";
@@ -23,6 +24,7 @@ import type {
   PublicEntrySource,
   PublicMediaSource,
   PublicGlobalSource,
+  PublicRecordSource,
   BuildExportPageSource,
   BuildExportSource,
 } from "@lacecms/contracts";
@@ -85,6 +87,8 @@ const checks = {
   >,
   // Globals have no path; all other application properties cross this boundary.
   PublicGlobalSource: true satisfies Mirrors<PublicGlobalContent, PublicGlobalSource>,
+  // Route-less records have no path; all other application properties cross this boundary.
+  PublicRecordSource: true satisfies Mirrors<PublicRecordContent, PublicRecordSource>,
   // Export pages carry all pagination and publication keys; no omissions.
   BuildExportPageSource: true satisfies Mirrors<BuildContentExportPage, BuildExportPageSource>,
   // A complete export is the first page without its continuation cursor.

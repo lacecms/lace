@@ -1,4 +1,4 @@
-import { isPlainObject } from "@lacecms/content";
+import { CONTENT_ENTRY_SYSTEM_SORTS, isPlainObject } from "@lacecms/content";
 import { fieldTypeCapabilities } from "@lacecms/content";
 import type { FieldMap, CollectionListOptions } from "./types.js";
 import { fail } from "../shared/errors.js";
@@ -48,8 +48,8 @@ export function normalizeListOptions(
     fail("listOptions must be a plain object.");
   }
   const keys = ["sortableFields", "filterableFields", "searchableFields"] as const;
-  assertOnlyKeys(value, keys, "listOptions");
-  const result: Record<string, readonly string[]> = {};
+  assertOnlyKeys(value, [...keys, "defaultSort"], "listOptions");
+  const result: Record<string, readonly string[] | string> = {};
   for (const operation of keys) {
     const targets = value[operation];
     if (targets === undefined) continue;
@@ -64,5 +64,31 @@ export function normalizeListOptions(
     }
     if (normalized.length) result[operation] = normalized;
   }
-  return Object.keys(result).length ? result : undefined;
+  const defaultSort = normalizeDefaultSort(
+    value.defaultSort,
+    (result.sortableFields as readonly string[] | undefined) ?? [],
+  );
+  if (defaultSort !== undefined) result.defaultSort = defaultSort;
+  return Object.keys(result).length ? (result as CollectionListOptions) : undefined;
+}
+
+// The documented default needs no declaration, so writing it keeps hashes unchanged.
+const IMPLICIT_DEFAULT_SORT = "-updatedAt";
+
+function normalizeDefaultSort(value: unknown, sortable: readonly string[]): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") fail("listOptions.defaultSort must be a sort string.");
+  if ((CONTENT_ENTRY_SYSTEM_SORTS as readonly string[]).includes(value)) {
+    return value === IMPLICIT_DEFAULT_SORT ? undefined : value;
+  }
+  const field = /^-?field:(.+)$/u.exec(value)?.[1];
+  if (field === undefined) {
+    fail(
+      `listOptions.defaultSort must be a system sort (${CONTENT_ENTRY_SYSTEM_SORTS.join(", ")}) or field:<key>.`,
+    );
+  }
+  if (!sortable.includes(field)) {
+    fail(`listOptions.defaultSort field "${field}" must be listed in listOptions.sortableFields.`);
+  }
+  return value;
 }

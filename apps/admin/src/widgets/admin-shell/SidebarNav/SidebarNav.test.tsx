@@ -85,7 +85,7 @@ test("a failed count or missing page draft keeps the item available and the rout
   );
 });
 
-test("lists globals in the Site group with singleton links", async () => {
+test("lists globals in the Globals group with singleton links", async () => {
   const settings = {
     blocks: [],
     fields: {},
@@ -109,14 +109,14 @@ test("lists globals in the Site group with singleton links", async () => {
     }),
     session: { id: "editor-1", role: "editor" },
   });
-  const site = await screen.findByRole("list", { name: "Site" });
+  const site = await screen.findByRole("list", { name: "Globals" });
   expect(await within(site).findByRole("link", { name: "Site settings" })).toHaveAttribute(
     "href",
     "/content/settings/settings-1",
   );
   expect(within(site).getByRole("link", { name: "Site settings" })).not.toHaveTextContent(/\d/);
   const groups = screen.getAllByRole("list").map((list) => list.getAttribute("aria-labelledby"));
-  expect(groups.indexOf("nav-group-site")).toBe(groups.indexOf("nav-group-collections") + 1);
+  expect(groups.indexOf("nav-group-globals")).toBe(groups.indexOf("nav-group-collections") + 1);
 
   document.body.replaceChildren();
   renderInRouter(nav(), {
@@ -129,9 +129,9 @@ test("lists globals in the Site group with singleton links", async () => {
     }),
     session: { id: "editor-1", role: "editor" },
   });
-  const unsynced = await screen.findByRole("list", { name: "Site" });
+  const unsynced = await screen.findByRole("list", { name: "Globals" });
   expect(within(unsynced).getByRole("link", { name: "Site settings" })).toHaveAttribute(
     "href",
-    "/content#site",
+    "/content#globals",
   );
 });

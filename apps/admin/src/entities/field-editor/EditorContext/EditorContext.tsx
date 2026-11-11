@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, type ComponentType, type ReactNode } from "react";
 import { useWatch, type Control, type UseFormReturn } from "react-hook-form";
+import { MAX_SNAPSHOT_LIST_ITEMS } from "@lacecms/content";
 import type { ContentModelDto } from "@lacecms/contracts";
 import type {
   DraftEditorValues,
@@ -105,6 +106,9 @@ export function useCompositeEditing() {
     },
   };
 }
+/** The entry-wide list budget line appears from 80% of the limit. */
+export const LIST_BUDGET_NOTICE_FROM = Math.floor(MAX_SNAPSHOT_LIST_ITEMS * 0.8);
+
 export function EntryListBudget({
   control,
   model,
@@ -119,9 +123,12 @@ export function EntryListBudget({
     blocks: blocks ?? [],
     fields: fields ?? {},
   });
+  // Only worth the space once the entry gets close to the limit.
+  if (budget.problem === undefined && budget.count < LIST_BUDGET_NOTICE_FROM) return null;
   return (
     <p className="text-xs text-muted-foreground" role="status">
-      List items: {budget.count} / 500 (includes nested lists and hidden blocks). {budget.problem}
+      List items: {budget.count} / {MAX_SNAPSHOT_LIST_ITEMS} (includes nested lists and hidden
+      blocks). {budget.problem}
     </p>
   );
 }

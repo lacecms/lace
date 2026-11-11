@@ -12,11 +12,15 @@ test("keeps supported collection-list parameters", () => {
 
 const none = { filters: undefined, q: undefined, sort: undefined, status: undefined };
 
-test("drops unsupported, blank, over-long, and default values", () => {
+test("drops unsupported, blank and over-long values but keeps every valid sort", () => {
   expect(parseCollectionSearch({ sort: "author", status: "archived" })).toStrictEqual(none);
   expect(parseCollectionSearch({ q: "   " })).toStrictEqual(none);
   expect(parseCollectionSearch({ q: "x".repeat(201) })).toStrictEqual(none);
-  expect(parseCollectionSearch({ q: 42, sort: "-updatedAt" })).toStrictEqual(none);
+  // The model's own default is dropped later, once metadata is known.
+  expect(parseCollectionSearch({ q: 42, sort: "-updatedAt" })).toStrictEqual({
+    ...none,
+    sort: "-updatedAt",
+  });
   expect(parseCollectionSearch({ q: "x".repeat(200) })).toStrictEqual({
     ...none,
     q: "x".repeat(200),

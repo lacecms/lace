@@ -94,6 +94,7 @@ test("preserves every repository contract case in order", () => {
     "public query identity avoids builds and guards untrusted, mixed and stale updates",
     "public query identity rolls back a failing final sync mutation",
     "configured collection queries share typed predicates, literal LIKE and exact field paging",
+    "a collection default sort pages like the explicit sort and binds omitted-sort cursors",
     "bounded string anchors cover long text/select, replacement, foreign models and empty races",
     "query performance is model-scoped with constant first/scalar/string statement counts at 1000 entries",
     "runtime LIKE policies count UTF-8 escapes before SQL while equality keeps 200 units",
@@ -110,5 +111,10 @@ test("preserves every repository contract case in order", () => {
     "returns publication and unpublication results equal to a later load",
     "refuses a stale publication as a revision conflict before link validation",
     "caps site-build and dispatcher claims per call and leaves the rest claimable",
+    "publishes route-less entries without routes and requests builds",
+    "reads route-less records newest publication first",
+    "exports records after the routed entries across pages",
+    "route-less entries are not routable link targets",
+    "synchronization guards removing a collection route",
   ]);
 });

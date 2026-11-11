@@ -45,10 +45,19 @@ collapsed card SHALL keep its header, including the summary, and hide only its
 fields. A card whose data has a validation error SHALL stay expanded so the
 error remains visible. Each card SHALL offer an actions menu with Move up, Move
 down, Duplicate, and Remove; Move up SHALL be unavailable for the first block
-and Move down for the last. The editor SHALL highlight exactly one active
+and Move down for the last. The editor SHALL highlight at most one active
 block: the block that focus or a pointer last entered, or the block most
-recently added, inserted, or duplicated. A newly added, inserted, or duplicated
-block SHALL be expanded and receive focus.
+recently added, inserted, or duplicated. A pointer press or focus move outside
+the block list SHALL clear the highlight, except inside a dialog, menu or
+popover opened from the editor. A newly added, inserted, or duplicated block
+SHALL be expanded, receive focus and become active.
+
+When the entry holds two or more blocks, the Blocks heading SHALL be
+accompanied by one control that collapses every block when any block without
+a validation error is expanded and otherwise expands every block. Its
+accessible name SHALL state the action ("Collapse all blocks" or "Expand all
+blocks"). Blocks with a validation error SHALL stay expanded, and the control
+SHALL change only presentation, never block data, order or the dirty state.
 
 Removing a block SHALL leave a notice at its former place that names the
 removed block and offers Undo and Dismiss, and focus SHALL move to Undo. Undo
@@ -140,6 +149,26 @@ SHALL name the moved block by its label and position rather than by its key.
 #### Scenario: Structural operations preserve saved and published order
 - **WHEN** a writer performs pointer or keyboard reordering, middle insertion or duplication, removal, or removal followed by Undo, then saves, reloads, and publishes
 - **THEN** the saved draft, published export, and Astro output retain the displayed sequence and the surviving blocks retain their stable keys and data
+
+#### Scenario: Clicking outside the blocks clears the highlight
+- **WHEN** a writer clicks a field in the second block and then clicks the empty page area beside the block list
+- **THEN** the second block is highlighted after the first click and no block is highlighted after the second
+
+#### Scenario: Choosing media keeps the block highlighted
+- **WHEN** a writer opens Choose media from the active Image block and selects an item in the media dialog
+- **THEN** the Image block stays highlighted while the dialog is open and after it closes
+
+#### Scenario: A writer collapses and expands every block
+- **WHEN** a writer activates "Collapse all blocks" in an entry with three expanded blocks and then activates "Expand all blocks"
+- **THEN** all three blocks collapse with their summaries visible, then all three expand, and the draft is not marked dirty
+
+#### Scenario: Collapse all keeps an invalid block open
+- **WHEN** one of three blocks has a validation error and a writer activates "Collapse all blocks"
+- **THEN** the two valid blocks collapse, the invalid block stays expanded, and the control then offers "Expand all blocks"
+
+#### Scenario: One block offers no bulk control
+- **WHEN** an entry holds a single block
+- **THEN** no collapse-all or expand-all control is shown
 
 ### Requirement: Block alt text inherits the media alt text
 A block whose definition has exactly one media field and a text field keyed

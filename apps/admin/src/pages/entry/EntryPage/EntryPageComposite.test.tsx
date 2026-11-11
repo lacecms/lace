@@ -228,12 +228,12 @@ test("explicit empty containers round-trip and group items are removed without c
   const saved = vi.fn();
   render(<Harness initial={[]} onSave={saved} />);
   await listAction(user, "Links", "Clear Links");
-  await user.click(screen.getByRole("button", { name: "Create Links" }));
+  await user.click(screen.getByRole("button", { name: "Create links" }));
   await user.click(screen.getByRole("button", { name: "Save" }));
   expect(saved.mock.calls[0]![0].fields.links).toEqual([]);
   await user.click(screen.getByRole("button", { name: "Add Links item" }));
   expect(screen.queryByRole("button", { name: "Clear Links item 1" })).toBeNull();
-  await user.click(screen.getByRole("button", { name: "Create Children" }));
+  await user.click(screen.getByRole("button", { name: "Create children" }));
   await user.click(screen.getByRole("button", { name: "Save" }));
   expect(saved.mock.calls[1]![0].fields.links).toEqual([{ children: [] }]);
 });

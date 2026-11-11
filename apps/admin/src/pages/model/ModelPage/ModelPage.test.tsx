@@ -108,7 +108,7 @@ test("filter changes replace the URL and unsupported parameters are ignored", as
 
   await screen.findByRole("table", { name: "posts entries" });
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-  expect(tableCalls()[0]).toEqual(["posts", undefined, {}]);
+  expect(tableCalls()[0]).toEqual(["posts", undefined, { sort: "-updatedAt" }]);
   expect(screen.getByRole("button", { name: /^All/u })).toHaveAttribute("aria-pressed", "true");
 
   const historyLength = router.history.length;

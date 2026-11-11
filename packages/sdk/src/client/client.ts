@@ -16,6 +16,7 @@ import type {
   PublicContentListDto,
   PublicEntryDto,
   PublicGlobalContentDto,
+  PublicRecordListDto,
   PublicMediaDictionaryDto,
   PublicMediaDto,
 } from "@lacecms/contracts";
@@ -122,6 +123,8 @@ export interface LaceClient {
   ): Promise<PublicContentEntryDto>;
   /** Reads a published route-less global by model key. */
   getGlobal(modelKey: string, options?: LaceRequestOptions): Promise<PublicGlobalContentDto>;
+  /** Lists published records of a route-less collection, newest publication first. */
+  listRecords(modelKey: string, options?: CollectionOptions): Promise<PublicRecordListDto>;
   getPage(modelKey: string, options?: LaceRequestOptions): Promise<PublicContentEntryDto>;
   getPublicMediaUrl(mediaId: string): string;
 }
@@ -253,6 +256,14 @@ function compareCodePoints(left: string, right: string): number {
     if (difference !== 0) return difference;
   }
   return a.length - b.length;
+}
+
+/** Orders record positions as the export does: by model key, then entry ID. */
+function compareRecordPosition(
+  left: readonly [string, string],
+  right: readonly [string, string],
+): number {
+  return compareCodePoints(left[0], right[0]) || compareCodePoints(left[1], right[1]);
 }
 
 function sameJson(left: unknown, right: unknown): boolean {
@@ -430,18 +441,30 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
         `The build-export pages are inconsistent: ${detail}. Upgrade the Lace API and SDK to compatible versions.`,
       );
     const entries: BuildExportFirstPageDto["entries"] = [];
+    const records: BuildExportFirstPageDto["records"] = [];
     const media = new Map<string, PublicMediaDto>();
     // The highest path delivered so far; a continuation page starts strictly after it.
     let floor: string | undefined;
+    // The last record position; records follow every routed entry in key, ID order.
+    let lastRecord: readonly [string, string] | undefined;
     const collect = (page: BuildExportPage) => {
-      if (page.nextCursor !== undefined && page.entries.length === 0)
-        throw violation("a page with a continuation cursor holds no entry");
+      if (page.nextCursor !== undefined && page.entries.length === 0 && page.records.length === 0)
+        throw violation("a page with a continuation cursor holds no entry or record");
+      if (lastRecord !== undefined && page.entries.length > 0)
+        throw violation("a routed entry follows a record");
       const previous = floor;
       for (const entry of page.entries) {
         if (previous !== undefined && compareCodePoints(entry.path, previous) <= 0)
           throw violation("entry paths do not continue after the previous page");
         if (floor === undefined || compareCodePoints(entry.path, floor) > 0) floor = entry.path;
         entries.push(entry);
+      }
+      for (const record of page.records) {
+        const position = [record.modelKey, record.id] as const;
+        if (lastRecord !== undefined && compareRecordPosition(position, lastRecord) <= 0)
+          throw violation("records do not continue in model key and identifier order");
+        lastRecord = position;
+        records.push(record);
       }
       for (const [id, item] of Object.entries(page.media)) {
         const known = media.get(id);
@@ -475,6 +498,7 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
         formatVersion: first.formatVersion,
         globals: first.globals,
         media: merged,
+        records,
         seo: first.seo,
         version: first.version,
       },
@@ -496,8 +520,12 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
     }
   }
 
-  function collectionUrl(modelKey: string, requestOptions: CollectionOptions = {}): URL {
-    const url = publicUrl(baseUrl, ["collections", assertIdentifier(modelKey, "modelKey")]);
+  function collectionUrl(
+    modelKey: string,
+    requestOptions: CollectionOptions = {},
+    resource: "collections" | "records" = "collections",
+  ): URL {
+    const url = publicUrl(baseUrl, [resource, assertIdentifier(modelKey, "modelKey")]);
     if (requestOptions.after !== undefined)
       url.searchParams.set("after", assertCursor(requestOptions.after));
     if (requestOptions.limit !== undefined) {
@@ -571,6 +599,14 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
       return read(
         publicUrl(baseUrl, ["globals", assertIdentifier(modelKey, "modelKey")]),
         tolerantPublicSchemas.publicGlobalContent,
+        requestOptions,
+      );
+    },
+
+    listRecords(modelKey, requestOptions = {}) {
+      return read(
+        collectionUrl(modelKey, requestOptions, "records"),
+        tolerantPublicSchemas.publicRecordList,
         requestOptions,
       );
     },

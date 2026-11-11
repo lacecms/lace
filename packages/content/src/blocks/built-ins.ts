@@ -3,10 +3,12 @@ import { deepFreeze } from "../shared/objects.js";
 import { defineBlock } from "./definition.js";
 import { VIDEO_EMBED_PROVIDERS } from "../fields/video-embeds.js";
 import {
+  listLayoutItemFields,
   listLayoutSettings,
   lightboxSetting,
   listLayoutSettingsVisibility,
 } from "./list-layout.js";
+import { migrateGalleryToV6 } from "./gallery-migration.js";
 
 // The optional link of an `image` block and of each `gallery` item.
 const imageLinkField = field.url({
@@ -58,11 +60,10 @@ const videoAspectRatioField = field.select({
   },
 });
 
-// The playback mode of a `videoEmbed` block and of each `gallery` video item.
-const videoPlaybackField = field.select({
+// The playback modes of a `videoEmbed` block and of each `gallery` video item.
+const videoPlaybackOptions = {
   options: ["player", "ambient"],
   required: true,
-  defaultValue: "player",
   label: "Playback",
   description: "Ambient videos play muted and loop without controls.",
   presentation: {
@@ -73,6 +74,38 @@ const videoPlaybackField = field.select({
         value: "ambient",
         label: "Ambient",
         description: "Muted, looping, no controls; respects reduced motion.",
+      },
+    ],
+  },
+} as const;
+const videoPlaybackField = field.select({ ...videoPlaybackOptions, defaultValue: "player" });
+// Gallery videos are mostly ambient, so new gallery video items start ambient.
+const galleryVideoPlaybackField = field.select({
+  ...videoPlaybackOptions,
+  defaultValue: "ambient",
+});
+
+// The size of each `gallery` image item.
+const gallerySizeField = field.select({
+  options: ["fill", "natural"],
+  required: true,
+  defaultValue: "fill",
+  label: "Size",
+  description: "A natural image keeps its own width, never wider than its cell.",
+  presentation: {
+    control: "cards",
+    choices: [
+      {
+        value: "fill",
+        label: "Fill",
+        description: "Fills the cell; your site sets its proportions.",
+        diagram: { cells: [{ x: 0, y: 0, width: 12, height: 12 }] },
+      },
+      {
+        value: "natural",
+        label: "Natural",
+        description: "Keeps the image's own width and proportions.",
+        diagram: { cells: [{ x: 0, y: 2, width: 6, height: 8 }] },
       },
     ],
   },
@@ -99,8 +132,8 @@ export const builtInBlocks = deepFreeze({
         defaultValue: [],
         item: field.group({
           // The kind comes first, then each kind reads image (or video) before
-          // its overrides: media, alt, caption, link or URL, title, caption,
-          // playback, aspect ratio.
+          // its overrides: media, alt, caption, link, size or URL, title,
+          // caption, playback, aspect ratio; placement applies to both.
           fields: {
             kind: field.select({
               options: ["image", "video"],
@@ -141,13 +174,16 @@ export const builtInBlocks = deepFreeze({
               label: "Caption",
             }),
             link: imageLinkField,
-            playback: videoPlaybackField,
+            size: gallerySizeField,
+            playback: galleryVideoPlaybackField,
             aspectRatio: videoAspectRatioField,
+            ...listLayoutItemFields(),
           },
           visibility: {
             media: { field: "kind", values: ["image"] },
             alt: { field: "kind", values: ["image"] },
             link: { field: "kind", values: ["image"] },
+            size: { field: "kind", values: ["image"] },
             videoUrl: { field: "kind", values: ["video"] },
             videoTitle: { field: "kind", values: ["video"] },
             playback: { field: "kind", values: ["video"] },
@@ -172,7 +208,8 @@ export const builtInBlocks = deepFreeze({
       ],
     },
     type: "gallery",
-    version: 5,
+    version: 6,
+    migrations: { 6: migrateGalleryToV6 },
   }),
   hero: defineBlock({
     description: "Large heading with optional text, image, and action.",

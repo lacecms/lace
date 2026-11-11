@@ -53,13 +53,19 @@ for Gallery or any custom list block:
 import {
   defineBlock,
   field,
+  listLayoutItemFields,
   listLayoutSettings,
   listLayoutSettingsVisibility,
 } from "@lacecms/content";
 const cards = defineBlock({
   type: "cards",
   version: 1,
-  fields: { cards: field.list({ item: field.text(), defaultValue: [] }) },
+  fields: {
+    cards: field.list({
+      item: field.group({ fields: { title: field.text(), ...listLayoutItemFields() } }),
+      defaultValue: [],
+    }),
+  },
   settings: { ...listLayoutSettings() },
   settingsVisibility: listLayoutSettingsVisibility(),
 });
@@ -70,19 +76,44 @@ is boolean, default true. `layoutPreset` defaults to `auto`. With the visibility
 only for grid. Inactive values are retained, saved and validated. Relevant errors
 temporarily reveal inactive controls for correction and error-summary focus. Vertical wrapping requires a definite height from site CSS.
 
-| Grid preset      | Container behavior                                               |
-| ---------------- | ---------------------------------------------------------------- |
-| `auto`           | Equal columns fitting a preferred minimum of 14rem               |
-| `columns-2`      | One column below 32rem, two from 32rem                           |
-| `columns-3`      | As above, three from 48rem                                       |
-| `columns-4`      | As above, four from 64rem                                        |
-| `narrow-wide`    | One below 32rem, then 1fr/2fr                                    |
-| `wide-narrow`    | One below 32rem, then 2fr/1fr                                    |
-| `featured-first` | One below 32rem, then two with only the first item spanning both |
+| Grid preset   | Container behavior                                 |
+| ------------- | -------------------------------------------------- |
+| `auto`        | Equal columns fitting a preferred minimum of 14rem |
+| `columns-2`   | One column below 32rem, two from 32rem             |
+| `columns-3`   | As above, three from 48rem                         |
+| `columns-4`   | As above, four from 64rem                          |
+| `narrow-wide` | One below 32rem, then 1fr/2fr                      |
+| `wide-narrow` | One below 32rem, then 2fr/1fr                      |
 
 Thresholds include their starting width. Order stays unchanged; incomplete rows
-leave tracks empty. The cards are schematic compositions, not site screenshots.
-They load no media and remain useful for empty galleries. Your site owns styling.
+leave tracks empty, and presets give no item a span. The cards are schematic
+compositions, not site screenshots. They load no media and remain useful for
+empty galleries. Your site owns styling.
+
+`listLayoutItemFields()` adds the item field `placement` to a list's item group:
+`auto` (default), `full`, `start` or `end`, shown as choice cards. In grid mode,
+for every preset and column count, `start` puts the item in the first column,
+`end` in the last column and `full` across the whole row. Cells skipped to honor
+a placement stay empty and the next item continues after it, so order is kept;
+in a single column every placement uses that column. Flex lists keep the value
+without effect. Gallery adopts the field for every item.
+
+The `featured-first` preset was removed in template 0.48.0. Gallery's migration
+rewrites it to `columns-2` with a `full` first item. A custom block that stored
+it adopts `listLayoutItemFields()`, raises its version and declares the same
+rewrite:
+
+```ts
+migrations: {
+  2: ({ data, settings }) =>
+    settings.layoutPreset !== "featured-first"
+      ? { data, settings }
+      : {
+          data: { ...data, cards: data.cards.map((c, i) => (i === 0 ? { ...c, placement: "full" } : c)) },
+          settings: { ...settings, layoutPreset: "columns-2" },
+        },
+},
+```
 
 Other selects may opt into the same control with
 `presentation: { control: "cards", choices: [{ value: "news", label: "News" }] }`.
@@ -94,7 +125,7 @@ positions and work inside groups, list items and scalar settings. Values remain
 strings; changing options/defaults retains existing structural rules.
 
 See [Astro integration](../../astro-integration/) for the matching CSS contract and
-coordinated Gallery v4 upgrade.
+Gallery upgrades.
 
 Block-level `settingsVisibility` is optional and only affects the settings panel; data fields use [conditional fields](../conditional-fields/). It maps scalar setting keys to
 `{ setting, values }`, where the controller is a required sibling select with a

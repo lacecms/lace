@@ -71,3 +71,22 @@ test("configured headers namespace system collisions and expose sort direction",
   expect(onSortChange).toHaveBeenLastCalledWith("field:title");
   expect(screen.getByRole("columnheader", { name: "Title" })).toHaveAttribute("aria-sort", "none");
 });
+
+test("rows of a route-less collection show no slug or no-slug note", async () => {
+  renderInRouter(
+    <EntryListTable
+      canManage={false}
+      items={[row, { ...row, id: "entry-2", slug: undefined, title: "Second" }]}
+      label="Testimonials"
+      listColumns={listColumns}
+      modelKey="testimonials"
+      onSortChange={() => undefined}
+      routed={false}
+      sort="-updatedAt"
+    />,
+  );
+  const table = await screen.findByRole("table", { name: "Testimonials entries" });
+  expect(within(table).queryByText("first-post")).not.toBeInTheDocument();
+  expect(within(table).queryByText("No slug")).not.toBeInTheDocument();
+  expect(within(table).getByRole("link", { name: "Second" })).toBeInTheDocument();
+});

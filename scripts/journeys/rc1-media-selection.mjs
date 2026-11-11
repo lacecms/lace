@@ -25,7 +25,7 @@ export async function rc1MediaSelection({ base, cookie, workspace, png, ok }) {
           {
             key: `01J${"901".padStart(23, "0")}`,
             type: "gallery",
-            schemaVersion: 5,
+            schemaVersion: 6,
             position: 1024,
             data: { images: [] },
           },

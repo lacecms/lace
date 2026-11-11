@@ -104,6 +104,24 @@ describe("import format v1", () => {
     ]);
   });
 
+  test("route-less collection entries refuse slugs and need no distinct slug", () => {
+    const models = new Map([
+      ["quotes", { key: "quotes", kind: "collection", routeLess: true, seo: false }],
+    ]);
+    const parsed = parseImportPackage(
+      pkg({
+        entries: [
+          entry({ key: "q1", model: "quotes", title: "One" }),
+          entry({ key: "q2", model: "quotes", title: "Two" }),
+          entry({ key: "q3", model: "quotes", slug: "three", title: "Three" }),
+        ],
+      }),
+    );
+    expect(modelRuleIssues(parsed, models)).toEqual([
+      { pointer: "/entries/2/slug", message: "is not allowed for a collection without a route." },
+    ]);
+  });
+
   test("pointers escape slash and tilde", () => {
     expect(pointer("fields", "a/b~c", 0)).toBe("/fields/a~1b~0c/0");
   });

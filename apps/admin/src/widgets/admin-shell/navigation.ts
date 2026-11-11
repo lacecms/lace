@@ -46,7 +46,7 @@ export type NavigationItem =
 
 export interface NavigationGroup {
   readonly items: readonly NavigationItem[];
-  readonly key: "admin" | "collections" | "library" | "pages" | "site";
+  readonly key: "admin" | "collections" | "library" | "globals" | "pages";
   readonly label: string;
 }
 
@@ -98,8 +98,8 @@ export function navigationGroups(
           label: modelLabel(model),
           modelKey: model.key,
         })),
-      key: "site",
-      label: "Site",
+      key: "globals",
+      label: "Globals",
     },
     {
       items: [

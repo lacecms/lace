@@ -70,6 +70,33 @@ shared entry and has no public URL of its own. Publish the settings global for
 its values to reach the site. The starter also defines a `navigation` global;
 keep it if your site's layout reads it. See [SEO](seo/) for fallback rules.
 
+### Collections without a route
+
+Some content is only listed on another page: CV rows, testimonials, press
+mentions. Leave out `route` and the collection has no public URLs:
+
+```ts
+defineCollection({
+  key: "testimonials",
+  version: 1,
+  label: "Testimonials",
+  fields: {
+    quote: field.textarea({ required: true }),
+    source: field.text(),
+  },
+  listFields: ["source"],
+}),
+```
+
+Its entries have a title but no slug, publish without one, never appear in the
+sitemap, and cannot be chosen as CMS link destinations; `seo` is not allowed.
+Lists, list fields and list options work as for any collection. Sites read
+them with `site.records("testimonials")`, newest publication first; sort by
+your own field when order matters. Adding or removing a route later is a
+structural change that synchronization refuses while the collection has
+published entries; removing a route also needs drafts without slugs and
+without incoming CMS links.
+
 Register each block definition once in `blocks` and list its type in each
 model that permits it. Custom types need their own definition and renderer:
 [create a custom block](custom-blocks/). The configuration describes content;
@@ -178,6 +205,7 @@ const articles = defineCollection({
     sortableFields: ["year", "summary"],
     filterableFields: ["summary", "year", "featured", "category", "date", "updated", "source"],
     searchableFields: ["summary"],
+    defaultSort: "-field:year",
   },
 });
 ```
@@ -188,6 +216,16 @@ search targets are text/textarea only. Nested fields, blocks, SEO, rich text and
 media are excluded. Pages/globals cannot declare `listOptions`. Empty arrays
 normalize away. These capabilities grant the same read controls to all roles;
 they do not grant write permissions.
+
+`defaultSort` chooses the order the list opens in. Write it like the API `sort`
+parameter: a system sort (`title`, `-title`, `updatedAt`, `-updatedAt`,
+`publishedAt`, `-publishedAt`) or `field:<key>` / `-field:<key>` for a key listed
+in `sortableFields`. Without it a list opens by last edit (`-updatedAt`). The API
+and MCP `list_entries` apply it when a request names no sort. Admin leaves the
+default out of the URL and keeps any other chosen sort there, including
+`-updatedAt`. Changing it is synchronized like other list options: no version
+bump, no content rewrite and no site build. Public delivery keeps its order; your
+site still sorts published entries itself.
 
 Admin keeps the existing title/slug search, status filter and system sorts. One
 field sort is active at a time. Missing, null and empty-string values appear last

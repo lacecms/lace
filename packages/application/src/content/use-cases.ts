@@ -246,7 +246,12 @@ export class ContentUseCases {
     }
     if (input.slug !== undefined && (model.kind !== "collection" || !isContentSlug(input.slug)))
       throw new CollectionQueryValidationError("/slug");
-    const query = resolveCollectionQuery(model, input.sort, input.filters, this.listQueryLimits);
+    // A request without sort uses the collection's configured default.
+    const sort =
+      (input.sort as ContentEntrySort | undefined) ??
+      (model.kind === "collection" ? model.listOptions?.defaultSort : undefined) ??
+      DEFAULT_CONTENT_ENTRY_SORT;
+    const query = resolveCollectionQuery(model, sort, input.filters, this.listQueryLimits);
     validateListQueryBudget(q, [], this.listQueryLimits);
     return detached(
       await this.dependencies.content.list({
@@ -258,7 +263,7 @@ export class ContentUseCases {
         modelKey: contentModelKey(model.key),
         ...(q === undefined || q.length === 0 ? {} : { q }),
         ...(input.slug === undefined ? {} : { slug: input.slug }),
-        sort: (input.sort as ContentEntrySort | undefined) ?? DEFAULT_CONTENT_ENTRY_SORT,
+        sort,
         ...(input.status === undefined ? {} : { status: input.status as ContentEntryStatus }),
       }),
     );

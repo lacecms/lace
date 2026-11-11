@@ -10,6 +10,7 @@ import type { ReactNode } from "react";
 import {
   EntryStatusBadge,
   entryStatus,
+  hasPublicRoute,
   resolvedPublicPath,
   siteUrlFor,
 } from "../../../entities/content/index.js";
@@ -185,8 +186,8 @@ export function EntryPublicationDetails({
         <Fact term="Last edited">
           {entry.updatedBy.displayName} · <RelativeTime iso={entry.draft.updatedAt} />
         </Fact>
-        {model.kind === "global" ? undefined : (
-          // A global has no URL of its own; every page may show it.
+        {!hasPublicRoute(model) ? undefined : (
+          // Globals and route-less records have no URL of their own; pages list them.
           <Fact term="Public URL">
             {publicPath === undefined ? (
               <span className="text-muted-foreground">No public URL yet</span>

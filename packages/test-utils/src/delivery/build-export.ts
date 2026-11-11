@@ -4,6 +4,7 @@ import type {
   PublicContentEntry,
   PublicContentReadPort,
   PublicGlobalContent,
+  PublicRecordContent,
 } from "@lacecms/application";
 import {
   buildExportContinuationPageSchema,
@@ -26,6 +27,7 @@ export async function readAllBuildContentPages(
   readonly entries: readonly PublicContentEntry[];
   readonly globals: readonly PublicGlobalContent[];
   readonly pages: readonly BuildContentExportPage[];
+  readonly records: readonly PublicRecordContent[];
   readonly version: number;
 }> {
   const pages: BuildContentExportPage[] = [];
@@ -42,6 +44,7 @@ export async function readAllBuildContentPages(
     entries: pages.flatMap((page) => page.entries),
     globals: pages[0]!.globals ?? [],
     pages,
+    records: pages.flatMap((page) => page.records),
     version: pages[0]!.version,
   };
 }
@@ -137,6 +140,7 @@ export async function readCompleteBuildExport(
     formatVersion: first.formatVersion,
     globals: first.globals,
     media: Object.fromEntries([...media.keys()].sort().map((id) => [id, media.get(id)!])),
+    records: pages.flatMap((page) => page.records),
     seo: first.seo,
     version: first.version,
   });

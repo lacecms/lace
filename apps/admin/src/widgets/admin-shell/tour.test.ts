@@ -55,7 +55,7 @@ test("absent and partial model groups do not manufacture navigation", () => {
   ).toEqual(["content", "collections", "media", "builds"]);
 });
 
-test("a Site step follows Collections only when globals are configured", () => {
+test("a Globals step follows Collections only when globals are configured", () => {
   const steps = tourSteps(sessionFor({ id: "user-1", role: "viewer" }), [
     ...models,
     { key: "settings", kind: "global" as const, label: "Site settings" },
@@ -64,9 +64,11 @@ test("a Site step follows Collections only when globals are configured", () => {
     "content",
     "pages",
     "collections",
-    "site",
+    "globals",
     "media",
     "builds",
   ]);
-  expect(steps.find((s) => s.id === "site")?.paragraphs.join(" ")).toContain("site-wide content");
+  expect(steps.find((s) => s.id === "globals")?.paragraphs.join(" ")).toContain(
+    "site-wide content",
+  );
 });

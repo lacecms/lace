@@ -331,6 +331,35 @@ test("accepts a global payload without a slug and rejects other kinds", () => {
   );
 });
 
+test("route-less collection payloads publish without a slug and reject one", () => {
+  const entry = { blocks: [], fields: {}, kind: "collection", routeLess: true, title: "Ada" };
+  expect(validateEntryPayload(entry, "draft")).toEqual(entry);
+  expect(validateEntryPayload(entry, "publish")).toEqual(entry);
+  for (const mode of ["draft", "publish"]) {
+    for (const slug of ["ada", ""]) {
+      expect(issueFrom(() => validateEntryPayload({ ...entry, slug }, mode))).toMatchObject({
+        code: "slug_not_allowed",
+      });
+    }
+  }
+  const aggregate = validateEntryAggregate(
+    { blocks: [], fields: {}, kind: "collection", title: "Ada" },
+    { blocks: [], fields: {}, kind: "collection", routeLess: true },
+    defineBlockRegistry([]),
+    "publish",
+  );
+  expect(aggregate).toMatchObject({ kind: "collection", title: "Ada" });
+  expect(aggregate).not.toHaveProperty("slug");
+  expect(() =>
+    validateEntryAggregate(
+      { blocks: [], fields: {}, kind: "collection", slug: "ada", title: "Ada" },
+      { blocks: [], fields: {}, kind: "collection", routeLess: true },
+      defineBlockRegistry([]),
+      "draft",
+    ),
+  ).toThrow(/\$\.slug.*not allowed/u);
+});
+
 test("list and snapshot budgets include defaults, hidden blocks and nested lengths", () => {
   const scalarList = field.list({ item: field.text() });
   expect(validateFieldValue(scalarList, Array(100).fill("x"))).toHaveLength(100);

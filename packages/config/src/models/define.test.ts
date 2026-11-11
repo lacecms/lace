@@ -5,6 +5,7 @@ import { field } from "@lacecms/content";
 
 import {
   ConfigurationError,
+  defineCollection,
   defineConfig,
   defineGlobal,
   definePage,
@@ -114,6 +115,50 @@ test.each([
   expect(() => defineGlobal({ key: "settings", version: 1, [option]: value })).toThrow(
     new RegExp(`must not declare ${option}`, "u"),
   );
+});
+
+test("defines a route-less collection without routes, slugs or SEO", async () => {
+  const testimonials = defineCollection({
+    fields: { quote: field.textarea({ required: true }) },
+    key: "testimonials",
+    listFields: ["quote"],
+    version: 1,
+  });
+  expect(testimonials).toMatchObject({
+    key: "testimonials",
+    kind: "collection",
+    listFields: ["quote"],
+  });
+  expect(testimonials).not.toHaveProperty("route");
+  expect(testimonials).not.toHaveProperty("seo");
+  const cv = defineCollection({ key: "cv", version: 1 });
+
+  const config = await defineConfig({
+    blocks,
+    content: [homeModel({ path: "/" }), postModel(), testimonials, cv],
+  });
+  const projected = config.public.content.find((model) => model.key === "testimonials");
+  expect(projected).toMatchObject({ key: "testimonials", kind: "collection" });
+  expect(projected).not.toHaveProperty("route");
+
+  const routed = await defineConfig({
+    blocks,
+    content: [defineCollection({ key: "cv", route: "/cv/:slug", version: 1 })],
+  });
+  const routeLess = await defineConfig({ blocks, content: [cv] });
+  expect(present(routeLess.content[0]).structureHash).not.toBe(
+    present(routed.content[0]).structureHash,
+  );
+});
+
+test.each([true, {}, false])("rejects seo %j on a route-less collection", (seo) => {
+  expect(() => defineCollection({ key: "testimonials", seo, version: 1 })).toThrow(
+    /testimonials" must not declare seo without a route/u,
+  );
+});
+
+test("still validates a supplied collection route", () => {
+  expect(() => defineCollection({ key: "cv", route: "", version: 1 })).toThrow(ConfigurationError);
 });
 
 test("keeps keys unique across kinds and hashes the kind", async () => {

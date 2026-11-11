@@ -19,7 +19,7 @@ async function mock(page: Page, rejectSave = false) {
       {
         key: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
         type: "gallery",
-        schemaVersion: 5,
+        schemaVersion: 6,
         position: 1000,
         hidden: false,
         data: { images: [] },
@@ -35,7 +35,7 @@ async function mock(page: Page, rejectSave = false) {
       lightbox: false,
       layoutMode: "flex-column",
       layoutWrap: false,
-      layoutPreset: "featured-first",
+      layoutPreset: "wide-narrow",
     },
   });
   const saves: unknown[] = [];
@@ -118,7 +118,7 @@ for (const width of [320, 1280])
       const mode = block.getByRole("radiogroup", { name: "Arrangement", exact: true });
       const preset = block.getByRole("radiogroup", { name: "Grid preset", exact: true });
       await expect(mode.getByRole("radio")).toHaveCount(3);
-      await expect(preset.getByRole("radio")).toHaveCount(7);
+      await expect(preset.getByRole("radio")).toHaveCount(6);
       expect(await block.locator('[aria-hidden="true"] .absolute').count()).toBeGreaterThan(0);
       await preset.getByRole("radio", { name: "Three columns", exact: true }).click();
       await expect(block.getByRole("switch", { name: "Wrap items" })).toHaveCount(0);

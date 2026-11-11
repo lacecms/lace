@@ -201,7 +201,7 @@ export async function listSettingsMcpProxyJourney({
         {
           key: `01J${"801".padStart(23, "0")}`,
           type: "gallery",
-          schemaVersion: 5,
+          schemaVersion: 6,
           position: 1024,
           data: {
             images: [

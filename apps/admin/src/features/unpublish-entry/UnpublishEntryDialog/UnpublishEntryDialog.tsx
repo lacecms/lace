@@ -28,7 +28,13 @@ import { ErrorState } from "../../../shared/ui/ErrorState/index.js";
 
 const staleCodes = new Set(["CONTENT_NOT_PUBLISHED", "CONTENT_REVISION_CONFLICT"]);
 
-function consequence(kind: ContentModelDto["kind"], publicPath: string | undefined): string {
+function consequence(
+  kind: ContentModelDto["kind"],
+  publicPath: string | undefined,
+  routeLess: boolean,
+): string {
+  if (routeLess)
+    return "The entry disappears from the pages that list it after the next site build.";
   if (kind === "global")
     return "Pages that show this content fall back to their defaults after the next site build.";
   if (kind === "page")
@@ -55,6 +61,7 @@ export function UnpublishEntryDialog({
   open,
   publicPath,
   returnFocus,
+  routeLess = false,
 }: {
   readonly entryId: string;
   readonly expectedPublishedSnapshotId: string;
@@ -65,6 +72,8 @@ export function UnpublishEntryDialog({
   readonly open: boolean;
   readonly publicPath?: string | undefined;
   readonly returnFocus?: RefObject<HTMLElement | null>;
+  /** True for an entry of a route-less collection, which has no path to name. */
+  readonly routeLess?: boolean;
 }) {
   const client = useAdminClient();
   const impact = useLinkImpactReview(entryId, "unpublish", open);
@@ -115,7 +124,7 @@ export function UnpublishEntryDialog({
                 : "Unpublish this entry?"}
           </DialogTitle>
           <DialogDescription>
-            {`${consequence(kind, publicPath)} The draft and any unsaved changes are kept; publishing again makes the current draft public.`}
+            {`${consequence(kind, publicPath, routeLess)} The draft and any unsaved changes are kept; publishing again makes the current draft public.`}
           </DialogDescription>
         </DialogHeader>
         {unpublish.error === null ? undefined : (
