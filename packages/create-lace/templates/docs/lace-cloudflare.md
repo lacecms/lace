@@ -2,6 +2,8 @@
 
 Run the CMS as your own Cloudflare Worker (D1, R2 and the packaged admin): first locally without an account, then in your Cloudflare account through explicit commands.
 
+Cloudflare operator commands require the project's direct Miniflare dependency, pinned to the version used by Wrangler. If upgrading an existing Cloudflare project that lacks it, run `pnpm add miniflare@5.20260903.0-alpha` and install dependencies before running those commands.
+
 **Working directory:** the CMS installation root that contains `package.json`, `lace.config.ts` and `worker/` (for example `cms/`). Run every command from there.
 
 **Two deployments.** The CMS Worker and the static site are separate deployments. Deploying the Worker never publishes the site, and deploying the site never deploys, migrates or configures the Worker.

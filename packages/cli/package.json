@@ -43,7 +43,6 @@
     "@lacecms/contracts": "workspace:*",
     "@lacecms/platform-cloudflare": "workspace:*",
     "@lacecms/platform-node": "workspace:*",
-    "miniflare": "catalog:",
     "semver": "catalog:",
     "valibot": "catalog:"
   },
@@ -52,9 +51,18 @@
     "@lacecms/test-utils": "workspace:*",
     "@types/node": "catalog:",
     "@valibot/to-json-schema": "catalog:",
+    "miniflare": "catalog:",
     "oxlint": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "miniflare": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "miniflare": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=24.12.0"

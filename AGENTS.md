@@ -1,5 +1,11 @@
 # Lace Agent Instructions
 
+## Project isolation
+
+Lace is independent of Kameleoon and its Spec Hub. Do not use Spec Hub for
+Lace work or create Lace records there; use the repository-local sources and
+OpenSpec workflow below instead.
+
 ## Sources of truth
 
 Read these before planning or implementing product work:

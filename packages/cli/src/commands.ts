@@ -9,8 +9,7 @@ import {
 } from "@lacecms/application";
 import type { NormalizedContentModel } from "@lacecms/config";
 import { CONFIGURATION_SYNC_STALE, LaceError } from "@lacecms/contracts";
-import { D1ContentRepository, D1SecurityService } from "@lacecms/platform-cloudflare";
-import type { D1Database } from "@lacecms/platform-cloudflare";
+import type { D1ContentRepository, D1Database } from "@lacecms/platform-cloudflare";
 import {
   NodeContentRepository,
   NodeSecurityService,
@@ -22,7 +21,6 @@ import {
   assertHostDatabaseSafe,
   HostDatabaseSafetyError,
 } from "@lacecms/platform-node";
-import { openLocalD1, RemoteD1Database } from "./d1-transport.js";
 import { CliError, EXIT, type CliEnvironment, type CliOptions } from "./index.js";
 import { assertD1Baseline, runMigration } from "./migrate.js";
 
@@ -250,6 +248,22 @@ export async function runCommand(
   }
   const databaseId = environment.databaseId;
   if (!databaseId) throw new CliError("CONFIG", "Missing LACE_D1_DATABASE_ID.", EXIT.CONFIG);
+  if (options.target === "cloudflare-local" && !environment.persistTo)
+    throw new CliError("CONFIG", "Missing LACE_CLOUDFLARE_PERSIST_TO.", EXIT.CONFIG);
+  if (options.target === "cloudflare-remote" && (!environment.accountId || !environment.apiToken))
+    throw new CliError("CONFIG", "Missing Cloudflare remote configuration.", EXIT.CONFIG);
+  try {
+    import.meta.resolve("miniflare");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ERR_MODULE_NOT_FOUND") throw error;
+    throw new CliError(
+      "OPERATION_FAILED",
+      "Cloudflare commands require Miniflare. Install it with `pnpm add -D miniflare@5.20260903.0-alpha`.",
+      EXIT.OPERATION,
+    );
+  }
+  const { D1ContentRepository, D1SecurityService } = await import("@lacecms/platform-cloudflare");
+  const { openLocalD1, RemoteD1Database } = await import("./d1-transport.js");
   let database: D1Database;
   let close: () => Promise<void> = async () => undefined;
   if (options.target === "cloudflare-local") {
