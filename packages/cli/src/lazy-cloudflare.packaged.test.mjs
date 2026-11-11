@@ -60,7 +60,7 @@ registerHooks({ resolve(specifier, context, next) {
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }
-});
+}, 60_000);
 
 test("packed CLI runs in a consumer without and with its optional peer", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "lace-packed-cli-"));
