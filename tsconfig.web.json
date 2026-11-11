@@ -1,5 +1,6 @@
 {
   "extends": "./tsconfig.base.json",
+  // Web-platform packages use DOM libraries for fetch types; this does not imply browser runtime access.
   "compilerOptions": {
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "types": []

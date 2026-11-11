@@ -3,7 +3,6 @@ import { randomBytes } from "node:crypto";
 import { access, chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { request as httpRequest, createServer } from "node:http";
 import { join } from "node:path";
-import { createInterface } from "node:readline/promises";
 import {
   UsageError,
   apiDirectory,
@@ -11,16 +10,13 @@ import {
   developmentOrigin,
   developmentPorts,
   developmentWranglerConfig,
-  parseDevArguments,
   parseJsonc,
-  parseMigrateArguments,
-  remoteConfirmationMatches,
-  remoteConfirmationMode,
-  remoteDatabase,
   root,
   routeFor,
   wranglerConfigPath,
 } from "./cloudflare-lib.mjs";
+import { parseDevArguments } from "./cloudflare-options.mjs";
+import { migrate } from "./cloudflare-migration.mjs";
 
 const wrangler = join(apiDirectory, "node_modules", ".bin", "wrangler");
 const localHelper = join(apiDirectory, "dist", "cloudflare-local.js");
@@ -55,38 +51,6 @@ function applyLocalMigrations(persistTo) {
       "--config",
       wranglerConfigPath,
     ],
-    { cwd: apiDirectory, env: wranglerEnvironment },
-  );
-}
-
-async function migrate(argv) {
-  const plan = parseMigrateArguments(argv);
-  if (plan.target === "local") {
-    console.info(`Applying D1 migrations to local state in ${plan.persistTo}.`);
-    return applyLocalMigrations(plan.persistTo);
-  }
-  const database = remoteDatabase(await readWranglerConfig());
-  if (
-    remoteConfirmationMode({ env: process.env, interactive: process.stdin.isTTY === true }) ===
-    "prompt"
-  ) {
-    const prompt = createInterface({ input: process.stdin, output: process.stdout });
-    let answer;
-    try {
-      answer = await prompt.question(
-        `This applies migrations to the REMOTE D1 database "${database.name}". Type its name to continue: `,
-      );
-    } finally {
-      prompt.close();
-    }
-    if (!remoteConfirmationMatches(answer, database.name)) {
-      console.error("Confirmation did not match; no migration was applied.");
-      return 1;
-    }
-  }
-  return run(
-    wrangler,
-    ["d1", "migrations", "apply", "DB", "--remote", "--config", wranglerConfigPath],
     { cwd: apiDirectory, env: wranglerEnvironment },
   );
 }
@@ -297,7 +261,7 @@ async function dev(argv) {
 async function main() {
   const [command, ...argv] = process.argv.slice(2);
   if (command === "migrate") {
-    process.exitCode = await migrate(argv);
+    process.exitCode = await migrate(argv, { readConfig: readWranglerConfig, run });
     return;
   }
   if (command === "dev") {

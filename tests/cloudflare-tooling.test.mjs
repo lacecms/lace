@@ -6,15 +6,14 @@ import {
   apiDirectory,
   defaultPersistDirectory,
   developmentWranglerConfig,
-  parseDevArguments,
   parseJsonc,
-  parseMigrateArguments,
   remoteConfirmationMatches,
   remoteConfirmationMode,
   remoteDatabase,
   routeFor,
   wranglerConfigPath,
 } from "../scripts/cloudflare-lib.mjs";
+import { parseDevArguments, parseMigrateArguments } from "../scripts/cloudflare-options.mjs";
 
 const config = parseJsonc(await readFile(wranglerConfigPath, "utf8"));
 
@@ -103,4 +102,46 @@ test("gateway sends API and health paths to the Worker before any frontend", () 
     expect(routeFor(path)).toBe("admin");
   for (const path of ["/", "/posts/first", "/apis", "/administrator", "/healthz"])
     expect(routeFor(path)).toBe("site");
+});
+
+test("migration wrapper delegates the exact target and preserves remote confirmation", async () => {
+  const { migrate } = await import("../scripts/cloudflare-migration.mjs");
+  const real = { d1_databases: [{ binding: "DB", database_id: "real-id", database_name: "lace" }] };
+  const calls = [];
+  const base = {
+    readConfig: async () => real,
+    run: (...args) => {
+      calls.push(args);
+      return 7;
+    },
+    env: {},
+    interactive: false,
+  };
+  await expect(migrate([], base)).rejects.toThrow(UsageError);
+  await expect(migrate(["--remote"], base)).rejects.toThrow(/interactive/u);
+  expect(
+    await migrate(["--remote"], { ...base, interactive: true, confirm: async () => "wrong" }),
+  ).toBe(1);
+  expect(calls).toHaveLength(0);
+  expect(await migrate(["--remote"], { ...base, env: { CI: "true" } })).toBe(7);
+  expect(calls[0][1]).toEqual(
+    expect.arrayContaining([
+      "__repository",
+      "cloudflare-migrate",
+      "--config",
+      wranglerConfigPath,
+      "--database-id",
+      "real-id",
+    ]),
+  );
+  calls.length = 0;
+  expect(await migrate(["--local", "--persist-to", "/tmp/state"], base)).toBe(7);
+  expect(calls[0][1]).toEqual(
+    expect.arrayContaining(["db", "migrate", "--target", "cloudflare-local"]),
+  );
+  expect(calls[0][2].env).toMatchObject({
+    LACE_D1_DATABASE_ID: "real-id",
+    LACE_CLOUDFLARE_PERSIST_TO: "/tmp/state",
+    LACE_WRANGLER_CONFIG: wranglerConfigPath,
+  });
 });

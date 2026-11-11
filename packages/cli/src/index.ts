@@ -1,3 +1,4 @@
+import { parseFlags } from "./parse-flags.js";
 import type { DiagnosticKind } from "./diagnostics.js";
 export const packageName = "@lacecms/cli";
 
@@ -51,37 +52,30 @@ export const usage =
   "Usage: lace <db migrate|content sync [--check]|auth bootstrap> [--target node|cloudflare-local|cloudflare-remote] [--operator-env <path> (remote only)] [--json]\n       lace env prepare [--target cloudflare-local] [--json]";
 
 export function parseArguments(argv: readonly string[]): CliOptions {
-  const words: string[] = [];
-  let target: Target = "node";
-  let targetSeen = false;
-  let operatorEnv: string | undefined;
-  let check = false;
-  let json = false;
-  for (let index = 0; index < argv.length; index += 1) {
-    const item = argv[index];
-    if (item === "--target") {
-      const next = argv[++index];
-      if (targetSeen || !["node", "cloudflare-local", "cloudflare-remote"].includes(next ?? ""))
-        throw new CliError("USAGE", usage, EXIT.USAGE);
-      target = next as Target;
-      targetSeen = true;
-    } else if (item === "--operator-env") {
-      const next = argv[++index];
-      if (operatorEnv !== undefined || !next || next.startsWith("--"))
-        throw new CliError("USAGE", usage, EXIT.USAGE);
-      operatorEnv = next;
-    } else if (item === "--check") {
-      if (check) throw new CliError("USAGE", usage, EXIT.USAGE);
-      check = true;
-    } else if (item === "--json") {
-      if (json) throw new CliError("USAGE", usage, EXIT.USAGE);
-      json = true;
-    } else if (item?.startsWith("--")) {
+  const {
+    positional: words,
+    seen,
+    values,
+  } = parseFlags(argv, {
+    boolean: ["--check", "--json"],
+    value: ["--target", "--operator-env"],
+    positional: true,
+    allowWhitespaceValue: true,
+    invalid: () => {
       throw new CliError("USAGE", usage, EXIT.USAGE);
-    } else if (item !== undefined) {
-      words.push(item);
-    }
-  }
+    },
+  });
+  const targetValue = values.get("--target");
+  if (
+    targetValue !== undefined &&
+    !["node", "cloudflare-local", "cloudflare-remote"].includes(targetValue)
+  )
+    throw new CliError("USAGE", usage, EXIT.USAGE);
+  const target = (targetValue ?? "node") as Target;
+  const targetSeen = seen.has("--target");
+  const operatorEnv = values.get("--operator-env");
+  const check = seen.has("--check");
+  const json = seen.has("--json");
   const command = words.join(" ");
   if (
     !["db migrate", "content sync", "auth bootstrap", "env prepare"].includes(command) ||

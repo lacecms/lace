@@ -1,3 +1,4 @@
+import { parseFlags } from "./parse-flags.js";
 import { diagnosticText, failureDiagnostic } from "./diagnostics.js";
 import { EXIT, CliError } from "./index.js";
 import { planUpgrade, presentUpgradePlan } from "./upgrade.js";
@@ -19,32 +20,19 @@ export function parseUpgradeArguments(
   json: boolean;
   action: "review" | "apply" | "rollback";
 } {
-  let project = cwd;
-  let template: string | undefined;
-  let json = false;
-  let action: "review" | "apply" | "rollback" = "review";
-  const seen = new Set<string>();
-  for (let index = 0; index < argv.length; index += 1) {
-    const flag = argv[index]!;
-    if (seen.has(flag)) throw new CliError("USAGE", upgradeUsage, EXIT.USAGE);
-    seen.add(flag);
-    if (flag === "--apply" || flag === "--rollback") {
-      if (action !== "review") throw new CliError("USAGE", upgradeUsage, EXIT.USAGE);
-      action = flag === "--apply" ? "apply" : "rollback";
-      continue;
-    }
-    if (flag === "--json") {
-      json = true;
-      continue;
-    }
-    if (flag !== "--project" && flag !== "--template")
+  const { seen, values } = parseFlags(argv, {
+    boolean: ["--apply", "--rollback", "--json"],
+    value: ["--project", "--template"],
+    invalid: () => {
       throw new CliError("USAGE", upgradeUsage, EXIT.USAGE);
-    const value = argv[++index];
-    if (value === undefined || value.trim().length === 0 || value.startsWith("--"))
-      throw new CliError("USAGE", upgradeUsage, EXIT.USAGE);
-    if (flag === "--project") project = value;
-    else template = value;
-  }
+    },
+  });
+  if (seen.has("--apply") && seen.has("--rollback"))
+    throw new CliError("USAGE", upgradeUsage, EXIT.USAGE);
+  const project = values.get("--project") ?? cwd;
+  const template = values.get("--template");
+  const json = seen.has("--json");
+  const action = seen.has("--rollback") ? "rollback" : seen.has("--apply") ? "apply" : "review";
   if (action === "rollback" ? template !== undefined : template === undefined)
     throw new CliError("USAGE", upgradeUsage, EXIT.USAGE);
   return { project, template, json, action };
@@ -53,7 +41,12 @@ export function parseUpgradeArguments(
 export async function runUpgradeCommand(
   argv: readonly string[],
 ): Promise<{ output: string; exitCode: number }> {
-  const options = parseUpgradeArguments(argv);
+  return runUpgradeOptions(parseUpgradeArguments(argv));
+}
+
+export async function runUpgradeOptions(
+  options: ReturnType<typeof parseUpgradeArguments>,
+): Promise<{ output: string; exitCode: number }> {
   if (options.action !== "review") {
     const outcome =
       options.action === "rollback"

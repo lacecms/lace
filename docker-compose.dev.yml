@@ -70,7 +70,7 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     command: >-
-      sh -ec 'pnpm --filter @lacecms/app-api... install --frozen-lockfile && pnpm --filter @lacecms/app-api run dev'
+      sh -ec 'pnpm --filter @lacecms/app-api... --filter @lacecms/cli... install --frozen-lockfile && pnpm --filter @lacecms/cli... build && pnpm --filter @lacecms/app-api run dev'
     depends_on:
       migrate:
         condition: service_completed_successfully

@@ -170,7 +170,7 @@ export class D1SecurityService implements SecurityService {
 
 /** Atomic fixed-window counter: one upsert increments or resets and returns the count. */
 export class D1FixedWindowRateLimiter implements SensitiveRateLimiter {
-  private key: Promise<CryptoKey> | undefined;
+  private key: ReturnType<typeof crypto.subtle.importKey> | undefined;
 
   public constructor(
     private readonly database: D1Database,

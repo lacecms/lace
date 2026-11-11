@@ -1,0 +1,245 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`help contract: --help 1`] = `
+{
+  "status": 0,
+  "stderr": "",
+  "stdout": "Usage: lace <db migrate|content sync [--check]|auth bootstrap> [--target node|cloudflare-local|cloudflare-remote] [--operator-env <path> (remote only)] [--json]
+       lace env prepare [--target cloudflare-local] [--json]
+Usage: lace doctor --target node|cloudflare-local|cloudflare-remote --stage setup|ready [--mode native|compose] [--json]
+Usage: lace upgrade --template <dir> [--apply] [--project <dir>] [--json]
+       lace upgrade --rollback [--project <dir>] [--json]
+Default: read-only dry run. Apply resumes a matching pending upgrade; rollback restores the latest recorded filesystem upgrade.
+Usage: lace add block <type...>|--all [--site <dir>] [--framework astro] [--dry-run] [--write-new] [--json]
+Installs registry block components into the site (default: site), regenerates its block map and records them in lace.site.json. Edited files are never overwritten.
+Usage: lace import <dir> [--url <origin>] [--publish] [--dry-run] [--overwrite] [--state <path>] [--json]
+       lace import <dir> --validate-only [--publish] [--json]
+Loads a format-v1 import package into a running installation through the admin API. Run it from the CMS project root that contains lace.config.ts. The token is read only from LACE_IMPORT_TOKEN; the API origin from --url or LACE_API_BASE_URL. --validate-only checks the package offline.
+Usage: lace cloudflare preflight --target cloudflare-remote --wrangler-auth token|oauth [--operator-env <path>] [--json]
+",
+}
+`;
+
+exports[`help contract: -h 1`] = `
+{
+  "status": 0,
+  "stderr": "",
+  "stdout": "Usage: lace <db migrate|content sync [--check]|auth bootstrap> [--target node|cloudflare-local|cloudflare-remote] [--operator-env <path> (remote only)] [--json]
+       lace env prepare [--target cloudflare-local] [--json]
+Usage: lace doctor --target node|cloudflare-local|cloudflare-remote --stage setup|ready [--mode native|compose] [--json]
+Usage: lace upgrade --template <dir> [--apply] [--project <dir>] [--json]
+       lace upgrade --rollback [--project <dir>] [--json]
+Default: read-only dry run. Apply resumes a matching pending upgrade; rollback restores the latest recorded filesystem upgrade.
+Usage: lace add block <type...>|--all [--site <dir>] [--framework astro] [--dry-run] [--write-new] [--json]
+Installs registry block components into the site (default: site), regenerates its block map and records them in lace.site.json. Edited files are never overwritten.
+Usage: lace import <dir> [--url <origin>] [--publish] [--dry-run] [--overwrite] [--state <path>] [--json]
+       lace import <dir> --validate-only [--publish] [--json]
+Loads a format-v1 import package into a running installation through the admin API. Run it from the CMS project root that contains lace.config.ts. The token is read only from LACE_IMPORT_TOKEN; the API origin from --url or LACE_API_BASE_URL. --validate-only checks the package offline.
+Usage: lace cloudflare preflight --target cloudflare-remote --wrangler-auth token|oauth [--operator-env <path>] [--json]
+",
+}
+`;
+
+exports[`help contract: add 1`] = `
+{
+  "status": 0,
+  "stderr": "",
+  "stdout": "Usage: lace add block <type...>|--all [--site <dir>] [--framework astro] [--dry-run] [--write-new] [--json]
+Installs registry block components into the site (default: site), regenerates its block map and records them in lace.site.json. Edited files are never overwritten.
+",
+}
+`;
+
+exports[`help contract: add 2`] = `
+{
+  "status": 0,
+  "stderr": "",
+  "stdout": "Usage: lace add block <type...>|--all [--site <dir>] [--framework astro] [--dry-run] [--write-new] [--json]
+Installs registry block components into the site (default: site), regenerates its block map and records them in lace.site.json. Edited files are never overwritten.
+",
+}
+`;
+
+exports[`help contract: auth 1`] = `
+{
+  "status": 3,
+  "stderr": "Usage: lace <db migrate|content sync [--check]|auth bootstrap> [--target node|cloudflare-local|cloudflare-remote] [--operator-env <path> (remote only)] [--json]
+       lace env prepare [--target cloudflare-local] [--json]
+Operation: auth bootstrap
+Reason: Command arguments or target selection are invalid.
+Recovery: Run lace --help (or lace upgrade --help), correct the arguments and select a supported target explicitly.
+",
+  "stdout": "",
+}
+`;
+
+exports[`help contract: auth 2`] = `
+{
+  "status": 3,
+  "stderr": "Usage: lace <db migrate|content sync [--check]|auth bootstrap> [--target node|cloudflare-local|cloudflare-remote] [--operator-env <path> (remote only)] [--json]
+       lace env prepare [--target cloudflare-local] [--json]
+Operation: auth bootstrap
+Reason: Command arguments or target selection are invalid.
+Recovery: Run lace --help (or lace upgrade --help), correct the arguments and select a supported target explicitly.
+",
+  "stdout": "",
+}
+`;
+
+exports[`help contract: cloudflare 1`] = `
+{
+  "status": 0,
+  "stderr": "",
+  "stdout": "Usage: lace cloudflare preflight --target cloudflare-remote --wrangler-auth token|oauth [--operator-env <path>] [--json]
+",
+}
+`;
+
+exports[`help contract: cloudflare 2`] = `
+{
+  "status": 0,
+  "stderr": "",
+  "stdout": "Usage: lace cloudflare preflight --target cloudflare-remote --wrangler-auth token|oauth [--operator-env <path>] [--json]
+",
+}
+`;
+
+exports[`help contract: content 1`] = `
+{
+  "status": 3,
+  "stderr": "Usage: lace <db migrate|content sync [--check]|auth bootstrap> [--target node|cloudflare-local|cloudflare-remote] [--operator-env <path> (remote only)] [--json]
+       lace env prepare [--target cloudflare-local] [--json]
+Operation: content sync
+Reason: Command arguments or target selection are invalid.
+Recovery: Run lace --help (or lace upgrade --help), correct the arguments and select a supported target explicitly.
+",
+  "stdout": "",
+}
+`;
+
+exports[`help contract: content 2`] = `
+{
+  "status": 3,
+  "stderr": "Usage: lace <db migrate|content sync [--check]|auth bootstrap> [--target node|cloudflare-local|cloudflare-remote] [--operator-env <path> (remote only)] [--json]
+       lace env prepare [--target cloudflare-local] [--json]
+Operation: content sync
+Reason: Command arguments or target selection are invalid.
+Recovery: Run lace --help (or lace upgrade --help), correct the arguments and select a supported target explicitly.
+",
+  "stdout": "",
+}
+`;
+
+exports[`help contract: db 1`] = `
+{
+  "status": 3,
+  "stderr": "Usage: lace <db migrate|content sync [--check]|auth bootstrap> [--target node|cloudflare-local|cloudflare-remote] [--operator-env <path> (remote only)] [--json]
+       lace env prepare [--target cloudflare-local] [--json]
+Operation: db migrate
+Reason: Command arguments or target selection are invalid.
+Recovery: Run lace --help (or lace upgrade --help), correct the arguments and select a supported target explicitly.
+",
+  "stdout": "",
+}
+`;
+
+exports[`help contract: db 2`] = `
+{
+  "status": 3,
+  "stderr": "Usage: lace <db migrate|content sync [--check]|auth bootstrap> [--target node|cloudflare-local|cloudflare-remote] [--operator-env <path> (remote only)] [--json]
+       lace env prepare [--target cloudflare-local] [--json]
+Operation: db migrate
+Reason: Command arguments or target selection are invalid.
+Recovery: Run lace --help (or lace upgrade --help), correct the arguments and select a supported target explicitly.
+",
+  "stdout": "",
+}
+`;
+
+exports[`help contract: doctor 1`] = `
+{
+  "status": 0,
+  "stderr": "",
+  "stdout": "Usage: lace doctor --target node|cloudflare-local|cloudflare-remote --stage setup|ready [--mode native|compose] [--json]
+",
+}
+`;
+
+exports[`help contract: doctor 2`] = `
+{
+  "status": 0,
+  "stderr": "",
+  "stdout": "Usage: lace doctor --target node|cloudflare-local|cloudflare-remote --stage setup|ready [--mode native|compose] [--json]
+",
+}
+`;
+
+exports[`help contract: env 1`] = `
+{
+  "status": 3,
+  "stderr": "Usage: lace <db migrate|content sync [--check]|auth bootstrap> [--target node|cloudflare-local|cloudflare-remote] [--operator-env <path> (remote only)] [--json]
+       lace env prepare [--target cloudflare-local] [--json]
+Operation: env prepare
+Reason: Command arguments or target selection are invalid.
+Recovery: Run lace --help (or lace upgrade --help), correct the arguments and select a supported target explicitly.
+",
+  "stdout": "",
+}
+`;
+
+exports[`help contract: env 2`] = `
+{
+  "status": 3,
+  "stderr": "Usage: lace <db migrate|content sync [--check]|auth bootstrap> [--target node|cloudflare-local|cloudflare-remote] [--operator-env <path> (remote only)] [--json]
+       lace env prepare [--target cloudflare-local] [--json]
+Operation: env prepare
+Reason: Command arguments or target selection are invalid.
+Recovery: Run lace --help (or lace upgrade --help), correct the arguments and select a supported target explicitly.
+",
+  "stdout": "",
+}
+`;
+
+exports[`help contract: import 1`] = `
+{
+  "status": 0,
+  "stderr": "",
+  "stdout": "Usage: lace import <dir> [--url <origin>] [--publish] [--dry-run] [--overwrite] [--state <path>] [--json]
+       lace import <dir> --validate-only [--publish] [--json]
+Loads a format-v1 import package into a running installation through the admin API. Run it from the CMS project root that contains lace.config.ts. The token is read only from LACE_IMPORT_TOKEN; the API origin from --url or LACE_API_BASE_URL. --validate-only checks the package offline.
+",
+}
+`;
+
+exports[`help contract: import 2`] = `
+{
+  "status": 0,
+  "stderr": "",
+  "stdout": "Usage: lace import <dir> [--url <origin>] [--publish] [--dry-run] [--overwrite] [--state <path>] [--json]
+       lace import <dir> --validate-only [--publish] [--json]
+Loads a format-v1 import package into a running installation through the admin API. Run it from the CMS project root that contains lace.config.ts. The token is read only from LACE_IMPORT_TOKEN; the API origin from --url or LACE_API_BASE_URL. --validate-only checks the package offline.
+",
+}
+`;
+
+exports[`help contract: upgrade 1`] = `
+{
+  "status": 0,
+  "stderr": "",
+  "stdout": "Usage: lace upgrade --template <dir> [--apply] [--project <dir>] [--json]
+       lace upgrade --rollback [--project <dir>] [--json]
+Default: read-only dry run. Apply resumes a matching pending upgrade; rollback restores the latest recorded filesystem upgrade.
+",
+}
+`;
+
+exports[`help contract: upgrade 2`] = `
+{
+  "status": 0,
+  "stderr": "",
+  "stdout": "Usage: lace upgrade --template <dir> [--apply] [--project <dir>] [--json]
+       lace upgrade --rollback [--project <dir>] [--json]
+Default: read-only dry run. Apply resumes a matching pending upgrade; rollback restores the latest recorded filesystem upgrade.
+",
+}
+`;

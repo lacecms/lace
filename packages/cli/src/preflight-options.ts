@@ -1,3 +1,4 @@
+import { parseFlags } from "./parse-flags.js";
 import { CliError, EXIT } from "./index.js";
 
 export const preflightUsage =
@@ -8,20 +9,16 @@ export interface PreflightOptions {
   readonly json: boolean;
 }
 export function parsePreflightArguments(argv: readonly string[]): PreflightOptions {
-  const values = new Map<string, string>();
-  let json = false;
+  const { values, seen } = parseFlags(argv, {
+    boolean: ["--json"],
+    value: ["--target", "--wrangler-auth", "--operator-env"],
+    allowWhitespaceValue: true,
+    invalid: () => {
+      throw new CliError("USAGE", preflightUsage, EXIT.USAGE);
+    },
+  });
+  const json = seen.has("--json");
   const invalid = () => new CliError("USAGE", preflightUsage, EXIT.USAGE);
-  for (let i = 0; i < argv.length; i++) {
-    const flag = argv[i];
-    if (flag === "--json") {
-      if (json) throw invalid();
-      json = true;
-    } else if (flag === "--target" || flag === "--wrangler-auth" || flag === "--operator-env") {
-      const value = argv[++i];
-      if (!value || value.startsWith("--") || values.has(flag)) throw invalid();
-      values.set(flag, value);
-    } else throw invalid();
-  }
   const auth = values.get("--wrangler-auth");
   if (values.get("--target") !== "cloudflare-remote" || (auth !== "token" && auth !== "oauth"))
     throw invalid();

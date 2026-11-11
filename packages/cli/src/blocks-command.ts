@@ -1,3 +1,4 @@
+import { parseFlags } from "./parse-flags.js";
 import { mkdir, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { BlockError, loadRegistry } from "./blocks-registry.js";
@@ -29,34 +30,23 @@ function usage(): never {
 
 /** argv excludes the leading `add block` words. */
 export function parseAddBlockArguments(argv: readonly string[]): AddBlockOptions {
-  const types: string[] = [];
-  const seen = new Set<string>();
-  let site = "site";
-  let framework: string | undefined;
-  let all = false;
-  let dryRun = false;
-  let writeNew = false;
-  let json = false;
-  for (let index = 0; index < argv.length; index += 1) {
-    const item = argv[index]!;
-    if (!item.startsWith("--")) {
-      if (!/^[A-Za-z][A-Za-z0-9-]{0,63}$/u.test(item)) usage();
-      types.push(item);
-      continue;
-    }
-    if (seen.has(item)) usage();
-    seen.add(item);
-    if (item === "--all") all = true;
-    else if (item === "--dry-run") dryRun = true;
-    else if (item === "--write-new") writeNew = true;
-    else if (item === "--json") json = true;
-    else if (item === "--site" || item === "--framework") {
-      const value = argv[++index];
-      if (value === undefined || value.trim().length === 0 || value.startsWith("--")) usage();
-      if (item === "--site") site = value;
-      else framework = value;
-    } else usage();
-  }
+  const {
+    positional: types,
+    seen,
+    values,
+  } = parseFlags(argv, {
+    boolean: ["--all", "--dry-run", "--write-new", "--json"],
+    value: ["--site", "--framework"],
+    positional: true,
+    invalid: usage,
+  });
+  if (types.some((item) => !/^[A-Za-z][A-Za-z0-9-]{0,63}$/u.test(item))) usage();
+  const site = values.get("--site") ?? "site";
+  const framework = values.get("--framework");
+  const all = seen.has("--all");
+  const dryRun = seen.has("--dry-run");
+  const writeNew = seen.has("--write-new");
+  const json = seen.has("--json");
   if (all === types.length > 0) usage();
   return { types, all, site, framework, dryRun, writeNew, json };
 }
@@ -208,7 +198,13 @@ export async function runAddBlockCommand(
   argv: readonly string[],
   context: { readonly cwd?: string; readonly registry?: Registry } = {},
 ): Promise<AddBlockResult> {
-  const options = parseAddBlockArguments(argv);
+  return runAddBlockOptions(parseAddBlockArguments(argv), context);
+}
+
+export async function runAddBlockOptions(
+  options: AddBlockOptions,
+  context: { readonly cwd?: string; readonly registry?: Registry } = {},
+): Promise<AddBlockResult> {
   const cwd = context.cwd ?? process.cwd();
   const registry = context.registry ?? (await loadRegistry());
   const site = await selectSite({ cwd, site: options.site, framework: options.framework });

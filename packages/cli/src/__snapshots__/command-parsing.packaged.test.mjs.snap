@@ -1,0 +1,119 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`parser retains values, defaults and rejects malformed flags 1`] = `
+{
+  "check": true,
+  "command": "content sync",
+  "json": true,
+  "target": "node",
+}
+`;
+
+exports[`parser retains values, defaults and rejects malformed flags 2`] = `
+{
+  "check": false,
+  "command": "db migrate",
+  "json": false,
+  "target": "node",
+}
+`;
+
+exports[`parser retains values, defaults and rejects malformed flags 3`] = `
+{
+  "json": false,
+  "mode": "native",
+  "stage": "setup",
+  "target": "node",
+}
+`;
+
+exports[`parser retains values, defaults and rejects malformed flags 4`] = `
+{
+  "json": false,
+  "mode": "native",
+  "stage": "ready",
+  "target": "node",
+}
+`;
+
+exports[`parser retains values, defaults and rejects malformed flags 5`] = `
+{
+  "json": false,
+  "wranglerAuth": "oauth",
+}
+`;
+
+exports[`parser retains values, defaults and rejects malformed flags 6`] = `
+{
+  "json": false,
+  "wranglerAuth": "token",
+}
+`;
+
+exports[`parser retains values, defaults and rejects malformed flags 7`] = `
+{
+  "action": "apply",
+  "json": false,
+  "project": "/Users/jentix/Dev/lace/packages/cli",
+  "template": "template",
+}
+`;
+
+exports[`parser retains values, defaults and rejects malformed flags 8`] = `
+{
+  "action": "rollback",
+  "json": false,
+  "project": "/Users/jentix/Dev/lace/packages/cli",
+  "template": undefined,
+}
+`;
+
+exports[`parser retains values, defaults and rejects malformed flags 9`] = `
+{
+  "all": false,
+  "dryRun": false,
+  "framework": undefined,
+  "json": false,
+  "site": "web",
+  "types": [
+    "hero",
+    "cta",
+  ],
+  "writeNew": false,
+}
+`;
+
+exports[`parser retains values, defaults and rejects malformed flags 10`] = `
+{
+  "all": true,
+  "dryRun": false,
+  "framework": undefined,
+  "json": false,
+  "site": "site",
+  "types": [],
+  "writeNew": false,
+}
+`;
+
+exports[`parser retains values, defaults and rejects malformed flags 11`] = `
+{
+  "directory": "out",
+  "dryRun": false,
+  "json": false,
+  "overwrite": false,
+  "publish": true,
+  "url": "https://x.test",
+  "validateOnly": false,
+}
+`;
+
+exports[`parser retains values, defaults and rejects malformed flags 12`] = `
+{
+  "directory": "out",
+  "dryRun": false,
+  "json": false,
+  "overwrite": false,
+  "publish": false,
+  "validateOnly": false,
+}
+`;

@@ -1,3 +1,4 @@
+import { parseFlags } from "./parse-flags.js";
 import { join, resolve } from "node:path";
 import { EXIT } from "./index.js";
 import { applyPlan } from "./import-apply.js";
@@ -30,26 +31,14 @@ function usage(): never {
 
 /** argv excludes the leading `import` word. */
 export function parseImportArguments(argv: readonly string[]): ImportOptions {
-  const seen = new Set<string>();
-  const positional: string[] = [];
-  const values: Record<string, string> = {};
-  for (let index = 0; index < argv.length; index += 1) {
-    const item = argv[index]!;
-    if (!item.startsWith("--")) {
-      positional.push(item);
-      continue;
-    }
-    if (seen.has(item)) usage();
-    seen.add(item);
-    if (item === "--url" || item === "--state") {
-      const value = argv[++index];
-      if (value === undefined || value.trim().length === 0 || value.startsWith("--")) usage();
-      values[item] = value;
-    } else if (
-      !["--publish", "--dry-run", "--validate-only", "--overwrite", "--json"].includes(item)
-    )
-      usage();
-  }
+  const { seen, positional, values } = parseFlags(argv, {
+    boolean: ["--publish", "--dry-run", "--validate-only", "--overwrite", "--json"],
+    value: ["--url", "--state"],
+    positional: true,
+    invalid: usage,
+  });
+  const url = values.get("--url");
+  const state = values.get("--state");
   const validateOnly = seen.has("--validate-only");
   if (
     positional.length !== 1 ||
@@ -59,12 +48,12 @@ export function parseImportArguments(argv: readonly string[]): ImportOptions {
     usage();
   return {
     directory: positional[0]!,
-    ...(values["--url"] === undefined ? {} : { url: values["--url"] }),
+    ...(url === undefined ? {} : { url }),
     publish: seen.has("--publish"),
     dryRun: seen.has("--dry-run"),
     validateOnly,
     overwrite: seen.has("--overwrite"),
-    ...(values["--state"] === undefined ? {} : { state: values["--state"] }),
+    ...(state === undefined ? {} : { state }),
     json: seen.has("--json"),
   };
 }
@@ -202,11 +191,12 @@ function completion(summary: ApplySummary): string {
 export async function runImportCommand(
   argv: readonly string[],
   runtime: ImportRuntime,
+  parse: () => ImportOptions = () => parseImportArguments(argv),
 ): Promise<ImportOutcome> {
   const json = argv.includes("--json");
   let data: PlanData | undefined;
   try {
-    const options = parseImportArguments(argv);
+    const options = parse();
     let origin: string | undefined;
     let token: string | undefined;
     if (!options.validateOnly) {

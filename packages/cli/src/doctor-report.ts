@@ -1,3 +1,4 @@
+import { parseFlags } from "./parse-flags.js";
 import { CliError, EXIT, type Target } from "./index.js";
 
 export const doctorUsage =
@@ -10,20 +11,17 @@ export interface DoctorOptions {
 }
 
 export function parseDoctorArguments(argv: readonly string[]): DoctorOptions {
-  const values = new Map<string, string>();
-  let json = false;
+  const { values, seen } = parseFlags(argv, {
+    boolean: ["--json"],
+    value: ["--target", "--stage", "--mode"],
+    allowFlagValue: true,
+    allowWhitespaceValue: true,
+    invalid: () => {
+      throw new CliError("USAGE", doctorUsage, EXIT.USAGE);
+    },
+  });
+  const json = seen.has("--json");
   const invalid = () => new CliError("USAGE", doctorUsage, EXIT.USAGE);
-  for (let i = 0; i < argv.length; i += 1) {
-    const flag = argv[i];
-    if (flag === "--json") {
-      if (json) throw invalid();
-      json = true;
-    } else if (flag === "--target" || flag === "--stage" || flag === "--mode") {
-      const value = argv[++i];
-      if (!value || values.has(flag)) throw invalid();
-      values.set(flag, value);
-    } else throw invalid();
-  }
   const target = values.get("--target");
   const stage = values.get("--stage");
   const mode = values.get("--mode");
