@@ -1,13 +1,22 @@
 ---
 title: SEO and search indexing
 description: Configure search metadata, indexing, canonical URLs and sitemaps.
+kind: guide
+verifiedAgainst: 0.1.0-rc2
 ---
 
 Lace stores SEO settings with each page or collection entry. The site resolves
 those settings when it builds; publishing content and deploying the resulting
 site are separate steps. SEO is optional per routable model and globals can
-provide site-wide defaults. These features require matching CMS, SDK and Astro
-packages and a site that uses the Lace SEO helpers.
+provide site-wide defaults.
+
+## Before you start
+
+- Matching CMS, SDK and Astro packages and a site that uses the Lace SEO
+  helpers; the starter site does.
+- SEO applies to pages and to collections with a `route`. Globals and
+  [route-less collections](../#add-a-collection-without-a-route) cannot enable
+  it.
 
 ## Enable SEO and set defaults
 
@@ -51,11 +60,39 @@ existing model, increase its version and [synchronize](../synchronization/).
 Publish the settings global so its defaults are available to site builds. The
 starter already provides SEO on Home and Posts and a settings global.
 
+Changing a fallback mapping (`seo: { description: "summary" }`) or
+`seoDefaults` needs synchronization but no version increase. A global's
+`seoDefaults` cannot name a [conditional field](../conditional-fields/).
+
+## Turn SEO off
+
+Remove `seo` from the model and increase its version. When entries already hold
+SEO values, synchronization refuses the plan with `SEO_REMOVAL_HAS_DATA` and
+counts them. To discard those values deliberately, add the temporary hint
+`removedSeo: true` to the model, synchronize in every environment, then remove
+the hint:
+
+```ts
+defineCollection({
+  key: "articles",
+  version: 3,
+  route: "/articles/:slug",
+  label: "Articles",
+  fields: { summary: field.textarea(), cover: field.media() },
+  removedSeo: true,
+});
+```
+
+The hint clears the SEO group of every draft and published entry of the model.
+It is rejected on a model that still enables `seo` and on globals.
+
 ## Edit metadata
 
 The SEO card in an enabled page or collection entry provides title,
 description, image, canonical URL and **Hide from search engines**. Blank
-values inherit where a fallback exists. Save the draft, publish it, then build
+values inherit where a fallback exists: the editor shows the inherited value as
+the field's placeholder, and the title and description show their length
+against the recommendation. Save the draft, publish it, then build
 and deploy the site. The preview is useful guidance, not a guarantee of what a
 search engine or social network will display.
 
@@ -103,3 +140,10 @@ For an existing or custom site, add the SEO component to the layout and the
 sitemap/robots endpoints to Astro yourself; a model configuration alone does
 not create them. See [Astro integration](../../astro-integration/) and the
 site-owned starter files for the integration.
+
+## Reference
+
+- [Configuration reference](../../reference/configuration/): `seo`,
+  `seoDefaults` and `removedSeo`.
+- [CLI and environment](../../reference/cli-environment/):
+  `LACE_BUILD_SITE_URL` and `LACE_SITE_INDEXING`.

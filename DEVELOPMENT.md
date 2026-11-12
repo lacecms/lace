@@ -105,7 +105,7 @@ when enabled, and unauthenticated `http://127.0.0.1:3000/mcp` returns `401` with
 an OAuth challenge. Both return `404` when disabled. If registration returns
 `404` while Admin works, check flag forwarding and recreate the API container.
 Enabled in Settings describes configuration, not verified client connectivity.
-See [MCP setup and client-specific commands](docs/mcp.md#inspect-configuration-and-connect-codex).
+See [MCP setup and client-specific commands](apps/docs/src/content/docs/en/latest/operations/mcp.md) in the public guide.
 
 ### Show published content on the local site
 

@@ -1,4 +1,10 @@
-# Configuration synchronization planner
+# Configuration synchronization planner (internal)
+
+Engineering notes for the planner and its guarded apply path. User guidance
+(the check/apply workflow, which changes need a version, rename and removal
+hints, block migrations and refusal codes) is public:
+[Synchronize configuration](../apps/docs/src/content/docs/en/latest/content-modeling/synchronization.md). Accepted behavior lives in the
+`configuration-synchronization` and `schema-evolution` specs.
 
 Step 6A provides the portable, non-mutating decision layer for reconciling
 normalized `lace.config.ts` models with persisted model identities. It is shared
@@ -130,21 +136,9 @@ content size limit (`BACKFILL_EXCEEDS_LIMIT`).
 ### Rename and removal hints (CE1B)
 
 Renaming or removing a field, or disallowing a block type, while stored content
-uses it requires an explicit, reviewed hint. Sync never infers one from a
-matching removal and addition.
-
-```ts
-defineCollection({
-  key: "posts",
-  version: 3,
-  blocks: ["richText"],
-  fields: {
-    title: field.text({ renamedFrom: "headline" }), // moves headline → title
-  },
-  removedFields: ["legacy"], // prunes stored legacy values
-  removedBlocks: ["quote"], // drops stored quote blocks
-});
-```
+uses it requires an explicit, reviewed hint (`renamedFrom`, `removedFields`,
+`removedBlocks`; see the public page for syntax and the operator workflow).
+Sync never infers one from a matching removal and addition.
 
 - `renamedFrom` is valid on model fields only; `defineBlock` rejects it because
   block data changes use block versions.
@@ -174,33 +168,13 @@ defineCollection({
   actors and timestamps are unchanged; the published version advances and one
   build is coalesced.
 
-Workflow: add the hint and bump the model version, review
-`lace content sync --check`, run `lace content sync` in every environment, then
-delete the hint (no version bump needed). Run sync right after deploying a
-configuration with hints: an editor whose admin already uses the new
-configuration but whose open draft predates sync could otherwise save an empty
-renamed field over the moved value.
+The operator workflow (hint, version bump, immediate sync in every
+environment, hint removal) is on the public page.
 
 ### Block migrations (CE1C)
 
-Stored block data changes through block versions. To change a block that
-stored content uses:
-
-```ts
-export const quote = defineBlock({
-  type: "quote",
-  version: 3,
-  fields: { text: field.text({ required: true }), source: field.text() },
-  migrations: {
-    // Each key is a target version; each function receives the previous
-    // version's { data, settings } and returns { data, settings? }.
-    2: ({ data: { quote, ...rest } }) => ({ data: { ...rest, text: quote ?? "" } }),
-    3: ({ data: { attribution, ...rest } }) => ({
-      data: attribution === undefined ? rest : { ...rest, source: attribution },
-    }),
-  },
-});
-```
+Stored block data changes through block versions and declared `migrations`
+(syntax and authoring rules on the public page).
 
 - **Rules.** Migration keys form one contiguous range that ends at the block's
   `version` (a version 1 block declares none). Each function is pure and
@@ -248,10 +222,7 @@ export const quote = defineBlock({
   final mutation, public reads may already return migrated published blocks
   under the previous published version.
 
-Workflow: bump the block version, add migrations, update the site component,
-bump every allowing model's version, review `lace content sync --check`, then
-deploy and run `lace content sync` immediately in every environment. Keep
-migrations while any environment may still hold older blocks.
+The operator workflow is on the public page.
 
 ### Reports and diagnostics
 
@@ -291,26 +262,8 @@ the model version for structural changes. Changes to block data still require a
 block version increase and executable migrations.
 
 Named children accept `renamedFrom` with the former sibling key. `removedFields`
-accepts schema pointers; `*` traverses every item of a list. For example, when
-`links` previously contained `headline`, `photo` and `legacy`:
-
-```ts
-fields: {
-  cards: field.list({
-    renamedFrom: "links",
-    item: field.group({
-      fields: {
-        title: field.text({ renamedFrom: "headline" }),
-        image: field.media({ renamedFrom: "photo" }),
-        caption: field.text({ defaultValue: "Untitled" }),
-      },
-    }),
-  }),
-},
-removedFields: ["/cards/*/legacy"],
-```
-
-Ancestor renames run first. Removal pointers use configured ancestor names,
+accepts schema pointers; `*` traverses every item of a list (example on the
+public page). Ancestor renames run first. Removal pointers use configured ancestor names,
 so this removes `legacy` from each former `links` item. Root hints retain their
 existing syntax; `/title` and `title` identify the same root field. Indices,
 cross-parent moves, item-level hints and overlapping removals are rejected.

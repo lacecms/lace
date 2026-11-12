@@ -9,19 +9,46 @@ remain authoritative; public prose does not replace them.
 
 | Public section | Internal references and acceptance sources |
 | --- | --- |
-| Getting started | personal-site-guide.md, compatibility.md, generated README/Compose guides |
-| Content modeling | node-api.md, configuration-synchronization.md, composite-fields.md, field-guidance.md, form-organization.md, ADR 0018 and conditional-fields spec (conditional fields page), model/SEO/block specs |
-| Editing content | rich-text-authoring.md, content-import.md (import guide, sample package), composite-fields.md and form-organization.md (conditional fields in the editor), CLI README, admin/media/account and content-import-cli specs |
-| Astro integration | site-styling.md (including video embed activation and provider smoke checks), generated lace-astro-site.md, SDK/render/block-installation specs |
-| Deployment | cloudflare-worker.md, cloudflare-deployment-handoff.md, generated Compose/Cloudflare guides |
-| Operations | auth-operations.md, database-migrations.md, compatibility.md, [verification.md](verification.md) (commands, coverage and owner checks), generated lace-operations.md |
-| Reference | CLI help/environment declarations, REST/API-docs specs, apps/api/openapi/api-v1.json |
+| Getting started | compatibility.md, project-generator and generated-project-onboarding specs, generated README/Compose guides |
+| Content modeling | configuration-synchronization.md, collection-queries.md, internal-url-links.md (links page), ADR 0013, ADR 0018 and ADR 0031, content-model-configuration, field-descriptors, list-layout, conditional-fields, collection-query-options and block specs |
+| Editing content | content-import.md (import guide, sample package), auth-operations.md (accounts), admin draft-editor, media-library, remote-state/lists, account and content-import-cli specs |
+| Astro integration | render-core, astro-adapter, gallery-block, block-source-registry and public-sdk specs, registry sources, generated lace-astro-site.md |
+| Deployment | node-api.md, cloudflare-worker.md, cloudflare-deployment-handoff.md, generated Compose/Cloudflare guides |
+| Operations | auth-operations.md, database-migrations.md, compatibility.md, [verification.md](verification.md) (commands, coverage and owner checks), MCP specs (MCP page), generated lace-operations.md and lace-mcp.md |
+| Reference | CLI help, generated configuration files, configuration input types, `apps/api/openapi/api-v1.json`, contracts MCP tool schemas; guarded by `tests/docs-reference.test.mjs` |
+
+Each user-facing topic has one owner. User procedures, settings and examples
+live on public pages; a remaining internal note keeps engineering content and
+links to its public owner (named in the [index](README.md)). A note left with
+nothing engineering is deleted and recorded under "Promoted and deleted".
 
 When behavior changes, review the public guide, the related internal documents and
 generated guides separately. Keep run evidence in its result directory and release readiness in archived changes; update the index and incoming links when consolidating or deleting internal documents.
 Generated guides remain version-matched consumer assets, not imports of latest
 public prose. Public pages link within the public site; contributor-only links
 should explicitly identify GitHub source.
+
+## Page rules
+
+Every page declares `kind` and `verifiedAgainst` in its frontmatter;
+`apps/docs/scripts/check.mjs` enforces both.
+
+- `overview`: an introduction and links, no second-level sections (landing,
+  `deployment/`, `reference/`).
+- `guide`: a purpose paragraph, then *Before you start*, at least one task
+  section, and a final *Reference* section that links a Reference page.
+- `reference`: tables under `reference/`, one row per item with purpose text.
+
+`verifiedAgainst` names the release a page was last checked against: the
+current `version` of `release/alpha.json` or one of its non-alpha
+`publishedVersions`. Set it to the current `version` whenever you change or
+re-check a page; release preparation does not touch pages. The footer shows it
+as "Verified against …". The catalog `target` must equal the release `version`.
+
+`tests/docs-reference.test.mjs` derives every CLI command and flag, `LACE_*`
+setting, configuration option, field builder, REST path and MCP tool/scope from
+shipped artifacts and fails naming each one the Reference pages do not mention.
+Add the row when you add the item.
 
 ## Locale/version catalog
 
@@ -42,6 +69,8 @@ and smoke-check root entry, deep navigation, theme, keyboard/mobile and Pagefind
 in a browser at `/lace/`.
 Root quality gates include the app; no CMS service is needed. Build preparation
 copies only committed OpenAPI JSON into ignored `public/reference/openapi.json`.
+The publication detector also treats the rendered `release/alpha.json` fields
+(`version`, `publishedVersions`) as input.
 `pnpm openapi:check` verifies that the committed API contract is current.
 
 ## GitHub Pages setup and recovery

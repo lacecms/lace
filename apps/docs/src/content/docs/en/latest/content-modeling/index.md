@@ -1,15 +1,34 @@
 ---
 title: Define your content
-description: Use typed, version-controlled models for pages, collections, globals and blocks.
+description: Define pages, collections, globals, fields and blocks in lace.config.ts and evolve them safely.
+kind: guide
+verifiedAgainst: 0.1.0-rc2
 ---
 
-`lace.config.ts` is the source of content structure. Admin edits values rather than creating model definitions. A page is a singleton at a fixed path; a collection holds entries addressed by a slug route; a global is a singleton with no public route, for shared site settings or navigation.
+`lace.config.ts` is the source of your content structure. It declares pages,
+collections and globals, their fields and the blocks each one allows. Admin
+edits values; it never creates or changes model definitions. This guide shows a
+complete model, the model kinds, field options and the collection list
+settings, and explains how to change a model after it holds content.
 
-## A complete starting model
+## Before you start
 
-This example defines a Home page at `/`, a collection of articles at
-`/articles/<slug>`, and a shared site settings global. Place it in the generated
-project's `lace.config.ts` (or adapt its existing definitions):
+- A generated Lace project with `lace.config.ts` at its root and the CMS
+  running locally ([Getting started](../getting-started/)).
+- Each configuration change reaches stored content only through
+  [configuration synchronization](synchronization/). Read that page before
+  changing a model that already has entries.
+
+## Define a starting model
+
+A **page** is one editable entry at a fixed `path`. A **collection** holds any
+number of entries; with a `route`, each entry's slug fills the route's `:slug`
+segment. A **global** is one shared entry without a public URL, used for site
+settings or navigation.
+
+This example defines a Home and an About page, a collection of articles at
+`/articles/<slug>`, and a site settings global. Place it in the generated
+project's `lace.config.ts`, or adapt the existing definitions:
 
 ```ts
 import { defineConfig, definePage, defineCollection, defineGlobal } from "@lacecms/config";
@@ -64,13 +83,18 @@ export default await defineConfig({
 });
 ```
 
-A page is one editable entry at its fixed `path`; a collection contains any
-number of entries, each with a slug substituted into `route`. A global is one
-shared entry and has no public URL of its own. Publish the settings global for
-its values to reach the site. The starter also defines a `navigation` global;
-keep it if your site's layout reads it. See [SEO](seo/) for fallback rules.
+Keys are stable identities, and `version` is the model's structural version.
+After synchronization, every page and global has one draft; collections start
+empty. Publish the settings global for its values to reach the site. The
+starter also defines a `navigation` global; keep it if your site's layout reads
+it. See [SEO](seo/) for the fallback rules.
 
-### Collections without a route
+The configuration describes content; it does not create Astro pages. Add the
+matching site route files, including a `getStaticPaths` route for each routed
+collection, and render the published data
+([Astro integration](../astro-integration/)).
+
+## Add a collection without a route
 
 Some content is only listed on another page: CV rows, testimonials, press
 mentions. Leave out `route` and the collection has no public URLs:
@@ -88,27 +112,108 @@ defineCollection({
 }),
 ```
 
-Its entries have a title but no slug, publish without one, never appear in the
-sitemap, and cannot be chosen as CMS link destinations; `seo` is not allowed.
-Lists, list fields and list options work as for any collection. Sites read
-them with `site.records("testimonials")`, newest publication first; sort by
-your own field when order matters. Adding or removing a route later is a
-structural change that synchronization refuses while the collection has
-published entries; removing a route also needs drafts without slugs and
-without incoming CMS links.
+Entries of a route-less collection have a title but no slug. The editor asks
+only for a title, shows no path or SEO card, and publishes without a slug. The
+entries never appear in the sitemap and cannot be chosen as
+[link destinations](links/); `seo` is not allowed on such a model. `listFields`
+and `listOptions` work as for any collection.
 
-Register each block definition once in `blocks` and list its type in each
-model that permits it. Custom types need their own definition and renderer:
-[create a custom block](custom-blocks/). The configuration describes content;
-it does not create Astro pages. Add corresponding site route files, including a
-`getStaticPaths` route for a collection, and render the relevant published data.
+Site code reads published entries with `site.records("testimonials")`, newest
+publication first. Each record has `id`, `title`, `fields`, `blocks` and
+`publishedAt`, plus the `image()` and `link()` helpers of entries; sort by your
+own field when order matters.
+
+Adding or removing a `route` later is a structural change that synchronization
+refuses while the collection has published entries. Removing a route also
+requires that no draft holds a slug and that no other entry links to the
+collection's entries.
+
+## Configure fields
+
+The `field` builder provides `text`, `textarea`, `richText`, `number`,
+`boolean`, `date`, `datetime`, `select`, `url` and `media`, plus `group` and
+`list` for nested values ([groups, lists and form layout](composites/)). Every
+builder accepts `label`, `description`, `required` and `defaultValue`.
+
+- **Required fields** are required for publication only. An incomplete draft
+  can still be saved; the editor marks the field Required and explains this.
+  Invalid present values, such as a number outside its `min`/`max` or text
+  longer than `maxLength`, block saving.
+- **Placeholders** (`placeholder`) are prompts in empty text, textarea, URL,
+  number, select and rich-text controls, including inside groups, lists, block
+  data and block settings. A placeholder is never saved as content. Set it to
+  `""` to suppress the control's generic prompt. Boolean, date, datetime,
+  media, group and list fields reject it: use `description` to explain them.
+- **Descriptions** appear under the field and are read by assistive technology.
+  Write instructions there rather than in labels.
+- **Text counters** show the current length of text and textarea values. They
+  count JavaScript UTF-16 units without trimming, so `" 😀 "` counts four. The
+  editor never truncates text; Save explains a value that is too long.
+
+```ts
+const fields = {
+  title: field.text({
+    label: "Title",
+    required: true,
+    placeholder: "A short, descriptive title",
+    description: "Shown on the article card.",
+    maxLength: 80,
+  }),
+  amount: field.number({ min: 1, max: 5, placeholder: "1 to 5" }),
+  category: field.select({ options: ["news", "guide"], placeholder: "Choose a category" }),
+  body: field.richText({ placeholder: "Tell the story…" }),
+};
+```
+
+Placeholders, labels and descriptions are display metadata: changing them
+needs synchronization but no model version increase, and it never rewrites
+content.
+
+To ask for some fields only in some cases, use
+[conditional fields](conditional-fields/). To link to other entries, use a URL
+field ([internal links](links/)).
+
+## Allow blocks
+
+Register each block definition once in the top-level `blocks` array and list
+its type in each model that permits it. Built-in definitions are
+`builtInBlocks.hero`, `richText`, `image`, `quote`, `cta`, `link`, `gallery`,
+`navigation` and `videoEmbed`. A block's content definition and settings are
+versioned separately from the visual component installed in your site; adding a
+definition does not install its renderer. To add your own type, see
+[create a custom block](custom-blocks/).
+
+### Allow provider video URLs
+
+Register `builtInBlocks.videoEmbed` and add `"videoEmbed"` to the model's
+allowed blocks. Increase that model's version and synchronize. The block has a
+required Video URL and Title and an optional Preview image and Caption. Its
+settings choose an aspect ratio (`16:9` default, `4:3`, `1:1`, `4:5`, `9:16`)
+and playback (`player` default, or `ambient`, a muted loop without controls;
+reduced motion and visitors without JavaScript get the player). Ambient has no
+built-in pause control and does not meet WCAG 2.2.2 for videos longer than five
+seconds. Install the matching site component before building; see
+[Style video embeds](../astro-integration/styling/#style-video-embeds) for
+behavior and a stop control.
+
+The block accepts YouTube watch, share, Shorts and embed links and Vimeo video
+and player links, including unlisted privacy hashes. Other providers and pasted
+iframe code fail validation. Your own URL fields can declare the same
+restriction:
+
+```ts
+field.url({ required: true, embedProviders: ["youtube", "vimeo"] });
+```
+
+The restriction is structural. Adding or narrowing it is a breaking change;
+removing or widening it is compatible. Ordinary URL fields keep their behavior.
 
 ## Change models after deployment
 
-Keys are stable identities: removing one and adding another does not rename it.
-For structural changes, increase the affected model's `version`, then review
-and apply configuration synchronization in **each** environment. For example,
-add a reading-time field to the `articles` definition above and change its
+Keys are stable identities: removing one key and adding another is not a
+rename. For structural changes, increase the affected model's `version`, then
+review and apply configuration synchronization in **each** environment. For
+example, add a reading-time field to the `articles` definition and change its
 `version: 1` to `version: 2`:
 
 ```ts
@@ -120,71 +225,27 @@ fields: {
 },
 ```
 
-Run `pnpm content:sync --check`, review the plan, and then run
-`pnpm content:sync` for a generated Node project with the SQLite services
-stopped. Check mode exits nonzero for pending changes as well as errors; read
-its report. On Cloudflare select the remote target explicitly and redeploy the
-Worker with the updated configuration. Full commands and ordering are in
-[synchronization](synchronization/) and [Cloudflare deployment](../deployment/cloudflare/).
+Run `pnpm content:sync --check`, review the plan, then run `pnpm content:sync`
+with the services that use the database stopped. Check mode exits nonzero for
+pending changes as well as for errors; read its report. On Cloudflare, select
+the target explicitly and redeploy the Worker with the updated configuration.
+See [synchronization](synchronization/) for the full workflow, rename and
+removal hints, and block migrations.
 
-To remove a model, remove its definition from `content` and review sync. A
+To remove a model, remove its definition from `content` and review the plan. A
 model can be removed only when it has **no entries**. An empty collection can
-therefore be removed; a page or global has a singleton created during sync,
-even if nobody edited it, and its removal is blocked while that entry exists.
-The Admin/API delete operation also rejects page and global singletons, so
-there is currently no supported ordinary removal workflow for those models.
-Sync does not infer a rename or automatically delete entries. Changes to a
-populated model may require explicit hints or migrations; take a backup and
-review the plan before applying destructive changes. Deleting a definition also
-does not delete the site's Astro route or renderer: update those separately.
-See [synchronization](synchronization/) for supported evolution and recovery.
-
-## Fields and author guidance
-
-Field builders include text, textarea, number, boolean, date, datetime, URL, select, media and rich text, plus groups and lists. Prefer a field description for instructions; supported scalar inputs accept `placeholder`. A placeholder is display metadata, never a saved content value. Required fields are required for publication, so otherwise valid incomplete drafts can still be saved. Invalid present values and hard maxima can block Save.
-
-Text counters count JavaScript UTF-16 units without trimming; SEO counters have their own trimmed/code-point rules. Do not truncate content silently to satisfy a UI counter.
-
-See [groups, lists and forms](composites/), [conditional fields](conditional-fields/) and [configuration synchronization](synchronization/).
-
-## Blocks and SEO
-
-A model declares which block types are allowed. Built-in types include hero, rich text, image, quote, CTA, Link, gallery, navigation and video embed. Blocks are ordered; their content schema and settings are versioned separately from the visual component source. Adding a block definition does not install its renderer into the Astro site.
-
-The [SEO system group](seo/) provides metadata such as title/description, social image and indexing settings. Configure site defaults and use per-entry overrides deliberately. Admin shows inheritance; recommended title/description lengths are guidance, while hard validation limits still apply. SEO title/description recommendations are 60/160 characters and hard limits are 200/500. Published SEO reaches the build export and site helpers; saving a draft does not update a public page.
-
-A global can supply shared header/navigation content. Publish it like another singleton; unpublished optional globals should have a deliberate site fallback.
-
-## Provider video URLs
-
-Register `builtInBlocks.videoEmbed` and add `"videoEmbed"` to the selected model's
-allowed blocks. Advance existing model versions and run normal configuration sync.
-The v2 block has required Video URL and Title, optional Preview image and Caption.
-Its Settings contain aspect-ratio cards (`16:9` default, `4:3`, `1:1`, `4:5`,
-`9:16`) and playback cards (`player` default, `ambient`). Ambient plays muted,
-looping, without controls; reduced motion and no JavaScript fall back to player.
-Unknown setting values fail draft save and publication. Version 1 blocks receive
-`16:9` and `player` during configuration sync, preserving content and poster usage.
-Install registry revision 2 before building; see [Astro integration](../astro-integration/)
-for upgrade steps, bandwidth advice and a site-owned stop control example.
-Ambient has no built-in pause control and does not meet WCAG 2.2.2 for videos
-longer than five seconds.
-It supports YouTube watch/share/shorts/embed links and Vimeo video/player links,
-including unlisted privacy hashes. Other providers and pasted iframe code fail
-validation. Custom URL fields can declare the same restriction:
-
-```ts
-field.url({ required: true, embedProviders: ["youtube", "vimeo"] });
-```
-
-This restriction is structural. Adding or narrowing it is breaking; removing or
-widening it is compatible. Ordinary URL fields keep their existing behavior.
+be removed; a page or global always has its singleton entry, created during
+synchronization, so its removal is refused while that entry exists, and Admin
+cannot delete page or global entries. Synchronization never infers a rename or
+deletes entries for you. Removing a definition also leaves the site's Astro
+route and renderer in place: update those separately.
 
 ## Collection list queries
 
-Collections can opt into queries over their current drafts. `listFields` selects
-visible columns; `listOptions` independently enables sorting, filters and extra
-search targets. A hidden field can still be queried.
+A collection can make its Admin entry list searchable, sortable and filterable
+by its own fields. `listFields` chooses the visible columns; `listOptions`
+independently enables sorting, filters, extra search targets and the order the
+list opens in. A field does not need to be a visible column to be queried.
 
 ```ts
 const articles = defineCollection({
@@ -210,58 +271,47 @@ const articles = defineCollection({
 });
 ```
 
-Each list contains at most 16 distinct top-level field keys. Sort/filter targets
-can be text, textarea, number, boolean, select, date, datetime or URL; extra
-search targets are text/textarea only. Nested fields, blocks, SEO, rich text and
-media are excluded. Pages/globals cannot declare `listOptions`. Empty arrays
-normalize away. These capabilities grant the same read controls to all roles;
-they do not grant write permissions.
+- Each list names at most 16 distinct top-level field keys.
+- Sort and filter targets can be text, textarea, number, boolean, select, date,
+  datetime or URL fields. Extra search targets are text or textarea only. The
+  title and slug are always searched.
+- Nested fields, blocks, SEO, rich text and media cannot be queried. Pages and
+  globals cannot declare `listOptions`. Empty arrays are ignored.
+- Every role with access to the list gets the same controls; they grant no
+  write permission.
 
-`defaultSort` chooses the order the list opens in. Write it like the API `sort`
+### Choose the default order
+
+`defaultSort` chooses the order a list opens in. Write it like the API `sort`
 parameter: a system sort (`title`, `-title`, `updatedAt`, `-updatedAt`,
-`publishedAt`, `-publishedAt`) or `field:<key>` / `-field:<key>` for a key listed
-in `sortableFields`. Without it a list opens by last edit (`-updatedAt`). The API
-and MCP `list_entries` apply it when a request names no sort. Admin leaves the
-default out of the URL and keeps any other chosen sort there, including
-`-updatedAt`. Changing it is synchronized like other list options: no version
-bump, no content rewrite and no site build. Public delivery keeps its order; your
-site still sorts published entries itself.
+`publishedAt`, `-publishedAt`) or `field:<key>` / `-field:<key>` for a key in
+`sortableFields`. A leading `-` sorts descending. `defaultSort` alone is a valid
+`listOptions`, for example `{ defaultSort: "title" }`. Without it a list opens
+by last edit (`-updatedAt`).
 
-Admin keeps the existing title/slug search, status filter and system sorts. One
-field sort is active at a time. Missing, null and empty-string values appear last
-in either direction; zero and false are present. String ordering ignores ASCII
-case; selects sort by stored value. Dates use calendar dates; datetime ranges
-and sorting compare UTC instants.
+The REST API and the MCP `list_entries` tool apply the default when a request
+names no sort. Admin leaves the default out of the page URL and keeps any other
+chosen sort there.
 
-Search and Contains use literal SQLite LIKE: ASCII case is ignored, while
-Cyrillic/non-ASCII case is retained. `Е`, `е`, `Ё` and `ё` are distinct. `%`, `_`
-and backslash match themselves. There is no transliteration or Unicode folding.
-Node/VPS permits 200 UTF-16 code units. Cloudflare permits 48 code units and at
-most 50 UTF-8 bytes **after** escaping and adding the two substring wrappers:
-48 ordinary ASCII characters or 24 Cyrillic letters fit; 24 percent signs fit
-because each is escaped, but adding one ASCII character produces 51 bytes and
-fails. Mixed scripts and emoji must fit both limits. Search trims surrounding
-whitespace; Contains retains it. Text Equals retains 200 code units on both
-runtimes and uses literal `= COLLATE NOCASE`, without a pattern byte budget.
-Admin advertises the active budget and retains invalid editing drafts without
-sending them or truncating them.
+### Synchronize query settings
 
-Different field filters combine with AND; selected category values combine with
-OR. Text/textarea/URL support Equals and Contains, booleans support Equals,
-numbers support Equals and inclusive ranges, selects support Any of (1–50
-configured values), dates/datetimes support inclusive ranges. Every enabled
-field supports Is set/Is not set. An optional blank bound is omitted; a range
-needs one bound. Date values are `YYYY-MM-DD`; API datetime bounds require an
-explicit offset and normalize to UTC. Text operands have a shared 200-code-unit
-ceiling, and Contains additionally follows the runtime budget. At most 16
-conditions are allowed, one per field, in an 8192-byte JSON filter parameter.
+`listFields` and `listOptions` are list metadata: changing them needs ordinary
+synchronization but no model version increase and no content rewrite. A
+`listOptions` change alone normally requests no site build. Query settings only
+query drafts in Admin. They do not change
+published content, the public API or SDK order, or the order your site renders
+entries in; sort published entries in site code.
 
-Query settings affect full projection identity, while content structure and
-model version remain unchanged. Run database migrations before deploying the
-new API/admin, then normal configuration sync. Query-only sync avoids a build
-when stored public identity or the legacy hash proves public content unchanged;
-unknown legacy baselines conservatively rebuild once. A combined query/SEO
-change still rebuilds. See [synchronization](synchronization/).
+Editors use the resulting controls as described in
+[search, sort and filter collections](../editing-content/#search-sort-and-filter-collections).
+API consumers find the request grammar and limits in the
+[API reference](../reference/api/).
 
-These controls query drafts in Admin. They do not change published content,
-public API/SDK ordering or the order of articles rendered by your site.
+## Reference
+
+- [Configuration reference](../reference/configuration/): every option of
+  `defineConfig`, `definePage`, `defineCollection`, `defineGlobal` and
+  `defineBlock`, list options, field builders and field options.
+- [CLI and environment](../reference/cli-environment/): `lace content sync` and
+  its targets.
+- [API reference](../reference/api/): entry list sort and filter parameters.

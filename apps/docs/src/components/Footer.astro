@@ -1,0 +1,15 @@
+---
+import Default from "@astrojs/starlight/components/Footer.astro";
+const verifiedAgainst = (Astro.locals.starlightRoute.entry.data as { verifiedAgainst?: string })
+  .verifiedAgainst;
+---
+<Default {...Astro.props} />
+{verifiedAgainst && <p class="verified-against">Verified against {verifiedAgainst}</p>}
+
+<style>
+  .verified-against {
+    margin-top: 1rem;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+  }
+</style>

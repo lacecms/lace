@@ -1055,7 +1055,7 @@ Passing verification:
 **Status:** implemented, synchronized into the three accepted capabilities and
 archived on 2026-10-12 as
 [`ce07c-generic-group-list-editing`](../../openspec/changes/archive/2026-10-12-ce07c-generic-group-list-editing). Configuration/editor behavior and rollback guidance are
-in [Composite fields](../composite-fields.md). CE7D remains separate and unimplemented.
+in [Groups and lists](../../apps/docs/src/content/docs/en/latest/content-modeling/composites.md). CE7D remains separate and unimplemented.
 
 - Render groups as labelled fieldsets with descriptions and nested controls.
   Render lists as labelled repeatable items, supporting Add, Remove,

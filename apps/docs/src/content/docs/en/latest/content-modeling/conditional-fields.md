@@ -1,9 +1,18 @@
 ---
 title: Conditional fields
 description: Show, require and publish a field only when a sibling select or switch selects it.
+kind: guide
+verifiedAgainst: 0.1.0-rc2
 ---
 
 A conditional field applies only when a sibling **controller** holds selected values. For example, a gallery item can be an image or a video: `kind` decides whether the editor asks for an image or a video link. The built-in `gallery` block (version 6) ships exactly this rule; the example below shows the same shape in a custom block. Lace enforces the rule on every write path (admin, REST, MCP and `lace import`), so a field that does not apply is never required and never published.
+
+## Before you start
+
+- A model or block in `lace.config.ts` with the fields you want to make
+  conditional ([Define your content](../), [groups and lists](../composites/)).
+- Rule changes are structural: plan a version increase and
+  [configuration synchronization](../synchronization/).
 
 ## Declare a rule
 
@@ -109,10 +118,17 @@ Rules are structural. Increase the model `version`, or the block `version` for b
 
 ## Settings keep `settingsVisibility`
 
-Block **settings** use a different rule, `settingsVisibility`, described in [groups, lists and form layout](../composites/#reusable-list-layouts). It only hides setting controls in the editor; hidden settings keep their defaults, are validated and are still published. Use `visibility` when a field should stop being required and stop being published; use `settingsVisibility` when you only want a tidier settings panel.
+Block **settings** use a different rule, `settingsVisibility`, described in [groups, lists and form layout](../composites/#show-settings-only-for-some-layouts). It only hides setting controls in the editor; hidden settings keep their defaults, are validated and are still published. Use `visibility` when a field should stop being required and stop being published; use `settingsVisibility` when you only want a tidier settings panel.
 
 ## In the editor
 
 The admin hides fields that do not apply as soon as the controller changes, without saving. See [edit and publish content](../../editing-content/#conditional-fields) for what editors see.
 
 When a list can add several images from the media library and its media field depends on a `select` controller, the list also offers one **Add** button per option that hides the media field, labelled with the option's choice-card label (the gallery's **Add Video**). It adds one item with that option selected. A controller's value never labels a collapsed row; rows use the other fields and previews instead.
+
+## Reference
+
+- [Configuration reference](../../reference/configuration/): `visibility` on
+  models, groups and blocks, and block `settingsVisibility`.
+- [Edit and publish content](../../editing-content/#conditional-fields): what
+  editors see.

@@ -16,6 +16,7 @@ export default defineConfig({
       editLink: { baseUrl: "https://github.com/lacecms/lace/edit/main/apps/docs/" },
       customCss: ["./src/styles/docs.css"],
       components: {
+        Footer: "./src/components/Footer.astro",
         Head: "./src/components/Head.astro",
         LanguageSelect: "./src/components/LanguageSelect.astro",
       },

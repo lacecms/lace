@@ -199,7 +199,7 @@ What the roadmap changes, with the numbers to beat:
 | RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | done |
 | RF6 | Admin editor structure | L | RF6A → RF6B → RF6C → RF6D | done |
 | RF7 | CLI and developer scripts | L | RF7A → RF7B → RF7C → RF7D | in progress |
-| RF8 | Documentation | L | RF8A → RF8X → RF8Y → RF8B → RF8C | in progress |
+| RF8 | Documentation | L | RF8A → RF8X → RF8Y → RF8B → RF8C | done |
 | RF9 | Test foundation | L | RF9A → RF9B → RF9C → RF9D → RF9E → RF9F | planned |
 
 **Order rationale:** RF1 first because deleting obsolete scripts and tests
@@ -1242,6 +1242,25 @@ public upgrade guidance keep only rc1 and later. Moved here from RF8B.
 public CLI command name and every REST path in `api-v1.json` appears in the
 reference pages.
 
+**Outcome (RF8C):** `en/latest` grew from 20 to 26 pages: new
+`reference/configuration`, `reference/mcp`, `operations/mcp`,
+`content-modeling/links` and `astro-integration/styling`; every existing route
+kept. `tests/docs-reference.test.mjs` derives CLI commands and flags, `LACE_*`
+settings, configuration options, field builders, the 58 REST paths and MCP
+tools/scopes from shipped artifacts and passes. Every page declares `kind` and
+`verifiedAgainst` (`0.1.0-rc2`); `check.mjs` enforces the guide template and
+the footer. Eight notes were promoted and deleted (`composite-fields`,
+`field-guidance`, `form-organization`, `mcp`, `media-tags`,
+`rich-text-authoring`, `site-styling`, and the owner's superseded
+`personal-site-guide`); seven were trimmed to engineering content, two only
+re-pointed, and every remaining note names its public owner in `docs/README.md`. Owner decisions (2026-11-12): delete
+the personal site guide, write the REST reference by hand, footers reject
+alpha versions. Settled questions: no pinned version route during
+prereleases; generated consumer guides stay unpublished template assets.
+During apply the permanent compatibility guide stopped repeating the upgrade
+steps (modified upgrade-guidance requirement), and build-export paging moved
+to the API reference.
+
 ## Step RF9 — Test foundation
 
 **Size:** L (six sessions). **Depends on:** RF4X guards. RF9A–RF9B precede RF5;
@@ -1372,3 +1391,4 @@ preserved in the linked archives. Dates refer to the final recorded event.
 
 | 2026-11-12 | RF7C | [rf07c-cli-source-layout](../openspec/changes/archive/2026-11-12-rf07c-cli-source-layout/) | Archived |
 | 2026-11-12 | RF7D | [rf07d-naming-hygiene](../openspec/changes/rf07d-naming-hygiene/) | Implemented; 113 D1 contract cases, 227 Node contract tests and 19 affected browser tests passed; build, export comparison and root quality gates passed. Specs synchronized; pending archive. |
+| 2026-11-12 | RF8C | [rf08c-user-documentation](../openspec/changes/archive/2026-11-12-rf08c-user-documentation/) | Archived |
