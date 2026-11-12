@@ -1,4 +1,4 @@
-import { isRecord as record } from "../shared/record.js";
+import { isCliRecord as record } from "../shared/record.js";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";

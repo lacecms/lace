@@ -1,4 +1,4 @@
-import { isRecord as isObject } from "../shared/record.js";
+import { isCliRecord as isObject } from "../shared/record.js";
 import { encodeEntryLink } from "@lacecms/application";
 import { pointer } from "./import-format.js";
 import type { ImportEntry, ImportIssue } from "./import-format.js";

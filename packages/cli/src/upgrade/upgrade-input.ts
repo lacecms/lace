@@ -1,4 +1,4 @@
-import { isRecord as record } from "../shared/record.js";
+import { isCliRecord as record } from "../shared/record.js";
 import { UpgradeError } from "../shared/UpgradeError.js";
 export { UpgradeError } from "../shared/UpgradeError.js";
 import { createHash } from "node:crypto";

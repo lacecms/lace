@@ -1,4 +1,4 @@
-import { isRecord as record } from "../shared/record.js";
+import { isCliRecord as record } from "../shared/record.js";
 import { BlockError } from "../shared/BlockError.js";
 export { BlockError } from "../shared/BlockError.js";
 import { lstat, readFile } from "node:fs/promises";
