@@ -9,6 +9,10 @@ import { parseUpgradeArguments } from "../dist/upgrade/upgrade-command.js";
 import { upgradeHash } from "../dist/upgrade/upgrade-input.js";
 
 const roots = [];
+/** Release coordinate the generated template pins; rewinds replace it with an older one. */
+const { version: releaseVersion } = JSON.parse(
+  await readFile(new URL("../package.json", import.meta.url), "utf8"),
+);
 const bin = fileURLToPath(new URL("../dist/bin.js", import.meta.url));
 const generator = fileURLToPath(new URL("../../create-lace/dist/bin.js", import.meta.url));
 // These integration scenarios start several real CLI processes and audit disk bytes.
@@ -148,7 +152,7 @@ describe("upgrade CLI", () => {
       const managed = ["package.json", ".env.example", "docs/lace-operations.md"];
       for (const path of managed) {
         const previous = (await readFile(join(project, path), "utf8")).replaceAll(
-          "0.1.0-rc2",
+          releaseVersion,
           "0.1.0-alpha.1",
         );
         await writeFile(join(project, path), previous);
@@ -180,7 +184,7 @@ describe("upgrade CLI", () => {
       await writeFile(
         join(project, "docs/lace-operations.md"),
         (await readFile(join(template, "docs/lace-operations.md"), "utf8")).replaceAll(
-          "0.1.0-rc2",
+          releaseVersion,
           "0.1.0-alpha.1",
         ),
       );
