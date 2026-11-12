@@ -65,6 +65,28 @@ test("over-budget drafts stay editable without debounce requests and recover whe
   expect(onSearchChange).not.toHaveBeenCalled();
   expect(box).toHaveValue("я".repeat(25));
   expect(screen.getByRole("alert")).toHaveTextContent("50 UTF-8 bytes");
+  expect(box).toHaveAccessibleDescription(/Search is too long/);
   await user.keyboard("{Backspace}");
   await waitFor(() => expect(onSearchChange).toHaveBeenCalledWith("я".repeat(24)));
 });
+
+test.each([
+  [{ maxSearchLength: 200, maxLikePatternBytes: null }, "200 UTF-16"],
+  [{ maxSearchLength: 48, maxLikePatternBytes: 50 }, "50 UTF-8 bytes"],
+] as const)(
+  "search information reveals the active policy and closes with Escape",
+  async (limits, expected) => {
+    const user = userEvent.setup();
+    renderToolbar({ limits, searchableLabels: ["Venue", "Note"] });
+    expect(screen.queryByText(/ASCII case is ignored/)).not.toBeInTheDocument();
+    const trigger = screen.getByRole("button", { name: "Search information" });
+    trigger.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByText(/Search title, slug and Venue, Note/)).toBeVisible();
+    expect(screen.getByText(new RegExp(expected))).toBeVisible();
+    expect(screen.getByText(/ASCII case is ignored/)).toBeVisible();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByText(/ASCII case is ignored/)).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  },
+);

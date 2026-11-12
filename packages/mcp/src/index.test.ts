@@ -5,7 +5,7 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { createMcpContentHandler } from "./index.js";
 import { ContentUseCases } from "@lacecms/application";
 import { actorId, attenuateActor, unixMilliseconds } from "@lacecms/domain";
-import { defineConfig, defineCollection, definePage } from "@lacecms/config";
+import { defineConfig, defineCollection, defineGlobal, definePage } from "@lacecms/config";
 import { field } from "@lacecms/content";
 import {
   InMemoryContentStore,
@@ -35,6 +35,8 @@ async function fixture() {
         fields: { author: field.text({ defaultValue: "Unknown" }) },
       }),
       definePage({ key: "home", path: "/", version: 1 }),
+      defineGlobal({ key: "settings", version: 1 }),
+      definePage({ key: "about", path: "/about", version: 1 }),
     ],
   });
   const store = new InMemoryContentStore();
@@ -92,7 +94,7 @@ test("SDK client discovers derived schemas and executes all five shared content 
   expect(saveSchema.required).toContain("expectedRevision");
   expect(saveSchema.additionalProperties).toBe(false);
   const models = payload(await client.callTool({ name: "list_content_models", arguments: {} }));
-  expect(models.items.map((m) => m.key)).toEqual(["home", "posts"]);
+  expect(models.items.map((m) => m.key)).toEqual(["posts", "home", "settings", "about"]);
   const created = payload(await client.callTool({ name: "create_entry", arguments: draft }));
   expect(created.draft.fields).toEqual({ author: "Unknown" });
   expect(created.published).toBeUndefined();

@@ -497,12 +497,15 @@ test("a collection opens in its configured default sort and keeps other sorts in
   expect(router.state.location.search).toEqual({});
 
   // The previous default is an ordinary sort here, so it stays in the URL.
-  await user.selectOptions(select, "-updatedAt");
+  await user.selectOptions(select, "updatedAt");
+  await user.click(screen.getByRole("button", { name: "Sort ascending" }));
   await waitFor(() => expect(router.state.location.search).toEqual({ sort: "-updatedAt" }));
   await waitFor(() => expect(listCalls(listEntries).at(-1)?.[2]).toEqual({ sort: "-updatedAt" }));
 
   // Selecting the configured default removes the sort from the URL again.
   await user.selectOptions(select, "field:category");
+  expect(screen.getByRole("button", { name: "Sort descending" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Sort descending" }));
   await waitFor(() => expect(router.state.location.search).toEqual({}));
   await waitFor(() =>
     expect(listCalls(listEntries).at(-1)?.[2]).toEqual({ sort: "field:category" }),
@@ -524,9 +527,31 @@ test("a reloaded -updatedAt URL survives on a collection with another default", 
     }),
   );
   await screen.findByRole("table", { name: "Posts entries" });
-  expect(screen.getByRole("combobox", { name: "Sort entries" })).toHaveValue("-updatedAt");
+  expect(screen.getByRole("combobox", { name: "Sort entries" })).toHaveValue("updatedAt");
+  expect(screen.getByRole("button", { name: "Sort descending" })).toBeInTheDocument();
   expect(router.state.location.search).toEqual({ sort: "-updatedAt" });
   expect(listCalls(listEntries).every(([, , query]) => query?.sort === "-updatedAt")).toBe(true);
+});
+
+test("long configured sort labels stay available in the bounded field selector", async () => {
+  const longLabel = "Organisation or venue with an exceptionally long name";
+  const model = {
+    ...postsModel,
+    fields: { ...postsModel.fields, category: { ...postsModel.fields.category, label: longLabel } },
+    listOptions: { sortableFields: ["category"] },
+  };
+  renderRoute(
+    "/content/posts?sort=-field%3Acategory",
+    editor,
+    client({
+      listEntries: async () => entryList([changedEntry]),
+      listModels: async () => ({ ...(await listModels()), items: [model] }),
+    }),
+  );
+  const select = await screen.findByRole("combobox", { name: "Sort entries" });
+  expect(select).toHaveClass("w-48", "truncate");
+  expect(within(select).getByRole("option", { name: longLabel })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Sort descending" })).toBeInTheDocument();
 });
 
 test("expired continuation retains rows and restarts with all query intent, replacing pages", async () => {

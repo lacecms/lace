@@ -25,6 +25,10 @@ the welcome panel, or replay it from the account menu at any time; it never
 blocks your work or discards an unsaved draft. Its progress is remembered in
 this browser only.
 
+The navigation groups Pages, Collections and Globals follow the order in the
+site configuration within each group. Select a group heading to collapse or
+expand it; groups start expanded when navigation opens.
+
 ## Create an entry
 
 Pages and globals already have their draft. In a collection, choose **Create
@@ -167,10 +171,12 @@ route), status, the configured columns, publication date and last edit. Above
 it you can:
 
 - **Search** titles and slugs, plus any extra fields the model enables. The
-  hint under the box describes what is searched.
+  information button beside the box describes what is searched and the active
+  search limits.
 - **Filter by status**: draft, published or changed. The totals follow your
   search and field filters.
-- **Sort** by title, publication date, last edit or an enabled field. Sortable
+- **Sort** by title, publication date, last edit or an enabled field. Choose a
+  field and use the arrow button to reverse its direction. Sortable
   column headers sort too. The list opens in the collection's default order,
   normally the last edit.
 - **Filter by fields** with the Filters control or a column's filter button.

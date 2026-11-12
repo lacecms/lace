@@ -131,14 +131,16 @@ for (const kind of ["node", "d1"] as const) {
       expect(new URL(page.url()).searchParams.has("sort")).toBe(false);
       expect(new URL(backend.requests.at(-1)!).searchParams.get("sort")).toBe("field:order");
 
-      await sort.selectOption("-updatedAt");
+      await sort.selectOption("updatedAt");
+      await page.getByRole("button", { name: "Sort ascending" }).click();
       await expect(page).toHaveURL(/sort=-updatedAt/);
       await expect.poll(titles).toEqual(["Beta", "Alpha", "Gamma"]);
       await page.reload();
-      await expect(sort).toHaveValue("-updatedAt");
+      await expect(sort).toHaveValue("updatedAt");
       await expect.poll(titles).toEqual(["Beta", "Alpha", "Gamma"]);
 
       await sort.selectOption("field:order");
+      await page.getByRole("button", { name: "Sort descending" }).click();
       await expect(page).not.toHaveURL(/sort=/);
       await expect.poll(titles).toEqual(["Alpha", "Beta", "Gamma"]);
     });

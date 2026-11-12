@@ -19,12 +19,15 @@ test("refuses to construct the test actor resolver outside Vitest", () => {
 
 test("opens a synced runtime that answers as the test actor and closes idempotently", async () => {
   const config = await defineConfig({
-    content: [definePage({ key: "home", path: "/", version: 1, fields: {} })],
+    content: [
+      definePage({ key: "zebra", path: "/zebra", version: 1, fields: {} }),
+      definePage({ key: "home", path: "/", version: 1, fields: {} }),
+    ],
   });
   const harness = await openNodeTestRuntime(platform, { config, actor: admin, sync: true });
   const response = await harness.request("/api/v1/admin/content-models");
   expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({ items: [{ key: "home" }] });
+  expect(await response.json()).toMatchObject({ items: [{ key: "zebra" }, { key: "home" }] });
   await harness.close();
   await harness.close();
   expect(existsSync(harness.directory)).toBe(false);

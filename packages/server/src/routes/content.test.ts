@@ -15,6 +15,24 @@ import {
 
 import { admin, editor, fixture, json } from "../test-support/app-harness.js";
 
+test("content model discovery retains interleaved declaration order", async () => {
+  const models = [
+    definePage({ key: "zebra", path: "/zebra", version: 1 }),
+    defineCollection({ key: "posts", route: "/posts/:slug", version: 1 }),
+    definePage({ key: "about", path: "/about", version: 1 }),
+    defineGlobal({ key: "settings", version: 1 }),
+  ];
+  const { app } = await fixture({ actor: editor, models });
+  const result = await json(app, "/api/v1/admin/content-models");
+  expect(result.response.status).toBe(200);
+  expect(result.body.items.map((item) => item.key)).toEqual([
+    "zebra",
+    "posts",
+    "about",
+    "settings",
+  ]);
+});
+
 test("editor and viewer mutations are denied by the API independently of Admin controls", async () => {
   const editorApp = (await fixture({ actor: editor })).app;
   const viewerApp = (await fixture({ actor: { id: actorId("viewer"), role: "viewer" } })).app;

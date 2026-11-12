@@ -275,6 +275,30 @@ test("renders canonical deterministic reports and check outcomes", () => {
   expect(checkConfigurationSynchronization(pending).exitCode).toBe(1);
 });
 
+test("reordering configured models does not change synchronization classification", async () => {
+  const page = definePage({ key: "home", path: "/", version: 1, blocks: [] });
+  const collection = defineCollection({
+    key: "posts",
+    route: "/blog/:slug",
+    version: 1,
+    blocks: [],
+  });
+  const before = await defineConfig({ content: [collection, page] });
+  const after = await defineConfig({ content: [page, collection] });
+  const storedModels = before.runtime.content.map((item) =>
+    stored({
+      key: item.key,
+      kind: item.kind,
+      version: item.version,
+      projectionHash: item.projectionHash,
+      structureHash: item.structureHash,
+    }),
+  );
+  expect(planConfigurationSynchronization({ models: after.runtime.content, storedModels })).toEqual(
+    planConfigurationSynchronization({ models: before.runtime.content, storedModels }),
+  );
+});
+
 test("prepares a detached dry run and materializes page defaults only for apply", async () => {
   const page = {
     ...definePage({

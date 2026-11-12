@@ -18,6 +18,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import { defaultCollectionSort } from "../../../entities/content/index.js";
 import { can, useSession, useSessionRecovery } from "../../../entities/session/index.js";
 import { CreateEntryDialog } from "../../../features/create-entry/index.js";
@@ -178,56 +179,80 @@ export function CollectionEntries({
           />
         ) : undefined}
       </div>
-      {model.listOptions?.sortableFields?.length ? (
-        <label className="flex items-center gap-2 text-sm">
-          Sort
-          <select
-            aria-label="Sort entries"
-            className="h-9 rounded-md border border-input bg-background px-3"
-            value={sort}
-            onChange={(event) => change({ sort: event.target.value as ContentEntrySortDto })}
+      <div
+        aria-label="Collection list controls"
+        className="flex flex-wrap items-start gap-3"
+        role="group"
+      >
+        {model.listOptions?.sortableFields?.length ? (
+          <div className="flex items-center gap-2 text-sm">
+            <span>Sort</span>
+            <select
+              aria-label="Sort entries"
+              className="h-9 w-48 min-w-0 max-w-full truncate rounded-md border border-input bg-background px-3"
+              value={sort.replace(/^-/, "")}
+              onChange={(event) =>
+                change({
+                  sort: `${sort.startsWith("-") ? "-" : ""}${event.target.value}` as ContentEntrySortDto,
+                })
+              }
+            >
+              {[
+                ["updatedAt", "Updated"],
+                ["title", "Title"],
+                ["publishedAt", "Published"],
+                ...model.listOptions.sortableFields.map((key) => [
+                  `field:${key}`,
+                  model.fields[key]?.label ?? key,
+                ]),
+              ].map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label={`Sort ${sort.startsWith("-") ? "descending" : "ascending"}`}
+              onClick={() =>
+                change({
+                  sort: (sort.startsWith("-") ? sort.slice(1) : `-${sort}`) as ContentEntrySortDto,
+                })
+              }
+            >
+              {sort.startsWith("-") ? (
+                <ArrowDown aria-hidden="true" />
+              ) : (
+                <ArrowUp aria-hidden="true" />
+              )}
+            </Button>
+          </div>
+        ) : undefined}
+        <EntryListToolbar
+          limits={listQueryLimits}
+          searchableLabels={
+            model.listOptions?.searchableFields?.map((key) => model.fields[key]?.label ?? key) ?? []
+          }
+          hasFieldFilters={!!query.filters?.length}
+          onClear={clear}
+          onSearchChange={(q) => change({ q })}
+          onStatusChange={(status) => change({ status })}
+          search={query.q ?? ""}
+          status={query.status}
+          totals={totals}
+        />
+        {model.listOptions?.filterableFields?.length ? (
+          <Button
+            className="w-fit"
+            variant="outline"
+            onClick={() => openFilters(model.listOptions!.filterableFields![0]!)}
           >
-            {[
-              ["updatedAt", "Updated"],
-              ["title", "Title"],
-              ["publishedAt", "Published"],
-              ...model.listOptions.sortableFields.map((key) => [
-                `field:${key}`,
-                model.fields[key]?.label ?? key,
-              ]),
-            ].flatMap(([value, label]) => [
-              <option key={value} value={value}>
-                {label} — ascending
-              </option>,
-              <option key={`-${value}`} value={`-${value}`}>
-                {label} — descending
-              </option>,
-            ])}
-          </select>
-        </label>
-      ) : undefined}
-      <EntryListToolbar
-        limits={listQueryLimits}
-        searchableLabels={
-          model.listOptions?.searchableFields?.map((key) => model.fields[key]?.label ?? key) ?? []
-        }
-        hasFieldFilters={!!query.filters?.length}
-        onClear={clear}
-        onSearchChange={(q) => change({ q })}
-        onStatusChange={(status) => change({ status })}
-        search={query.q ?? ""}
-        status={query.status}
-        totals={totals}
-      />
-      {model.listOptions?.filterableFields?.length ? (
-        <Button
-          className="w-fit"
-          variant="outline"
-          onClick={() => openFilters(model.listOptions!.filterableFields![0]!)}
-        >
-          Filters
-        </Button>
-      ) : undefined}
+            Filters
+          </Button>
+        ) : undefined}
+      </div>
       {filterField ? (
         <CollectionFilters
           key={filterField}

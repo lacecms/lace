@@ -11,6 +11,20 @@ const models = [
 const labels = (groups: ReturnType<typeof navigationGroups>) =>
   groups.map((group) => [group.label, group.items.map((item) => item.label)]);
 
+test("model links retain their relative declaration order", () => {
+  const items = [
+    { key: "z", kind: "page" as const },
+    { key: "b", kind: "collection" as const },
+    { key: "a", kind: "page" as const },
+    { key: "a-collection", kind: "collection" as const },
+  ];
+  expect(labels(navigationGroups(sessionFor({ id: "editor", role: "editor" }), items))).toEqual([
+    ["Pages", ["z", "a"]],
+    ["Collections", ["b", "a-collection"]],
+    ["Library", ["Media", "Builds"]],
+  ]);
+});
+
 test("navigation groups follow configured models and the role matrix", () => {
   expect(labels(navigationGroups(sessionFor({ id: "user-1", role: "admin" }), models))).toEqual([
     ["Pages", ["Home"]],

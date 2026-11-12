@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { LayoutGrid } from "lucide-react";
+import { ChevronDown, LayoutGrid } from "lucide-react";
+import { useState } from "react";
 import { useEntryOverview } from "../../../entities/content/index.js";
 import { useSession, useSessionRecovery } from "../../../entities/session/index.js";
 import { adminQueryKeys, useAdminClient } from "../../../shared/api/index.js";
@@ -29,6 +30,7 @@ export function SidebarNav({
   const models = useQuery({ queryFn: client.listModels, queryKey: adminQueryKeys.models });
   useSessionRecovery(models.error);
   const groups = navigationGroups(session, models.data?.items);
+  const [collapsed, setCollapsed] = useState<readonly string[]>([]);
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 p-3">
       <p className="m-0 flex items-center gap-2 px-2 py-1 text-base font-semibold text-sidebar-foreground">
@@ -62,15 +64,40 @@ export function SidebarNav({
         )}
         {groups.map((group) => (
           <div className="grid gap-1" key={group.key}>
-            <p
-              className="px-2 text-xs font-medium text-muted-foreground"
-              id={`nav-group-${group.key}`}
-            >
-              {group.label}
-            </p>
+            {group.key === "pages" || group.key === "collections" || group.key === "globals" ? (
+              <button
+                aria-controls={`nav-list-${group.key}`}
+                aria-expanded={!collapsed.includes(group.key)}
+                className="flex w-full items-center justify-between px-2 text-left text-xs font-medium text-muted-foreground"
+                id={`nav-group-${group.key}`}
+                onClick={() =>
+                  setCollapsed((current) =>
+                    current.includes(group.key)
+                      ? current.filter((key) => key !== group.key)
+                      : [...current, group.key],
+                  )
+                }
+                type="button"
+              >
+                {group.label}
+                <ChevronDown
+                  aria-hidden="true"
+                  className={`size-3 transition-transform ${collapsed.includes(group.key) ? "-rotate-90" : ""}`}
+                />
+              </button>
+            ) : (
+              <p
+                className="px-2 text-xs font-medium text-muted-foreground"
+                id={`nav-group-${group.key}`}
+              >
+                {group.label}
+              </p>
+            )}
             <ul
               aria-labelledby={`nav-group-${group.key}`}
-              className="m-0 grid list-none gap-0.5 p-0"
+              className={`m-0 list-none gap-0.5 p-0 ${collapsed.includes(group.key) ? "hidden" : "grid"}`}
+              hidden={collapsed.includes(group.key)}
+              id={`nav-list-${group.key}`}
             >
               {group.items.map((item) => (
                 <li key={item.kind === "resource" ? item.path : item.modelKey}>

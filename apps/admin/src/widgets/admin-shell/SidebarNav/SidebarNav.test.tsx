@@ -1,5 +1,6 @@
 import { screen, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
+import { userEvent } from "@testing-library/user-event";
 import {
   entry,
   entryList,
@@ -17,6 +18,20 @@ afterEach(() => {
 });
 
 const nav = () => <SidebarNav onSignOut={() => undefined} signingOut={false} />;
+
+test("model groups collapse independently with the keyboard", async () => {
+  const user = userEvent.setup();
+  renderInRouter(nav(), { session: { id: "editor-1", role: "editor" } });
+  const pages = await screen.findByRole("button", { name: "Pages" });
+  expect(pages).toHaveAttribute("aria-expanded", "true");
+  pages.focus();
+  await user.keyboard("{Enter}");
+  expect(pages).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByRole("list", { name: "Pages" })).not.toBeInTheDocument();
+  expect(screen.getByRole("list", { name: "Collections" })).toBeVisible();
+  await user.keyboard(" ");
+  expect(screen.getByRole("list", { name: "Pages" })).toBeVisible();
+});
 
 test("groups configured pages, collections with counts, library, and admin items by role", async () => {
   renderInRouter(nav(), { session: { displayName: "Ada Admin", id: "admin-1", role: "admin" } });

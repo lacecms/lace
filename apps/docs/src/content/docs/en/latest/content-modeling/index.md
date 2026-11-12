@@ -26,6 +26,10 @@ number of entries; with a `route`, each entry's slug fills the route's `:slug`
 segment. A **global** is one shared entry without a public URL, used for site
 settings or navigation.
 
+Within each Admin navigation group, models appear in the order they are
+declared in `content`. Reordering declarations changes navigation order without
+changing the models' structural identity.
+
 This example defines a Home and an About page, a collection of articles at
 `/articles/<slug>`, and a site settings global. Place it in the generated
 project's `lace.config.ts`, or adapt the existing definitions:

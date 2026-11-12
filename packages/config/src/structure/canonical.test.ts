@@ -58,6 +58,9 @@ test("produces stable per-model and whole-config hashes", async () => {
 
   expect(first.structureHash).toBe(second.structureHash);
   expect(first.projectionHash).toBe(second.projectionHash);
+  expect(first.runtime.content.map((model) => model.key)).toEqual(["posts", "home"]);
+  expect(second.runtime.content.map((model) => model.key)).toEqual(["home", "posts"]);
+  expect(first.public.content.map((model) => model.key)).toEqual(["home", "posts"]);
   expect(present(first.content[0]).key).toBe("home");
   expect(present(first.content[0]).structureHash).toBe(
     present(displayChanged.content[0]).structureHash,
@@ -199,9 +202,10 @@ test("omits canonical structures from public projections", async () => {
   }
   expect(serialized).not.toContain("blockDefinitions");
   expect(config.runtime.content.every((model) => typeof model.structure === "object")).toBe(true);
-  expect(present(config.runtime.content[0]).structureHash).toBe(
-    present(config.content[0]).structureHash,
-  );
+  for (const model of config.runtime.content)
+    expect(model.structureHash).toBe(
+      config.content.find((item) => item.key === model.key)?.structureHash,
+    );
 });
 
 test("puts declared block settings in structural identity and omits empty ones", async () => {

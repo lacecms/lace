@@ -159,7 +159,6 @@ export async function defineConfig<const Models extends readonly ContentModelDef
   const models = [...input.content];
   assertUniqueModels(models);
   assertRegisteredModelBlocks(models, registry);
-  models.sort((left, right) => left.key.localeCompare(right.key));
 
   const normalizedModels = await Promise.all(
     models.map(async (model) => {
@@ -179,7 +178,9 @@ export async function defineConfig<const Models extends readonly ContentModelDef
   );
 
   const blocks = toBlockRegistryMetadata(registry);
-  const publicModels = normalizedModels.map(publicModel);
+  const publicModels = [...normalizedModels]
+    .sort((left, right) => left.key.localeCompare(right.key))
+    .map(publicModel);
   const hashModels = publicModels.map(normalizedModelForHash);
   const projection = { blocks, content: hashModels } as unknown as JsonValue;
   const structure = {
