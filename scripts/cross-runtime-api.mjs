@@ -103,7 +103,7 @@ export async function apiJourney(f) {
     contracts.contentModelListSchema,
   );
   assert.deepEqual(
-    models.items.map((model) => model.key),
+    models.items.map((model) => model.key).sort(),
     [...expected.models, ...expected.globals].sort(),
   );
   for (const role of ["editor", "viewer"]) {
