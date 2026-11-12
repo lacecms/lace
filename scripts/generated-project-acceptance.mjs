@@ -544,7 +544,7 @@ async function nodeJourney(context) {
     headers: { cookie },
   });
   const modelNames = models.body?.items?.map((item) => item.key);
-  if (JSON.stringify(modelNames) !== JSON.stringify(["home", "navigation", "posts", "settings"])) {
+  if (JSON.stringify(modelNames) !== JSON.stringify(["home", "posts", "settings", "navigation"])) {
     throw new Error(`api: generated config mismatch: ${JSON.stringify(modelNames)}`);
   }
   const homeEntries = await request(base, "/api/v1/admin/models/home/entries", {

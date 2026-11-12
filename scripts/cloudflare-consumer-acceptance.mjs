@@ -986,6 +986,6 @@ async function login(base, email, password, secretValues) {
 async function expectModels(base, cookie) {
   const models = await json(base, "api/v1/admin/content-models", { headers: { cookie } });
   const keys = models?.items?.map((item) => item.key);
-  if (JSON.stringify(keys) !== JSON.stringify(["home", "navigation", "posts", "settings"]))
+  if (JSON.stringify(keys) !== JSON.stringify(["home", "posts", "settings", "navigation"]))
     throw new Error(`cloudflare-config: unexpected models ${JSON.stringify(keys)}`);
 }
