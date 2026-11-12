@@ -242,6 +242,30 @@ describe("import apply", () => {
     expect(Object.keys(state.targets[server.origin].entries)).toEqual(["launch", "second"]);
   });
 
+  test("media metadata updates survive a proxy that weakens ETags", async () => {
+    const server = await api();
+    const directory = await writePackage();
+    const ifMatch = [];
+    let weakened = 0;
+    const compressing = async (url, init = {}) => {
+      if (init.method === "PATCH") ifMatch.push(new Headers(init.headers).get("if-match"));
+      const response = await server.fetch(url, init);
+      const etag = response.headers.get("etag");
+      if (etag === null || etag.startsWith("W/")) return response;
+      const headers = new Headers(response.headers);
+      headers.set("etag", `W/${etag}`);
+      weakened += 1;
+      return new Response(response.body, { status: response.status, headers });
+    };
+    const result = await run(directory, server, [], compressing);
+    expect(result).toMatchObject({ ok: true, code: "IMPORT_COMPLETED", exitCode: 0 });
+    expect(weakened).toBeGreaterThan(0);
+    expect(ifMatch).toHaveLength(2);
+    for (const tag of ifMatch) expect(tag).toMatch(/^"[0-9]+"$/u);
+    const media = await server.session("/api/v1/admin/media");
+    expect(media.body.items.find((item) => item.alt === "Hero")).toBeDefined();
+  });
+
   test("publication keys are deterministic printable ASCII", () => {
     expect(publicationKey("abc/1", 3)).toBe("lace-import:abc%2F1:3");
     expect(publicationKey("x".repeat(300), 1)).toMatch(/^lace-import:[0-9a-f]{64}$/u);
