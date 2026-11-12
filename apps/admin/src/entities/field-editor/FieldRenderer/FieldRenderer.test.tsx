@@ -160,7 +160,7 @@ test("an annotation is shown to every user and describes the control", () => {
   );
 });
 
-test("CE9A inherited prompts override configured generic text and empty prompts suppress fallback", () => {
+test("inherited prompts override configured generic text and empty prompts suppress fallback", () => {
   const { unmount } = render(
     <Harness
       definition={{ type: "text", required: false, placeholder: "Generic" }}

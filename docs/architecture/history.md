@@ -56,7 +56,7 @@ Codes formerly cited in the architecture and the changes that delivered them;
 | Step 34 | [`step-34a-cross-runtime-browser-verification`](../../openspec/changes/archive/2026-10-07-step-34a-cross-runtime-browser-verification/), [`step-34b-local-security-resilience`](../../openspec/changes/archive/2026-10-10-step-34b-local-security-resilience/), [`step-34c-local-operations-owner-handoff`](../../openspec/changes/archive/2026-10-10-step-34c-local-operations-owner-handoff/) | Local cross-runtime, security and operations verification and the owner handoff for real VPS/Cloudflare acceptance. |
 | RF4 | [`rf04a-content-module-split`](../../openspec/changes/archive/2026-11-03-rf04a-content-module-split/), [`rf04x-workspace-guards`](../../openspec/changes/archive/2026-11-04-rf04x-workspace-guards/), [`rf04j-remaining-flat-packages`](../../openspec/changes/archive/2026-11-08-rf04j-remaining-flat-packages/) and the other RF4 sessions | Domain-directory source layout adopted by the flat packages, with its guards. |
 | RF5B | [`rf05b-shared-content-reader`](../../openspec/changes/archive/2026-11-08-rf05b-shared-content-reader/) | `platform-node` and `platform-cloudflare` adopt the source layout; shared `SqlContentReader`. |
-| RF6, RF7C | [refactoring roadmap](../refactoring-roadmap.md) | Planned sessions: admin editor structure and the `cli` source layout. |
+| RF6, RF7C | [refactoring roadmap](../refactoring-roadmap.md) | Admin editor structure and the `cli` source layout. |
 
 ## Release record
 

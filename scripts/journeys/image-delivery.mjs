@@ -148,7 +148,7 @@ export async function imageDeliveryJourney({ base, cookie, project, proxyBase })
     }
   }
   console.info(
-    `Alpha seven exact consumer: GIF/original/validators${proxyBase ? ", large proxy upload and static cache headers" : " in local Worker/R2"} passed`,
+    `Packed consumer: GIF/original/validators${proxyBase ? ", large proxy upload and static cache headers" : " in local Worker/R2"} passed`,
   );
 }
 

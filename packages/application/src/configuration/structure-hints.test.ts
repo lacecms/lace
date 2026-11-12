@@ -47,7 +47,7 @@ test("itemLabel sync is projection-only without content writes or version change
   expect(after.projectionHash).not.toBe(before.projectionHash);
 });
 
-test("CE9B model and nested layouts plan no content writes", async () => {
+test("model and nested layouts plan no content writes", async () => {
   const make = (label: string) =>
     posts({
       fields: {

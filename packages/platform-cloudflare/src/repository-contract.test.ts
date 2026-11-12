@@ -14,7 +14,7 @@ afterEach(async () => {
 
 const runtime = {
   listQueryLimits: CLOUDFLARE_LIST_QUERY_LIMITS,
-  recordEvidence: (value) => console.log("CQ1 local D1", JSON.stringify(value)),
+  recordEvidence: (value) => console.log("Collection query local D1", JSON.stringify(value)),
   async open(options) {
     const { database, dispose } = await openLocalD1();
     cleanups.push(async () => {

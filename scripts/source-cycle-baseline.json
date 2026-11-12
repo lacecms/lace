@@ -2,6 +2,5 @@
   [
     "apps/admin/src/entities/content/composite-values.ts",
     "apps/admin/src/entities/content/editor-form.ts"
-  ],
-  ["packages/cli/src/diagnostics.ts", "packages/cli/src/index.ts"]
+  ]
 ]

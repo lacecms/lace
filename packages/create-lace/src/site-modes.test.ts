@@ -365,6 +365,7 @@ test("starter package.json and workspace bytes equal the committed templates", a
     delete template.scripts[name];
   delete template.dependencies["@lacecms/db"];
   delete template.dependencies["@lacecms/platform-cloudflare"];
+  delete template.dependencies.miniflare;
   expect(plain).toEqual(template);
   const workspace = await readFile(join(templates, "pnpm-workspace.yaml"), "utf8");
   expect(renderForSite(workspace, "pnpm-workspace.yaml", "workspace", { mode: "starter" })).toBe(

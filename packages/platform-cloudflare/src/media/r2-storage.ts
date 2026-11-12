@@ -49,7 +49,7 @@ function streamFromReadable(body: ReadableStream<Uint8Array>, timeoutMs: number)
       const reader = body.getReader();
       try {
         for (;;) {
-          let result: ReadableStreamReadResult<Uint8Array>;
+          let result: Awaited<ReturnType<typeof reader.read>>;
           try {
             result = await bounded(reader.read(), timeoutMs);
           } catch {

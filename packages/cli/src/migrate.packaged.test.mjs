@@ -2,7 +2,7 @@ import { expect, test, vi } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { findWrangler, runMigration } from "../dist/migrate.js";
+import { findWrangler, runMigration } from "../dist/operator/migrate.js";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -133,9 +133,9 @@ test("D1 migration runs the project Wrangler above a subdirectory configuration"
 });
 
 test("remote migration child and REST commands share explicitly resolved identity", async () => {
-  const { resolveOperatorEnvironment } = await import("../dist/operator-environment.js");
+  const { resolveOperatorEnvironment } = await import("../dist/doctor/operator-environment.js");
   const { loadEnvironment } = await import("../dist/index.js");
-  const { runCommand } = await import("../dist/commands.js");
+  const { runCommand } = await import("../dist/operator/commands.js");
   const directory = await mkdtemp(join(tmpdir(), "lace-remote-identity-"));
   try {
     await writeFile(
@@ -182,7 +182,7 @@ test("remote migration child and REST commands share explicitly resolved identit
 });
 
 test("remote migration initializes a fresh D1 whose ledger read fails with HTTP 400", async () => {
-  const { runCommand } = await import("../dist/commands.js");
+  const { runCommand } = await import("../dist/operator/commands.js");
   const directory = await mkdtemp(join(tmpdir(), "lace-remote-fresh-"));
   try {
     const wranglerConfig = join(directory, "worker/wrangler.jsonc");

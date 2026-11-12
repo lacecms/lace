@@ -177,7 +177,7 @@ test.each([false, true])(
 );
 
 test.each(["text", "textarea", "url", "number", "select"] as const)(
-  "CE9A configured placeholder reaches %s without creating a value",
+  "configured placeholder reaches %s without creating a value",
   (type) => {
     render(
       <Harness
@@ -197,7 +197,7 @@ test.each(["text", "textarea", "url", "number", "select"] as const)(
   },
 );
 
-test("CE9A raw counts and bounds remain readable for viewers and do not truncate", async () => {
+test("raw counts and bounds remain readable for viewers and do not truncate", async () => {
   const user = userEvent.setup();
   const definition = {
     type: "text",
@@ -224,7 +224,7 @@ test("CE9A raw counts and bounds remain readable for viewers and do not truncate
   );
 });
 
-test("CE9A nested group/list guidance follows current values after moves", async () => {
+test("nested group/list guidance follows current values after moves", async () => {
   const user = userEvent.setup();
   render(
     <Harness

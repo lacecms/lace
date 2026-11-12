@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
-import { planUpgrade, presentUpgradePlan, unifiedUpgradeDiff } from "../dist/upgrade.js";
-import { upgradeHash } from "../dist/upgrade-input.js";
+import { planUpgrade, presentUpgradePlan, unifiedUpgradeDiff } from "../dist/upgrade/upgrade.js";
+import { upgradeHash } from "../dist/upgrade/upgrade-input.js";
 
 const roots = [];
 afterEach(async () => {

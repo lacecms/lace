@@ -5,7 +5,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { toJsonSchema } from "@valibot/to-json-schema";
-import { importPackageSchema } from "../dist/import-format.js";
+import { importPackageSchema } from "../dist/import/import-format.js";
 
 export const schemaPath = fileURLToPath(
   new URL("../schema/lace-import.schema.json", import.meta.url),

@@ -86,7 +86,7 @@ test("requires a non-blank title, keeps failures in the dialog, and resets on ca
   expect(createEntry).toHaveBeenCalledTimes(1);
 });
 
-test("CE9B manual slug mode survives failure, clear and title changes until re-enabled", async () => {
+test("manual slug mode survives failure, clear and title changes until re-enabled", async () => {
   const user = userEvent.setup();
   const createEntry = vi
     .fn()

@@ -3,8 +3,13 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
-import { parseImportArguments, runImportCommand } from "../dist/import-command.js";
-import { configSource, removePackages, samplePackage, writePackage } from "./import-fixtures.mjs";
+import { parseImportArguments, runImportCommand } from "../dist/import/import-command.js";
+import {
+  configSource,
+  removePackages,
+  samplePackage,
+  writePackage,
+} from "./test-support/import-fixtures.ts";
 
 const packageRoot = fileURLToPath(new URL("..", import.meta.url));
 let project;

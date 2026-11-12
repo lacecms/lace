@@ -100,7 +100,11 @@ function sitePath(site: SiteSelection): string {
 }
 
 /** Root dependencies and scripts that only Cloudflare projects receive. */
-const CLOUDFLARE_DEPENDENCIES = ["@lacecms/db", "@lacecms/platform-cloudflare"] as const;
+const CLOUDFLARE_DEPENDENCIES = [
+  "@lacecms/db",
+  "@lacecms/platform-cloudflare",
+  "miniflare",
+] as const;
 
 /** Adjusts root scripts and Worker dependencies; key order follows the template. */
 export function renderRootPackage(text: string, site: SiteSelection, cloudflare = false): string {

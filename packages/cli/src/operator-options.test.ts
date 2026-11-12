@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { parseArguments } from "./index.js";
-import { parsePreflightArguments } from "./preflight-options.js";
+import { parsePreflightArguments } from "./doctor/preflight-options.js";
 
 test("operator file requires one explicit remote target and preserves old options", () => {
   for (const words of [

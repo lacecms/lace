@@ -564,7 +564,7 @@ test("final removal guard rejects a source published after impact preflight", as
   ).toBe(0);
 });
 
-test("CE10 high fan-out evidence keeps impact and picker indexed with bounded row work", async () => {
+test("high fan-out evidence keeps impact and picker indexed with bounded row work", async () => {
   const { counting, database, repository } = await open();
   await repository.create({ entry: draft("target"), mediaReferences: [] });
   await repository.publish(publishInput("target", 1, 2, "target-published"));

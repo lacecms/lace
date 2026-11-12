@@ -3,10 +3,10 @@ import * as fs from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseEnv } from "node:util";
 import { expect, test } from "vitest";
-import { directory } from "./upgrade-fixtures.mjs";
+import { directory } from "./test-support/upgrade-fixtures.ts";
 import { parseArguments } from "../dist/index.js";
-import { describeFailure } from "../dist/diagnostics.js";
-import { prepareEnvironment, renderEnvironment } from "../dist/environment.js";
+import { describeFailure } from "../dist/diagnostics/diagnostics.js";
+import { prepareEnvironment, renderEnvironment } from "../dist/operator/environment.js";
 
 const binary = resolve(import.meta.dirname, "../dist/bin.js");
 const template = await fs.readFile(
@@ -291,7 +291,7 @@ test("termination before publication leaves only protected ignored staging", asy
   const root = await directory();
   await fs.writeFile(join(root, ".env.example"), template);
   const source = `import * as fs from 'node:fs/promises';
-    import {prepareEnvironment} from ${JSON.stringify(new URL("../dist/environment.js", import.meta.url).href)};
+    import {prepareEnvironment} from ${JSON.stringify(new URL("../dist/operator/environment.js", import.meta.url).href)};
     await prepareEnvironment(process.cwd(), { ...fs, link: async () => { process.kill(process.pid, 'SIGKILL'); } });`;
   const result = spawnSync(process.execPath, ["--input-type=module", "-e", source], {
     cwd: root,

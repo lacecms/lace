@@ -120,7 +120,7 @@ async function mock(page: Page, role: "admin" | "viewer") {
 
 for (const width of [1280, 390])
   for (const role of ["admin", "viewer"] as const) {
-    test(`CE9A guidance and counters ${role} at ${width}px`, async ({ page }) => {
+    test(`guidance and counters ${role} at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       const state = await mock(page, role);
       await page.goto("/admin/content/posts/entry-1");

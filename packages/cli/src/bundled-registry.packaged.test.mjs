@@ -1,7 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { bundledRegistryPath, frameworkItems, loadRegistry } from "../dist/blocks-registry.js";
+import {
+  bundledRegistryPath,
+  frameworkItems,
+  loadRegistry,
+} from "../dist/blocks/blocks-registry.js";
 
 test("the bundled registry matches the repository registry and lists the built-in astro items", async () => {
   const loaded = await loadRegistry();

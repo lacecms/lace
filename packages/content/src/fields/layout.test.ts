@@ -50,7 +50,7 @@ describe("visual form layout metadata", () => {
   });
 });
 
-test("CE9B layouts survive the maximum six-container branch", () => {
+test("layouts survive the maximum six-container branch", () => {
   const nested = (remaining) =>
     field.list({
       item: field.group({

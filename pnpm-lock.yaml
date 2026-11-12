@@ -875,9 +875,6 @@ importers:
       '@lacecms/platform-node':
         specifier: workspace:*
         version: link:../platform-node
-      miniflare:
-        specifier: 'catalog:'
-        version: 5.20260903.0-alpha(@types/node@24.10.1)
       semver:
         specifier: 'catalog:'
         version: 7.8.5
@@ -897,6 +894,9 @@ importers:
       '@valibot/to-json-schema':
         specifier: 'catalog:'
         version: 1.4.0(valibot@1.4.2(typescript@7.0.2))
+      miniflare:
+        specifier: 'catalog:'
+        version: 5.20260903.0-alpha(@types/node@24.10.1)
       oxlint:
         specifier: 'catalog:'
         version: 1.81.0

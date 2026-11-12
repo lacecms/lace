@@ -7,7 +7,7 @@ import * as platform from "./index.js";
 import { openNodeTestRuntime } from "./test-support/node-runtime-harness.js";
 import { readCompleteBuildExport } from "@lacecms/test-utils";
 
-test("CE9A real API keeps incomplete drafts savable and metadata sync preserves public content", async () => {
+test("real API keeps incomplete drafts savable and metadata sync preserves public content", async () => {
   const make = (placeholder) =>
     defineConfig({
       blocks: [

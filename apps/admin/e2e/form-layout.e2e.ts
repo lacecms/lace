@@ -159,7 +159,7 @@ async function mock(page: Page, role: "admin" | "viewer" = "admin") {
 }
 
 for (const width of [1280, 390]) {
-  test(`CE9B recursive layouts retain rich text/media, reorder and reveal errors at ${width}px`, async ({
+  test(`recursive layouts retain rich text/media, reorder and reveal errors at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -225,7 +225,7 @@ declare const initialForAssertion: {
   cards: { image: string; address: string; body: { content: { content: { text: string }[] }[] } }[];
 };
 
-test("CE9B viewers operate keyboard tabs without edits", async ({ page }) => {
+test("viewers operate keyboard tabs without edits", async ({ page }) => {
   await mock(page, "viewer");
   await page.goto("/admin/content/posts/entry-1");
   const fields = page.getByRole("region", { name: "Fields", exact: true });
@@ -241,9 +241,7 @@ test("CE9B viewers operate keyboard tabs without edits", async ({ page }) => {
   await expectNoAccessibilityViolations(page, "CE9B viewer");
 });
 
-test("CE9B new-entry slug follows title, stops on manual editing and opens clean", async ({
-  page,
-}) => {
+test("new-entry slug follows title, stops on manual editing and opens clean", async ({ page }) => {
   const state = await mock(page);
   await page.goto("/admin/content/posts");
   await page.getByRole("button", { name: "Create entry" }).click();
@@ -266,7 +264,7 @@ test("CE9B new-entry slug follows title, stops on manual editing and opens clean
   expect(state.creates).toMatchObject([{ slug: "other-title", title: "Other title" }]);
 });
 
-test("CE9B block summary reveals Content, layout tabs and collapsed item", async ({ page }) => {
+test("block summary reveals Content, layout tabs and collapsed item", async ({ page }) => {
   await mock(page);
   await page.goto("/admin/content/posts/entry-1");
   const block = page.getByRole("article");

@@ -5,7 +5,7 @@ import * as platform from "../dist/index.js";
 import { openNodeTestRuntime } from "./test-support/node-runtime-harness.ts";
 
 import { internalLinkHttpContract } from "../../../tests/fixtures/internal-link-http.mjs";
-test("CE10 Node HTTP destination status and impact acknowledgment contract", async () => {
+test("Node HTTP destination status and impact acknowledgment contract", async () => {
   const layout = { mode: "tabs", groups: [{ key: "main", label: "Main", fields: ["note"] }] };
   const config = await defineConfig({
     blocks: [builtInBlocks.cta],

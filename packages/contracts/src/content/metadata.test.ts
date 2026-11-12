@@ -104,7 +104,7 @@ test("list label metadata survives recursive contracts and invalid targets fail"
     );
 });
 
-test("CE9A recursive metadata preserves placeholders and rejects misplaced prompts", () => {
+test("recursive metadata preserves placeholders and rejects misplaced prompts", () => {
   const fields = {
     group: field.group({
       fields: { tags: field.list({ item: field.text({ placeholder: "Tag" }) }) },
@@ -130,7 +130,7 @@ test("CE9A recursive metadata preserves placeholders and rejects misplaced promp
   }
 });
 
-test("CE9B layout metadata round trips and rejects ambiguous references", () => {
+test("layout metadata round trips and rejects ambiguous references", () => {
   const layout = { mode: "tabs", groups: [{ key: "main", label: "Main", fields: ["body"] }] };
   const fields = {
     body: field.text(),
@@ -244,7 +244,7 @@ test("block visibility metadata uses shared validation for forged REST input", (
   ).toBe(false);
 });
 
-test("SM5A visibility metadata round trips at every owner and rejects forged rules", () => {
+test("visibility metadata round trips at every owner and rejects forged rules", () => {
   const kinds = {
     kind: field.select({ options: ["image", "video"], required: true, defaultValue: "image" }),
   };

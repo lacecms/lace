@@ -313,7 +313,8 @@ async function main() {
     await acceptance(command);
     return;
   }
-  const syncArgs = command === "sync" ? process.argv.slice(3) : [];
+  const forwardedArgs = command === "sync" ? process.argv.slice(3) : [];
+  const syncArgs = forwardedArgs[0] === "--" ? forwardedArgs.slice(1) : forwardedArgs;
   if (syncArgs.length > 1 || (syncArgs.length === 1 && syncArgs[0] !== "--check")) {
     throw new Error("Usage: pnpm content:sync [--check]");
   }
@@ -354,7 +355,11 @@ async function main() {
         "-T",
         "api",
         "node",
-        "apps/api/dist/content-sync-cli.js",
+        "packages/cli/dist/bin.js",
+        "content",
+        "sync",
+        "--target",
+        "node",
         ...syncArgs,
       ]),
     );

@@ -958,7 +958,7 @@ test("Worker identity trusts only its ingress and ignores arbitrary provider/for
   expect(fixture.runtime.clients.get(invalid)).toBe("0.0.0.0");
 });
 
-test("CE9B real Worker API retains created slugs and duplicate/conflict behavior", async () => {
+test("real Worker API retains created slugs and duplicate/conflict behavior", async () => {
   const fixture = await workerFixture();
   await fixture.signIn();
   const metadata = await fixture.call("/api/v1/admin/content-models");
@@ -1158,7 +1158,7 @@ test("complete authenticated content invocations fit D1 limits with maximum inte
       `${process.env.LACE_CE10_EVIDENCE}-invocations.json`,
       JSON.stringify(measurements, null, 2),
     );
-  console.info("CE10 complete D1 invocation counts", JSON.stringify(measurements));
+  console.info("Internal-link D1 invocation counts", JSON.stringify(measurements));
 });
 
 test("Worker MCP flag shares exact parsing and sanitized 503 diagnostics", async () => {

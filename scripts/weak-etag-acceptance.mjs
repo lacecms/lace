@@ -89,7 +89,7 @@ for await (const line of createInterface({ input: process.stdin })) {
 `;
 
 /**
- * Alpha.2 field-trial §4 (33B) in the packed consumer: the standard loader of
+ * Weak ETag handling in the packed consumer: the standard loader of
  * the installed `@lacecms/astro` reads the Compose API's build export through a
  * compressing proxy that weakens the ETag, without a custom fetch. Development
  * mode revalidates with the received validator (`304` while unchanged, new

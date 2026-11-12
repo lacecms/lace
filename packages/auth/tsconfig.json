@@ -1,5 +1,5 @@
 {
-  "extends": "../../tsconfig.browser.json",
+  "extends": "../../tsconfig.web.json",
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src",

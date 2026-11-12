@@ -201,8 +201,10 @@ pnpm dev:node
 The API imports and normalizes the file once before listening. A missing,
 unloadable, or invalid file fails startup. Neither a browser request nor an
 environment value selects a different TypeScript file. Restarting and running
-SQLite migrations do not synchronize models or create page drafts. With the
-stack running, use `pnpm content:sync --check` to print a read-only plan. Its
+SQLite migrations do not synchronize models or create page drafts. The Compose
+API service builds the CLI before it starts; synchronization executes that CLI
+inside the API container against the same database. With the stack running,
+use `pnpm content:sync --check` to print a read-only plan. Its
 exit status is zero only when the plan is valid and there is no pending work;
 pending or invalid plans exit non-zero. Run `pnpm content:sync` to print the
 plan and apply valid changes. A newly synchronized page has one incomplete

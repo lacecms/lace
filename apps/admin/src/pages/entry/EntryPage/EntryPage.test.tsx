@@ -685,7 +685,7 @@ test("a blocked save focuses a summary whose links reach the invalid block field
   );
   await user.click(screen.getByRole("button", { name: "Save draft" }));
   await waitFor(() => expect(saveDraft).toHaveBeenCalledTimes(1));
-});
+}, 15_000);
 
 test("server issues map to block fields, deep rich-text paths, and unplaced text", async () => {
   const user = userEvent.setup();

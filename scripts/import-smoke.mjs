@@ -1,4 +1,4 @@
-// SM4C: imports the documented sample package with the packed CLI of a
+// Imports the documented sample package with the packed CLI of a
 // generated project and requires an unchanged rerun.
 import { cp, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";

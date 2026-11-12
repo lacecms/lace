@@ -263,7 +263,7 @@ test("nested parent and child problems keep readable reading order and hidden mi
   expect(problems[2]!.blocking).toBe(false);
 });
 
-test("CE9B summaries follow visual order at model, group, block and settings boundaries", () => {
+test("summaries follow visual order at model, group, block and settings boundaries", () => {
   const layout = {
     mode: "tabs" as const,
     groups: [{ key: "second", label: "Second", fields: ["second"] }],

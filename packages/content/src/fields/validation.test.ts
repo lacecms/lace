@@ -123,7 +123,7 @@ test("composite exact leaf paths and malformed values", () => {
   ).toEqual([{ text: "default" }]);
 });
 
-test("CE9A shared counts retain ordinary UTF-16 and SEO trimmed code points", async () => {
+test("shared counts retain ordinary UTF-16 and SEO trimmed code points", async () => {
   const { textLength, seoTextLength } = await import("./validation.js");
   for (const [text, raw, seo] of [
     ["", 0, 0],

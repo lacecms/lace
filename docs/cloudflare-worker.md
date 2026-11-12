@@ -235,8 +235,10 @@ empty database.
 
 ## D1 migrations
 
-Migrations are an explicit deployment step. The command refuses to run
-without exactly one target:
+Migrations are an explicit deployment step. Build the workspace CLI and its
+dependencies first with `pnpm exec turbo run build --filter=@lacecms/cli...`.
+The command delegates to that built CLI and refuses to run without exactly one
+target:
 
 ```bash
 pnpm db:migrate:cloudflare -- --local

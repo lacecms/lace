@@ -9,7 +9,7 @@ afterEach(async () => {
 const workerFixture = (options = {}) =>
   createWorkerFixture(createCloudflareWorker, cleanups, options);
 
-test("CE10 authenticated Worker destination status and impact acknowledgment contract", async () => {
+test("authenticated Worker destination status and impact acknowledgment contract", async () => {
   const fixture = await workerFixture();
   await fixture.signIn();
   const { internalLinkHttpContract } =

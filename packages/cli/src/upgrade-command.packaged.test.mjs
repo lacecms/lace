@@ -5,8 +5,8 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { TEMPLATE_VERSION } from "../../create-lace/dist/index.js";
-import { parseUpgradeArguments } from "../dist/upgrade-command.js";
-import { upgradeHash } from "../dist/upgrade-input.js";
+import { parseUpgradeArguments } from "../dist/upgrade/upgrade-command.js";
+import { upgradeHash } from "../dist/upgrade/upgrade-input.js";
 
 const roots = [];
 const bin = fileURLToPath(new URL("../dist/bin.js", import.meta.url));
@@ -243,7 +243,7 @@ describe("upgrade CLI", () => {
 import { registerHooks } from "node:module";
 import { appendFileSync } from "node:fs";
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "./commands.js" || specifier.startsWith("@lacecms/platform-") || specifier === "miniflare") {
+  if (specifier === "./operator/commands.js" || specifier.startsWith("@lacecms/platform-") || specifier === "miniflare") {
     appendFileSync(${JSON.stringify(trace)}, specifier + "\\n");
     throw new Error("Runtime adapters are blocked by the regression test.");
   }
@@ -284,7 +284,7 @@ registerHooks({ resolve(specifier, context, next) {
       );
       expect(operation.status).toBe(6);
       expect(JSON.parse(operation.stdout).code).toBe("OPERATION_FAILED");
-      expect(await readFile(trace, "utf8")).toBe("./commands.js\n");
+      expect(await readFile(trace, "utf8")).toBe("./operator/commands.js\n");
     },
     integrationTimeout,
   );

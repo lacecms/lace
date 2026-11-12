@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { importJsonSchema, schemaPath } from "../scripts/generate-import-schema.mjs";
-import { parseImportPackage } from "../dist/import-format.js";
+import { parseImportPackage } from "../dist/import/import-format.js";
 
 /** Minimal draft-07 subset used by the generated schema; returns error locations. */
 function validate(schema, value, at = "") {

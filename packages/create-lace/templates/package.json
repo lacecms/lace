@@ -26,7 +26,8 @@
     "@lacecms/config": "0.1.0-rc2",
     "@lacecms/content": "0.1.0-rc2",
     "@lacecms/db": "0.1.0-rc2",
-    "@lacecms/platform-cloudflare": "0.1.0-rc2"
+    "@lacecms/platform-cloudflare": "0.1.0-rc2",
+    "miniflare": "5.20260903.0-alpha"
   },
   "devDependencies": {
     "wrangler": "4.129.0"

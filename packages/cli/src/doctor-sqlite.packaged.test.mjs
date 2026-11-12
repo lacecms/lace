@@ -4,9 +4,9 @@ import { mkdtemp, writeFile, readdir, readFile, rm, mkdir, symlink, chmod } from
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { checkedInMigrations } from "@lacecms/platform-node";
-import { nodeMigrations } from "../dist/doctor-probes.js";
-import { doctorIO } from "../dist/doctor-io.js";
-import { runDoctor } from "../dist/doctor.js";
+import { nodeMigrations } from "../dist/doctor/doctor-probes.js";
+import { doctorIO } from "../dist/doctor/doctor-io.js";
+import { runDoctor } from "../dist/doctor/doctor.js";
 
 const roots = [];
 afterEach(async () => {

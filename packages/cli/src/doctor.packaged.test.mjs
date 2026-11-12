@@ -3,10 +3,10 @@ import { mkdtemp, writeFile, readdir, readFile, mkdir, rm, symlink } from "node:
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { parseDoctorArguments } from "../dist/doctor-report.js";
-import { runDoctor } from "../dist/doctor.js";
-import { doctorIO, boundedFile, boundedProcess, boundedJson } from "../dist/doctor-io.js";
-import { invalidSettings } from "../dist/doctor-settings.js";
+import { parseDoctorArguments } from "../dist/doctor/doctor-report.js";
+import { runDoctor } from "../dist/doctor/doctor.js";
+import { doctorIO, boundedFile, boundedProcess, boundedJson } from "../dist/doctor/doctor-io.js";
+import { invalidSettings } from "../dist/doctor/doctor-settings.js";
 import { checkedInMigrations, parseNodeRuntimeSettings } from "@lacecms/platform-node";
 
 const roots = [];
