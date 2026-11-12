@@ -1,7 +1,7 @@
 # Connect an existing Astro site
 
 Use this guide when your Astro site already exists and the Lace CMS lives in a
-subdirectory generated with `pnpm create lace@0.1.0-rc3 cms`. The CMS never
+subdirectory generated with `pnpm create lace@0.1.0-rc4 cms`. The CMS never
 modifies your site; every file below is yours. For build-site selection,
 mounts and the Compose builder, see
 [Selecting the build site](lace-operations.md#selecting-the-build-site).
@@ -22,7 +22,7 @@ my-site/                 your Astro project (lockfile root)
 Astro `^7.3.1` must already be a dependency. In the site root:
 
 ```sh
-pnpm add @lacecms/astro@0.1.0-rc3 @lacecms/render@0.1.0-rc3 @lacecms/sdk@0.1.0-rc3 @lacecms/content@0.1.0-rc3 sharp@0.35.5
+pnpm add @lacecms/astro@0.1.0-rc4 @lacecms/render@0.1.0-rc4 @lacecms/sdk@0.1.0-rc4 @lacecms/content@0.1.0-rc4 sharp@0.35.5
 ```
 
 `@lacecms/sdk` loads published content, `@lacecms/render` validates blocks and
@@ -795,7 +795,7 @@ image crop. Set `--lace-list-gap` (default 0) and `--lace-list-item-min` (14rem)
 Unlayered site rules override it; order theme layers after `lace-layout` otherwise.
 Vertical wrap needs an explicit site-defined height. Grid thresholds are container
 widths of 32/48/64rem; all six preset names are in the content-modeling guide.
-The `featured-first` preset was removed in template 0.48.0: a custom block that
+The `featured-first` preset was removed in template 0.49.0: a custom block that
 stored it declares a migration that sets `layoutPreset` to `columns-2` and its
 first item's `placement` to `full`, as Gallery's migration 6 does.
 Schematics explain composition, not site appearance. Default grid/auto preserves

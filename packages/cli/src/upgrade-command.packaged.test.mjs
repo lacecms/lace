@@ -194,7 +194,7 @@ describe("upgrade CLI", () => {
       const outcome = JSON.parse(result.stdout);
       expect(outcome.data.instructions.templateVersion).toBe(TEMPLATE_VERSION);
       // Only the step from the latest published template is described.
-      expect(outcome.guidance).toContain("Template 0.48.0");
+      expect(outcome.guidance).toContain("Template 0.49.0");
       expect(outcome.guidance).toContain("baseline migration");
       expect(outcome.guidance).toContain("SCHEMA_UNSUPPORTED");
       expect(outcome.guidance).toContain("--target cloudflare-remote --operator-env");

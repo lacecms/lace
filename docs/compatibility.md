@@ -105,8 +105,9 @@ mixing artifacts from different versions is unsupported.
 
 | Release | Template | Status |
 | --- | --- | --- |
-| `0.1.0-rc3` | `0.48.0` | Selected candidate; publication pending |
-| `0.1.0-rc2` | `0.47.0` | Oldest supported release; latest published release |
+| `0.1.0-rc4` | `0.49.0` | Selected candidate; publication pending |
+| `0.1.0-rc3` | `0.48.0` | Latest published release |
+| `0.1.0-rc2` | `0.47.0` | Oldest supported release |
 
 A candidate becomes published only when the owner publishes it. Each version is
 recorded in `publishedVersions` after that publication, before the next
@@ -212,6 +213,11 @@ The operator procedure (backup, coordinated package and image update, forward
 migration, configuration synchronization, site rebuild and rollback) is the
 public [Upgrade and roll back](../apps/docs/src/content/docs/en/latest/operations/index.md#upgrade-and-roll-back)
 guide; this document does not repeat its steps.
+
+An rc3 installation can upgrade to rc4 by backing up and updating the packages,
+images and managed template together, then running the documented migration,
+configuration synchronization and site rebuild. The rc4 changes introduce no
+new SQL migration or required user-owned source changes.
 
 A database created before rc2 predates the baseline: `lace db migrate` and
 `lace doctor` report `SCHEMA_UNSUPPORTED` for it and change nothing; such an
