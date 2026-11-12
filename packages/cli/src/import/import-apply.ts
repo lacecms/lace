@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   adminContentEntrySchema,
   mediaDetailSchema,
+  mediaEntityTag,
   mediaMetadataSchema,
   publishContentEntryResultSchema,
   updateMediaMetadataResultSchema,
@@ -44,12 +45,15 @@ async function patchMedia(
     schema: mediaDetailSchema,
     expect: [200],
   });
+  // The precondition is derived from the body, never the ETag response header:
+  // compressing proxies such as Cloudflare weaken strong ETags to `W/"…"`,
+  // which the media If-Match precondition refuses.
   await client.request({
     method: "PATCH",
     path: `${API}/media/${encodeURIComponent(mediaId)}`,
     what: `Updating media "${key}"`,
     json: changes,
-    headers: { "if-match": current.headers.get("etag") ?? "" },
+    headers: { "if-match": mediaEntityTag(Date.parse(current.body.updatedAt)) },
     schema: updateMediaMetadataResultSchema,
     expect: [200],
   });

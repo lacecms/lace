@@ -26,6 +26,11 @@ are [ADR 0016](adr/0016-import-credentials.md) (import tokens) and
   so importing them again with a new state file creates duplicates.
 - The token comes only from `LACE_IMPORT_TOKEN` and never appears in output,
   the state file or diagnostics.
+- Media `If-Match` is built from the `updatedAt` in the response body
+  (`mediaEntityTag`), never copied from the `ETag` response header:
+  compressing proxies such as the Cloudflare edge weaken strong tags to
+  `W/"…"`, which the media precondition refuses. `import-apply.test.ts`
+  simulates such a proxy; local `wrangler dev` and Node do not compress.
 - Conditional fields need no import-specific handling: `--validate-only` and
   the server apply the same `visibility` rules
   ([ADR 0018](adr/0018-conditional-fields.md)). Fill a target only when its
