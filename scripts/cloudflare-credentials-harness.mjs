@@ -6,10 +6,10 @@ import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 const moduleAt = (name) =>
   import(pathToFileURL(resolve(`node_modules/@lacecms/cli/dist/${name}.js`)));
-const { runPreflight } = await moduleAt("preflight");
-const { resolveOperatorEnvironment } = await moduleAt("operator-environment");
+const { runPreflight } = await moduleAt("doctor/preflight");
+const { resolveOperatorEnvironment } = await moduleAt("doctor/operator-environment");
 const { parseArguments, loadEnvironment } = await moduleAt("index");
-const { runMigration } = await moduleAt("migrate");
+const { runMigration } = await moduleAt("operator/migrate");
 const account = "a".repeat(32),
   token = "credential-acceptance-private-sentinel";
 const configPath = "worker/wrangler.jsonc",
