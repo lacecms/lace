@@ -2,7 +2,7 @@
 title: Start with Lace
 description: Create a CMS project, publish your first page and build a static Astro site from it.
 kind: guide
-verifiedAgainst: 0.1.0-rc2
+verifiedAgainst: 0.1.0-rc3
 ---
 
 Lace manages one website per installation. Developers define models and rendering in code; editors manage values and blocks in Admin. Content is stored in SQLite (Node) or D1 (Cloudflare), binary media in MinIO or R2, and published content is kept separate from editable drafts. This guide creates a project, starts the CMS locally with Docker Compose, publishes a first page and builds the site from it.
@@ -10,18 +10,18 @@ Lace manages one website per installation. Developers define models and renderin
 ## Before you start
 
 - Node **>=24.12.0**, pnpm **>=12** and Docker Compose. The tested versions are Node **24.12.0** and pnpm **12.3.4**; a newer major satisfies the minimum but is not tested.
-- Lace packages, the `create-lace` generator and the API/builder images from one release. This documentation targets **0.1.0-rc2**, the oldest supported release. Check that the release is available in [GitHub Releases](https://github.com/lacecms/lace/releases): the latest documentation follows the main branch and can describe a release before it is published. Do not substitute an older prerelease.
+- Lace packages, the `create-lace` generator and the API/builder images from one release. This documentation targets **0.1.0-rc3**; rc2 is the oldest supported release. Check that the release is available in [GitHub Releases](https://github.com/lacecms/lace/releases): the latest documentation follows the main branch and can describe a release before it is published. Do not substitute an older prerelease.
 - An empty target directory. Only files such as `.git`, `README.md` and `LICENSE` may already exist; the generator does not install into a populated project.
 
 ## Create a project
 
 ```sh
-pnpm dlx create-lace@0.1.0-rc2 my-site --starter
+pnpm dlx create-lace@0.1.0-rc3 my-site --starter
 cd my-site
 pnpm install
 ```
 
-To generate into the current, empty directory, use `pnpm dlx create-lace@0.1.0-rc2 init . --starter`. Choose one site mode:
+To generate into the current, empty directory, use `pnpm dlx create-lace@0.1.0-rc3 init . --starter`. Choose one site mode:
 
 | Mode                              | Result                                                                                |
 | --------------------------------- | ------------------------------------------------------------------------------------- |

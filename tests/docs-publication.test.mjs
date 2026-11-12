@@ -57,7 +57,7 @@ test("release versions rendered in footers are inputs; other release metadata is
   );
   expect(changed({ ...release, version: "9.9.9-rc9" })).not.toBe(digest());
   expect(
-    changed({ ...release, publishedVersions: [...release.publishedVersions, "0.1.0-rc2"] }),
+    changed({ ...release, publishedVersions: [...release.publishedVersions, "9.9.9-rc8"] }),
   ).not.toBe(digest());
 });
 test("projects only docs dependency closure, including transitive resolutions", () => {

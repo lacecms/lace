@@ -2,7 +2,7 @@
 title: Connect an Astro site
 description: Install source-owned block components, read published content at build time and keep installed components up to date.
 kind: guide
-verifiedAgainst: 0.1.0-rc2
+verifiedAgainst: 0.1.0-rc3
 ---
 
 Lace does not render your website. Your Astro site reads published content from the CMS at build time through the Lace SDK and renders it with block components that are installed into the site as editable source. This guide connects a site, reads pages, collections and globals, renders blocks, rich text, images and video, and updates installed components safely.
@@ -21,7 +21,7 @@ Starter mode includes an editable Astro site in `site/`. Existing-site mode crea
 Starter projects are already connected; skip to [Read published content](#read-published-content). For an existing site, install the matching packages in the Astro project and commit its lockfile:
 
 ```sh
-pnpm add @lacecms/astro@0.1.0-rc2 @lacecms/render@0.1.0-rc2 @lacecms/sdk@0.1.0-rc2 @lacecms/content@0.1.0-rc2 sharp
+pnpm add @lacecms/astro@0.1.0-rc3 @lacecms/render@0.1.0-rc3 @lacecms/sdk@0.1.0-rc3 @lacecms/content@0.1.0-rc3 sharp
 ```
 
 Upgrade these four Lace packages together. Then install the block components from the CMS root, using your site's actual relative path:

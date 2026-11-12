@@ -105,6 +105,7 @@ mixing artifacts from different versions is unsupported.
 
 | Release | Template | Status |
 | --- | --- | --- |
+| `0.1.0-rc3` | `0.48.0` | Selected candidate; publication pending |
 | `0.1.0-rc2` | `0.47.0` | Oldest supported release; latest published release |
 
 A candidate becomes published only when the owner publishes it. Each version is

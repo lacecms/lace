@@ -3,6 +3,14 @@
 Important changes and required upgrade actions; preparation alone does not
 announce publication. See [release status and evidence](docs/alpha-release.md).
 
+## 0.1.0-rc3
+
+- Build collections without public routes and configure a default sort for the editor list.
+- Place gallery items in the grid and display images at their natural size; upgrading gallery definitions requires model version bumps, synchronization and updated installed source ([upgrade guide](docs/compatibility.md#upgrading-from-rc2)).
+- The entry editor has a refined layout, and Site is now named Globals in the admin.
+- Remote Cloudflare D1 migration handles a fresh database when its ledger query returns HTTP 400.
+- Upgrade all Lace packages, both images and the project template (`0.48.0`) together. rc2 is the oldest supported release; back up before upgrading and rebuild the site after synchronization.
+
 ## 0.1.0-rc2
 
 - The database starts from one baseline migration: an rc1 database is refused with `SCHEMA_UNSUPPORTED` and must be recreated, then content synchronized and restored ([upgrade guide](docs/compatibility.md)).
