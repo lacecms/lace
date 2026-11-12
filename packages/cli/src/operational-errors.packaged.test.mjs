@@ -2,13 +2,13 @@ import { expect, test, vi } from "vitest";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
-import { directory, pair, snapshot } from "./upgrade-fixtures.mjs";
+import { directory, pair, snapshot } from "./test-support/upgrade-fixtures.ts";
 import { openNodeDatabase } from "@lacecms/platform-node";
-import { runCommand } from "../dist/commands.js";
-import { describeFailure, missingLedger } from "../dist/diagnostics.js";
+import { runCommand } from "../dist/operator/commands.js";
+import { describeFailure, missingLedger } from "../dist/diagnostics/diagnostics.js";
 import { presentResult } from "../dist/index.js";
-import { runMigration } from "../dist/migrate.js";
-import { openLocalD1 } from "../dist/d1-transport.js";
+import { runMigration } from "../dist/operator/migrate.js";
+import { openLocalD1 } from "../dist/operator/d1-transport.js";
 
 const binary = resolve(import.meta.dirname, "../dist/bin.js");
 const repository = resolve(import.meta.dirname, "../../..");

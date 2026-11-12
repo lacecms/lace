@@ -1288,7 +1288,7 @@ Corrections from the 2026-11-07 inventory:
   test-support, and the shared layer serves the packages above test-utils.
 - Only repository tests use the test subpath. It becomes a source-only
   export of the Node runtime harness and leaves the packed manifest.
-- The three CLI fixture `.mjs` modules move to RF9F.
+- The three CLI fixture `.mjs` modules move in RF7C.
 
 ### Session RF9C — Test size ceiling
 
@@ -1312,10 +1312,8 @@ After RF5: `platform-node` (12) and `platform-cloudflare` (12).
 ### Session RF9F — Type CLI, generator and app tests
 
 After RF7C: `cli` (21), `create-lace` (2), `apps/api` (4) and `apps/builder`
-(2). The CLI fixture modules (`import-fixtures.mjs`, `upgrade-fixtures.mjs`,
-`import-api.mjs`) become typed test-support and leave the RF9B
-JavaScript-source allowlist. The typecheck baseline file is deleted when it
-is empty.
+(2). The three CLI fixture helpers were moved to typed test-support in RF7C.
+The typecheck baseline file is deleted when it is empty.
 
 ## 6. Progress log
 
@@ -1371,3 +1369,5 @@ preserved in the linked archives. Dates refer to the final recorded event.
 | 2026-11-11 | — | [route-less-collections](../openspec/changes/archive/2026-11-11-route-less-collections/) | Archived |
 | 2026-11-11 | RF7A | [rf07a-lazy-cloudflare-path](../openspec/changes/archive/2026-11-11-rf07a-lazy-cloudflare-path/) | Archived |
 | 2026-11-11 | RF7B | [rf07b-one-command-table](../openspec/changes/archive/2026-11-11-rf07b-one-command-table/) | Archived |
+
+| 2026-11-12 | RF7C | [rf07c-cli-source-layout](../openspec/changes/archive/2026-11-12-rf07c-cli-source-layout/) | Archived |

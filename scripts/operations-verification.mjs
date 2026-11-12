@@ -80,7 +80,7 @@ export async function main() {
       "forward-migration-upgrade",
       [
         packageRun("packages/platform-node/src/migrate.test.ts"),
-        packageRun("packages/cli/src/upgrade-rollback.test.ts"),
+        packageRun("packages/cli/src/upgrade/upgrade-rollback.test.ts"),
         packageRun("--packaged", "packages/cli/src/upgrade-command.packaged.test.mjs"),
       ],
       ["--maxWorkers=2"],

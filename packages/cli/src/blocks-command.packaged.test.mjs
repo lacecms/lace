@@ -16,8 +16,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, describe, expect, test } from "vitest";
-import { parseAddBlockArguments, runAddBlockCommand } from "../dist/blocks-command.js";
-import { bundledRegistryPath, loadRegistry } from "../dist/blocks-registry.js";
+import { parseAddBlockArguments, runAddBlockCommand } from "../dist/blocks/blocks-command.js";
+import { bundledRegistryPath, loadRegistry } from "../dist/blocks/blocks-registry.js";
 
 const bin = fileURLToPath(new URL("../dist/bin.js", import.meta.url));
 const generator = fileURLToPath(new URL("../../create-lace/dist/bin.js", import.meta.url));

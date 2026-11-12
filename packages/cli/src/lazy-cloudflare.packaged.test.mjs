@@ -108,7 +108,9 @@ test("packed CLI runs in a consumer without and with its optional peer", async (
     const doctorAfter = run("doctor", "--target", "node", "--stage", "setup", "--json");
     expect(doctorAfter.status).toBe(doctorBefore.status);
     expect(doctorAfter.stdout).toBe(doctorBefore.stdout);
-    const { openLocalD1 } = await import(pathToFileURL(join(pkg, "dist/d1-transport.js")).href);
+    const { openLocalD1 } = await import(
+      pathToFileURL(join(pkg, "dist/operator/d1-transport.js")).href
+    );
     const local = await openLocalD1({ databaseId: "db", persistTo: join(cwd, "d1") });
     try {
       expect((await local.database.prepare("select 1 as value").all()).results[0].value).toBe(1);

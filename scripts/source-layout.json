@@ -114,5 +114,14 @@
     "deploy": [],
     "repository": ["d1"],
     "runtime": ["d1", "deploy", "media", "repository", "security"]
+  },
+  "packages/cli": {
+    "shared": [],
+    "diagnostics": ["shared"],
+    "upgrade": ["diagnostics", "shared"],
+    "blocks": ["diagnostics", "shared", "upgrade"],
+    "import": ["shared", "upgrade"],
+    "doctor": ["blocks", "shared", "upgrade"],
+    "operator": ["diagnostics", "shared"]
   }
 }

@@ -1,14 +1,26 @@
 #!/usr/bin/env node
 import { EXIT, loadEnvironment, parseArguments, presentResult, usage } from "./index.js";
-import { parseUpgradeArguments, runUpgradeOptions, upgradeUsage } from "./upgrade-command.js";
-import { describeFailure, failureDiagnostic, identifyOperation } from "./diagnostics.js";
+import {
+  parseUpgradeArguments,
+  runUpgradeOptions,
+  upgradeUsage,
+} from "./upgrade/upgrade-command.js";
+import {
+  describeFailure,
+  failureDiagnostic,
+  identifyOperation,
+} from "./diagnostics/diagnostics.js";
 import type { Target } from "./index.js";
-import { doctorUsage, parseDoctorArguments } from "./doctor-report.js";
-import { addBlockUsage, parseAddBlockArguments, runAddBlockOptions } from "./blocks-command.js";
-import { importUsage } from "./import-usage.js";
+import { doctorUsage, parseDoctorArguments } from "./doctor/doctor-report.js";
+import {
+  addBlockUsage,
+  parseAddBlockArguments,
+  runAddBlockOptions,
+} from "./blocks/blocks-command.js";
+import { importUsage } from "./import/import-usage.js";
 
-import { parsePreflightArguments, preflightUsage } from "./preflight-options.js";
-import { parseFlags } from "./parse-flags.js";
+import { parsePreflightArguments, preflightUsage } from "./doctor/preflight-options.js";
+import { parseFlags } from "./shared/parse-flags.js";
 import { CliError } from "./index.js";
 
 type Context = { target: Target; operation: ReturnType<typeof identifyOperation> };
@@ -49,7 +61,7 @@ const commandTable = [
     },
     async run(options, context) {
       context.target = "cloudflare-remote";
-      const { runWranglerMigration } = await import("./wrangler-migration.js");
+      const { runWranglerMigration } = await import("./operator/wrangler-migration.js");
       const versions = await runWranglerMigration(options);
       console.info(`D1 migrations installed: ${versions.join(", ")}.`);
       return EXIT.OK;
@@ -61,7 +73,7 @@ const commandTable = [
     parse: parsePreflightArguments,
     async run(options, context) {
       context.target = "cloudflare-remote";
-      const { runPreflight } = await import("./preflight.js");
+      const { runPreflight } = await import("./doctor/preflight.js");
       const result = await runPreflight(options);
       console.info(result.output);
       return result.exitCode;
@@ -73,7 +85,7 @@ const commandTable = [
     parse: parseDoctorArguments,
     async run(options, context) {
       context.target = options.target;
-      const { runDoctor } = await import("./doctor.js");
+      const { runDoctor } = await import("./doctor/doctor.js");
       const result = await runDoctor(options);
       console.info(result.output);
       return result.exitCode;
@@ -103,7 +115,7 @@ const commandTable = [
     name: "import",
     usage: importUsage,
     async parse(argv) {
-      const module = await import("./import-command.js");
+      const module = await import("./import/import-command.js");
       try {
         const options = module.parseImportArguments(argv);
         return { argv, module, parse: () => options };
@@ -155,7 +167,7 @@ async function runOperator(
   const target = context.target;
   const operation = context.operation;
   if (options.command === "env prepare") {
-    const { prepareEnvironment } = await import("./environment.js");
+    const { prepareEnvironment } = await import("./operator/environment.js");
     const worker = options.target === "cloudflare-local";
     await prepareEnvironment(undefined, undefined, worker ? "cloudflare-local" : "project");
     console.info(
@@ -177,12 +189,12 @@ async function runOperator(
       ? process.env
       : (
           await (
-            await import("./operator-environment.js")
+            await import("./doctor/operator-environment.js")
           ).resolveOperatorEnvironment(options.operatorEnv)
         ).values;
   const environment = loadEnvironment(options.target, values);
   // Runtime adapters are unnecessary for upgrade, help and invalid settings.
-  const { runCommand } = await import("./commands.js");
+  const { runCommand } = await import("./operator/commands.js");
   const result = await runCommand(options, environment);
   const output = presentResult(
     {

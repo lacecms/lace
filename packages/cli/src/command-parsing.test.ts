@@ -1,14 +1,14 @@
 // The test tsconfig does not include the ambient declaration unless referenced.
 // oxlint-disable-next-line typescript/triple-slash-reference
-/// <reference path="./doctor-semver.d.ts" />
+/// <reference path="./doctor/doctor-semver.d.ts" />
 
 import { expect, test } from "vitest";
 import { parseArguments } from "./index.js";
-import { parseDoctorArguments } from "./doctor-report.js";
-import { parsePreflightArguments } from "./preflight-options.js";
-import { parseUpgradeArguments } from "./upgrade-command.js";
-import { parseAddBlockArguments } from "./blocks-command.js";
-import { parseImportArguments } from "./import-command.js";
+import { parseDoctorArguments } from "./doctor/doctor-report.js";
+import { parsePreflightArguments } from "./doctor/preflight-options.js";
+import { parseUpgradeArguments } from "./upgrade/upgrade-command.js";
+import { parseAddBlockArguments } from "./blocks/blocks-command.js";
+import { parseImportArguments } from "./import/import-command.js";
 
 type ParserCase = {
   parse: (args: string[]) => unknown;

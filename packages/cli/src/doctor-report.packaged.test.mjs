@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { parseDoctorArguments, doctorReport, checkOrder } from "../dist/doctor-report.js";
+import { parseDoctorArguments, doctorReport, checkOrder } from "../dist/doctor/doctor-report.js";
 
 const options = parseDoctorArguments(["--target", "node", "--stage", "setup", "--json"]);
 test("doctor requires unique explicit selectors and does not change ordinary defaults", () => {

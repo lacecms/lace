@@ -4,13 +4,13 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
-import { pair, snapshot } from "./upgrade-fixtures.mjs";
-import { applyUpgrade } from "../dist/upgrade-apply.js";
-import { rollbackUpgrade } from "../dist/upgrade-rollback.js";
-import { loadOperation } from "../dist/upgrade-journal.js";
+import { pair, snapshot } from "./test-support/upgrade-fixtures.ts";
+import { applyUpgrade } from "../dist/upgrade/upgrade-apply.js";
+import { rollbackUpgrade } from "../dist/upgrade/upgrade-rollback.js";
+import { loadOperation } from "../dist/upgrade/upgrade-journal.js";
 
-const applyModule = new URL("../dist/upgrade-apply.js", import.meta.url).href;
-const rollbackModule = new URL("../dist/upgrade-rollback.js", import.meta.url).href;
+const applyModule = new URL("../dist/upgrade/upgrade-apply.js", import.meta.url).href;
+const rollbackModule = new URL("../dist/upgrade/upgrade-rollback.js", import.meta.url).href;
 const bin = fileURLToPath(new URL("../dist/bin.js", import.meta.url));
 const script = `
 import { applyUpgrade } from ${JSON.stringify(applyModule)};
