@@ -64,7 +64,7 @@ describe("admin client OpenAPI drift", () => {
     );
   });
   it("fails closed for unsupported source and computed method declarations", () => {
-    const folder = mkdtempSync(resolve(tmpdir(), "lace-rf06b-"));
+    const folder = mkdtempSync(resolve(tmpdir(), "lace-admin-openapi-"));
     try {
       const file = resolve(folder, "fixture.ts");
       writeFileSync(

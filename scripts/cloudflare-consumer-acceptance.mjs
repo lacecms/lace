@@ -469,7 +469,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
     const create = tab.getByRole("dialog", { name: "Create entry" });
     await create.getByRole("textbox", { name: "Title" }).fill("Cloudflare published title");
     await create.getByRole("button", { name: "Create entry" }).click();
-    // CE9 also gives the creation dialog a Slug input. Wait for it to close
+    // The creation dialog also has a Slug input. Wait for it to close
     // before editing the entry so this locator cannot target the old dialog.
     await create.waitFor({ state: "hidden", timeout: 30_000 });
     // Creating an entry opens it in the editor.
@@ -676,7 +676,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
     if (JSON.stringify(afterDraft.draft) !== JSON.stringify(draft.draft))
       throw new Error("cloudflare-restart: saved draft did not persist");
 
-    // Pages deployment tracking (33E) against a loopback Pages API stub: the
+    // Pages deployment tracking against a loopback Pages API stub: the
     // Worker follows the exact hook-accepted deployment to its proven outcome.
     console.info("Acceptance: cloudflare-pages-tracking-configure");
     await stop();

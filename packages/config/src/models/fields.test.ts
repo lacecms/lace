@@ -135,7 +135,7 @@ test("itemLabel changes only projection identity at every descriptor position", 
   expect((await make("title", "changed")).structureHash).not.toBe(after.structureHash);
 });
 
-test("CE9A placeholders change projection only across scalar/composite and block settings", async () => {
+test("placeholders change projection only across scalar/composite and block settings", async () => {
   for (const composite of [false, true]) {
     const make = (placeholder: string | undefined, data = "stored") => {
       const prompt = placeholder === undefined ? {} : { placeholder };
@@ -189,7 +189,7 @@ test("CE9A placeholders change projection only across scalar/composite and block
   }
 });
 
-test("CE9B layouts are projection-only at every owner and preserve content keys", async () => {
+test("layouts are projection-only at every owner and preserve content keys", async () => {
   const layout = {
     mode: "tabs",
     groups: [{ key: "main", label: "Main", fields: ["layout"] }],

@@ -1208,7 +1208,7 @@ async function starterJourney(project) {
     (gallery.match(/<li\b[^>]*data-lace-part="item"[^>]*>\s*<figure\b/g) ?? []).length !== 4 ||
     !gallery.includes('<img alt="Media library description" data-lace-part="media"') ||
     !gallery.includes('<img alt="A quiet desk" data-lace-part="media"') ||
-    // SM5D: the ambient video item ships templates and no live ambient player.
+    // The ambient video item ships templates and no live ambient player.
     !gallery.includes(
       '<figure data-lace-video data-lace-aspect-ratio="1:1" data-lace-playback="ambient">',
     ) ||
@@ -1910,7 +1910,7 @@ async function inspectShipping(context, label = "initial") {
           createHash("sha256").update(configured.before).digest("hex") !== shipping.digests[file] ||
           bytes.toString("utf8") !== configured.after
         )
-          throw new Error("Unreviewed alpha.8 consumer configuration change");
+          throw new Error("Unreviewed consumer query configuration change");
       } else if (file === ".lace/manifest.json") {
         if (bytes.toString("utf8") !== shipping.manifest)
           throw new Error("Consumer installation changed ownership metadata");
@@ -2044,7 +2044,7 @@ async function feedbackJourneys(parent, context, session, tarballs, upgradeOpera
 }
 
 /**
- * The packed Cloudflare credential journey (33F): the installed CLI keeps remote
+ * The packed Cloudflare credential journey: the installed CLI keeps remote
  * credentials in the explicit operator file and preflight reports dotenv/shell
  * shadowing with stubbed providers, and the Worker bundles without an account.
  */
@@ -2063,7 +2063,7 @@ async function credentialsJourney(parent, tarballs) {
 }
 
 /**
- * The alpha.2 field-trial regressions after the onboarding journeys, with the
+ * The packed-consumer regressions after the onboarding journeys, with the
  * same packages, generator and images: block order and weak ETags on the
  * running Compose release, then (after it stops) builder source diagnostics on
  * the existing-site consumer and the credential journey. Pages tracking and the

@@ -22,7 +22,7 @@ export const cases: RepositoryContractCase[] = [];
 const contract = registerContract(cases);
 
 contract(
-  "CE9A placeholder-only sync preserves populated snapshots and stale guards",
+  "placeholder-only sync preserves populated snapshots and stale guards",
   async (runtime, expect) => {
     const make = async (placeholder?: string) =>
       (
@@ -80,7 +80,7 @@ contract(
 );
 
 contract(
-  "CE9B layout-only sync preserves populated snapshots and stale guards",
+  "layout-only sync preserves populated snapshots and stale guards",
   async (runtime, expect) => {
     const make = async (label?: string) =>
       (

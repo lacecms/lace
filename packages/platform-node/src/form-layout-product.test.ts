@@ -6,7 +6,7 @@ import { field } from "@lacecms/content";
 import * as platform from "./index.js";
 import { openNodeTestRuntime } from "./test-support/node-runtime-harness.js";
 
-test("CE9B real Node API projects layouts and keeps created slugs and conflict drafts", async () => {
+test("real Node API projects layouts and keeps created slugs and conflict drafts", async () => {
   const layout = { mode: "tabs", groups: [{ key: "main", label: "Main", fields: ["note"] }] };
   const config = await defineConfig({
     content: [

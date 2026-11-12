@@ -69,7 +69,7 @@ function observedConnection(connection) {
 
 const runtimes = {
   "file-backed SQLite": {
-    recordEvidence: (value) => console.log("CQ1 SQLite file", JSON.stringify(value)),
+    recordEvidence: (value) => console.log("Collection query SQLite file", JSON.stringify(value)),
     async open(options) {
       const directory = await mkdtemp(join(tmpdir(), "lace-contract-"));
       const databasePath = join(directory, "lace.sqlite");
@@ -97,7 +97,7 @@ const runtimes = {
     },
   },
   "in-memory SQLite": {
-    recordEvidence: (value) => console.log("CQ1 SQLite memory", JSON.stringify(value)),
+    recordEvidence: (value) => console.log("Collection query SQLite memory", JSON.stringify(value)),
     async open(options) {
       const database = openNodeDatabase(":memory:");
       migrate(database.drizzle, { migrationsFolder });

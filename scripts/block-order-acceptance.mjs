@@ -26,7 +26,7 @@ export function renderedBlockKeys(html, entryId) {
 }
 
 /**
- * Alpha.2 field-trial §1 (33A) in the packed consumer: the admin served by the
+ * Block ordering in the packed consumer: the admin served by the
  * API image reorders (pointer and keyboard), inserts and duplicates in the
  * middle, removes and undoes removal; every step saves with ascending
  * positions, survives reload, publishes, reaches the build export in the

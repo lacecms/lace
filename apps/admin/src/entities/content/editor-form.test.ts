@@ -577,7 +577,7 @@ test.each([
   ["😀", ""],
   ["", ""],
   ["A".repeat(99) + "-rest", "a".repeat(99)],
-])("CE9B normalizes a suggestion for %s", (title, expected) => {
+])("normalizes a suggestion for %s", (title, expected) => {
   expect(suggestSlug(title)).toBe(expected);
 });
 

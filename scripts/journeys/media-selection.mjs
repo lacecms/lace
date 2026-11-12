@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { loadBrowser, visible } from "../acceptance-browser.mjs";
 
 /** Uses the saved consumer's API/admin, with Playwright only as the test driver. */
-export async function rc1MediaSelection({ base, cookie, workspace, png, ok }) {
+export async function mediaSelection({ base, cookie, workspace, png, ok }) {
   const ids = [];
   for (const name of ["rc1-picker-a.png", "rc1-picker-b.png"]) {
     const form = new FormData();

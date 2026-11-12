@@ -24,7 +24,7 @@ export const cases: RepositoryContractCase[] = [];
 const contract = registerContract(cases);
 
 contract(
-  "LIST1 presentation-only sync preserves populated snapshots and stale guards",
+  "presentation-only sync preserves populated snapshots and stale guards",
   async (runtime, expect) => {
     const make = async (placeholder?: string) =>
       (
@@ -92,7 +92,7 @@ contract(
 );
 
 contract(
-  "SM5D mixed galleries publish only the shown values of each item kind",
+  "mixed galleries publish only the shown values of each item kind",
   async (runtime, expect) => {
     const config = await defineConfig({
       blocks: [builtInBlocks.gallery],
@@ -214,7 +214,7 @@ contract(
 );
 
 contract(
-  "LIST2 setting visibility sync preserves content, retains build behavior and validates inactive values",
+  "setting visibility sync preserves content, retains build behavior and validates inactive values",
   async (runtime, expect) => {
     const make = async (values?: readonly string[]) =>
       defineConfig({

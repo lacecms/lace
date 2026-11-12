@@ -125,7 +125,7 @@ test("list itemLabel is portable presentation metadata with validated targets", 
   expect(() => forgedMetadata({ ...field.text(), itemLabel: "title" })).toThrow();
 });
 
-test("CE9A placeholders are portable, exact, kind-specific and recursive", () => {
+test("placeholders are portable, exact, kind-specific and recursive", () => {
   for (const type of ["text", "textarea", "url", "number", "richText", "select"]) {
     const options = type === "select" ? { options: ["a"] } : {};
     for (const placeholder of ["Prompt <plain>", ""]) {

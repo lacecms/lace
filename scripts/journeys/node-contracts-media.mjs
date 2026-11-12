@@ -159,6 +159,6 @@ export async function nodeContractsMediaJourney({
     (error) => error.code === "BUILD_EXPORT_VERSION_CHANGED",
   );
   console.info(
-    "Alpha.6 exact consumer: pagination, tolerant safety, stale cursor and draft-media deletion passed",
+    "Packed consumer: pagination, tolerant safety, stale cursor and draft-media deletion passed",
   );
 }

@@ -8,7 +8,7 @@ import sharp from "sharp";
 import { InMemoryObjectStorage, readCompleteBuildExport } from "@lacecms/test-utils";
 import { openNodeTestRuntime } from "./test-support/node-runtime-harness.js";
 
-test("LIST1 real API saves, publishes and validates Gallery layout scalars", async () => {
+test("real API saves, publishes and validates Gallery layout scalars", async () => {
   const custom = defineBlock({
     type: "cards",
     version: 1,

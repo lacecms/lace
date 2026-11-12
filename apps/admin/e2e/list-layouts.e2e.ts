@@ -108,7 +108,7 @@ async function mock(page: Page, rejectSave = false) {
 }
 for (const width of [320, 1280])
   for (const theme of ["light", "dark"]) {
-    test(`LIST2 conditional schematic cards ${theme} at ${width}px`, async ({ page }) => {
+    test(`conditional schematic cards ${theme} at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       await page.addInitScript((value) => localStorage.setItem("lace:admin-theme", value), theme);
       const state = await mock(page);
@@ -165,9 +165,7 @@ for (const width of [320, 1280])
     });
   }
 
-test("LIST2 summary reveals and focuses an inactive setting without changing mode", async ({
-  page,
-}) => {
+test("summary reveals and focuses an inactive setting without changing mode", async ({ page }) => {
   await mock(page, true);
   await page.goto("/admin/content/posts/entry-1");
   await page.getByRole("textbox", { name: "Title", exact: true }).first().fill("Changed");

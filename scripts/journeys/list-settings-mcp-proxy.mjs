@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { rc1MediaSelection } from "./rc1-media-selection.mjs";
+import { mediaSelection } from "./media-selection.mjs";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
 /** Consumer-owned configuration, applied before the generated runtime synchronizes. */
@@ -323,7 +323,7 @@ export async function listSettingsMcpProxyJourney({
     assert.equal(video.link, undefined);
     assert.equal(video.aspectRatio, "4:3");
     assert.equal(video.playback, "ambient");
-    await rc1MediaSelection({ base, cookie, workspace, png, ok });
+    await mediaSelection({ base, cookie, workspace, png, ok });
     const connections = (await ok("api/v1/account/mcp-connections")).body.items;
     const owned = connections.find((item) => item.clientName === "RC1 writer");
     assert.ok(owned);

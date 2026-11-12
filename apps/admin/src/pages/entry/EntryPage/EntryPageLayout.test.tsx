@@ -72,7 +72,7 @@ function open(
   );
 }
 
-test("CE9B nested layout navigation is clean, preserves absence and reveals validation", async () => {
+test("nested layout navigation is clean, preserves absence and reveals validation", async () => {
   const user = userEvent.setup();
   const save = vi.fn<AdminClient["saveDraft"]>(async (_id, input) => ({
     ...initial,
@@ -115,36 +115,31 @@ test("CE9B nested layout navigation is clean, preserves absence and reveals vali
   expect(JSON.stringify(save.mock.calls[0]![1])).not.toContain('"layout"');
 });
 
-test.each([false, true])(
-  "CE9B layout values survive save failure (conflict %s)",
-  async (conflict) => {
-    const user = userEvent.setup();
-    const save = vi.fn<AdminClient["saveDraft"]>(async () => {
-      throw new AdminClientError({
-        code: conflict ? "CONTENT_REVISION_CONFLICT" : "UNAVAILABLE",
-        message: "Rejected",
-        status: conflict ? 409 : 503,
-      });
+test.each([false, true])("layout values survive save failure (conflict %s)", async (conflict) => {
+  const user = userEvent.setup();
+  const save = vi.fn<AdminClient["saveDraft"]>(async () => {
+    throw new AdminClientError({
+      code: conflict ? "CONTENT_REVISION_CONFLICT" : "UNAVAILABLE",
+      message: "Rejected",
+      status: conflict ? 409 : 503,
     });
-    open(save);
-    await user.click(await screen.findByRole("tab", { name: "Details tab" }));
-    await user.type(screen.getByRole("textbox", { name: "Note" }), " local");
-    await user.click(screen.getByRole("tab", { name: "Intro tab" }));
-    await user.click(screen.getByRole("button", { name: "Save draft" }));
-    await waitFor(() => expect(save).toHaveBeenCalledOnce());
-    await user.click(screen.getByRole("tab", { name: "Details tab" }));
-    expect(screen.getByRole("textbox", { name: "Note" })).toHaveValue("Note local");
-    expect(screen.getByLabelText("Slug")).toHaveValue("stable");
-    if (conflict) {
-      await user.click(screen.getByRole("button", { name: "Reload server draft" }));
-      await waitFor(() =>
-        expect(screen.getByRole("textbox", { name: "Note" })).toHaveValue("Note"),
-      );
-    }
-  },
-);
+  });
+  open(save);
+  await user.click(await screen.findByRole("tab", { name: "Details tab" }));
+  await user.type(screen.getByRole("textbox", { name: "Note" }), " local");
+  await user.click(screen.getByRole("tab", { name: "Intro tab" }));
+  await user.click(screen.getByRole("button", { name: "Save draft" }));
+  await waitFor(() => expect(save).toHaveBeenCalledOnce());
+  await user.click(screen.getByRole("tab", { name: "Details tab" }));
+  expect(screen.getByRole("textbox", { name: "Note" })).toHaveValue("Note local");
+  expect(screen.getByLabelText("Slug")).toHaveValue("stable");
+  if (conflict) {
+    await user.click(screen.getByRole("button", { name: "Reload server draft" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Note" })).toHaveValue("Note"));
+  }
+});
 
-test("CE9B viewers navigate layouts and disclosures without mutation controls", async () => {
+test("viewers navigate layouts and disclosures without mutation controls", async () => {
   const user = userEvent.setup();
   open(undefined, "viewer");
   await user.click(await screen.findByRole("tab", { name: "Details tab" }));
@@ -157,7 +152,7 @@ test("CE9B viewers navigate layouts and disclosures without mutation controls", 
   expect(screen.getByRole("textbox", { name: "Address" })).toBeVisible();
 });
 
-test("CE9B unsaved navigation retains hidden values on Stay and discards on Leave", async () => {
+test("unsaved navigation retains hidden values on Stay and discards on Leave", async () => {
   const user = userEvent.setup();
   const router = open();
   await user.click(await screen.findByRole("tab", { name: "Details tab" }));
@@ -176,7 +171,7 @@ test("CE9B unsaved navigation retains hidden values on Stay and discards on Leav
   await waitFor(() => expect(router.state.location.pathname).toBe("/content"));
 });
 
-test("CE9B revert replaces fields in inactive panels with the published values", async () => {
+test("revert replaces fields in inactive panels with the published values", async () => {
   const user = userEvent.setup();
   const published = {
     ...initial.draft,
@@ -209,7 +204,7 @@ test("CE9B revert replaces fields in inactive panels with the published values",
   expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled();
 }, 15000);
 
-test("CE9B pending saves lock leaf mutations while tabs remain navigable", async () => {
+test("pending saves lock leaf mutations while tabs remain navigable", async () => {
   const user = userEvent.setup();
   let release!: (entry: typeof initial) => void;
   const pending = new Promise<typeof initial>((resolve) => {

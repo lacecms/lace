@@ -324,7 +324,7 @@ test("memory nested synchronization preserves audits and rebuilds media usage", 
   expect((await sync(next)).status).toBe("noop");
 });
 
-test("CE9A fake sync retains populated singleton content when guidance changes", async () => {
+test("fake sync retains populated singleton content when guidance changes", async () => {
   const store = new InMemoryContentStore();
   const make = async (placeholder: string | undefined) =>
     (

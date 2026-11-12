@@ -18,7 +18,7 @@ async function fixture(
   await page.addStyleTag({ content: await readFile(source, "utf8") });
   return page.locator("[data-lace-layout]");
 }
-test("LIST1 container thresholds are inclusive for all grid presets", async ({ page }) => {
+test("container thresholds are inclusive for all grid presets", async ({ page }) => {
   for (const width of [511, 512, 513, 767, 768, 769, 1023, 1024, 1025]) {
     for (const preset of [
       "auto",
@@ -56,7 +56,7 @@ test("LIST1 container thresholds are inclusive for all grid presets", async ({ p
     }
   }
 });
-test("LIST1 empty/single/odd lists, flex wrapping, explicit height and CSS overrides", async ({
+test("empty/single/odd lists, flex wrapping, explicit height and CSS overrides", async ({
   page,
 }) => {
   for (const count of [0, 1, 5])
@@ -135,9 +135,7 @@ async function cells(list: ReturnType<Page["locator"]>) {
     });
   });
 }
-test("LIST3 right column only: an end item leaves its row's first column empty", async ({
-  page,
-}) => {
+test("right column only: an end item leaves its row's first column empty", async ({ page }) => {
   const list = await fixture(page, 640, "columns-2", "grid", true, 3, ["end", "auto", "auto"]);
   expect(await cells(list)).toEqual([
     { column: 2, row: 1, span: 1 },
@@ -148,7 +146,7 @@ test("LIST3 right column only: an end item leaves its row's first column empty",
     Array.from({ length: 3 }, (_, i) => `Card ${i}Nested`),
   );
 });
-test("LIST3 any item spans the row and start begins a row", async ({ page }) => {
+test("any item spans the row and start begins a row", async ({ page }) => {
   const full = await fixture(page, 896, "columns-3", "grid", true, 5, [
     "auto",
     "auto",
@@ -180,7 +178,7 @@ test("LIST3 any item spans the row and start begins a row", async ({ page }) => 
     expect(first, preset).toEqual({ column: 1, row: 3, span: 1 });
   }
 });
-test("LIST3 placement in narrow grids and flex lists", async ({ page }) => {
+test("placement in narrow grids and flex lists", async ({ page }) => {
   const placements = ["end", "full", "start", "auto"];
   const narrow = await fixture(page, 448, "columns-2", "grid", true, 4, placements);
   expect(await cells(narrow)).toEqual(

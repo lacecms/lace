@@ -113,7 +113,7 @@ test("keyboard shortcuts open the link control and focus the toolbar", async () 
   expect(await screen.findByLabelText("Link URL")).toHaveFocus();
 });
 
-test("CE9A changing a prompt updates decoration and aria without content edits or history loss", async () => {
+test("changing a prompt updates decoration and aria without content edits or history loss", async () => {
   const change = vi.fn();
   const props = {
     id: "field-body",

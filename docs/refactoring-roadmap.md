@@ -177,7 +177,7 @@ What the roadmap changes, with the numbers to beat:
 | Admin | components under 60 lines occupying a three-file folder | 40 |
 | CLI | runtime dependencies on the `--target node` path | `miniflare` + `workerd` loaded statically through `commands.ts` |
 | Scripts | `scripts/*.mjs` | 52 files, 13.7k lines; 31 of 55 root scripts undocumented |
-| Scripts | alpha-numbered or roadmap-step-numbered entrypoints | three release-named journey modules, one step-named security module and three step-named verification commands |
+| Scripts | alpha-numbered or roadmap-step-numbered entrypoints | three release-named journey modules, one step-named security module and three step-named verification commands → RF7D: remaining release-named journey removed; 44 test titles, one temporary prefix and five pinned contract names renamed; test-title guard added |
 | Docs | architecture document (now `docs/architecture/`) | 3,696 lines; change codes (CE/SM/LIST/MCP) in headings and prose → RF8A (4,086 lines at the start): a README and twelve domain files, 2,492 prose lines; codes only in `history.md`; guarded by `tests/architecture-document.test.mjs` |
 | Test loop | test files with `@ts-nocheck` | RF2C: 88 → RF4E: 143 (copied by splits) → RF4X: 141 → RF4F: 139 → RF4G: 137 → RF4I: 136 → RF4H: 132, listed in a shrinking baseline; test-support always typed |
 | Layout | intra-package module cycles | RF4X: 5 legacy components baselined (admin `entities/content`, `auth`, `cli`, `domain`, `platform-node`); six split packages declared in `scripts/source-layout.json` → RF4F: seven → RF4G: 3 components (`domain` and `auth` cycles broken), nine packages declared → RF5B: 2 components (`platform-node` broken); both platform packages declared |
@@ -1371,3 +1371,4 @@ preserved in the linked archives. Dates refer to the final recorded event.
 | 2026-11-11 | RF7B | [rf07b-one-command-table](../openspec/changes/archive/2026-11-11-rf07b-one-command-table/) | Archived |
 
 | 2026-11-12 | RF7C | [rf07c-cli-source-layout](../openspec/changes/archive/2026-11-12-rf07c-cli-source-layout/) | Archived |
+| 2026-11-12 | RF7D | [rf07d-naming-hygiene](../openspec/changes/rf07d-naming-hygiene/) | Implemented; 113 D1 contract cases, 227 Node contract tests and 19 affected browser tests passed; build, export comparison and root quality gates passed. Specs synchronized; pending archive. |

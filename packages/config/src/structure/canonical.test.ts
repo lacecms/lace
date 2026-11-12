@@ -467,7 +467,7 @@ test("hint lookup does not treat inherited constructor as a configured field", (
   ).toEqual({ title: "constructor" });
 });
 
-test("CE9A scalar-only global hashes still exclude collection listFields", async () => {
+test("scalar-only global hashes still exclude collection listFields", async () => {
   const make = (listFields: string[]) =>
     defineConfig({ content: [postModel({ blocks: [], listFields })] });
   const plain = await make([]);
