@@ -85,6 +85,12 @@ export function fingerprint(read, list) {
   const workspace = yamlDocuments(read("pnpm-workspace.yaml"))[0];
   const manifest = json("package.json");
   const turbo = json("turbo.json");
+  // Pages render the release version they were verified against; other release metadata is not public input.
+  const releaseMetadata = json("release/alpha.json");
+  const release = {
+    version: releaseMetadata.version,
+    publishedVersions: releaseMetadata.publishedVersions,
+  };
   const inputs = Object.fromEntries(
     list
       .filter(
@@ -111,6 +117,7 @@ export function fingerprint(read, list) {
   );
   const value = {
     inputs,
+    release,
     closure,
     catalog,
     allowBuilds,

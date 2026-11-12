@@ -2,7 +2,9 @@
 
 Maintainer notes for `lace import`. The user guide, format reference and
 converter guide are public:
-[Import content](../apps/docs/src/content/docs/en/latest/editing-content/import.md).
+[Import content](../apps/docs/src/content/docs/en/latest/editing-content/import.md);
+import tokens are described in
+[Users, roles and accounts](../apps/docs/src/content/docs/en/latest/editing-content/accounts.md).
 Accepted behavior lives in `openspec/specs/content-import-cli`; the decisions
 are [ADR 0016](adr/0016-import-credentials.md) (import tokens) and
 [ADR 0017](adr/0017-content-import-client.md) (import is an admin REST client).

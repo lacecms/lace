@@ -18,6 +18,7 @@ const source = Object.fromEntries(
     "pnpm-workspace.yaml",
     "package.json",
     "turbo.json",
+    "release/alpha.json",
     ...list.filter(
       (p) =>
         p.startsWith("apps/docs/") ||
@@ -45,6 +46,19 @@ test("hashes public inputs and ignores internal-only prose", () => {
   expect(digest({ "apps/docs/src/catalog.json": "changed" })).not.toBe(before);
   expect(digest({ "apps/api/openapi/api-v1.json": "changed" })).not.toBe(before);
   expect(digest({ ".github/workflows/docs-pages.yml": "changed" })).not.toBe(before);
+});
+test("release versions rendered in footers are inputs; other release metadata is not", () => {
+  const release = JSON.parse(source["release/alpha.json"]);
+  const changed = (value) => digest({ "release/alpha.json": JSON.stringify(value) });
+  expect(changed(release)).toBe(digest());
+  expect(changed({ ...release, packages: [...release.packages, "extra"] })).toBe(digest());
+  expect(changed({ ...release, images: { api: "example/api", builder: "example/builder" } })).toBe(
+    digest(),
+  );
+  expect(changed({ ...release, version: "9.9.9-rc9" })).not.toBe(digest());
+  expect(
+    changed({ ...release, publishedVersions: [...release.publishedVersions, "0.1.0-rc2"] }),
+  ).not.toBe(digest());
 });
 test("projects only docs dependency closure, including transitive resolutions", () => {
   const documents = yamlDocuments(source["pnpm-lock.yaml"]);

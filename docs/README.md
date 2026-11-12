@@ -5,7 +5,8 @@ The [architecture](architecture/README.md) owns product scope and invariants;
 `authoritative` identifies a governing document within that authority order;
 `internal note` provides engineering guidance; `historical` preserves decisions
 and completed delivery order. Public guides live in `apps/docs`; this directory
-is not published. See [documentation maintenance](documentation-maintenance.md)
+is not published. Every user-facing topic has one owner: a remaining note keeps
+engineering content and names its public owner page. See [documentation maintenance](documentation-maintenance.md)
 for the public/internal topic map and [ADR index](adr/README.md) for decision status.
 
 ## Consolidated verification and history
@@ -25,30 +26,38 @@ the two indexes describe themselves and are excluded from the row count.
 
 ## docs/
 
-| File | Status | Details |
-| --- | --- | --- |
-| [alpha-release.md](alpha-release.md) | internal note | §22/§25; artifact preparation, verification and owner publication |
-| [auth-operations.md](auth-operations.md) | internal note | §14/§21; authentication, account security and email operations |
-| [cloudflare-deployment-handoff.md](cloudflare-deployment-handoff.md) | internal note | §5/§18/§21; real-account deployment and owner checks |
-| [cloudflare-worker.md](cloudflare-worker.md) | internal note | §5/§16/§18; Worker bindings, local development and limits |
-| [collection-queries.md](collection-queries.md) | internal note | §8/§12/§16; configured admin list queries and runtime limits |
-| [compatibility.md](compatibility.md) | internal note | §7/§22; release, template, contract and rollback compatibility |
-| [composite-fields.md](composite-fields.md) | internal note | §8/§11/§17; bounded group/list modeling and authoring |
-| [configuration-synchronization.md](configuration-synchronization.md) | internal note | §8/§16/§22; classified schema synchronization |
-| [content-import.md](content-import.md) | internal note | §7/§12/§14; import package, credentials and CLI behavior |
-| [database-migrations.md](database-migrations.md) | internal note | §16/§21/§22; migration procedure and portability |
-| [documentation-maintenance.md](documentation-maintenance.md) | internal note | §6/§19/§20; public-documentation ownership and publication |
-| [field-guidance.md](field-guidance.md) | internal note | §8/§17; field labels, placeholders and validation guidance |
-| [form-organization.md](form-organization.md) | internal note | §8/§17; layout metadata and editor organization |
-| [internal-url-links.md](internal-url-links.md) | internal note | §8/§9.6/§13; stable link identities, guards and rendering |
-| [mcp.md](mcp.md) | internal note | §3/§12/§14; OAuth setup, consent, tool authority and revocation |
-| [media-tags.md](media-tags.md) | internal note | §9.7/§12/§16; administrative media organization |
-| [node-api.md](node-api.md) | internal note | §5/§12/§18; Node API composition and local operations |
-| [personal-site-guide.md](personal-site-guide.md) | internal note | §7/§13; independent Astro application and source ownership |
-| [refactoring-roadmap.md](refactoring-roadmap.md) | authoritative | Active RF1–RF8 delivery order, session boundaries and owner decisions |
-| [rich-text-authoring.md](rich-text-authoring.md) | internal note | §11/§13/§17; rich-text grammar, rendering and editor tools |
-| [site-styling.md](site-styling.md) | internal note | §7/§13; installed source, styling hooks and video behavior |
-| [verification.md](verification.md) | internal note | §3/§14/§20/§21; commands, limits, coverage, D1 budgets and owner checks |
+| File | Status | Details | Public owner |
+| --- | --- | --- | --- |
+| [alpha-release.md](alpha-release.md) | internal note | §22/§25; artifact preparation, verification and owner publication | — |
+| [auth-operations.md](auth-operations.md) | internal note | §14/§21; setup, token, invitation, reset and request-limit internals | [Accounts](../apps/docs/src/content/docs/en/latest/editing-content/accounts.md), [Operations](../apps/docs/src/content/docs/en/latest/operations/index.md) |
+| [cloudflare-deployment-handoff.md](cloudflare-deployment-handoff.md) | internal note | §5/§18/§21; real-account deployment and owner checks | [Cloudflare](../apps/docs/src/content/docs/en/latest/deployment/cloudflare.md) |
+| [cloudflare-worker.md](cloudflare-worker.md) | internal note | §5/§16/§18; Worker routing, outbox, export budgets, build tracking and verification | [Cloudflare](../apps/docs/src/content/docs/en/latest/deployment/cloudflare.md), [CLI and environment](../apps/docs/src/content/docs/en/latest/reference/cli-environment.md) |
+| [collection-queries.md](collection-queries.md) | internal note | §8/§12/§16; collection query matching, SQL and runtime policy | [Content modeling](../apps/docs/src/content/docs/en/latest/content-modeling/index.md), [API](../apps/docs/src/content/docs/en/latest/reference/api.md) |
+| [compatibility.md](compatibility.md) | internal note | §7/§22; release, template, contract and rollback compatibility; permanent upgrade guide | [Operations](../apps/docs/src/content/docs/en/latest/operations/index.md) |
+| [configuration-synchronization.md](configuration-synchronization.md) | internal note | §8/§16/§22; synchronization planner and guards | [Synchronization](../apps/docs/src/content/docs/en/latest/content-modeling/synchronization.md) |
+| [content-import.md](content-import.md) | internal note | §7/§12/§14; import invariants and verification tiers | [Import content](../apps/docs/src/content/docs/en/latest/editing-content/import.md) |
+| [database-migrations.md](database-migrations.md) | internal note | §16/§21/§22; migration policy, D1 batches and contract suite | [Operations](../apps/docs/src/content/docs/en/latest/operations/index.md) |
+| [documentation-maintenance.md](documentation-maintenance.md) | internal note | §6/§19/§20; public-documentation ownership, page rules and publication | — |
+| [internal-url-links.md](internal-url-links.md) | internal note | §8/§9.6/§13; link identities, guards, persistence and rollback | [Internal links](../apps/docs/src/content/docs/en/latest/content-modeling/links.md) |
+| [node-api.md](node-api.md) | internal note | §5/§12/§18; Node runtime boundaries and the engine-checkout stack | [Node deployment](../apps/docs/src/content/docs/en/latest/deployment/node.md), [CLI and environment](../apps/docs/src/content/docs/en/latest/reference/cli-environment.md) |
+| [refactoring-roadmap.md](refactoring-roadmap.md) | authoritative | Active RF1–RF8 delivery order, session boundaries and owner decisions | — |
+| [verification.md](verification.md) | internal note | §3/§14/§20/§21; commands, limits, coverage, D1 budgets and owner checks | — |
+
+### Promoted and deleted
+
+These notes held user guidance only; it now lives on the public pages below.
+Git history keeps the originals.
+
+| Deleted file | Public page |
+| --- | --- |
+| `composite-fields.md` | [Groups and lists](../apps/docs/src/content/docs/en/latest/content-modeling/composites.md) |
+| `field-guidance.md` | [Content modeling](../apps/docs/src/content/docs/en/latest/content-modeling/index.md), [Configuration](../apps/docs/src/content/docs/en/latest/reference/configuration.md) |
+| `form-organization.md` | [Groups and lists](../apps/docs/src/content/docs/en/latest/content-modeling/composites.md), [Editing content](../apps/docs/src/content/docs/en/latest/editing-content/index.md) |
+| `mcp.md` | [Connect an AI assistant](../apps/docs/src/content/docs/en/latest/operations/mcp.md), [MCP reference](../apps/docs/src/content/docs/en/latest/reference/mcp.md) |
+| `media-tags.md` | [Rich text and media](../apps/docs/src/content/docs/en/latest/editing-content/rich-text-media.md), [API](../apps/docs/src/content/docs/en/latest/reference/api.md) |
+| `personal-site-guide.md` | [Getting started](../apps/docs/src/content/docs/en/latest/getting-started/index.md), [Astro integration](../apps/docs/src/content/docs/en/latest/astro-integration/index.md), [Deployment](../apps/docs/src/content/docs/en/latest/deployment/index.md) |
+| `rich-text-authoring.md` | [Rich text and media](../apps/docs/src/content/docs/en/latest/editing-content/rich-text-media.md), [Astro integration](../apps/docs/src/content/docs/en/latest/astro-integration/index.md) |
+| `site-styling.md` | [Style your site](../apps/docs/src/content/docs/en/latest/astro-integration/styling.md) |
 
 ## docs/architecture/
 

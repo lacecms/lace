@@ -1,9 +1,10 @@
 # Configured collection queries (internal)
 
-CQ1 adds opt-in Admin draft queries. Public authoring and operator instructions
-live in `apps/docs/src/content/docs/en/latest/content-modeling/index.md`,
-`editing-content/index.md`, `content-modeling/synchronization.md` and
-`reference/api.md`. Architecture §§8, 9, 12, 16 and 17 and the OpenSpec capability
+CQ1 adds opt-in Admin draft queries. User guidance is public:
+[configuration](../apps/docs/src/content/docs/en/latest/content-modeling/index.md#collection-list-queries),
+[editor controls](../apps/docs/src/content/docs/en/latest/editing-content/index.md#search-sort-and-filter-collections)
+and the [API request grammar and limits](../apps/docs/src/content/docs/en/latest/reference/api.md).
+Architecture §§8, 9, 12, 16 and 17 and the `collection-query-options` spec
 remain authoritative. This document records implementation boundaries.
 
 ## Configuration and transport

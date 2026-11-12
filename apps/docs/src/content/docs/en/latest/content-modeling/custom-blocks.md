@@ -1,12 +1,21 @@
 ---
 title: Create a custom block
 description: Define a custom content block, add it to a model and render it in Astro.
+kind: guide
+verifiedAgainst: 0.1.0-rc2
 ---
 
 A block has a content definition in the CMS and a separate site-owned renderer.
 The definition generates a generic Admin form; the Astro component decides how
 published content looks. This example adds a small notice to a generated
 project with a starter site.
+
+## Before you start
+
+- A generated project with the starter Astro site in `site/`
+  ([Getting started](../../getting-started/)).
+- Familiarity with [field builders](../) and
+  [configuration synchronization](../synchronization/).
 
 ## Define and register the block
 
@@ -69,9 +78,22 @@ Publish an entry containing the block and build the site to verify it. A missing
 renderer or invalid published block fails the build rather than silently
 omitting content. Hidden blocks are not rendered.
 
+## Change the block later
+
 If a stored block's fields or settings later change, increase the block version,
-provide the necessary migrations and increase the version of every model that
-allows it. Update its renderer to match and review sync before applying it; see
+provide the necessary [migrations](../synchronization/#migrate-block-data) and
+increase the version of every model that allows it. Update its renderer to match and review sync before applying it; see
 [configuration synchronization](../synchronization/) and the generated
 `docs/lace-astro-site.md`. The scaffold command does not overwrite your custom
 component when you later change its definition.
+
+Presentation-only changes, such as `settingsLayout`, `settingsVisibility`,
+labels, descriptions or placeholders, need synchronization but no block or
+model version increase.
+
+## Reference
+
+- [Configuration reference](../../reference/configuration/): `defineBlock`
+  options, block settings and migrations.
+- [CLI and environment](../../reference/cli-environment/): `lace add block`
+  and its flags.

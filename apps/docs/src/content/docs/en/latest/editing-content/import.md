@@ -1,6 +1,8 @@
 ---
 title: Import content
 description: Load pages, posts and images from another site with lace import.
+kind: guide
+verifiedAgainst: 0.1.0-rc2
 ---
 
 `lace import` loads a portable **import package** into a running Lace installation: a directory with `lace-import.json` and the image files it names. Use it to move an existing site, or to load content that a script produced. The command talks to your installation's admin API, so it works the same against the Node runtime and a Cloudflare Worker, and every write goes through the same validation as the admin.
@@ -15,7 +17,7 @@ Import creates and updates drafts, uploads images and can publish. It never dele
 
 ## Import a package
 
-1. In Admin, open **Settings → Import tokens** and create a token. Choose a name and a lifetime of 1 to 7 days. Allow publishing only if you will use `--publish`; that choice exists only for administrators who can publish. Copy the token: it is shown once.
+1. In Admin, open **Settings → Import tokens** and create a token. Choose a name and a lifetime of 1, 3 or 7 days. Allow publishing only if you will use `--publish`; that choice exists only for administrators who can publish. Copy the token: it is shown once.
 2. Put the token into your shell session only. Never write it to `.env`, a script or source control:
 
    ```bash
@@ -58,7 +60,7 @@ Without `--publish` import only saves drafts, which you can review and publish i
 Every check runs before the first write; if anything is wrong, nothing is written. The plan lists each image as `upload`, `update` or `unchanged` and each entry as `create`, `update`, `unchanged` or `conflict`, followed by the publication order.
 
 - Images are matched by their content (SHA-256), so a rerun never uploads a file twice. When the library already holds the same file, the alt text, caption, focal point and tags that the package gives replace the library values.
-- Pages and globals are matched by model; collection entries by model and slug.
+- Pages and globals are matched by model; collection entries by model and slug. Entries of a collection without a route have no slug and are matched only through the state file: without it, a rerun creates them again.
 - An entry is `unchanged` when its saved draft already equals the package. Unchanged entries are not saved again, and published entries that equal their draft are not republished.
 
 Run the same command again after fixing the package or after an interruption: finished work is recognized as unchanged, and the rest continues.
@@ -106,7 +108,7 @@ Every item has a `key`: 1 to 128 letters, digits, dots, underscores or hyphens, 
 | --------- | --------------------------------------------------------------------------------------- |
 | `key`     | Required.                                                                               |
 | `model`   | Required. A model key from `lace.config.ts`.                                            |
-| `slug`    | Required for collection entries; not allowed for pages and globals.                     |
+| `slug`    | Required for entries of collections with a route; not allowed otherwise.                |
 | `title`   | Required for pages and collection entries; not allowed for globals.                     |
 | `fields`  | Required object of the model's field values (use `{}` when empty).                      |
 | `blocks`  | Required array of blocks the model allows.                                              |
@@ -115,12 +117,12 @@ Every item has a `key`: 1 to 128 letters, digits, dots, underscores or hyphens, 
 
 Each page and each global appears at most once, and each collection slug once per model. Pages and globals already exist after configuration sync; import updates them.
 
-**Blocks** are `{"type": "...", "data": {...}}` with optional `settings`, `anchor`, `className`, `hidden` and `key`. Positions follow the array order. A block without a `key` gets `b1`, `b2`, … from its position, so keep block order stable or set explicit keys. Field values use the same shapes as the admin API: plain strings, numbers and booleans, rich text as a document object, groups as objects and lists as arrays.
+**Blocks** are `{"type": "...", "data": {...}}` with optional `settings`, `anchor`, `className`, `hidden` and `key`. Positions follow the array order. A block without a `key` gets `b1`, `b2`, … from its position, so keep block order stable or set explicit keys. Field values use the same shapes as the admin API: plain strings, numbers and booleans, rich text as a document object, groups as objects and lists as arrays. [Conditional fields](../../content-modeling/conditional-fields/) follow the same rules as in Admin: fill a field only when its controller selects it. A value in a hidden field is checked like a draft value, kept in the draft and never published, so `--publish` does not require hidden required fields.
 
 **References** connect items inside the package:
 
 - `{"$media": "<media key>"}` in a media field, a nested media field (for example a gallery image) or `seo.image` becomes that image.
-- `{"$entry": "<entry key>"}` in a URL field becomes an internal link to that page or collection entry, which follows slug changes. Globals cannot be link targets.
+- `{"$entry": "<entry key>"}` in a URL field becomes an [internal link](../../content-modeling/links/) to that page or collection entry, which follows slug changes. Globals and entries of collections without a route cannot be link targets.
 
 A reference anywhere else is an error. With `--publish`, a published entry may link only to entries that are published too; import publishes link targets first and reports cycles.
 
@@ -388,4 +390,11 @@ A converter is a script, in any language, that reads your old site and writes a 
 5. **Validate and iterate.** Run `--validate-only --publish` after every converter change; errors name the exact JSON position, such as `/entries/12/blocks/3/data/images/0/media`. Then run a `--dry-run` against a local installation and look at the result in Admin and on the built site.
 6. **Import for real.** Import into the target installation, rerun to confirm the plan is all `unchanged`, and keep the package and state file until the old site is retired.
 
-See [CLI and environment](../../reference/cli-environment/) for the other commands.
+## Reference
+
+- [CLI and environment](../../reference/cli-environment/): `lace import`, its
+  flags and exit codes, `LACE_IMPORT_TOKEN` and `LACE_API_BASE_URL`.
+- [API reference](../../reference/api/): the admin endpoints an import token
+  may call.
+- [Import tokens](../accounts/#create-import-tokens): token lifecycle and
+  revocation.

@@ -194,52 +194,23 @@ loader reports it as `invalid_export` with advice to upgrade `@lacecms/sdk`.
 
 ### Build-export paging
 
-- `GET /api/v1/public/build-export` returns a first page `{formatVersion,
-  version, entries, globals, seo, media, nextCursor?}`; requests with
-  `?after=<nextCursor>` return continuation pages `{formatVersion, version,
-  entries, media, nextCursor?}`. An optional `limit` (1–100, default 100)
-  caps entries per page, and the server also ends a page at a fixed
-  stored-JSON byte budget, always delivering at least one entry.
-- Sites that use the published-site loader, `getSite()`, `LaceBlocks` or
-  `client.getBuildExport()` follow every cursor through the SDK and receive
-  one assembled export. Code that reads the raw REST export must follow
-  `nextCursor` until it is absent and merge the pages' `entries` and `media`;
-  `globals` and `seo` come from the first page.
-- A continuation request whose cursor was issued before a publication fails
-  with `409 BUILD_EXPORT_VERSION_CHANGED` and details `{expectedVersion,
-  actualVersion}`. `client.getBuildExport()` then restarts from the first
-  page, at most two traversals in total (`restart: false` disables this). The
-  published-site loader disables restarts when
-  `LACE_EXPECTED_PUBLISHED_VERSION` is set and reports the conflict as
-  `version_mismatch`; without it, exhausted restarts also fail with
-  `version_mismatch`, stating that content kept changing during the export.
-- `If-None-Match` applies to the first page only; continuation pages ignore it
-  and every `200` page carries the strong ETag of its version.
-- The page byte budget (4,000,000 stored bytes) is sized for the Workers Free
-  plan's 128 MB memory and 50 D1 queries per invocation; staying within its
-  10 ms CPU limit is best effort, because one maximal entry can exceed it on
-  its own page.
+The paging contract consumers follow (page shapes, cursors, version conflicts
+and restarts, ETags) is public: see
+[Consume exports safely](../apps/docs/src/content/docs/en/latest/reference/api.md#consume-exports-safely).
+The page byte budget (4,000,000 stored bytes) is sized for the Workers Free
+plan's 128 MB memory and 50 D1 queries per invocation; staying within its
+10 ms CPU limit is best effort, because one maximal entry can exceed it on
+its own page.
 
 ## Upgrading from rc2
 
-An rc2 database already starts from the baseline migration, so it is upgraded
-in place with forward migrations and never recreated
-([database migrations](database-migrations.md)).
-
-1. Back up `lace.config.ts`, site source, package/lock files, deployment
-   settings, the database and media objects.
-2. Upgrade every Lace engine, CLI, SDK/render/Astro/site package and both API
-   and builder images together. Review managed-file conflicts with the
-   template upgrade plan and merge user-owned site and deployment changes
-   explicitly.
-3. Apply forward migrations. Compose: stop `api` and `dispatcher`, then run
-   `pnpm db:migrate`. Local Cloudflare: `pnpm cf:db:migrate`. Remote
-   Cloudflare:
-   `pnpm exec lace db migrate --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`.
-4. Run `pnpm content:sync` (or the selected Cloudflare target), restart or
-   redeploy the matching runtime, rebuild the site and check it on the selected
-   runtime before relying on it. Local acceptance is not a real deployment
-   check.
+rc2 (`0.1.0-rc2`) is the oldest supported upgrade origin. Its database already
+starts from the baseline migration, so it is upgraded in place with forward
+migrations and never recreated ([database migrations](database-migrations.md)).
+The operator procedure (backup, coordinated package and image update, forward
+migration, configuration synchronization, site rebuild and rollback) is the
+public [Upgrade and roll back](../apps/docs/src/content/docs/en/latest/operations/index.md#upgrade-and-roll-back)
+guide; this document does not repeat its steps.
 
 A database created before rc2 predates the baseline: `lace db migrate` and
 `lace doctor` report `SCHEMA_UNSUPPORTED` for it and change nothing; such an

@@ -1,10 +1,18 @@
 # Cloudflare Worker runtime
 
+Internal note on the Cloudflare composition: request routing, bounded
+background work, deploy-hook and Pages-tracking outcomes, the engine
+repository's local Worker stack and its verification. Operator setup,
+credentials, site deployment, email and upgrades are public:
+[Deploy on Cloudflare](../apps/docs/src/content/docs/en/latest/deployment/cloudflare.md).
+Every Worker var, secret and binding is listed in
+[CLI and environment](../apps/docs/src/content/docs/en/latest/reference/cli-environment.md).
+
 The Cloudflare composition runs the same portable API as the
 [Node runtime](node-api.md). It uses D1 for SQL data, a native R2 binding for
 media, and the Workers static-assets binding for the built admin. Everything is
 wired in `@lacecms/platform-cloudflare` (`createCloudflareWorker`). The
-deployable entry is [`apps/api/worker/index.ts`](../apps/api/worker/index.ts),
+engine's deployable entry is [`apps/api/worker/index.ts`](../apps/api/worker/index.ts),
 configured by [`apps/api/wrangler.jsonc`](../apps/api/wrangler.jsonc).
 
 The entry statically imports the repository-root `lace.config.ts`, so the
@@ -15,56 +23,23 @@ Build dispatch calls the configured [deploy hook](#deploy-hook). Without one,
 it records the same sanitized `trigger_unavailable` failure that an
 unconfigured Node deployment records.
 
-## Bindings and variables
+## Runtime bindings
 
-| Name | Kind | Required | Meaning |
-| --- | --- | --- | --- |
-| `DB` | D1 binding | yes | Authoritative SQL data, migrated from `packages/db/drizzle`. |
-| `MEDIA` | R2 binding | yes | Private media bucket; objects are keyed `media/<id>`. |
-| `ASSETS` | static assets | no | Built admin files served under `/admin/`. |
-| `CACHE` | KV binding | no | Opt-in derived cache. Absent means no-op; misses and failures never change results. |
-| `LACE_PUBLIC_BASE_URL` | variable | yes | Canonical absolute HTTP(S) base URL. It is the only source for public media URLs. |
-| `LACE_BUILD_SITE_ID`, `LACE_BUILD_SITE_LABEL` | variable | no | Safe build-site identity shown in Admin; set both or neither. |
-| `LACE_BUILD_SITE_URL` | variable | no | Public site base URL (for example the Pages domain) that the editor links published entries to. Requires the identity; empty means unset. Give the Pages build the same value (workflow repository variable or Pages environment variable) for canonical URLs and `sitemap.xml`. |
-| `LACE_AUTH_SECRET` | secret | yes | Better Auth and rate-limit HMAC secret. |
-| `LACE_DEPLOY_HOOK_URL` | secret | no | HTTPS deploy-hook URL that rebuilds the static site. |
-| `LACE_DEPLOY_HOOK_TIMEOUT_MS` | variable | no | Deploy-hook call timeout from 1 to 60000 ms; defaults to 10000. |
-| `LACE_ENVIRONMENT` | variable | no | `production` (default, `Secure` cookies) or `development`. |
-| `LACE_PAGES_ACCOUNT_ID` | variable | no¹ | Cloudflare account ID (32 hex characters) of the Pages project. |
-| `LACE_PAGES_PROJECT_NAME` | variable | no¹ | Pages project whose deploy hook is `LACE_DEPLOY_HOOK_URL`. |
-| `LACE_PAGES_API_TOKEN` | secret | no¹ | Separate API token with only *Account · Cloudflare Pages · Read*; never the D1 operator token. |
-| `LACE_PAGES_TRACKING_TIMEOUT_MINUTES` | variable | no | Overall tracking deadline per build, 5–1440 minutes; defaults to 60. |
-| `LACE_PAGES_API_BASE_URL` | variable | no | Development only: HTTPS or loopback HTTP stub of the Cloudflare API, ending in `/`. Invalid in production. |
-| `LACE_R2_TIMEOUT_MS` | variable | no | Per-operation R2 timeout from 1 to 60000 ms; defaults to 10000. |
-| `EMAIL` | send_email binding | with `cloudflare` | Cloudflare Email Service binding; requires Workers Paid and an onboarded sending domain. |
-| `LACE_EMAIL_PROVIDER` | variable | no | `none` (default), `resend`, `cloudflare`, or `log` (development only). `smtp` is Node-only. |
-| `LACE_EMAIL_FROM` | variable | with a provider | Sender as `address` or `Display Name <address>`. |
-| `LACE_EMAIL_TIMEOUT_MS` | variable | no | Per-send timeout from 1 to 60000 ms; defaults to 10000. |
-| `LACE_RESEND_API_KEY` | secret | with `resend` | Resend API key; works on Workers Free. |
-| `LACE_RESEND_API_BASE_URL` | variable | no | Test-only endpoint override; HTTPS outside development. |
+The Worker requires the `DB` (D1) and `MEDIA` (R2, objects keyed `media/<id>`)
+bindings; `ASSETS` serves the built admin under `/admin/`, `CACHE` (KV) is an
+opt-in derived cache whose misses and failures never change results, and
+`EMAIL` is the Email Service `send_email` binding of the `cloudflare` email
+provider. Secrets are set with `wrangler secret put`, never through `vars`.
+When bindings or variables are invalid, every request receives a sanitized
+`503` envelope, and the Worker logs only the names of the affected bindings or
+variables, never their values. Pages tracking is enabled only when all three of
+its settings are present; a partial set is a validation error.
 
-¹ Pages tracking is enabled only when all three are set; setting some of them is
-a validation error.
-
-Email is optional. Resend is the recommended Worker provider: it works on the
-Workers Free plan over HTTPS. The `cloudflare` provider uses the Email Service
-`send_email` binding, which can reach arbitrary recipients only on Workers Paid
-after the sending domain is onboarded; binding errors map to the same closed
-reasons as every other provider.
-
-The sender also delivers invitations, password-reset links, and
-password-changed notices (see
-[Authentication operations](auth-operations.md#invitations)). Public reset
-emails and password-changed notices run after the response through the
-request's `executionCtx.waitUntil`, so delivery never delays the request.
-Without a working provider, invitation and administrator reset responses carry
-their link once. Local `pnpm dev:cloudflare` uses the `log` provider, so those
-links appear in the Worker output.
-
-Set secrets with `wrangler secret put`, never through `vars`. When bindings or
-variables are invalid, every request receives a sanitized `503` envelope. The
-Worker logs only the names of the affected bindings or variables, never their
-values.
+Email sends map binding and provider errors to the same closed reasons as the
+Node runtime ([email delivery boundary](node-api.md#email-delivery-boundary)).
+Public reset emails and password-changed notices run after the response
+through the request's `executionCtx.waitUntil`, so delivery never delays the
+request.
 
 ## Compatibility and routing
 
@@ -141,18 +116,15 @@ in progress the build is `running`. Without Pages tracking, `accepted` is a
 final status that means only that the provider took the request; it never
 proves the site was published (only `succeeded` does). Use the recorded
 provider ID to find the deployment in the Cloudflare dashboard, and retry an
-`accepted` build from Admin if the deployment failed. Databases migrated from
-earlier alphas record former `running` hook builds, and hook `succeeded`
-builds without a provider ID, as `accepted`.
+`accepted` build from Admin if the deployment failed.
 
 ## Pages deployment tracking
 
 With `LACE_PAGES_ACCOUNT_ID`, `LACE_PAGES_PROJECT_NAME` and the secret
 `LACE_PAGES_API_TOKEN`, every identified hook acceptance stays `running` and
 each scheduled run reads exactly that deployment
-(`GET /accounts/{account}/pages/projects/{project}/deployments/{id}`). Create
-a dedicated token with only *Account · Cloudflare Pages · Read*; the Worker
-never uses the D1 operator token. The token, the hook URL and Pages response
+(`GET /accounts/{account}/pages/projects/{project}/deployments/{id}`). The
+Worker never uses the D1 operator token for this. The token, the hook URL and Pages response
 bodies (which contain environment variables) are never stored, logged or
 returned; Builds shows only the closed stage, the last check time and a reason.
 
@@ -185,10 +157,8 @@ A generic deploy hook without Pages tracking stays honestly `accepted`; an
 authenticated CI callback is deliberately not offered (a callback after
 `pnpm build` cannot prove publication).
 
-Cloudflare Pages offers deploy hooks only for projects connected to Git. A
-project deployed by direct upload (`wrangler pages deploy`) has no hook. The
-real-account deployment procedure, including the Pages Git integration, is in
-[cloudflare-deployment-handoff.md](cloudflare-deployment-handoff.md).
+The real-account deployment procedure, including the Pages Git integration, is
+in [cloudflare-deployment-handoff.md](cloudflare-deployment-handoff.md).
 
 ## Local development
 
@@ -283,30 +253,11 @@ single atomic D1 batches, so concurrent uses of one token succeed at most once.
 
 See [owner checks on real infrastructure](verification.md#owner-checks-on-real-infrastructure) for deployment, restore, rotation and provider evidence beyond local verification.
 
-## Optional API documentation UI
-
-Add `"LACE_API_DOCS_ENABLED": "true"` to Worker `vars` and redeploy to serve a
-public Scalar reference at `/api/docs`. In local development, put
-`LACE_API_DOCS_ENABLED=true` in the local `.dev.vars` and restart the dev server.
-Omit the setting or use the exact string `false` to disable it and restore API
-`404` responses. Empty strings and all other supplied values are invalid and
-use the Worker's sanitized invalid-environment `503` boundary.
-
-The UI reads the live `/api/v1/openapi.json`, which remains available even when
-the UI is disabled. The browser must reach `cdn.jsdelivr.net` for the pinned
-Scalar script; offline viewing is not supported. The page is anonymous when
-enabled, while interactive API requests use the current Lace origin and retain
-normal authorization, validation and concurrency checks. No external request
-proxy or prefilled/persisted credentials are configured. Existing same-origin
-sessions apply; telemetry, remote fonts and optional hosted integrations are
-disabled. Disable or remove the variable and redeploy to turn the UI off.
-
 ## Optional content assistant
 
-Set the string var `LACE_MCP_ENABLED` to `true` after D1 migrations and redeploy;
-local development uses `.dev.vars`. No additional binding is required. See
-[OAuth content assistant](mcp.md) for scopes, account revocation, diagnostics and
-the distinct local-versus-remote acceptance requirements.
+The public guide is
+[Connect an AI assistant](../apps/docs/src/content/docs/en/latest/operations/mcp.md);
+shared implementation notes are in [Node API runtime](node-api.md#optional-content-assistant).
 
 OAuth maintenance rotates three bounded cleanup phases across minute invocations,
 using at most three D1 statements per run so existing dispatch work retains the

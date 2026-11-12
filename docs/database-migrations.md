@@ -1,25 +1,25 @@
 # Database migrations
 
-Lace database changes are explicit, ordered, forward-only migrations shared by
-Node SQLite and Cloudflare D1. Backward/down migrations are not supported.
+Internal note on the shared migration chain, its baseline, the D1 mutation
+strategy and the repository contract suite. Operators apply migrations as
+described in
+[Operate and recover Lace](../apps/docs/src/content/docs/en/latest/operations/index.md#upgrade-and-roll-back)
+and the deployment guides.
 
-Generate a migration after changing the shared Drizzle schema:
+Lace database changes are explicit, ordered, forward-only migrations shared by
+Node SQLite and Cloudflare D1. Backward/down migrations are not supported. If
+an applied migration needs correction, restore a verified backup or ship a
+reviewed later forward migration; never edit an already-applied migration
+file.
+
+In the engine repository, generate a migration after changing the shared
+Drizzle schema, and apply the checked-in chain to a Node SQLite file (printing
+its installed migration records):
 
 ```bash
 pnpm db:generate
-```
-
-Apply all checked-in migrations to a Node SQLite file and print its installed
-migration records:
-
-```bash
 LACE_DATABASE_PATH=./lace.sqlite pnpm db:migrate:node
 ```
-
-Run this command as a deployment step before starting the Node runtime. If a
-production migration needs correction, restore a verified database backup or
-ship a reviewed later forward migration; do not edit an already-applied
-migration file.
 
 For local development, do not run a separate migration process. `pnpm dev:node`
 starts the Compose migration role against its named SQLite volume before the
@@ -27,11 +27,12 @@ API is allowed to become ready. Ordinary `pnpm dev:stop` and subsequent starts
 preserve that volume; only `pnpm dev:reset -- --confirm` deletes the named
 local development database and MinIO data.
 
-Node content repositories require this migration before they are constructed.
-They provide bounded reads, draft lifecycle writes, guarded publication, and
-entry deletion. Public-projection mutations atomically enqueue durable build
-work; build dispatch occurs later. Media deletion only marks unreferenced media
-for asynchronous cleanup, never deleting an object in the database transaction.
+Node content repositories require the migrated schema before they are
+constructed. They provide bounded reads, draft lifecycle writes, guarded
+publication and entry deletion. Public-projection mutations atomically enqueue
+durable build work; build dispatch occurs later. Media deletion only marks
+unreferenced media for asynchronous cleanup, never deleting an object in the
+database transaction.
 
 ## Baseline and older databases
 
@@ -54,12 +55,11 @@ are no longer checked in. It is refused, not upgraded:
 - the Node API and the Worker report not ready, because the baseline is not
   in their ledger.
 
-Recreate such a database: keep the content you need, back up the old file or
-D1 export, then delete the local database files (`.lace/data/lace.sqlite` with
-its `-wal`/`-shm` files in a generated Node project, `.lace/data/cloudflare`
-for local Cloudflare, `packages/platform-node/lace.sqlite` or the
-`dev-data/` state in this repository) or create a new remote D1 database, and
-run the migration, content sync and bootstrap again.
+Such installations are unsupported; the public upgrade guidance starts at
+rc2. A contributor's engine-repository state from before the baseline is
+discarded and recreated: `pnpm dev:reset -- --confirm` for the Node stack, or
+delete `packages/platform-node/lace.sqlite` and the `dev-data/cloudflare/`
+state, then migrate, synchronize and bootstrap again.
 
 ## Cloudflare D1
 
@@ -98,7 +98,7 @@ a freshly migrated database, and every run also asserts that no
 
 See [owner checks on real infrastructure](verification.md#owner-checks-on-real-infrastructure) for deployment, restore, rotation and provider evidence beyond local verification.
 
-## CE10 internal URL links
+## Internal URL links
 
 See [internal URL links](./internal-url-links.md) for canonical ID targets, the
 200-occurrence snapshot bound, publication/removal guards, format-2 transport,
