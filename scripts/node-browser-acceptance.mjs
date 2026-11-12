@@ -5,7 +5,7 @@ export const administratorTourSteps = Object.freeze([
   "Content",
   "Pages",
   "Collections",
-  "Site",
+  "Globals",
   "Media",
   "Builds",
   "Users",
