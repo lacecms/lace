@@ -70,9 +70,11 @@ test("generates deterministic owned source and hashed managed files", async () =
     await readFile(join(left.path, ".lace/upgrade-instructions.json"), "utf8"),
   );
   expect(instructions).toMatchObject({ schemaVersion: 1, templateVersion: TEMPLATE_VERSION });
-  // Instructions describe only the upgrade from the latest published template (rc2).
+  // Instructions cover the latest release and the oldest supported upgrade path.
   expect(instructions.configuration).toHaveLength(1);
-  expect(instructions.configuration[0]).toMatch(/^Template 0\.48\.0: .*rc2 .*pnpm content:sync/u);
+  expect(instructions.configuration[0]).toContain(`Template ${TEMPLATE_VERSION}:`);
+  expect(instructions.configuration[0]).toMatch(/rc3 installations need no additional schema/u);
+  expect(instructions.configuration[0]).toMatch(/rc2 installations.*pnpm content:sync/u);
   expect(instructions.database).toHaveLength(1);
   expect(instructions.database[0]).toMatch(
     /rc2 database.*baseline migration.*pnpm db:migrate.*SCHEMA_UNSUPPORTED/u,
