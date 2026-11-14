@@ -1012,7 +1012,21 @@ async function installPackedConsumer(project, tarballs) {
   ]
     .map(([name, file]) => `  '${name}': '${file}'`)
     .join("\n");
-  await writeFile(workspaceFile, `${workspaceYaml}\noverrides:\n${overrides}\n`);
+  // pnpm verifies the workspace lockfile before resolving the packed consumer.
+  // Carry its approved release-age exceptions into the disposable project.
+  const minimumReleaseAgeExclude = JSON.parse(
+    await run("install-release-age-exclusions", "pnpm", [
+      "config",
+      "get",
+      "minimumReleaseAgeExclude",
+      "--location=project",
+      "--json",
+    ]),
+  );
+  const releaseAgePolicy = minimumReleaseAgeExclude?.length
+    ? `\nminimumReleaseAgeExclude: ${JSON.stringify(minimumReleaseAgeExclude)}\n`
+    : "";
+  await writeFile(workspaceFile, `${workspaceYaml}\noverrides:\n${overrides}\n${releaseAgePolicy}`);
   await copyFile(join(workspace, "pnpm-lock.yaml"), join(project, "pnpm-lock.yaml"));
   await run("install", "pnpm", ["install", "--no-frozen-lockfile"], {
     cwd: project,
