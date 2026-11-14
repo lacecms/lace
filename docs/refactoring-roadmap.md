@@ -83,15 +83,14 @@ records rc1 in `publishedVersions`, writes the changelog entry and relaxes the
 preparation gate to Node 24 or later with exact pnpm `12.3.4`. It also
 withdraws `allow-supported-node-release-preparation`. The owner prepares,
 accepts and publishes rc2 themselves using `docs/alpha-release.md`. The
-remaining sessions (RF6, RF7, RF8C, RF9C–RF9F) keep their order, are not part
-of rc2 and end in rc3. rc1 stays the oldest supported release and the upgrade
+remaining sessions (RF6, RF7, RF8C, RF9C–RF9F) keep their order and are not part
+of rc2. rc1 stays the oldest supported release and the upgrade
 fixture origin.
 
 **Outcome (RC2):** the owner published rc2 on 2026-11-08: sixteen npm
 packages on `next`, both images for linux/amd64 and linux/arm64, and GitHub
 prerelease `v0.1.0-rc2` at merge commit `e82670cc`. `prepare-rc2-release` is
-archived with its specifications synchronized. `0.1.0-rc2` joins
-`publishedVersions` when rc3 is selected.
+archived with its specifications synchronized.
 
 ### Owner-inserted feature changes after RF6 (2026-11-10)
 
@@ -114,8 +113,8 @@ preset) and is retained without effect in flex modes; `featured-first` is
 removed and migrated to `columns-2` with a `full` first item; image `size`
 `natural` keeps intrinsic width capped to the cell with preserved proportions
 and no horizontal overflow; gallery video items default to `ambient` playback,
-`videoEmbed` keeps `player`. No release is selected: the owner decides when
-rc3 is prepared. RF7, RF8C and RF9C–RF9F keep their order after these changes.
+`videoEmbed` keeps `player`. RF7, RF8C and RF9C–RF9F keep their order after
+these changes.
 
 On 2026-11-10 the owner also inserted `admin-editor-ui-polish` from an admin
 UI review, delivered before route-less collections: the Site navigation group
