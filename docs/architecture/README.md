@@ -48,6 +48,23 @@ directory, `openspec/specs/**` (accepted behavior), the active OpenSpec change
 and `docs/archive/` (completed roadmaps). A lower level may add detail but
 never silently contradicts a higher one.
 
+### Maintaining the architecture
+
+Keep current scope, system boundaries, responsibilities, dependencies and
+cross-cutting invariants here. Accepted capability specs own detailed behavior;
+ADRs record decisions and rationale; history belongs in `history.md` and the
+change archive. Update affected architecture in the same change as the system.
+Before moving detail, verify its destination preserves the requirements and
+retain the architectural invariant and a useful link here.
+
+Each Markdown file in this directory may contain at most 600 lines outside
+fenced Mermaid diagrams, including blank and whitespace-only lines. When a file
+outgrows that limit, split it by domain and preserve section numbers and the map.
+The directory check warns above 3,000 nonblank lines outside Mermaid diagrams;
+review duplication and stale detail when it warns, without discarding invariants.
+Both counts exclude diagram fences and their contents; the directory count also
+excludes blank and whitespace-only lines. A final newline adds no extra line.
+
 ## 2. Product goals
 
 A user creates a site with one CLI command (starter, existing Astro site or no

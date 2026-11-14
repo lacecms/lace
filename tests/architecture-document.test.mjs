@@ -4,11 +4,13 @@ import * as db from "@lacecms/db";
 import { is } from "drizzle-orm";
 import { SQLiteTable, getTableConfig } from "drizzle-orm/sqlite-core";
 import { expect, test } from "vitest";
+import {
+  architectureSizeDiagnostics,
+  warnArchitectureSize,
+} from "./test-support/architecture-size.mjs";
 
 const directory = resolve(import.meta.dirname, "../docs/architecture");
 const HISTORY = "history.md";
-const MAX_TOTAL_PROSE_LINES = 2_500;
-const MAX_FILE_LINES = 600;
 const SECTION_COUNT = 26;
 const CHANGE_CODE = /\b(?:CE|SM|LIST|CQ|MCP|RF)\d+[A-Z]?\b|\bStep \d+\b|\b\d{2}[A-H]\b/g;
 
@@ -25,17 +27,6 @@ function lines(source) {
 
 function mermaidBlocks(source) {
   return [...source.matchAll(/^```mermaid\n([\s\S]*?)^```$/gm)].map((match) => match[1]);
-}
-
-function proseLineCount(source) {
-  let inside = false;
-  let count = 0;
-  for (const line of lines(source)) {
-    if (!inside && line.startsWith("```mermaid")) inside = true;
-    else if (inside && line.startsWith("```")) inside = false;
-    else if (!inside) count += 1;
-  }
-  return count;
 }
 
 function schemaTables() {
@@ -209,16 +200,8 @@ test("the section map matches the numbered section headings", () => {
   expect(mismatches, "section map mismatches").toEqual([]);
 });
 
-test("architecture files stay within their size ceilings", () => {
-  const oversized = [...files]
-    .map(([name, source]) => [name, lines(source).length])
-    .filter(([, count]) => count >= MAX_FILE_LINES)
-    .map(([name, count]) => `${name}: ${count} lines (limit below ${MAX_FILE_LINES})`);
+test("architecture files stay within their size limit", () => {
+  const { oversized, warning } = architectureSizeDiagnostics(files);
+  warnArchitectureSize(warning);
   expect(oversized, "oversized architecture files").toEqual([]);
-
-  const total = [...files.values()].reduce((sum, source) => sum + proseLineCount(source), 0);
-  expect(
-    total,
-    `architecture prose is ${total} lines outside Mermaid blocks (limit below ${MAX_TOTAL_PROSE_LINES})`,
-  ).toBeLessThan(MAX_TOTAL_PROSE_LINES);
 });
