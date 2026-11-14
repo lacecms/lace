@@ -3,8 +3,8 @@
 > **Archived 2026-11-01.** All five steps (SM1–SM5, twelve sessions) are
 > implemented, synchronized and archived under `openspec/changes/archive/`;
 > merged to `main` in [lacecms/lace#63](https://github.com/lacecms/lace/pull/63).
-> Kept for delivery history. The active roadmap is
-> [`docs/refactoring-roadmap.md`](../refactoring-roadmap.md).
+> Kept for delivery history. The next roadmap was the
+> [refactoring roadmap](refactoring-roadmap.md).
 
 > Selected 2026-10-31 after the alpha.8 release. Motivated by migrating the
 > first real portfolio site (tatianae.com, currently on Framer) to Lace and

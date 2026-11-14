@@ -43,7 +43,7 @@ website. One installation manages one website, with the same content model and
 domain behavior on Cloudflare (Workers, D1, R2, optionally KV) or a VPS (Docker
 Compose, Node.js, SQLite, MinIO). Authority order, highest first: this
 directory, `openspec/specs/**` (accepted behavior), the active OpenSpec change
-(proposed delta), then the [active roadmap](../refactoring-roadmap.md)
+(proposed delta), then the [active roadmap](../extensibility-roadmap.md)
 (delivery order and decisions), [backlog.md](../../backlog.md) (future work)
 and `docs/archive/` (completed roadmaps). A lower level may add detail but
 never silently contradicts a higher one.
