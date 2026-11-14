@@ -1,5 +1,6 @@
 import { notFound, parse, response } from "../shared/http.js";
 import { optionalJsonBody } from "../shared/request.js";
+import { authorizationFailure, security, validationFailure } from "../shared/openapi.js";
 import { requireContentReader } from "@lacecms/application";
 import {
   buildSiteSelectionSchema,
@@ -10,6 +11,7 @@ import {
   identifierSchemaPublic,
   toSiteBuildRecordDto,
   InvariantError,
+  errorEnvelopeSchema,
 } from "@lacecms/contracts";
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
@@ -22,11 +24,14 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
     "/api/v1/admin/build-site",
     describeRoute({
       summary: "Read current configured build site",
+      tags: ["admin"],
+      security: security.session,
       responses: {
         200: {
           description: "Current configuration, not deployment verification",
           content: { "application/json": { schema: resolver(buildSiteSelectionSchema) } },
         },
+        ...authorizationFailure(),
       },
     }),
     async (context) => {
@@ -43,7 +48,9 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
           content: { "application/json": { schema: resolver(siteBuildListSchema) } },
           description: "Recent site builds",
         },
+        ...authorizationFailure(),
       },
+      security: security.session,
       summary: "List site builds",
       tags: ["admin"],
     }),
@@ -63,7 +70,14 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
           content: { "application/json": { schema: resolver(siteBuildRecordSchema) } },
           description: "Site build detail",
         },
+        ...authorizationFailure(),
+        404: {
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+          description: "Site build not found",
+        },
+        ...validationFailure(),
       },
+      security: security.session,
       summary: "Get a site build",
       tags: ["admin"],
     }),
@@ -87,7 +101,10 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
           content: { "application/json": { schema: resolver(buildQueueReceiptSchema) } },
           description: "Build request queued",
         },
+        ...authorizationFailure(),
+        ...validationFailure(),
       },
+      security: security.session,
       summary: "Request a site build",
       tags: ["admin"],
     }),
@@ -112,7 +129,10 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
           content: { "application/json": { schema: resolver(buildQueueReceiptSchema) } },
           description: "Failed build retry queued",
         },
+        ...authorizationFailure(),
+        ...validationFailure(),
       },
+      security: security.session,
       summary: "Retry a failed site build",
       tags: ["admin"],
     }),

@@ -360,11 +360,11 @@ test("enabled MCP connection routes describe their existing contracts in OpenAPI
   const list = doc.paths["/api/v1/account/mcp-connections"].get;
   const revoke = doc.paths["/api/v1/account/mcp-connections/{connectionId}/revoke"].post;
   expect(list.parameters.map(({ name }) => name).sort()).toEqual(["after", "limit"]);
-  expect(Object.keys(list.responses).sort()).toEqual(["200", "401", "422"]);
+  expect(Object.keys(list.responses).sort()).toEqual(["200", "403", "422"]);
   expect(revoke.parameters).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ name: "connectionId", in: "path", required: true }),
     ]),
   );
-  expect(Object.keys(revoke.responses).sort()).toEqual(["204", "401", "403", "404", "422", "429"]);
+  expect(Object.keys(revoke.responses).sort()).toEqual(["204", "403", "404", "422", "429"]);
 });

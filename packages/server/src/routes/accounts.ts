@@ -7,6 +7,7 @@ import {
   validationHook,
 } from "../shared/http.js";
 import { optionalJsonBody } from "../shared/request.js";
+import { authorizationFailure, security, validationFailure } from "../shared/openapi.js";
 import {
   accountCapabilitiesSchema,
   oauthConnectionListSchema,
@@ -52,7 +53,9 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
           content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
           description: "Unknown, expired, revoked or accepted invitation",
         },
+        ...validationFailure(),
       },
+      security: security.none,
     }),
     validator("json", invitationInspectRequestSchema, validationHook),
     async (context) => {
@@ -86,7 +89,9 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
           content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
           description: "Unknown, expired, revoked or accepted invitation",
         },
+        ...validationFailure(),
       },
+      security: security.none,
     }),
     validator("json", invitationAcceptRequestSchema, validationHook),
     async (context) => {
@@ -110,7 +115,9 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
       tags: ["account"],
       responses: {
         202: { description: "Accepted; identical whether or not the address has an account" },
+        ...validationFailure(),
       },
+      security: security.none,
     }),
     validator("json", passwordResetRequestSchema, validationHook),
     async (context) => {
@@ -130,7 +137,9 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
           content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
           description: "Unknown, expired, consumed or superseded reset link",
         },
+        ...validationFailure(),
       },
+      security: security.none,
     }),
     validator("json", passwordResetConfirmRequestSchema, validationHook),
     async (context) => {
@@ -152,7 +161,10 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
           content: { "application/json": { schema: resolver(adminSessionSchema) } },
           description: "Updated session summary",
         },
+        ...authorizationFailure(),
+        ...validationFailure(),
       },
+      security: security.session,
     }),
     validator("json", accountProfileUpdateRequestSchema, validationHook),
     async (context) => {
@@ -176,9 +188,12 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
         },
         400: {
           content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-          description: "The current password is incorrect",
+          description: "The current password is incorrect (INVALID_CREDENTIALS)",
         },
+        ...authorizationFailure(),
+        ...validationFailure(),
       },
+      security: security.session,
     }),
     validator("json", accountPasswordChangeRequestSchema, validationHook),
     async (context) => {
@@ -202,19 +217,13 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
     describeRoute({
       summary: "Read account capabilities",
       tags: ["account"],
+      security: security.session,
       responses: {
         200: {
           description: "Successful response",
           content: { "application/json": { schema: resolver(accountCapabilitiesSchema) } },
         },
-        401: {
-          description: "Session required",
-          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-        },
-        403: {
-          description: "Insufficient permissions",
-          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-        },
+        ...authorizationFailure(),
       },
     }),
     async (context) => {
@@ -237,6 +246,7 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
       describeRoute({
         summary: "List the signed-in user's MCP connections",
         tags: ["account"],
+        security: security.session,
         parameters: [
           {
             in: "query",
@@ -258,14 +268,8 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
             description: "Connections without credentials",
             content: { "application/json": { schema: resolver(oauthConnectionListSchema) } },
           },
-          401: {
-            description: "Session required",
-            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-          },
-          422: {
-            description: "Invalid query",
-            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-          },
+          ...authorizationFailure(),
+          ...validationFailure(),
         },
       }),
       async (context) => {
@@ -302,6 +306,7 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
       describeRoute({
         summary: "Revoke an owned MCP connection",
         tags: ["account"],
+        security: security.session,
         parameters: [
           {
             in: "path",
@@ -316,22 +321,12 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
         },
         responses: {
           204: { description: "Connection revoked" },
-          401: {
-            description: "Session required",
-            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-          },
-          403: {
-            description: "Invalid origin",
-            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-          },
+          ...authorizationFailure("an Origin that is not the canonical public origin"),
           404: {
             description: "Connection not found",
             content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
           },
-          422: {
-            description: "Invalid request",
-            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-          },
+          ...validationFailure(),
           429: {
             description: "Rate limit exceeded",
             content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
@@ -363,7 +358,9 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
           content: { "application/json": { schema: resolver(accountSessionListSchema) } },
           description: "Sessions without tokens or IP addresses",
         },
+        ...authorizationFailure(),
       },
+      security: security.session,
     }),
     async (context) => {
       const resolvedActor = await actor(context);
@@ -400,7 +397,10 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
           content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
           description: "The current session is ended by signing out instead",
         },
+        ...authorizationFailure(),
+        ...validationFailure(),
       },
+      security: security.session,
     }),
     async (context) => {
       const resolvedActor = await actor(context);
@@ -422,7 +422,10 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
           content: { "application/json": { schema: resolver(sessionRevocationResultSchema) } },
           description: "Count of sessions ended",
         },
+        ...authorizationFailure(),
+        ...validationFailure(),
       },
+      security: security.session,
     }),
     async (context) => {
       const resolvedActor = await actor(context);

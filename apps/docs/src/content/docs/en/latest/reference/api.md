@@ -37,6 +37,8 @@ Session permissions come from the user's role:
 | `users:manage`    | admin                 | Manage users and invitations.                                  |
 | `settings:manage` | admin                 | Settings, build and import tokens, email test, build requests. |
 
+Failures use one JSON envelope: `error.code`, `error.message` and, for some codes, `error.details`. A missing, invalid or insufficient credential returns `403 AUTHORIZATION_DENIED`; the REST API never answers `401`. A request that breaks the contract returns `422 VALIDATION_FAILED` with value-free issues. The OpenAPI contract names the accepted credentials of each operation through the `session`, `buildToken` and `importToken` security schemes.
+
 ## Public endpoints
 
 | Method | Path                                           | Purpose                                                                                         | Credential  |

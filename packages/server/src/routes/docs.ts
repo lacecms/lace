@@ -4,6 +4,7 @@ import {
   blockMetadataSchema,
   fieldVisibilitySchema,
   contentMetadataOpenApi,
+  errorEnvelopeSchema,
 } from "@lacecms/contracts";
 import { Scalar } from "@scalar/hono-api-reference";
 import { toJsonSchema } from "@valibot/to-json-schema";
@@ -11,6 +12,7 @@ import type { Hono } from "hono";
 import { describeRoute, loadVendor, openAPIRouteHandler } from "hono-openapi";
 import type { GenerateSpecOptions } from "hono-openapi";
 import type { RouteContext } from "../composition/route-context.js";
+import { securitySchemes } from "../shared/openapi.js";
 
 loadVendor("valibot", {
   toJSONSchema: ((
@@ -29,10 +31,17 @@ loadVendor("valibot", {
                 ? "BlockMetadata"
                 : valibotSchema === fieldVisibilitySchema
                   ? "FieldVisibility"
-                  : undefined;
+                  : valibotSchema === errorEnvelopeSchema
+                    ? "ErrorEnvelope"
+                    : undefined;
         return name === undefined ? undefined : { $ref: `#/components/schemas/${name}` };
       },
     })) as never,
+});
+
+/** The shared failure body (ADR 0019), referenced by every documented error response. */
+const { $schema: _dialect, ...errorEnvelopeComponent } = toJsonSchema(errorEnvelopeSchema, {
+  errorMode: "ignore",
 });
 
 export function registerDocsRoutes(app: Hono, routeContext: RouteContext): void {
@@ -40,6 +49,8 @@ export function registerDocsRoutes(app: Hono, routeContext: RouteContext): void 
   app.get(
     "/api/v1/openapi.json",
     openAPIRouteHandler(app, {
+      // Validation failures are `422` in the shared envelope, documented per route.
+      defaultValidationErrorResponse: false,
       documentation: {
         info: {
           title: capabilities.environment.openApiTitle,
@@ -47,9 +58,13 @@ export function registerDocsRoutes(app: Hono, routeContext: RouteContext): void 
         },
         openapi: "3.1.0",
         components: {
-          schemas: contentMetadataOpenApi as NonNullable<
+          schemas: {
+            ...contentMetadataOpenApi,
+            ErrorEnvelope: errorEnvelopeComponent,
+          } as NonNullable<
             NonNullable<GenerateSpecOptions["documentation"]["components"]>["schemas"]
           >,
+          securitySchemes,
         },
       },
     }),

@@ -1,4 +1,5 @@
 import { AuthorizationError, notFound, response, validationHook } from "../shared/http.js";
+import { authorizationFailure, security, validationFailure } from "../shared/openapi.js";
 import {
   effectiveActorPermissions,
   importTokenCapabilities,
@@ -48,19 +49,13 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
     describeRoute({
       summary: "List build tokens",
       tags: ["admin"],
+      security: security.session,
       responses: {
         200: {
           description: "Build token metadata",
           content: { "application/json": { schema: resolver(buildTokenListSchema) } },
         },
-        401: {
-          description: "Session required",
-          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-        },
-        403: {
-          description: "Insufficient permissions",
-          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-        },
+        ...authorizationFailure(),
       },
     }),
     async (context) => {
@@ -72,6 +67,19 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
   );
   app.post(
     "/api/v1/admin/api-tokens",
+    describeRoute({
+      summary: "Create a build token",
+      tags: ["admin"],
+      security: security.session,
+      responses: {
+        201: {
+          description: "The created token; the plaintext is returned only here",
+          content: { "application/json": { schema: resolver(buildTokenCreatedSchema) } },
+        },
+        ...authorizationFailure(),
+        ...validationFailure(),
+      },
+    }),
     validator("json", buildTokenCreateRequestSchema, validationHook),
     async (context) => {
       await settingsActor(context);
@@ -92,20 +100,14 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
     describeRoute({
       summary: "Revoke a build token",
       tags: ["admin"],
+      security: security.session,
       parameters: [{ name: "tokenId", in: "path", required: true, schema: { type: "string" } }],
       responses: {
         200: {
           description: "Revoked build token metadata",
           content: { "application/json": { schema: resolver(buildTokenSchema) } },
         },
-        401: {
-          description: "Session required",
-          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-        },
-        403: {
-          description: "Insufficient permissions",
-          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-        },
+        ...authorizationFailure(),
         404: {
           description: "Token not found",
           content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
@@ -130,7 +132,9 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
           content: { "application/json": { schema: resolver(importTokenListSchema) } },
           description: "Import-token metadata, newest first; never the plaintext",
         },
+        ...authorizationFailure(),
       },
+      security: security.session,
       summary: "List import tokens. Requires a session with settings:manage.",
       tags: ["admin"],
     }),
@@ -152,7 +156,10 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
           content: { "application/json": { schema: resolver(importTokenCreatedSchema) } },
           description: "The created token; the plaintext is returned only here",
         },
+        ...authorizationFailure(),
+        ...validationFailure(),
       },
+      security: security.session,
       summary:
         "Create an import token for lace import (1–7 days; publishing only for creators with content:publish). Requires a session with settings:manage.",
       tags: ["admin"],
@@ -186,7 +193,13 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
           content: { "application/json": { schema: resolver(importTokenSchema) } },
           description: "The revoked token (idempotent)",
         },
+        ...authorizationFailure(),
+        404: {
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+          description: "Token not found",
+        },
       },
+      security: security.session,
       summary: "Revoke an import token. Requires a session with settings:manage.",
       tags: ["admin"],
     }),
@@ -208,7 +221,9 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
           content: { "application/json": { schema: resolver(importCredentialSchema) } },
           description: "The presented import token and the effective permissions",
         },
+        ...authorizationFailure(),
       },
+      security: security.importOnly,
       summary:
         "Describe the presented import token. Accepts only Authorization: Bearer <import token>.",
       tags: ["admin"],

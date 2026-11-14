@@ -1,5 +1,6 @@
 import { noStore, notFound, parse, response, validationHook } from "../shared/http.js";
 import { optionalJsonBody } from "../shared/request.js";
+import { authorizationFailure, security, validationFailure } from "../shared/openapi.js";
 import { invitationDto, invitationIssueDto, linkIssueDto } from "../shared/account-dtos.js";
 import {
   managedUserListSchema,
@@ -29,19 +30,13 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
     describeRoute({
       summary: "List managed users",
       tags: ["admin"],
+      security: security.session,
       responses: {
         200: {
           description: "Successful response",
           content: { "application/json": { schema: resolver(managedUserListSchema) } },
         },
-        401: {
-          description: "Session required",
-          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-        },
-        403: {
-          description: "Insufficient permissions",
-          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-        },
+        ...authorizationFailure(),
       },
     }),
     async (context) => {
@@ -59,7 +54,9 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
           content: { "application/json": { schema: resolver(invitationListSchema) } },
           description: "Invitations without tokens or links",
         },
+        ...authorizationFailure(),
       },
+      security: security.session,
     }),
     async (context) => {
       const items = await accounts().listInvitations(await actor(context));
@@ -80,7 +77,10 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
           content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
           description: "The address has an account or an active invitation",
         },
+        ...authorizationFailure(),
+        ...validationFailure(),
       },
+      security: security.session,
     }),
     validator("json", invitationCreateRequestSchema, validationHook),
     async (context) => {
@@ -107,7 +107,10 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
           content: { "application/json": { schema: resolver(invitationIssueResultSchema) } },
           description: "Invitation reissued; the link is present only when email was not sent",
         },
+        ...authorizationFailure(),
+        ...validationFailure(),
       },
+      security: security.session,
     }),
     async (context) => {
       const resolvedActor = await actor(context);
@@ -126,7 +129,12 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
     describeRoute({
       summary: "Revoke an invitation",
       tags: ["admin"],
-      responses: { 204: { description: "Invitation revoked" } },
+      security: security.session,
+      responses: {
+        204: { description: "Invitation revoked" },
+        ...authorizationFailure(),
+        ...validationFailure(),
+      },
     }),
     async (context) => {
       const resolvedActor = await actor(context);
@@ -148,7 +156,10 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
           content: { "application/json": { schema: resolver(adminPasswordResetResultSchema) } },
           description: "Reset issued; the link is present only when email was not sent",
         },
+        ...authorizationFailure(),
+        ...validationFailure(),
       },
+      security: security.session,
     }),
     async (context) => {
       const resolvedActor = await actor(context);
@@ -175,7 +186,10 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
           content: { "application/json": { schema: resolver(sessionRevocationResultSchema) } },
           description: "Count of sessions ended",
         },
+        ...authorizationFailure(),
+        ...validationFailure(),
       },
+      security: security.session,
     }),
     async (context) => {
       const resolvedActor = await actor(context);
@@ -189,6 +203,28 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
   );
   app.patch(
     "/api/v1/admin/users/:userId",
+    describeRoute({
+      summary: "Change a user's role or disabled state",
+      tags: ["admin"],
+      security: security.session,
+      responses: {
+        200: {
+          content: { "application/json": { schema: resolver(managedUserSchema) } },
+          description: "Updated user",
+        },
+        ...authorizationFailure(),
+        404: {
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+          description: "User not found",
+        },
+        409: {
+          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+          description:
+            "The final active administrator cannot be disabled or demoted (LAST_ADMIN_PROTECTED)",
+        },
+        ...validationFailure(),
+      },
+    }),
     validator("json", userUpdateRequestSchema, validationHook),
     async (context) => {
       await usersActor(context);
