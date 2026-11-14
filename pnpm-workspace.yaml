@@ -23,7 +23,7 @@ catalog:
   "@radix-ui/react-slot": 1.3.3
   "@radix-ui/react-tabs": 1.1.21
   "@radix-ui/react-tooltip": 1.2.16
-  "@tailwindcss/vite": 4.3.3
+  "@tailwindcss/vite": 4.3.5
   "@tanstack/react-query": 5.103.1
   "@tanstack/react-router": 1.170.38
   "@tanstack/react-table": 9.2.4
@@ -51,42 +51,42 @@ catalog:
   "@types/node": 24.10.1
   "@types/react": 19.3.0
   "@types/react-dom": 19.3.0
-  "@vitejs/plugin-react": 6.1.1
+  "@vitejs/plugin-react": 6.3.0
   "@fission-ai/openspec": 1.12.0
   "@hono/standard-validator": 0.4.0
-  "@hono/node-server": 2.1.3
-  "@playwright/test": 1.63.0
-  "@valibot/to-json-schema": 1.4.0
-  astro: 7.3.3
-  better-auth: 1.7.7
-  better-sqlite3: 13.0.3
+  "@hono/node-server": 2.1.8
+  "@playwright/test": 1.65.0
+  "@valibot/to-json-schema": 1.8.0
+  astro: 7.4.12
+  better-auth: 1.7.25
+  better-sqlite3: 13.2.0
   class-variance-authority: 0.7.1
   clsx: 2.1.1
   drizzle-orm: 0.45.2
   drizzle-kit: 0.31.10
-  hono: 4.13.11
-  hono-openapi: 1.3.3
+  hono: 4.13.18
+  hono-openapi: 1.6.0
   jsdom: 30.1.0
-  lucide-react: 1.48.0
+  lucide-react: 1.73.0
   miniflare: 5.20260903.0-alpha
-  nodemailer: 10.1.4
+  nodemailer: 10.5.0
   oxfmt: 0.66.0
   oxlint: 1.81.0
-  react: 19.2.8
+  react: 19.3.1
   react-day-picker: 10.0.1
-  react-dom: 19.2.8
+  react-dom: 19.3.1
   react-dropzone: 20.1.2
   react-hook-form: 7.70.0
   sonner: 2.0.8
   tailwind-merge: 3.7.0
   tailwindcss: 4.3.3
-  turbo: 2.10.12
+  turbo: 2.11.11
   typescript: 7.0.2
   ulid: 3.0.2
-  valibot: 1.4.2
-  vite: 8.2.4
-  vitest: 5.0.3
-  wrangler: 4.129.0
+  valibot: 1.5.0
+  vite: 8.3.8
+  vitest: 5.1.0
+  wrangler: 4.162.0
   "@aws-sdk/client-s3": ^3.1133.0
   sharp: ^0.35.5
   semver: 7.8.5
@@ -113,3 +113,18 @@ overrides:
   "zod@>=4.0.0 <4.6.6": 4.6.6
   "seroval@>=1.4.1 <1.6.11": 1.6.11
   "vite@>=8.3.0 <=8.3.2": 8.3.3
+
+minimumReleaseAgeExclude:
+  - '@better-auth/core@1.7.25'
+  - '@better-auth/drizzle-adapter@1.7.25'
+  - '@better-auth/kysely-adapter@1.7.25'
+  - '@better-auth/memory-adapter@1.7.25'
+  - '@better-auth/mongo-adapter@1.7.25'
+  - '@better-auth/prisma-adapter@1.7.25'
+  - '@better-auth/telemetry@1.7.25'
+  - '@standard-community/standard-json@0.4.1'
+  - '@standard-community/standard-openapi@0.2.12'
+  - better-auth@1.7.25
+  - better-sqlite3@13.2.0
+  - hono-openapi@1.6.0
+  - lucide-react@1.73.0

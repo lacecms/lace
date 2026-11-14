@@ -94,6 +94,7 @@ from committed outbox work, and `401 AUTHENTICATION_REQUIRED`.
 | EX3 | Typed outbox events | M | EX3A → EX3B | planned |
 | EX4 | Route policies and security use cases | L | EX4A → EX4B → EX4C → EX4D | planned |
 | EX5 | Model kind descriptor | S | EX5A | planned |
+| EX6 | Trusted client identity and production Compose ingress | M | EX6A and EX6B independent | planned |
 
 Dependencies:
 
@@ -114,6 +115,8 @@ Dependencies:
 | EX4C | EX4B | EX2, EX3 |
 | EX4D | EX4C, EX2D | EX3 |
 | EX5A | EX2C | EX3, EX4 |
+| EX6A | — | EX6B and sessions outside EX4 |
+| EX6B | — | EX1–EX5, EX6A |
 
 **Order rationale:** EX1A first, because `worker.test.ts` and the
 `platform-node` tests that EX2 rewrites must already be split. EX2 precedes
@@ -122,6 +125,10 @@ write the enqueue path twice. EX4 touches the HTTP layer only and runs beside
 EX2. EX1C types platform and `db` tests after EX2 has moved them, as RF9E
 waited for RF5. EX5 follows EX2C because configuration synchronization is the
 largest consumer of model kinds.
+
+EX6 can start immediately. Prefer EX6A before EX4A so the route-policy
+refactor can reuse the corrected client identity handling and its regression
+tests. EX6B can proceed independently.
 
 **If the next feature is already known:** webhooks move EX3 before EX2
 (accepting a second enqueue path for one step); CE12 revision history adds a
@@ -315,6 +322,43 @@ capability registry. `isSingletonKind` and the kind literal comparisons in
 becoming a singleton. The `kind` CHECK constraint is generated from the table.
 Open question: whether a future kind still needs a table rebuild migration or
 the constraint moves to application validation.
+
+## Step EX6 — Trusted client identity and production Compose ingress
+
+**Size:** M (two independent sessions).
+
+### Session EX6A — Preserve trusted client identity through body handling
+
+The patched Hono `bodyLimit()` still replaces `Request` when it buffers a
+streamed body. Lace associates the ingress-resolved client address with the
+original request object, so downstream rate limiting and the Better Auth
+sign-in wrapper can fall back to a shared `0.0.0.0` identity. Carry the
+trusted identity through body handling in request-scoped context that is
+independent of the `Request` object.
+
+Verify on Node and Cloudflare that a request whose body is replaced keeps the
+same identity for Lace rate limiting and Better Auth sign-in, and that two
+trusted client addresses retain separate buckets. Cover caller-supplied
+forwarding headers and the conservative fallback when trusted identity is
+unavailable. Add regression coverage for the existing rules in
+[bootstrap-user-token-abuse-controls](../openspec/specs/bootstrap-user-token-abuse-controls/spec.md)
+and keep it through EX4A.
+
+### Session EX6B — Restrict host port bindings in production Compose
+
+The generated production template publishes the Node API and Nginx HTTP ports
+on all host interfaces. Keep the API reachable over the Compose network and
+remove its default host-port publication. Bind Nginx to loopback by default for
+a host TLS proxy. Document explicit ingress configuration for other proxy
+topologies. Update the repository's production Compose example alongside the
+generated template, and document migration for existing installs and the
+supported endpoint for host-side commands and manual builds.
+
+Verify the resolved Compose port bindings across generated site modes and
+check that Nginx can still reach the API and serve the admin through the
+documented ingress path. Update [deployment architecture](architecture/deployment.md)
+and the affected Compose, project generator and generated acceptance specs in
+the OpenSpec change.
 
 ## 6. Progress log
 

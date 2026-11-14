@@ -5,9 +5,10 @@
   unfinished RF9C–RF9F sessions and the open findings of the API, backend and
   database audit of 2026-11-14. Order: EX1 test foundation → EX2 shared write
   plans → EX3 typed outbox events → EX4 route policies and security use cases
-  → EX5 model kind descriptor, with the dependencies in its §4. Each session
-  gets its own just-in-time OpenSpec change. Progress is tracked in the
-  roadmap's progress log.
+  → EX5 model kind descriptor, with the dependencies in its §4. EX6 covers
+  trusted client identity and production Compose ingress and can start
+  independently. Each session gets its own just-in-time OpenSpec change.
+  Progress is tracked in the roadmap's progress log.
 
 - **Refactoring roadmap (implemented, archived 2026-11-14):** RF1–RF8 and
   RF9A–RF9B plus four audit changes; kept in
