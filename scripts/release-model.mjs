@@ -86,6 +86,23 @@ export async function readReleaseModel(root) {
   };
 }
 
+const EXACT_PNPM_SPECIFICATION = /^pnpm@\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
+const EXACT_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
+
+/**
+ * Corepack bundled with the minimum Node (24.12.0) rejects a range in either package-manager
+ * field, so a manifest may omit both but never declare a range there; `engines.pnpm` carries it.
+ */
+function exactPackageManagerSpecification(manifest) {
+  if (
+    manifest.packageManager !== undefined &&
+    !EXACT_PNPM_SPECIFICATION.test(manifest.packageManager)
+  )
+    return false;
+  const devEngine = manifest.devEngines?.packageManager;
+  return devEngine?.version === undefined || EXACT_VERSION.test(devEngine.version);
+}
+
 export function validateReleaseModel(model, { templates = true } = {}) {
   const { definition: release, manifests } = model;
   if (
@@ -120,6 +137,8 @@ export function validateReleaseModel(model, { templates = true } = {}) {
       manifest.engines?.pnpm !== ENGINE_MINIMUMS.pnpm
     )
       throw new Error(`Engine minimum mismatch: ${label}`);
+    if (!exactPackageManagerSpecification(manifest))
+      throw new Error(`Package manager specification must be an exact version: ${label}`);
   }
   for (const [name, { manifest }] of Object.entries(manifests)) {
     if (!publicNames.has(name) && !manifest.private)

@@ -115,6 +115,8 @@ test.each([
   "engine-package",
   "engine-template",
   "engine-root",
+  "package-manager-range",
+  "dev-engines-range",
 ])("rejects %s release graph drift", async (failure) => {
   const model = await coherentModel();
   const manifest = model.manifests["@lacecms/content"].manifest;
@@ -138,6 +140,9 @@ test.each([
   if (failure === "engine-package") manifest.engines = { node: ">=24.12.0 <25" };
   if (failure === "engine-template") model.templates[0].engines.pnpm = ">=12 <13";
   if (failure === "engine-root") model.rootManifest.engines.node = ">=24.12.0 <25";
+  if (failure === "package-manager-range") model.templates[0].packageManager = "pnpm@>=12";
+  if (failure === "dev-engines-range")
+    model.templates[0].devEngines = { packageManager: { name: "pnpm", version: ">=12" } };
   const guide = "packages/create-lace/templates/docs/lace-operations.md";
   if (failure === "guide-create") model.guides[guide] += "pnpm create lace@0.1.0-alpha.1 x\n";
   if (failure === "guide-package") model.guides[guide] += "pnpm add @lacecms/astro@0.1.0-alpha.1\n";
