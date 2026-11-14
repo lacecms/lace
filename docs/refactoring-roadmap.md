@@ -198,7 +198,7 @@ What the roadmap changes, with the numbers to beat:
 | RF4 | Module splits | L | RF4A → RF4B → RF4C → RF4D → RF4E → RF4X → RF4F → RF4G → RF4H → RF4I → RF4J | done |
 | RF5 | Runtime deduplication | L | RF5A → RF5B → RF5C | done |
 | RF6 | Admin editor structure | L | RF6A → RF6B → RF6C → RF6D | done |
-| RF7 | CLI and developer scripts | L | RF7A → RF7B → RF7C → RF7D | in progress |
+| RF7 | CLI and developer scripts | L | RF7A → RF7B → RF7C → RF7D | done |
 | RF8 | Documentation | L | RF8A → RF8X → RF8Y → RF8B → RF8C | done |
 | RF9 | Test foundation | L | RF9A → RF9B → RF9C → RF9D → RF9E → RF9F | planned |
 
@@ -1388,7 +1388,6 @@ preserved in the linked archives. Dates refer to the final recorded event.
 | 2026-11-11 | — | [route-less-collections](../openspec/changes/archive/2026-11-11-route-less-collections/) | Archived |
 | 2026-11-11 | RF7A | [rf07a-lazy-cloudflare-path](../openspec/changes/archive/2026-11-11-rf07a-lazy-cloudflare-path/) | Archived |
 | 2026-11-11 | RF7B | [rf07b-one-command-table](../openspec/changes/archive/2026-11-11-rf07b-one-command-table/) | Archived |
-
 | 2026-11-12 | RF7C | [rf07c-cli-source-layout](../openspec/changes/archive/2026-11-12-rf07c-cli-source-layout/) | Archived |
-| 2026-11-12 | RF7D | [rf07d-naming-hygiene](../openspec/changes/rf07d-naming-hygiene/) | Implemented; 113 D1 contract cases, 227 Node contract tests and 19 affected browser tests passed; build, export comparison and root quality gates passed. Specs synchronized; pending archive. |
 | 2026-11-12 | RF8C | [rf08c-user-documentation](../openspec/changes/archive/2026-11-12-rf08c-user-documentation/) | Archived |
+| 2026-11-14 | RF7D | [rf07d-naming-hygiene](../openspec/changes/archive/2026-11-14-rf07d-naming-hygiene/) | Archived; 113 D1 contract cases, 227 Node contract tests and 19 affected browser tests passed; build, export comparison and root quality gates passed. Specs synchronized. |
