@@ -226,4 +226,5 @@ a shared repository contract case pins the result.
 | Build export page | both read groups in one read transaction | two `batch()` calls with a version re-read | contract build-export cases; Node one extra in-transaction version read |
 | Collection `list` and configuration-sync scans | numbered parameters, `NODE_LIST_QUERY_LIMITS` | positional parameters, `CLOUDFLARE_LIST_QUERY_LIMITS` | collection-query contract cases (§12 limits differ by design) |
 | Bind chunk for identifier lists | 200 | 100 (`D1_MAX_BOUND_PARAMETERS`) | not observable |
+| Superseded snapshots and idempotency expiry | one transaction | guarded batch | aligned: shared `deleteSupersededSnapshotsStatement`, live-record read and expired-record replacement, purge statement; contract retention cases |
 | Entry reload inside writes | synchronous loader inside publication transactions | awaited shared reader | covered by the publication result row |

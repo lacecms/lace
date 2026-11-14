@@ -63,6 +63,7 @@ export * from "./content/blocks.js";
 export * from "./content/snapshots.js";
 export * from "./links/statements.js";
 export * from "./publication/projection.js";
+export * from "./publication/idempotency.js";
 export * from "./links/reader.js";
 export * from "./reads/content-reader.js";
 

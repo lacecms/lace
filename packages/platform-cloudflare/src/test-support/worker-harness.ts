@@ -140,6 +140,8 @@ export async function createWorkerFixture(
     advance: (milliseconds: number) => {
       offset += milliseconds;
     },
+    /** The fixture clock's current time, including every `advance`. */
+    now: () => Date.now() + offset,
     call,
     ctx,
     env,

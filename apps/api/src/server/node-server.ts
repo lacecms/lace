@@ -151,6 +151,7 @@ export async function startNodeServer(input: {
   readonly settings: NodeRuntimeSettings;
 }): Promise<NodeServer> {
   await input.runtime.maintainOAuth();
+  await input.runtime.maintainOperations();
   await input.runtime.verifyStorage();
   const fetch = input.developmentGateway
     ? createNodeDevelopmentGateway(input.runtime.app.fetch, input.settings)

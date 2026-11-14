@@ -30,6 +30,12 @@ export interface Clock {
   now(): UnixMilliseconds;
 }
 
+/** Bounded operational cleanup that each SQL runtime runs on its maintenance schedule. */
+export interface OperationsMaintenancePort {
+  /** Deletes at most `limit` expired idempotency records and returns how many it deleted. */
+  purgeExpiredIdempotencyRecords(now: number, limit: number): Promise<number>;
+}
+
 export interface IdGenerator {
   next(): string;
 }

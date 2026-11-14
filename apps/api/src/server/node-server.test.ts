@@ -582,3 +582,36 @@ test("development gateway keeps MCP discovery and child paths local without fron
     expect(destroyed).toBe(true);
   }
 });
+
+test("Node server start runs operations maintenance and purges expired idempotency records", async () => {
+  const harness = await openNodeTestRuntime(platform, {
+    config: await loadProjectConfig(),
+    runtimeDefaults: true,
+    settings: runtimeEnvironment,
+    storage: {
+      createReadUrl: async () => "memory-object://media",
+      delete: async () => {},
+      get: async () => null,
+      put: async (input) => ({ contentType: input.contentType, key: input.key, size: 0 }),
+    },
+  });
+  const { runtime } = harness;
+  const now = Date.now();
+  const insert = runtime.database.connection.prepare(
+    "insert into idempotency_records (scope,key,request_hash,response_json,created_at,expires_at) values ('publication:e:a',?,'h','{}',1,?)",
+  );
+  insert.run("old", now - 1);
+  insert.run("live", now + 86_400_000);
+  const server = await startNodeServer({ runtime, settings: { ...harness.settings, port: 0 } });
+  try {
+    expect(
+      runtime.database.connection
+        .prepare("select key from idempotency_records")
+        .all()
+        .map((row) => row.key),
+    ).toEqual(["live"]);
+  } finally {
+    await server.close();
+    await harness.close();
+  }
+});

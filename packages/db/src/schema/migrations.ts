@@ -4,6 +4,7 @@ export const appliedMigrationQuery =
 /** Kept in lockstep with drizzle/meta/_journal.json by the migration inventory test. */
 export const checkedInMigrations = Object.freeze([
   { createdAt: 1794149823599, name: "0000_baseline.sql" },
+  { createdAt: 1794664775142, name: "0001_persistence_hygiene.sql" },
 ]);
 
 export interface AppliedMigration {

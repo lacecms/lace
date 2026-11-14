@@ -30,6 +30,10 @@ import {
   notPublished,
   revertDraftSnapshotSql,
   revisionConflict,
+  deleteExpiredIdempotencyRecordStatement,
+  deleteSupersededSnapshotsStatement,
+  LIVE_IDEMPOTENCY_RECORD_SQL,
+  publicationScope,
   unpublicationScope,
 } from "@lacecms/db";
 import {
@@ -150,17 +154,15 @@ export class NodeEntryCommands extends NodeRepositoryBase implements ContentEntr
     const scope =
       input.idempotency === undefined
         ? undefined
-        : `publication:${input.entryId}:${input.idempotency.actorId}`;
+        : publicationScope(input.entryId, input.idempotency.actorId);
     try {
       const result = this.connection.transaction(() => {
         if (input.idempotency !== undefined) {
           if (input.idempotency.actorId !== input.publishedBy.id)
             failure("Publication idempotency actor must match publisher.");
           const prior = this.connection
-            .prepare(
-              "select request_hash, response_json from idempotency_records where scope = ? and key = ?",
-            )
-            .get(scope, input.idempotency.key) as
+            .prepare(LIVE_IDEMPOTENCY_RECORD_SQL)
+            .get(scope, input.idempotency.key, input.publishedAt) as
             | { request_hash: string; response_json: string }
             | undefined;
           if (prior !== undefined) {
@@ -278,22 +280,13 @@ export class NodeEntryCommands extends NodeRepositoryBase implements ContentEntr
         const committed = this.loadEntry(input.entryId);
         if (committed === null) failure("Published content entry could not be reloaded.");
         if (input.idempotency !== undefined)
-          this.connection
-            .prepare(
-              "insert into idempotency_records (scope, key, request_hash, response_json, created_at, expires_at) values (?, ?, ?, ?, ?, ?)",
-            )
-            .run(
-              scope,
-              input.idempotency.key,
-              input.idempotency.fingerprint,
-              JSON.stringify(committed),
-              input.publishedAt,
-              input.publishedAt + PUBLICATION_IDEMPOTENCY_TTL_MS,
-            );
-        if (entry.published !== undefined)
-          this.connection
-            .prepare("delete from content_snapshots where id = ?")
-            .run(entry.published.id);
+          this.recordIdempotency(scope!, input.idempotency, committed, input.publishedAt);
+        const superseded = deleteSupersededSnapshotsStatement(
+          input.entryId,
+          entry.draft.id,
+          input.publishedSnapshotId,
+        );
+        this.connection.prepare(superseded.sql).run(...superseded.params);
         return {
           entry: committed,
           outcome: "published" as const,
@@ -321,10 +314,8 @@ export class NodeEntryCommands extends NodeRepositoryBase implements ContentEntr
           if (idempotency.actorId !== input.unpublishedBy.id)
             failure("Unpublication idempotency actor must match the unpublishing actor.");
           const prior = this.connection
-            .prepare(
-              "select request_hash, response_json from idempotency_records where scope = ? and key = ?",
-            )
-            .get(scope, idempotency.key) as
+            .prepare(LIVE_IDEMPOTENCY_RECORD_SQL)
+            .get(scope, idempotency.key, input.unpublishedAt) as
             | { request_hash: string; response_json: string }
             | undefined;
           if (prior !== undefined) {
@@ -363,18 +354,7 @@ export class NodeEntryCommands extends NodeRepositoryBase implements ContentEntr
         const committed = this.loadEntry(input.entryId);
         if (committed === null) failure("Unpublished content entry could not be reloaded.");
         if (idempotency !== undefined)
-          this.connection
-            .prepare(
-              "insert into idempotency_records (scope, key, request_hash, response_json, created_at, expires_at) values (?, ?, ?, ?, ?, ?)",
-            )
-            .run(
-              scope,
-              idempotency.key,
-              idempotency.fingerprint,
-              JSON.stringify(committed),
-              input.unpublishedAt,
-              input.unpublishedAt + PUBLICATION_IDEMPOTENCY_TTL_MS,
-            );
+          this.recordIdempotency(scope!, idempotency, committed, input.unpublishedAt);
         this.checkpoint("unpublish.snapshot");
         this.connection
           .prepare("delete from content_snapshots where id = ?")
@@ -481,5 +461,28 @@ export class NodeEntryCommands extends NodeRepositoryBase implements ContentEntr
       this.throwWriteError(error, false);
     }
     return { status: "deleted" };
+  }
+
+  /** Replaces an expired record of the same scope and key inside the caller's transaction. */
+  private recordIdempotency(
+    scope: string,
+    idempotency: { readonly fingerprint: string; readonly key: string },
+    committed: ContentEntry,
+    now: number,
+  ): void {
+    const expired = deleteExpiredIdempotencyRecordStatement(scope, idempotency.key, now);
+    this.connection.prepare(expired.sql).run(...expired.params);
+    this.connection
+      .prepare(
+        "insert into idempotency_records (scope, key, request_hash, response_json, created_at, expires_at) values (?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        scope,
+        idempotency.key,
+        idempotency.fingerprint,
+        JSON.stringify(committed),
+        now,
+        now + PUBLICATION_IDEMPOTENCY_TTL_MS,
+      );
   }
 }

@@ -25,7 +25,7 @@ import {
 // otherwise runs after SDK schemas in a combined esbuild bundle.
 import { createMcpContentHandler } from "@lacecms/mcp";
 import type { ContentModelDefinition, NormalizedConfig } from "@lacecms/config";
-import { betterAuthSchema, checkedInMigrations } from "@lacecms/db";
+import { betterAuthSchema, checkedInMigrations, IDEMPOTENCY_PURGE_LIMIT } from "@lacecms/db";
 import { unixMilliseconds } from "@lacecms/domain";
 import {
   composeLaceServices,
@@ -105,6 +105,8 @@ export interface CreateCloudflareWorkerInput {
 export interface CloudflareRuntime {
   readonly clients: TrustedClientAddresses;
   readonly maintainOAuth: () => Promise<void>;
+  /** Purges one bounded batch of expired idempotency records, on OAuth phase-2 minutes only. */
+  readonly maintainOperations: () => Promise<void>;
   readonly app: ReturnType<typeof createLaceApp>;
   readonly buildDispatcher: SiteBuildDispatcher;
   readonly buildTracker: SiteBuildTracker;
@@ -309,9 +311,13 @@ export function createCloudflareRuntime(
     maintainOAuth: () => {
       const now = Number(clock.now());
       // Rotate bounded maintenance phases; authorization expiry is checked eagerly.
-      const minute = Math.floor(now / 60_000) % 3;
-      const phase = minute === 0 ? 0 : minute === 1 ? 1 : 2;
-      return oauth.cleanup(now, 20, phase);
+      return oauth.cleanup(now, 20, maintenancePhase(now));
+    },
+    maintainOperations: async () => {
+      const now = Number(clock.now());
+      // Only OAuth phase 2 has two statements; the purge keeps a run within 50 D1 queries.
+      if (maintenancePhase(now) !== 2) return;
+      await repository.purgeExpiredIdempotencyRecords(now, IDEMPOTENCY_PURGE_LIMIT);
     },
     app,
     buildDispatcher,
@@ -322,6 +328,12 @@ export function createCloudflareRuntime(
     security,
     settings,
   });
+}
+
+/** The scheduled maintenance phase of a minute: OAuth cleanup rotates through 0, 1 and 2. */
+function maintenancePhase(now: number): 0 | 1 | 2 {
+  const minute = Math.floor(now / 60_000) % 3;
+  return minute === 0 ? 0 : minute === 1 ? 1 : 2;
 }
 
 /**
@@ -362,7 +374,12 @@ export function createCloudflareWorker(input: CreateCloudflareWorkerInput): Clou
 
   /** One dispatcher's failure is logged and never prevents the next from running. */
   async function dispatch(
-    name: "media-deletion" | "site-build" | "site-build-tracking" | "oauth-cleanup",
+    name:
+      | "media-deletion"
+      | "site-build"
+      | "site-build-tracking"
+      | "oauth-cleanup"
+      | "operations-cleanup",
     run: () => Promise<void>,
   ): Promise<void> {
     try {
@@ -407,6 +424,7 @@ export function createCloudflareWorker(input: CreateCloudflareWorkerInput): Clou
       const runtime = configured(env);
       if (runtime === undefined) return;
       await dispatch("oauth-cleanup", () => runtime.maintainOAuth());
+      await dispatch("operations-cleanup", () => runtime.maintainOperations());
       await dispatch("site-build", () =>
         runtime.buildDispatcher.runOnce(SCHEDULED_SITE_BUILD_CLAIMS),
       );

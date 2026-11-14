@@ -7,11 +7,13 @@ async function main(): Promise<void> {
   const config = await loadProjectConfig();
   const runtime = createNodeRuntime({ config, settings });
   await runtime.maintainOAuth();
+  await runtime.maintainOperations();
   await runtime.verifyStorage();
   const loop = startDispatchLoop({
     build: () => runtime.buildDispatcher.runOnce(),
     media: async () => {
       await runtime.maintainOAuth();
+      await runtime.maintainOperations();
       await runtime.deletionDispatcher.runOnce();
     },
     onError: () => console.error("Lace dispatch cycle failed."),

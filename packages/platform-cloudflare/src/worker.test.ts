@@ -357,6 +357,45 @@ test("scheduled and post-commit dispatch recover builds and media deletions", as
   expect(JSON.stringify(fixture.logs)).not.toContain(secret);
 });
 
+test("scheduled operations cleanup purges expired idempotency records as its own phase", async () => {
+  const fixture = await workerFixture();
+  const now = Date.now();
+  await fixture.local.database
+    .prepare(
+      "insert into idempotency_records (scope,key,request_hash,response_json,created_at,expires_at) values ('publication:e:a','old','h','{}',1,?), ('publication:e:a','live','h','{}',1,?)",
+    )
+    .bind(now - 1, now + 86_400_000)
+    .run();
+  const keys = async () =>
+    (
+      await fixture.local.database.prepare("select key from idempotency_records order by key").all()
+    ).results.map((row) => row.key);
+  // The purge rides the OAuth phase-2 minute only; other minutes leave records in place.
+  for (let minute = 0; minute < 3; minute += 1) {
+    const phase = Math.floor(fixture.now() / 60_000) % 3;
+    await fixture.worker.scheduled({}, fixture.env, fixture.ctx);
+    expect(await keys()).toEqual(phase === 2 ? ["live"] : ["live", "old"]);
+    if (phase === 2) break;
+    fixture.advance(60_000);
+  }
+  expect(await keys()).toEqual(["live"]);
+
+  fixture.advance(3 * 60_000);
+  const purge = vi
+    .spyOn(fixture.runtime.repository, "purgeExpiredIdempotencyRecords")
+    .mockRejectedValue(new Error(`boom ${secret}`));
+  const builds = vi.spyOn(fixture.runtime.buildDispatcher, "runOnce");
+  await fixture.worker.scheduled({}, fixture.env, fixture.ctx);
+  expect(purge).toHaveBeenCalledOnce();
+  expect(builds).toHaveBeenCalledOnce();
+  expect(fixture.logs).toContainEqual({
+    component: "dispatch",
+    dispatcher: "operations-cleanup",
+    reason: "dispatch_failed",
+  });
+  expect(JSON.stringify(fixture.logs)).not.toContain(secret);
+});
+
 test("a scheduled run with many pending deletions stays within 50 D1 queries", async () => {
   const fixture = await workerFixture();
   await fixture.signIn();

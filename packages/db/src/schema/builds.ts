@@ -26,6 +26,7 @@ export const siteBuilds = sqliteTable(
   (table) => [
     index("site_builds_history_idx").on(table.requestedAt, table.id),
     index("site_builds_tracking_idx").on(table.status, table.providerCheckAfter),
+    index("site_builds_published_snapshot_idx").on(table.publishedSnapshotId),
     check(
       "site_builds_status_check",
       sql`${table.status} in ('pending', 'running', 'accepted', 'succeeded', 'failed', 'cancelled', 'unknown')`,
