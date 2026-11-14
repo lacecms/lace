@@ -174,6 +174,7 @@ export function composeLaceServices(input: LaceServicesInput): LaceServices {
     apiDocsEnabled: flags.apiDocsEnabled,
     auth: input.auth.boundary,
     builds,
+    clientAddress: input.limits.clientAddress,
     buildSite: input.http.buildSite,
     config: input.config,
     content,

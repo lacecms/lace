@@ -153,6 +153,13 @@ changes count against it per actor. Deployments may lower these limits.
 Expired buckets are removed by the same scheduled maintenance as expired
 idempotency rows.
 
+Node resolves the client from the transport peer and accepts a validated
+forwarded chain only from configured trusted proxies; Cloudflare resolves it
+at trusted Worker ingress. The resolved identity is retained for the whole
+request, including body buffering, and shared by Lace and provider sign-in
+limits. Without trusted ingress metadata both use `0.0.0.0`; caller headers
+cannot replace it.
+
 ### Security requirements
 
 - secure, HTTP-only cookies in production;

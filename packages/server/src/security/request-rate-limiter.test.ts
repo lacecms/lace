@@ -44,3 +44,31 @@ test("counts an actor-scoped route per actor and skips it without one", async ()
   await limiter.check({ actor: { id: "editor" }, request: request() });
   expect(checks).toEqual([{ now: 42, operation: "mcp", subject: "actor:editor" }]);
 });
+
+test("uses captured identity for client and OAuth subjects while preserving actor subjects", async () => {
+  const { checks, limiter } = harness();
+  for (const body of ["one", "two"]) {
+    await limiter.check({
+      clientAddress: "203.0.113.8",
+      request: new Request("https://lace.test/api/v1/setup/admin", { method: "POST", body }),
+    });
+  }
+  await limiter.check({
+    clientAddress: "203.0.113.8",
+    request: new Request("https://lace.test/api/auth/oauth2/token", {
+      method: "POST",
+      body: new URLSearchParams({ client_id: "client-a" }),
+    }),
+  });
+  await limiter.check({
+    actor: { id: "editor" },
+    clientAddress: "203.0.113.8",
+    request: new Request("https://lace.test/mcp", { method: "POST" }),
+  });
+  expect(checks.map(({ subject }) => subject)).toEqual([
+    "203.0.113.8",
+    "203.0.113.8",
+    '["203.0.113.8","client-a"]',
+    "actor:editor",
+  ]);
+});

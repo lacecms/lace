@@ -39,6 +39,7 @@ type FixtureOptions = Partial<
     | "apiDocsEnabled"
     | "publicBaseUrl"
     | "auth"
+    | "clientAddress"
     | "oauthConnections"
     | "mcp"
     | "mcpEnabled"
@@ -72,6 +73,7 @@ export async function fixture({
   publicBaseUrl = "https://lace.test/",
   resolveActor,
   auth,
+  clientAddress,
   oauthConnections,
   mcp,
   mcpEnabled,
@@ -205,6 +207,7 @@ export async function fixture({
       publishedContentVersion: store.publishedContentVersion.bind(store),
     },
     rateLimiter: rateLimiter ?? { check: async () => allowed },
+    ...(clientAddress === undefined ? {} : { clientAddress }),
     readiness: { isReady: async () => ready },
     requestIds: { next: () => `request-${logs.length + 1}` },
   });

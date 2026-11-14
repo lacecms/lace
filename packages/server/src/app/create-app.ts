@@ -31,6 +31,7 @@ import { Hono } from "hono";
 declare module "hono" {
   interface ContextVariableMap {
     "lace.actor": Actor | undefined;
+    "lace.clientAddress": string;
     "lace.requestId": string;
     "lace.sessionId": string | null | undefined;
     "lace.mcpCompletion": { readonly tool: string; readonly outcome: "success" | "error" };
@@ -58,6 +59,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
   );
 
   app.use(async (context, next) => {
+    context.set("lace.clientAddress", input.clientAddress?.(context.req.raw) ?? "0.0.0.0");
     const requestId = input.requestIds.next();
     context.set("lace.requestId", requestId);
     const startedAt = performance.now();
@@ -180,6 +182,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
     const resolvedActor = actorLimited ? await actor(context) : undefined;
     const decision = await input.rateLimiter.check({
       ...(resolvedActor === undefined ? {} : { actor: resolvedActor }),
+      clientAddress: context.get("lace.clientAddress"),
       request: context.req.raw,
       requestId: context.get("lace.requestId") as string,
     });

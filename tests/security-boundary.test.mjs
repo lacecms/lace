@@ -973,3 +973,155 @@ for (const kind of ["node", "cloudflare"]) {
     }
   }, 30000);
 }
+
+for (const kind of ["node", "cloudflare"]) {
+  test(`${kind}: buffered sign-in keeps independent provider and Lace identities`, async () => {
+    const diagnostics = [];
+    const f = await open(kind, { logger: { log: (entry) => diagnostics.push(entry) } });
+    const invoke = (client, streamed) => {
+      const body = JSON.stringify({ email: "buffered@lace.test", password });
+      const headers = {
+        origin,
+        "content-type": "application/json",
+        "x-lace-client-address": "192.0.2.99",
+        "x-forwarded-for": kind === "node" ? `192.0.2.99, ${client}` : "192.0.2.99",
+        ...(streamed
+          ? { "transfer-encoding": "chunked" }
+          : { "content-length": String(Buffer.byteLength(body)) }),
+      };
+      return f.call(
+        new Request(`${origin}/api/auth/sign-in/email`, {
+          method: "POST",
+          headers,
+          body: streamed
+            ? new ReadableStream({
+                start(controller) {
+                  controller.enqueue(new TextEncoder().encode(body));
+                  controller.close();
+                },
+              })
+            : body,
+          ...(streamed ? { duplex: "half" } : {}),
+        }),
+        kind === "node" ? "10.0.0.1" : client,
+      );
+    };
+    const a = kind === "node" ? "198.51.100.201" : "198.51.100.211",
+      b = kind === "node" ? "198.51.100.202" : "198.51.100.212";
+    for (let index = 0; index < 3; index++) {
+      expect((await invoke(a, index % 2 === 0)).status).not.toBe(429);
+      expect((await invoke(b, true)).status).not.toBe(429);
+    }
+    const blocked = await invoke(a, true);
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get("x-retry-after")).not.toBeNull();
+    const rows = await f.rows();
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.request_count).sort()).toEqual([3, 4]);
+    expect(JSON.stringify(rows)).not.toMatch(/198\.51\.100|buffered@lace\.test/u);
+    expect(JSON.stringify(diagnostics)).not.toMatch(/198\.51\.100|buffered@lace\.test/u);
+    expect((await invoke(b, false)).status).toBe(429);
+  }, 30000);
+}
+
+for (const kind of ["node", "cloudflare"]) {
+  test(`${kind}: missing identity and oversized streams retain conservative boundaries`, async () => {
+    const f = await open(kind);
+    const make = (path, size, headers = {}) =>
+      new Request(origin + path, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "transfer-encoding": "chunked",
+          "x-lace-client-address": "192.0.2.9",
+          "x-forwarded-for": "192.0.2.8",
+          ...headers,
+        },
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new Uint8Array(size).fill(32));
+            controller.close();
+          },
+        }),
+        duplex: "half",
+      });
+    for (const path of ["/api/auth/sign-in/email", "/api/v1/setup/admin"]) {
+      const result = await f.call(
+        make(path, 1_048_577),
+        kind === "node" ? "198.51.100.1" : "198.51.100.2",
+      );
+      expect(result.status).toBe(413);
+    }
+    expect(await f.rows()).toEqual([]);
+    for (let index = 0; index < 2; index++) {
+      const request = make("/api/v1/setup/admin", 2, { "x-forwarded-for": `192.0.2.${index + 1}` });
+      const result =
+        index === 0 ? await f.runtime.app.fetch(request) : await f.call(request, undefined);
+      expect(result.status).not.toBe(413);
+    }
+    expect((await f.rows()).map((row) => row.request_count)).toEqual([2]);
+  }, 30000);
+}
+
+test("node: malformed proxy chains use the transport peer for both limiters", async () => {
+  const f = await open("node");
+  const send = (index) =>
+    f.call(
+      new Request(`${origin}/api/auth/sign-in/email`, {
+        method: "POST",
+        headers: {
+          origin,
+          "content-type": "application/json",
+          "transfer-encoding": "chunked",
+          "x-forwarded-for": `invalid-${index}, 198.51.100.9`,
+          "x-lace-client-address": `192.0.2.${index}`,
+        },
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              new TextEncoder().encode(JSON.stringify({ email: "missing@lace.test", password })),
+            );
+            controller.close();
+          },
+        }),
+        duplex: "half",
+      }),
+      "10.0.0.3",
+    );
+  for (let index = 1; index <= 3; index++) expect((await send(index)).status).not.toBe(429);
+  const blocked = await send(4);
+  expect(blocked.status).toBe(429);
+  expect(blocked.headers.get("x-retry-after")).not.toBeNull();
+  expect((await f.rows()).map((row) => row.request_count)).toEqual([4]);
+}, 30000);
+
+test("cloudflare: missing ingress and direct app calls share the provider fallback", async () => {
+  const f = await open("cloudflare");
+  const send = (index) => {
+    const request = new Request(`${origin}/api/auth/sign-in/email`, {
+      method: "POST",
+      headers: {
+        origin,
+        "content-type": "application/json",
+        "transfer-encoding": "chunked",
+        "x-forwarded-for": `192.0.2.${index}`,
+        "x-lace-client-address": `192.0.2.${index}`,
+      },
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode(JSON.stringify({ email: "missing@lace.test", password })),
+          );
+          controller.close();
+        },
+      }),
+      duplex: "half",
+    });
+    return index % 2 ? f.runtime.app.fetch(request) : f.call(request, undefined);
+  };
+  for (let index = 1; index <= 3; index++) expect((await send(index)).status).not.toBe(429);
+  const blocked = await send(4);
+  expect(blocked.status).toBe(429);
+  expect(blocked.headers.get("x-retry-after")).not.toBeNull();
+  expect((await f.rows()).map((row) => row.request_count)).toEqual([4]);
+}, 30000);

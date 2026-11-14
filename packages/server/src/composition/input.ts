@@ -24,7 +24,7 @@ export interface ActorResolver {
 }
 
 export interface AuthRouteHandler {
-  fetch(request: Request): Promise<Response>;
+  fetch(request: Request, clientAddress?: string): Promise<Response>;
 }
 
 export interface RequestIdGenerator {
@@ -35,6 +35,7 @@ export interface RequestRateLimiter {
   check(input: {
     readonly request: Request;
     readonly requestId: string;
+    readonly clientAddress?: string;
     readonly actor?: Actor;
   }): Promise<boolean | RateLimitDecision>;
 }
@@ -66,6 +67,8 @@ export interface BuiltAdminResponder {
 }
 
 export interface LaceAppInput {
+  /** Reads trusted ingress metadata from the original request. */
+  readonly clientAddress?: (request: Request) => string;
   /** Invitation, recovery and self-service flows; absent disables the account routes. */
   readonly accounts?: AccountUseCases;
   /** Opt-in browser reference; machine-readable OpenAPI remains available. */
