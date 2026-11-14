@@ -7,7 +7,12 @@ import {
   validationHook,
 } from "../shared/http.js";
 import { optionalJsonBody } from "../shared/request.js";
-import { authorizationFailure, security, validationFailure } from "../shared/openapi.js";
+import {
+  authenticationFailure,
+  authorizationFailure,
+  security,
+  validationFailure,
+} from "../shared/openapi.js";
 import {
   accountCapabilitiesSchema,
   oauthConnectionListSchema,
@@ -161,6 +166,7 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
           content: { "application/json": { schema: resolver(adminSessionSchema) } },
           description: "Updated session summary",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },
@@ -190,6 +196,7 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
           content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
           description: "The current password is incorrect (INVALID_CREDENTIALS)",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },
@@ -223,6 +230,7 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
           description: "Successful response",
           content: { "application/json": { schema: resolver(accountCapabilitiesSchema) } },
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
       },
     }),
@@ -268,6 +276,7 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
             description: "Connections without credentials",
             content: { "application/json": { schema: resolver(oauthConnectionListSchema) } },
           },
+          ...authenticationFailure(),
           ...authorizationFailure(),
           ...validationFailure(),
         },
@@ -321,6 +330,7 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
         },
         responses: {
           204: { description: "Connection revoked" },
+          ...authenticationFailure(),
           ...authorizationFailure("an Origin that is not the canonical public origin"),
           404: {
             description: "Connection not found",
@@ -339,6 +349,7 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
           context.req.header("origin") !==
           new URL(capabilities.publicBaseUrl ?? context.req.url).origin
         )
+          // A foreign origin is refused regardless of authentication.
           throw new AuthorizationError();
         parse(oauthConnectionRevokeSchema, await optionalJsonBody(context.req.raw));
         const connectionId = parse(identifierSchemaPublic, context.req.param("connectionId"));
@@ -358,6 +369,7 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
           content: { "application/json": { schema: resolver(accountSessionListSchema) } },
           description: "Sessions without tokens or IP addresses",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
       },
       security: security.session,
@@ -397,6 +409,7 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
           content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
           description: "The current session is ended by signing out instead",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },
@@ -422,6 +435,7 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
           content: { "application/json": { schema: resolver(sessionRevocationResultSchema) } },
           description: "Count of sessions ended",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },

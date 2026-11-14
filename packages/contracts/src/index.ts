@@ -52,6 +52,7 @@ export type {
   IdempotencyKey,
 } from "./shared/primitives.js";
 export * from "./shared/preconditions.js";
+export * from "./errors/authentication.js";
 export * from "./errors/envelope.js";
 export * from "./errors/classification.js";
 export * from "./openapi/json-schema.js";

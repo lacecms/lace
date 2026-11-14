@@ -15,7 +15,12 @@ import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import * as v from "valibot";
 import { emailDeliveryStatus } from "../runtime/email.js";
-import { authorizationFailure, security, validationFailure } from "../shared/openapi.js";
+import {
+  authenticationFailure,
+  authorizationFailure,
+  security,
+  validationFailure,
+} from "../shared/openapi.js";
 import type { RouteContext } from "../composition/route-context.js";
 
 export function registerSetupSessionRoutes(app: Hono, routeContext: RouteContext): void {
@@ -87,6 +92,7 @@ export function registerSetupSessionRoutes(app: Hono, routeContext: RouteContext
           content: { "application/json": { schema: resolver(adminSessionSchema) } },
           description: "Session summary without credential material",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
       },
       security: security.session,
@@ -104,6 +110,7 @@ export function registerSetupSessionRoutes(app: Hono, routeContext: RouteContext
           description: "Successful response",
           content: { "application/json": { schema: resolver(adminSettingsStatusSchema) } },
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
       },
     }),
@@ -133,6 +140,7 @@ export function registerSetupSessionRoutes(app: Hono, routeContext: RouteContext
           content: { "application/json": { schema: resolver(emailTestResultSchema) } },
           description: "Closed delivery outcome; failed sends are reported, not raised",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },

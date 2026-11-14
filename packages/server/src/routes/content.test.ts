@@ -1009,7 +1009,7 @@ test("internal-link HTTP reads enforce permissions and strict bounded query mode
     );
   expect(calls.length).toBe(before);
   const denied = await fixture({ actor: null, linkReads });
-  expect((await json(denied.app, "/api/v1/admin/link-targets")).response.status).toBe(403);
+  expect((await json(denied.app, "/api/v1/admin/link-targets")).response.status).toBe(401);
   expect(calls.length).toBe(before);
 });
 

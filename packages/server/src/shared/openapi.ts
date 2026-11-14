@@ -21,15 +21,16 @@ export function validationFailure(): { readonly 422: EnvelopeResponse } {
   };
 }
 
-/**
- * The classified `403 AUTHORIZATION_DENIED` for a missing, invalid or
- * insufficient credential; no Lace error maps to `401`. `alsoMeans` merges a
- * route's own denial reason into the one `403` description.
- */
+/** A missing or rejected credential. */
+export function authenticationFailure(): { readonly 401: EnvelopeResponse } {
+  return { 401: envelopeResponse("Authentication required (AUTHENTICATION_REQUIRED)") };
+}
+
+/** An authenticated actor or request shape is refused. */
 export function authorizationFailure(alsoMeans?: string): { readonly 403: EnvelopeResponse } {
   return {
     403: envelopeResponse(
-      `Authentication or permission required (AUTHORIZATION_DENIED)${
+      `Permission denied (AUTHORIZATION_DENIED)${
         alsoMeans === undefined ? "" : `; also ${alsoMeans}`
       }`,
     ),

@@ -187,7 +187,7 @@ test("serves the seeded lifecycle through an actual Node listener", async () => 
           headers: { "if-none-match": weakTag },
         })
       ).response.status,
-    ).toBe(403);
+    ).toBe(401);
     for (const tag of ["*", 'W/"bad"', '"1", "2"', '"9007199254740992"'])
       expect(
         (
@@ -318,8 +318,8 @@ test("keeps production composition anonymous even when a request asks for a test
         headers: { "x-lace-test-actor": "admin" },
       }),
     ).toMatchObject({
-      body: { error: { code: "AUTHORIZATION_DENIED" } },
-      response: { status: 403 },
+      body: { error: { code: "AUTHENTICATION_REQUIRED" } },
+      response: { status: 401 },
     });
   } finally {
     await value.close();
@@ -532,7 +532,7 @@ test("anonymous browser setup state survives bootstrap and stale clients stay cl
     expect(stale.map((result) => result.response.status)).toEqual([404, 404]);
     expect((await json(value.server, "/api/v1/setup/state")).body).toEqual({ setupComplete: true });
     expect(await value.runtime.security.listUsers()).toHaveLength(1);
-    expect((await json(value.server, "/api/v1/admin/users")).response.status).toBe(403);
+    expect((await json(value.server, "/api/v1/admin/users")).response.status).toBe(401);
   } finally {
     await value.close();
   }

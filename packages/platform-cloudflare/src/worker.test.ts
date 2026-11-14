@@ -256,7 +256,7 @@ test("Worker readiness rejects a D1 database migrated before the baseline", asyn
 test("Worker composition serves setup, auth, R2 media, and publication from D1", async () => {
   const fixture = await workerFixture();
   expect((await fixture.call("/health/ready")).response.status).toBe(200);
-  expect((await fixture.call("/api/v1/admin/content-models")).response.status).toBe(403);
+  expect((await fixture.call("/api/v1/admin/content-models")).response.status).toBe(401);
   const admin = await fixture.signIn();
   expect(admin).toMatchObject({ email: "admin@lace.test", role: "admin" });
   expect(
@@ -612,7 +612,7 @@ test("Worker/D1 compares strong and weak export validators through publication",
         headers: { "if-none-match": `W/${etag}` },
       })
     ).response.status,
-  ).toBe(403);
+  ).toBe(401);
   for (const tag of ["*", 'W/"bad"', '"1", "2"', '"9007199254740992"'])
     expect(
       (

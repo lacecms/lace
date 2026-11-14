@@ -1,3 +1,4 @@
+import { AuthenticationRequiredError } from "@lacecms/contracts";
 import { registerDocsRoutes } from "../routes/docs.js";
 import { registerPublicRoutes } from "../routes/public.js";
 import { registerContentRoutes } from "../routes/content.js";
@@ -133,10 +134,13 @@ export function createLaceApp(input: LaceAppInput): Hono {
   app.use(async (context, next) => {
     const request = context.req.raw;
     if (!isBearerManagementRequest(request, context.req.path)) return next();
+    // A Bearer credential is not accepted on this route or without an import resolver.
     if (input.importActors === undefined || !isImportRoute(request.method, context.req.path))
       throw new AuthorizationError();
     const resolved = await input.importActors.resolve(request);
-    if (resolved === null) throw new AuthorizationError();
+    // A foreign origin is refused independently of the credential.
+    if (resolved === "request-denied") throw new AuthorizationError();
+    if (resolved === null) throw new AuthenticationRequiredError("session-or-bearer");
     context.set("lace.actor", resolved.actor);
     context.set("lace.importToken", resolved.token);
     context.set("lace.sessionId", null);

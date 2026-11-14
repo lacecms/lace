@@ -1,6 +1,11 @@
 import { invalid, notFound, response, validationHook } from "../shared/http.js";
 import { mediaIdParams, pagination } from "../shared/request.js";
-import { authorizationFailure, security, validationFailure } from "../shared/openapi.js";
+import {
+  authenticationFailure,
+  authorizationFailure,
+  security,
+  validationFailure,
+} from "../shared/openapi.js";
 import {
   ContractValidationError,
   MAX_MEDIA_TAG_INPUT_LENGTH,
@@ -43,6 +48,7 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
           content: { "application/json": { schema: resolver(mediaListSchema) } },
           description: "Media page",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },
@@ -79,6 +85,7 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
           description: "Media tag catalog",
           content: { "application/json": { schema: resolver(mediaTagCatalogSchema) } },
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },
@@ -129,6 +136,7 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
           content: { "application/json": { schema: resolver(mediaMetadataSchema) } },
           description: "Created media",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },
@@ -153,6 +161,7 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
           content: { "application/json": { schema: resolver(mediaMetadataSchema) } },
           description: "Deletion requested",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },
@@ -183,6 +192,7 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
           content: { "application/json": { schema: resolver(mediaDetailSchema) } },
           description: "Media item with the entries that use it",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },
@@ -231,6 +241,7 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
           },
           description: "Updated media and build dispatch outcome",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },
@@ -279,6 +290,7 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
           content: { "application/json": { schema: resolver(mediaMetadataSchema) } },
           description: "Deletion retry requested",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },
@@ -339,6 +351,7 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
         200: { description: "Media bytes" },
         304: { description: "The cached media is still valid" },
         404: { description: "Media is not active or does not exist" },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },

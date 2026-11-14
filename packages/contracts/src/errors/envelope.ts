@@ -11,6 +11,7 @@ export { contractValidationIssueSchema, ContractValidationError };
 export type { ContractValidationIssue };
 
 export const errorCodeSchema = v.picklist([
+  "AUTHENTICATION_REQUIRED",
   "AUTHORIZATION_DENIED",
   "BUILD_EXPORT_VERSION_CHANGED",
   "CONFLICT",
@@ -83,7 +84,7 @@ export function toContentValidationIssues(
 
 export interface ClassifiedError {
   readonly body: ErrorEnvelope;
-  readonly status: 400 | 403 | 404 | 409 | 410 | 413 | 422 | 429 | 500;
+  readonly status: 400 | 401 | 403 | 404 | 409 | 410 | 413 | 422 | 429 | 500;
   readonly headers?: Readonly<Record<string, string>>;
 }
 

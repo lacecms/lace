@@ -945,9 +945,9 @@ test.each(["save", "publish", "reload"] as const)(
     const expiredError = () => {
       expired = true;
       throw new AdminClientError({
-        code: "AUTHORIZATION_DENIED",
+        code: "AUTHENTICATION_REQUIRED",
         message: "Sign in again.",
-        status: 403,
+        status: 401,
       });
     };
     const source = {

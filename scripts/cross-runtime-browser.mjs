@@ -153,7 +153,7 @@ export async function browserJourney(f, workspace) {
       (r) => r.url().endsWith(`/entries/${homeId}/draft`) && r.request().method() === "PUT",
     );
     await page.getByRole("button", { name: "Save draft", exact: true }).click();
-    assert.equal((await rejected).status(), 403);
+    assert.equal((await rejected).status(), 401);
     await page.getByRole("button", { name: "Leave without saving", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Sign in", exact: true })).toBeVisible();
     // Recovery itself uses the real auth endpoint and confirms the mutation never committed.

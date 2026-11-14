@@ -301,7 +301,7 @@ for (const kind of ["node", "cloudflare"]) {
       },
     });
     expect(await changed.json()).toEqual({ revoked: 1 });
-    expect((await invoke("/api/v1/admin/session", { cookie: second })).status).toBe(403);
+    expect((await invoke("/api/v1/admin/session", { cookie: second })).status).toBe(401);
     expect((await invoke("/api/v1/admin/session", { cookie: first })).status).toBe(200);
 
     for (let index = 0; index < 3; index += 1)
@@ -350,7 +350,7 @@ for (const kind of ["node", "cloudflare"]) {
         })
       ).status,
     ).toBe(204);
-    expect((await invoke("/api/v1/admin/session", { cookie: first })).status).toBe(403);
+    expect((await invoke("/api/v1/admin/session", { cookie: first })).status).toBe(401);
     await signIn("invitee@lace.test", `${password}-reset`, peer(7));
 
     // Two invite-limited operations so far; the per-administrator limit is 20 per hour.
@@ -539,7 +539,11 @@ for (const kind of ["node", "cloudflare"]) {
     expect(crossSite.status).toBe(403);
     expect(await protectedState(f)).toEqual(before);
     for (const cookie of [undefined, "invalid=session", cookies.editor, cookies.viewer])
-      await deny("/api/v1/admin/invitations", { cookie, json: create });
+      await deny(
+        "/api/v1/admin/invitations",
+        { cookie, json: create },
+        cookie === undefined || cookie === "invalid=session" ? 401 : 403,
+      );
     for (const role of ["editor", "viewer"]) {
       await deny("/api/v1/admin/api-tokens", { cookie: cookies[role], json: { name: "denied" } });
       await deny("/api/v1/admin/builds", { cookie: cookies[role], json: {} });
@@ -626,11 +630,11 @@ for (const kind of ["node", "cloudflare"]) {
     expect(await f.query("select * from session order by rowid")).toEqual(sessions);
     await f.runtime.security.disableUser({ userId: editor.id });
     expect(await f.query(`select id from session where user_id = '${editor.id}'`)).toEqual([]);
-    await deny("/api/v1/admin/content-models", { cookie: cookies.editor });
+    await deny("/api/v1/admin/content-models", { cookie: cookies.editor }, 401);
     await f.sql(`update session set expires_at = 1 where user_id = '${viewer.id}'`);
-    await deny("/api/v1/admin/content-models", { cookie: cookies.viewer });
+    await deny("/api/v1/admin/content-models", { cookie: cookies.viewer }, 401);
     await f.sql(`delete from session where user_id = '${admin.id}'`);
-    await deny("/api/v1/admin/invitations", { cookie: cookies.admin, json: create });
+    await deny("/api/v1/admin/invitations", { cookie: cookies.admin, json: create }, 401);
     // Origin-less non-browser requests retain their session/role authorization.
     const login = await f.call(
       new Request(origin + "/api/auth/sign-in/email", {
@@ -819,7 +823,7 @@ for (const kind of ["node", "cloudflare"]) {
     const before = await protectedState(f);
     expect(
       (await call("/api/v1/public/build-export", "GET", undefined, authorization)).status,
-    ).toBe(403);
+    ).toBe(401);
     expect(await protectedState(f)).toEqual(before);
   }, 30000);
 }
@@ -898,6 +902,74 @@ for (const kind of ["node", "cloudflare"]) {
       assertSecretFree(sentinel, secrets, "deliberate leak");
     } catch (error) {
       expect(error.message).not.toContain(sentinel);
+    }
+  }, 30000);
+}
+
+for (const kind of ["node", "cloudflare"]) {
+  test(`${kind}: rejected import credentials receive authentication challenges`, async () => {
+    const f = await open(kind);
+    const setup = await f.runtime.security.createSetupToken();
+    const { user: admin } = await f.runtime.security.bootstrap({
+      email: "import-admin@lace.test",
+      password,
+      token: setup.token,
+    });
+    const creator = await createUserByInvitation(f.runtime.security, {
+      email: "import-editor@lace.test",
+      invitedBy: admin.id,
+      now: Date.now(),
+      password,
+      role: "editor",
+    });
+    const now = Date.now();
+    const issue = (createdBy, expiresAt) =>
+      f.runtime.security.createImportToken({
+        capabilities: ["content:import"],
+        createdBy,
+        expiresAt,
+        name: "test",
+        now,
+      });
+    const valid = await issue(admin.id, now + 60000);
+    const expired = await issue(admin.id, now - 1);
+    const revoked = await issue(admin.id, now + 60000);
+    const disabled = await issue(creator.id, now + 60000);
+    await f.runtime.security.revokeImportToken({ tokenId: revoked.id, now });
+    await f.runtime.security.disableUser({ userId: creator.id });
+    const wrongKind = await f.runtime.security.createBuildToken({ name: "wrong kind", now });
+    const request = (token, path = "/api/v1/admin/content-models", extra = {}) =>
+      f.call(
+        new Request(origin + path, { headers: { authorization: `Bearer ${token}`, ...extra } }),
+        "198.51.100.77",
+      );
+    for (const [path, challenge] of [
+      ["/api/v1/admin/session", 'Session realm="lace"'],
+      ["/api/v1/public/build-export", 'Bearer realm="lace"'],
+      ["/api/v1/admin/content-models", 'Session realm="lace", Bearer realm="lace"'],
+    ]) {
+      const response = await f.call(new Request(origin + path), "198.51.100.77");
+      expect(response.status).toBe(401);
+      expect(response.headers.get("www-authenticate")).toBe(challenge);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    }
+    expect((await request(valid.token)).status).toBe(200);
+    expect((await request(valid.token, "/api/v1/admin/users")).status).toBe(403);
+    for (const token of [
+      "unknown",
+      expired.token,
+      revoked.token,
+      disabled.token,
+      wrongKind.token,
+    ]) {
+      const response = await request(token, undefined, {
+        cookie: "better-auth.session_token=invalid",
+      });
+      expect(response.status).toBe(401);
+      expect(response.headers.get("www-authenticate")).toBe(
+        'Session realm="lace", Bearer realm="lace"',
+      );
+      expect((await response.json()).error.code).toBe("AUTHENTICATION_REQUIRED");
     }
   }, 30000);
 }

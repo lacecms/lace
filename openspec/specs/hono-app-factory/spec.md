@@ -84,8 +84,8 @@ only immutable published content and SHALL not require an admin actor.
 
 #### Scenario: An unauthenticated caller requests an admin entry
 - **WHEN** a caller has no resolved actor and requests an admin content route
-- **THEN** the request returns the shared authorization error before a content
-  read or mutation capability runs
+- **THEN** the request returns `401` `AUTHENTICATION_REQUIRED` before a
+  content read or mutation capability runs
 
 #### Scenario: A public collection page is requested
 - **WHEN** a caller requests a configured collection with a valid opaque cursor
@@ -592,8 +592,10 @@ actually returns:
   any other validation-error body or status.
 - Query parameters that the handler reads SHALL appear as documented
   parameters with their bounds, even when the handler parses them itself.
-- Credential and authorization failures SHALL be documented with the status
-  and envelope the classifier produces.
+- Every operation that requires a credential SHALL document `401` with the
+  shared error envelope for a missing or unresolvable credential. An operation
+  that can also refuse an authenticated actor SHALL document `403` with the
+  shared envelope. Public operations SHALL document neither.
 
 The document SHALL declare security schemes for the browser session cookie,
 the build token and the import token. Each operation SHALL state which of
@@ -634,8 +636,8 @@ registered product route.
 #### Scenario: Denial status matches the classifier
 
 - **WHEN** a client reads an admin operation that requires a session
-- **THEN** it documents `403` with the shared error envelope for a missing or
-  insufficient credential, and documents no `401`
+- **THEN** it documents `401` with the shared error envelope for a missing
+  credential and `403` for an insufficient permission
 
 #### Scenario: Credentials are declared per operation
 

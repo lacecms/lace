@@ -21,7 +21,7 @@ import {
   RateLimitExceededError,
   RuntimeConfigurationError,
 } from "@lacecms/application";
-import { ContractValidationError } from "@lacecms/contracts";
+import { AuthenticationRequiredError, ContractValidationError } from "@lacecms/contracts";
 import type { ClassifiedError } from "@lacecms/contracts";
 
 export interface ErrorMatrixCase {
@@ -31,6 +31,16 @@ export interface ErrorMatrixCase {
   readonly expected: ClassifiedError;
 }
 export const errorMatrixCases: readonly ErrorMatrixCase[] = [
+  {
+    name: "AuthenticationRequiredError",
+    errorClass: AuthenticationRequiredError,
+    create: () => new AuthenticationRequiredError("session"),
+    expected: {
+      status: 401,
+      body: { error: { code: "AUTHENTICATION_REQUIRED", message: "Authentication is required." } },
+      headers: { "cache-control": "no-store", "www-authenticate": 'Session realm="lace"' },
+    },
+  },
   {
     name: "DomainError:AUTHORIZATION_DENIED",
     errorClass: DomainError,

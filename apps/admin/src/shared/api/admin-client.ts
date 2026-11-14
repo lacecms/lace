@@ -128,5 +128,5 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
 }
 
 export function isSessionExpiredError(error: unknown): error is AdminClientError {
-  return error instanceof AdminClientError && (error.status === 401 || error.status === 403);
+  return error instanceof AdminClientError && error.status === 401;
 }

@@ -83,7 +83,7 @@ test.each([admin, editor, { id: actorId("viewer"), role: "viewer" }])(
     const anonymous = (await fixture({ actor: null, builds })).app;
     expect(
       (await anonymous.fetch(new Request("https://lace.test/api/v1/admin/site-builds"))).status,
-    ).toBe(403);
+    ).toBe(401);
   },
 );
 
@@ -113,5 +113,5 @@ test("current build site is unknown by default and anonymous reads fail", async 
   const anonymous = (await fixture({ actor: null })).app;
   expect(
     (await anonymous.fetch(new Request("https://lace.test/api/v1/admin/build-site"))).status,
-  ).toBe(403);
+  ).toBe(401);
 });

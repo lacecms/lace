@@ -39,7 +39,7 @@ for (const kind of ["SQLite", "D1"]) {
             }),
           )
         ).status,
-      ).toBe(403);
+      ).toBe(401);
       const build = await f.rest("/api/v1/admin/api-tokens", {
         method: "POST",
         json: { name: "Fixture build" },
@@ -218,7 +218,7 @@ for (const kind of ["SQLite", "D1"]) {
               headers: authorization ? { authorization } : {},
             }),
           );
-          expect(response.status).toBe(403);
+          expect(response.status).toBe(authorization ? 403 : 401);
           expect(await response.json()).not.toHaveProperty("mcp");
         }
         await f.login();

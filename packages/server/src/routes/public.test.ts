@@ -365,7 +365,8 @@ test("checks build credentials before conditional or page reads", async () => {
     { authorization: "Bearer wrong" },
   ]) {
     const denied = await json(app, `${path}?limit=0`, { headers });
-    expect(denied.response.status).toBe(403);
+    expect(denied.response.status).toBe(401);
+    expect(denied.response.headers.get("www-authenticate")).toBe('Bearer realm="lace"');
   }
   expect(exportLoads()).toBe(0);
   const unchanged = await json(app, path, {

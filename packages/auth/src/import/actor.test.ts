@@ -52,6 +52,7 @@ test("import tokens resolve the creator's current role under a write-only ceilin
     });
 
   const plain = present(await resolver.resolve(request("Bearer import-token")));
+  if (plain === "request-denied") throw new Error("Unexpected origin denial");
   expect(plain.actor).toMatchObject({ id: "admin-1", role: "admin" });
   expect(plain.token.id).toBe("import-token");
   const granted: readonly Permission[] = ["content:read", "content:write", "media:write"];
@@ -64,12 +65,14 @@ test("import tokens resolve the creator's current role under a write-only ceilin
     expect(canContentOperation(plain.actor, operation)).toBe(false);
 
   const publisher = present(await resolver.resolve(request("Bearer publish-token")));
+  if (publisher === "request-denied") throw new Error("Unexpected origin denial");
   expect(hasPermission(publisher.actor, "content:publish")).toBe(true);
   expect(canContentOperation(publisher.actor, "publish")).toBe(true);
   expect(canContentOperation(publisher.actor, "unpublish")).toBe(false);
 
   // A demoted creator keeps writing but loses publication through the role.
   const demoted = present(await resolver.resolve(request("Bearer demoted-token")));
+  if (demoted === "request-denied") throw new Error("Unexpected origin denial");
   expect(hasPermission(demoted.actor, "content:write")).toBe(true);
   expect(canContentOperation(demoted.actor, "publish")).toBe(false);
 
@@ -99,8 +102,8 @@ test("import tokens resolve the creator's current role under a write-only ceilin
       method: "PUT",
       headers: { authorization: "Bearer import-token", ...(origin ? { origin } : {}) },
     });
-  expect(await resolver.resolve(unsafe("https://evil.example"))).toBeNull();
-  expect(await resolver.resolve(unsafe("null"))).toBeNull();
+  expect(await resolver.resolve(unsafe("https://evil.example"))).toBe("request-denied");
+  expect(await resolver.resolve(unsafe("null"))).toBe("request-denied");
   expect(await resolver.resolve(unsafe("https://cms.test"))).not.toBeNull();
   expect(await resolver.resolve(unsafe())).not.toBeNull();
   const crossSiteRead = new Request("https://cms.test/api/v1/admin/media", {

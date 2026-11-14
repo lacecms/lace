@@ -15,6 +15,6 @@ test("both failure responses resolve to the shared error envelope", async () => 
 
 test("a route's own denial reason merges into the one 403 description", () => {
   expect(authorizationFailure("an invalid origin")[403].description).toBe(
-    "Authentication or permission required (AUTHORIZATION_DENIED); also an invalid origin",
+    "Permission denied (AUTHORIZATION_DENIED); also an invalid origin",
   );
 });

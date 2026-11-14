@@ -12,7 +12,7 @@ export interface AuthRouteHandler {
 }
 
 export interface SessionActorResolver {
-  resolve(request: Request): Promise<Actor | null>;
+  resolve(request: Request): Promise<Actor | "request-denied" | null>;
   /** The opaque identifier of the session authenticating the request; never its token. */
   sessionId(request: Request): Promise<string | null>;
 }
@@ -192,6 +192,7 @@ export function createBetterAuthBoundary(input: CreateBetterAuthBoundaryInput): 
     ...(mcp ? { mcp } : {}),
     actors: Object.freeze({
       resolve: async (request: Request) => {
+        if (!trustedRequestOrigin(request)) return "request-denied" as const;
         const active = await activeSession(request);
         return active === null
           ? null

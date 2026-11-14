@@ -1,6 +1,11 @@
 import { notFound, parse, response } from "../shared/http.js";
 import { optionalJsonBody } from "../shared/request.js";
-import { authorizationFailure, security, validationFailure } from "../shared/openapi.js";
+import {
+  authenticationFailure,
+  authorizationFailure,
+  security,
+  validationFailure,
+} from "../shared/openapi.js";
 import { requireContentReader } from "@lacecms/application";
 import {
   buildSiteSelectionSchema,
@@ -31,6 +36,7 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
           description: "Current configuration, not deployment verification",
           content: { "application/json": { schema: resolver(buildSiteSelectionSchema) } },
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
       },
     }),
@@ -48,6 +54,7 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
           content: { "application/json": { schema: resolver(siteBuildListSchema) } },
           description: "Recent site builds",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
       },
       security: security.session,
@@ -70,6 +77,7 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
           content: { "application/json": { schema: resolver(siteBuildRecordSchema) } },
           description: "Site build detail",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         404: {
           content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
@@ -101,6 +109,7 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
           content: { "application/json": { schema: resolver(buildQueueReceiptSchema) } },
           description: "Build request queued",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },
@@ -129,6 +138,7 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
           content: { "application/json": { schema: resolver(buildQueueReceiptSchema) } },
           description: "Failed build retry queued",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },

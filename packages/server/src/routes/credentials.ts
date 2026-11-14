@@ -1,5 +1,10 @@
 import { AuthorizationError, notFound, response, validationHook } from "../shared/http.js";
-import { authorizationFailure, security, validationFailure } from "../shared/openapi.js";
+import {
+  authenticationFailure,
+  authorizationFailure,
+  security,
+  validationFailure,
+} from "../shared/openapi.js";
 import {
   effectiveActorPermissions,
   importTokenCapabilities,
@@ -55,6 +60,7 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
           description: "Build token metadata",
           content: { "application/json": { schema: resolver(buildTokenListSchema) } },
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
       },
     }),
@@ -76,6 +82,7 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
           description: "The created token; the plaintext is returned only here",
           content: { "application/json": { schema: resolver(buildTokenCreatedSchema) } },
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },
@@ -107,6 +114,7 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
           description: "Revoked build token metadata",
           content: { "application/json": { schema: resolver(buildTokenSchema) } },
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         404: {
           description: "Token not found",
@@ -132,6 +140,7 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
           content: { "application/json": { schema: resolver(importTokenListSchema) } },
           description: "Import-token metadata, newest first; never the plaintext",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
       },
       security: security.session,
@@ -156,6 +165,7 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
           content: { "application/json": { schema: resolver(importTokenCreatedSchema) } },
           description: "The created token; the plaintext is returned only here",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },
@@ -193,6 +203,7 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
           content: { "application/json": { schema: resolver(importTokenSchema) } },
           description: "The revoked token (idempotent)",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         404: {
           content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
@@ -221,6 +232,7 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
           content: { "application/json": { schema: resolver(importCredentialSchema) } },
           description: "The presented import token and the effective permissions",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
       },
       security: security.importOnly,
@@ -229,9 +241,10 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
       tags: ["admin"],
     }),
     async (context) => {
-      const token = context.get("lace.importToken");
-      if (token === undefined) throw new AuthorizationError();
       const resolvedActor = await actor(context);
+      const token = context.get("lace.importToken");
+      // A session actor cannot describe an import credential.
+      if (token === undefined) throw new AuthorizationError();
       return response(
         importCredentialSchema,
         {

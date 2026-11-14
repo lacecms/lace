@@ -128,8 +128,9 @@ test("account routes require a session and admin routes require users:manage", a
     ["/api/v1/admin/invitations", "POST", { email: "x@lace.test", role: "viewer" }],
   ]) {
     const response = await send(anonymous.app, path, method, body);
-    expect(response.status, `${method} ${path}`).toBe(403);
-    expect((await response.json()).error.code).toBe("AUTHORIZATION_DENIED");
+    expect(response.status, `${method} ${path}`).toBe(401);
+    expect(response.headers.get("www-authenticate")).toBe('Session realm="lace"');
+    expect((await response.json()).error.code).toBe("AUTHENTICATION_REQUIRED");
   }
   const restricted = await fixture({ actor: editor, security });
   for (const [path, method, body] of [

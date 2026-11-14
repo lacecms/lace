@@ -18,7 +18,7 @@ import type { ServerConfig } from "../shared/content-config.js";
 export type Actor = Parameters<ContentUseCases["create"]>[0]["actor"];
 
 export interface ActorResolver {
-  resolve(request: Request): Promise<Actor | null>;
+  resolve(request: Request): Promise<Actor | "request-denied" | null>;
   /** The opaque id of the provider session authenticating the request, when there is one. */
   sessionId?(request: Request): Promise<string | null>;
 }
@@ -96,7 +96,9 @@ export interface LaceAppInput {
   readonly importActors?: {
     resolve(
       request: Request,
-    ): Promise<{ readonly actor: Actor; readonly token: ImportTokenMetadata } | null>;
+    ): Promise<
+      { readonly actor: Actor; readonly token: ImportTokenMetadata } | "request-denied" | null
+    >;
   };
   readonly adminAssets?: BuiltAdminResponder;
   readonly config: ServerConfig;

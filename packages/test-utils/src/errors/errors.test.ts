@@ -3,6 +3,7 @@ import { InvariantError, LaceError } from "@lacecms/content";
 import { errorMatrixCases } from "./error-matrix.js";
 
 const codes: Readonly<Record<string, string>> = {
+  AuthenticationRequiredError: "AUTHENTICATION_REQUIRED",
   FieldConfigurationError: "FIELD_CONFIGURATION_INVALID",
   ContractValidationError: "VALIDATION_FAILED",
   ContentValidationError: "VALIDATION_FAILED",

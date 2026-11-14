@@ -116,11 +116,14 @@ test("import tokens are denied everywhere else and never fall back to a session"
     authorization: "Bearer bad",
     cookie: "better-auth.session_token=valid",
   });
-  expect(withCookie.status).toBe(403);
+  expect(withCookie.status).toBe(401);
+  expect(withCookie.headers.get("www-authenticate")).toBe(
+    'Session realm="lace", Bearer realm="lace"',
+  );
   const queryToken = await call("GET", "/api/v1/admin/media?access_token=good", undefined, {
     authorization: "",
   });
-  expect(queryToken.status).toBe(403);
+  expect(queryToken.status).toBe(401);
   expect(sessions).toEqual([]);
 });
 
@@ -170,6 +173,18 @@ test("the import credential describes itself only to import tokens", async () =>
   expect(
     (await app.fetch(new Request("https://lace.test/api/v1/admin/import-credential"))).status,
   ).toBe(403);
+});
+
+test("anonymous import requests challenge both accepted credentials", async () => {
+  const { app } = await fixture({ actor: null });
+  for (const path of ["/api/v1/admin/entries/e-1", "/api/v1/admin/import-credential"]) {
+    const response = await app.request(path);
+    expect(response.status).toBe(401);
+    expect(response.headers.get("www-authenticate")).toBe(
+      'Session realm="lace", Bearer realm="lace"',
+    );
+    expect((await response.json()).error.code).toBe("AUTHENTICATION_REQUIRED");
+  }
 });
 
 test("administrators issue, list and revoke import tokens through session routes", async () => {

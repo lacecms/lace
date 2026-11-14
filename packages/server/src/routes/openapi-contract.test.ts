@@ -113,7 +113,6 @@ test("every registered product route is documented as the server enforces it", a
     if (!operation.summary) fail("no summary");
     if ((operation.tags ?? []).length === 0) fail("no tag");
     if (!statuses.some((status) => /^2\d\d$/u.test(status))) fail("no success status");
-    if (statuses.includes("401")) fail("documents 401; denials are 403");
     for (const [status, documented] of Object.entries(responses))
       if (documented.description === "Validation Error") fail(`default validation ${status}`);
     if (
@@ -124,7 +123,7 @@ test("every registered product route is documented as the server enforces it", a
     const validates = route.validated || HAND_PARSED.has(key);
     const documents422 = responses["422"]?.description === validationFailure()[422].description;
     if (validates && !documents422) fail("validates input but does not document the shared 422");
-    for (const status of ["403", "422"]) {
+    for (const status of ["401", "403", "422"]) {
       const schema = responses[status]?.content?.["application/json"]?.schema;
       if (status in responses && (schema as { $ref?: string })?.$ref !== ENVELOPE_REF)
         fail(`${status} is not the shared ErrorEnvelope`);
@@ -145,11 +144,9 @@ test("every registered product route is documented as the server enforces it", a
     if (management && !IMPORT_TOKEN_ONLY.has(key) && !schemes.includes("session"))
       fail("management route without session security");
     if (!management && schemes.includes("session")) fail("session security outside management");
-    if (
-      schemes.length > 0 &&
-      !responses["403"]?.description?.startsWith("Authentication or permission required")
-    )
-      fail("accepts a credential but does not document the classified 403");
+    if (schemes.length > 0 && !statuses.includes("401")) fail("accepts a credential but lacks 401");
+    if (schemes.length === 0 && (statuses.includes("401") || statuses.includes("403")))
+      fail("public operation documents 401 or 403");
   }
   expect(violations).toEqual([]);
 });

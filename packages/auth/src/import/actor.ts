@@ -51,7 +51,7 @@ export function createImportActorResolver(input: {
   readonly production: boolean;
   readonly security: Pick<TokenSecurityPort, "resolveImportToken">;
   readonly now?: () => number;
-}): { resolve(request: Request): Promise<ImportActorResolution | null> } {
+}): { resolve(request: Request): Promise<ImportActorResolution | "request-denied" | null> } {
   const allowedOrigins = trustedOrigins(input.origin, input.production);
   return Object.freeze({
     resolve: async (request: Request) => {
@@ -61,7 +61,7 @@ export function createImportActorResolver(input: {
         origin !== null &&
         !allowedOrigins.includes(origin)
       )
-        return null;
+        return "request-denied" as const;
       if (new URL(request.url).searchParams.has("access_token")) return null;
       const match = /^Bearer ([A-Za-z0-9_-]{1,4096})$/u.exec(
         request.headers.get("authorization") ?? "",

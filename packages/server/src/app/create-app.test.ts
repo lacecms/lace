@@ -31,8 +31,8 @@ test("keeps liveness, readiness, request IDs, and logs separate", async () => {
 test("validates admin requests, rejects anonymous actors, and protects fallbacks", async () => {
   const anonymous = await fixture({ actor: null });
   expect(await json(anonymous.app, "/api/v1/admin/content-models")).toMatchObject({
-    body: { error: { code: "AUTHORIZATION_DENIED" } },
-    response: { status: 403 },
+    body: { error: { code: "AUTHENTICATION_REQUIRED" } },
+    response: { status: 401 },
   });
   const authenticated = await fixture({ actor: editor });
   expect(await json(authenticated.app, "/api/v1/admin/content-models")).toMatchObject({
@@ -146,7 +146,7 @@ test("optional API reference uses live same-origin contracts and preserves API b
   expect(html).not.toContain("proxy.scalar.com");
   expect(html).not.toContain("authorization");
   expect(enabled.logs.at(-1)).toMatchObject({ path: "/api/docs", status: 200 });
-  expect((await enabled.app.request("/api/v1/admin/content-models")).status).toBe(403);
+  expect((await enabled.app.request("/api/v1/admin/content-models")).status).toBe(401);
   const schema = await (await disabled.app.request("/api/v1/openapi.json")).json();
   expect(await (await enabled.app.request("/api/v1/openapi.json")).json()).toEqual(schema);
   expect(schema.paths).not.toHaveProperty("/api/docs");

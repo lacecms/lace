@@ -1,12 +1,6 @@
+import { AuthenticationRequiredError } from "@lacecms/contracts";
 import { readBuildExportPage, readBuildExportQuery } from "./build-export.js";
-import {
-  AuthorizationError,
-  notFound,
-  parse,
-  response,
-  validationHook,
-  validationResponse,
-} from "../shared/http.js";
+import { notFound, parse, response, validationHook, validationResponse } from "../shared/http.js";
 import { collectionItemParams, modelKeyParams, pagination, publicPath } from "../shared/request.js";
 import {
   collectionModel,
@@ -14,7 +8,7 @@ import {
   pageModel,
   routeLessCollectionModel,
 } from "../shared/content-config.js";
-import { authorizationFailure, security, validationFailure } from "../shared/openapi.js";
+import { authenticationFailure, security, validationFailure } from "../shared/openapi.js";
 import { collectionPathFailure } from "@lacecms/contracts";
 import {
   buildExportContinuationPageSchema,
@@ -303,7 +297,7 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
           description:
             "Published content changed since the first page (BUILD_EXPORT_VERSION_CHANGED)",
         },
-        ...authorizationFailure(),
+        ...authenticationFailure(),
         ...validationFailure(),
       },
       security: security.build,
@@ -321,7 +315,7 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
             token: authorization.slice(7) as never,
           }))
         )
-          throw new AuthorizationError();
+          throw new AuthenticationRequiredError("bearer");
       }
       const query = readBuildExportQuery(new URL(context.req.url));
       const suppliedTag = context.req.header("if-none-match") ?? undefined;

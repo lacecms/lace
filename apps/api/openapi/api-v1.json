@@ -201,6 +201,7 @@
             "properties": {
               "code": {
                 "enum": [
+                  "AUTHENTICATION_REQUIRED",
                   "AUTHORIZATION_DENIED",
                   "BUILD_EXPORT_VERSION_CHANGED",
                   "CONFLICT",
@@ -1133,6 +1134,16 @@
             },
             "description": "Updated session summary"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -1141,7 +1152,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -1184,6 +1195,16 @@
             },
             "description": "Successful response"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -1192,7 +1213,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           }
         },
         "security": [
@@ -1306,6 +1327,16 @@
             },
             "description": "Connections without credentials"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -1314,7 +1345,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -1369,6 +1400,16 @@
           "204": {
             "description": "Connection revoked"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -1377,7 +1418,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED); also an Origin that is not the canonical public origin"
+            "description": "Permission denied (AUTHORIZATION_DENIED); also an Origin that is not the canonical public origin"
           },
           "404": {
             "content": {
@@ -1478,6 +1519,16 @@
             },
             "description": "The current password is incorrect (INVALID_CREDENTIALS)"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -1486,7 +1537,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -1552,6 +1603,16 @@
             },
             "description": "Sessions without tokens or IP addresses"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -1560,7 +1621,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           }
         },
         "security": [
@@ -1589,6 +1650,16 @@
           "204": {
             "description": "Session ended"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -1597,7 +1668,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "404": {
             "content": {
@@ -1673,6 +1744,16 @@
             },
             "description": "Count of sessions ended"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -1681,7 +1762,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -1754,6 +1835,16 @@
             },
             "description": "Build token metadata"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -1762,7 +1853,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           }
         },
         "security": [
@@ -1835,6 +1926,16 @@
             },
             "description": "The created token; the plaintext is returned only here"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -1843,7 +1944,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -1916,6 +2017,16 @@
             },
             "description": "Revoked build token metadata"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -1924,7 +2035,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "404": {
             "content": {
@@ -1994,6 +2105,16 @@
             },
             "description": "Current configuration, not deployment verification"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -2002,7 +2123,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           }
         },
         "security": [
@@ -2056,6 +2177,16 @@
             },
             "description": "Build request queued"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -2064,7 +2195,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -2138,6 +2269,16 @@
             },
             "description": "Failed build retry queued"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -2146,7 +2287,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -2411,6 +2552,16 @@
             },
             "description": "Content models"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -2419,7 +2570,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           }
         },
         "security": [
@@ -2487,6 +2638,16 @@
           "204": {
             "description": "Entry deleted"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -2495,7 +2656,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -2940,6 +3101,16 @@
             },
             "description": "Content entry with its last editor"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -2948,7 +3119,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -3529,6 +3700,16 @@
             },
             "description": "Saved entry"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -3537,7 +3718,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -4005,6 +4186,16 @@
             },
             "description": "Created copy"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -4013,7 +4204,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -4280,6 +4471,16 @@
             },
             "description": "Bounded source or location page and concurrency receipt"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -4288,7 +4489,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -4791,6 +4992,16 @@
             },
             "description": "Publication and build dispatch outcome"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -4799,7 +5010,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -5267,6 +5478,16 @@
             },
             "description": "Reverted entry"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -5275,7 +5496,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -5795,6 +6016,16 @@
             },
             "description": "Unpublication and build dispatch outcome"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -5803,7 +6034,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -5933,6 +6164,16 @@
             },
             "description": "The presented import token and the effective permissions"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -5941,7 +6182,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           }
         },
         "security": [
@@ -6051,6 +6292,16 @@
             },
             "description": "Import-token metadata, newest first; never the plaintext"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -6059,7 +6310,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           }
         },
         "security": [
@@ -6189,6 +6440,16 @@
             },
             "description": "The created token; the plaintext is returned only here"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -6197,7 +6458,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -6317,6 +6578,16 @@
             },
             "description": "The revoked token (idempotent)"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -6325,7 +6596,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "404": {
             "content": {
@@ -6406,6 +6677,16 @@
             },
             "description": "Invitations without tokens or links"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -6414,7 +6695,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           }
         },
         "security": [
@@ -6541,6 +6822,16 @@
             },
             "description": "Invitation created; the link is present only when email was not sent"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -6549,7 +6840,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "409": {
             "content": {
@@ -6598,6 +6889,16 @@
           "204": {
             "description": "Invitation revoked"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -6606,7 +6907,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -6745,6 +7046,16 @@
             },
             "description": "Invitation reissued; the link is present only when email was not sent"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -6753,7 +7064,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -6911,6 +7222,16 @@
             },
             "description": "Bounded destination page"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -6919,7 +7240,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -7080,6 +7401,16 @@
             },
             "description": "Destination statuses keyed by ID"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -7088,7 +7419,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -7313,6 +7644,16 @@
             },
             "description": "Media page"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -7321,7 +7662,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -7485,6 +7826,16 @@
             },
             "description": "Created media"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -7493,7 +7844,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -7653,6 +8004,16 @@
             },
             "description": "Deletion requested"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -7661,7 +8022,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -7934,6 +8295,16 @@
             },
             "description": "Media item with the entries that use it"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -7942,7 +8313,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -8198,6 +8569,16 @@
             },
             "description": "Updated media and build dispatch outcome"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -8206,7 +8587,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -8254,6 +8635,16 @@
           "304": {
             "description": "The cached media is still valid"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -8262,7 +8653,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "404": {
             "description": "Media is not active or does not exist"
@@ -8414,6 +8805,16 @@
             },
             "description": "Deletion retry requested"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -8422,7 +8823,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -8512,6 +8913,16 @@
             },
             "description": "Media tag catalog"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -8520,7 +8931,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -8760,6 +9171,16 @@
             },
             "description": "Content entry page with per-status totals"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -8768,7 +9189,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -9343,6 +9764,16 @@
             },
             "description": "Created entry"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -9351,7 +9782,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -9432,6 +9863,16 @@
             },
             "description": "Session summary without credential material"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -9440,7 +9881,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           }
         },
         "security": [
@@ -9509,6 +9950,16 @@
             },
             "description": "Closed delivery outcome; failed sends are reported, not raised"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -9517,7 +9968,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -9612,6 +10063,16 @@
             },
             "description": "Successful response"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -9620,7 +10081,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           }
         },
         "security": [
@@ -9742,6 +10203,16 @@
             },
             "description": "Recent site builds"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -9750,7 +10221,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           }
         },
         "security": [
@@ -9871,6 +10342,16 @@
             },
             "description": "Site build detail"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -9879,7 +10360,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "404": {
             "content": {
@@ -9955,6 +10436,16 @@
             },
             "description": "Successful response"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -9963,7 +10454,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           }
         },
         "security": [
@@ -10039,6 +10530,16 @@
             },
             "description": "Updated user"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -10047,7 +10548,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "404": {
             "content": {
@@ -10168,6 +10669,16 @@
             },
             "description": "Reset issued; the link is present only when email was not sent"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -10176,7 +10687,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -10242,6 +10753,16 @@
             },
             "description": "Count of sessions ended"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -10250,7 +10771,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
           "422": {
             "content": {
@@ -11551,7 +12072,7 @@
             },
             "description": "One page of the published build export"
           },
-          "403": {
+          "401": {
             "content": {
               "application/json": {
                 "schema": {
@@ -11559,7 +12080,7 @@
                 }
               }
             },
-            "description": "Authentication or permission required (AUTHORIZATION_DENIED)"
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
           },
           "409": {
             "content": {

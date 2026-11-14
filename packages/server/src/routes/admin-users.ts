@@ -1,6 +1,11 @@
 import { noStore, notFound, parse, response, validationHook } from "../shared/http.js";
 import { optionalJsonBody } from "../shared/request.js";
-import { authorizationFailure, security, validationFailure } from "../shared/openapi.js";
+import {
+  authenticationFailure,
+  authorizationFailure,
+  security,
+  validationFailure,
+} from "../shared/openapi.js";
 import { invitationDto, invitationIssueDto, linkIssueDto } from "../shared/account-dtos.js";
 import {
   managedUserListSchema,
@@ -36,6 +41,7 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
           description: "Successful response",
           content: { "application/json": { schema: resolver(managedUserListSchema) } },
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
       },
     }),
@@ -54,6 +60,7 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
           content: { "application/json": { schema: resolver(invitationListSchema) } },
           description: "Invitations without tokens or links",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
       },
       security: security.session,
@@ -77,6 +84,7 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
           content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
           description: "The address has an account or an active invitation",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },
@@ -107,6 +115,7 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
           content: { "application/json": { schema: resolver(invitationIssueResultSchema) } },
           description: "Invitation reissued; the link is present only when email was not sent",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },
@@ -132,6 +141,7 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
       security: security.session,
       responses: {
         204: { description: "Invitation revoked" },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },
@@ -156,6 +166,7 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
           content: { "application/json": { schema: resolver(adminPasswordResetResultSchema) } },
           description: "Reset issued; the link is present only when email was not sent",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },
@@ -186,6 +197,7 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
           content: { "application/json": { schema: resolver(sessionRevocationResultSchema) } },
           description: "Count of sessions ended",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         ...validationFailure(),
       },
@@ -212,6 +224,7 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
           content: { "application/json": { schema: resolver(managedUserSchema) } },
           description: "Updated user",
         },
+        ...authenticationFailure(),
         ...authorizationFailure(),
         404: {
           content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
