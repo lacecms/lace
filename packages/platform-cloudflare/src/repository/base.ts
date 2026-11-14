@@ -30,6 +30,8 @@ export interface D1RepositoryOptions {
   /** Test hook: a throw at a named checkpoint injects a failing statement at that batch position. */
   readonly beforeMutation?: (checkpoint: string) => void;
   readonly nextId?: () => string;
+  /** Called once after a committed batch in which an outbox statement changed a row. */
+  readonly onOutboxWork?: () => void;
 }
 
 /**
@@ -104,11 +106,17 @@ export abstract class D1RepositoryBase {
     if (batch.statements.length > D1_MAX_BATCH_STATEMENTS) {
       failure("D1 mutation exceeds its statement budget.");
     }
+    let results: D1Result[];
     try {
-      return await this.database.batch(batch.statements);
+      results = await this.database.batch(batch.statements);
     } catch (error) {
       sqliteWriteError(error, pageCreation, "D1");
     }
+    // A failed guard leaves every outbox statement unchanged although the batch commits.
+    if (batch.outbox.some((index) => (results[index]?.meta.changes ?? 0) > 0)) {
+      this.options.onOutboxWork?.();
+    }
+    return results;
   }
 
   protected async all<Row = Record<string, unknown>>(
@@ -287,7 +295,7 @@ export abstract class D1RepositoryBase {
       `json_patch(json_object('publishedSnapshotId', ?, 'reason', ?, 'requestedAt', ?, 'requestedBy', ?, 'targetVersion', coalesce((select version from published_state where singleton_key = 1), 0)), json_object('retryOfBuildId', ${retry}))`;
     const payloadParams = [input.snapshotId, input.reason, input.requestedAt, input.requestedBy];
     const availableAt = input.requestedAt + SITE_BUILD_DEBOUNCE_MS;
-    batch.add(
+    batch.addOutbox(
       `insert or ignore into outbox_events (id, type, payload_json, attempts, available_at, created_at)
        select ?, 'site.build.requested', ${payload("?")}, 0, ?, ? where ${condition.sql}`,
       eventId,
@@ -297,7 +305,7 @@ export abstract class D1RepositoryBase {
       input.requestedAt,
       ...condition.params,
     );
-    batch.add(
+    batch.addOutbox(
       `update outbox_events
           set payload_json = ${payload("coalesce(?, json_extract(payload_json, '$.retryOfBuildId'))")},
               available_at = ?

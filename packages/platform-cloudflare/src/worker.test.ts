@@ -12,7 +12,6 @@ import {
   createCloudflareAdminAssets,
   createCloudflareWorker,
   parseCloudflareSettings,
-  producesDispatchWork,
 } from "./index.js";
 import { countingD1 } from "./test-support/d1-test-harness.js";
 import { animatedGifFixture, readCompleteBuildExport } from "@lacecms/test-utils";
@@ -122,28 +121,81 @@ test("admin assets redirect, fall back to the SPA entry, and reject other method
   expect(requested).toEqual(["/index.html", "/assets/app.js", "/missing.js", "/index.html"]);
 });
 
-test("only successful dispatch-producing admin mutations schedule post-commit work", () => {
-  const request = (method, path) => new Request(`${origin}${path}`, { method });
-  expect(producesDispatchWork(request("POST", "/api/v1/admin/entries/e/publish"), 200)).toBe(true);
-  expect(producesDispatchWork(request("DELETE", "/api/v1/admin/entries/e"), 204)).toBe(true);
-  expect(producesDispatchWork(request("DELETE", "/api/v1/admin/media/m"), 202)).toBe(true);
-  expect(producesDispatchWork(request("POST", "/api/v1/admin/media/m/retry-deletion"), 202)).toBe(
-    true,
-  );
-  expect(producesDispatchWork(request("POST", "/api/v1/admin/builds"), 202)).toBe(true);
-  expect(producesDispatchWork(request("POST", "/api/v1/admin/builds/b/retry"), 202)).toBe(true);
-  expect(producesDispatchWork(request("POST", "/api/v1/admin/entries/e/publish"), 409)).toBe(false);
-  expect(producesDispatchWork(request("GET", "/api/v1/admin/entries/e"), 200)).toBe(false);
-  expect(producesDispatchWork(request("PUT", "/api/v1/admin/entries/e/draft"), 200)).toBe(false);
-  expect(producesDispatchWork(request("POST", "/api/v1/admin/entries/e/unpublish"), 200)).toBe(
-    true,
-  );
-  expect(producesDispatchWork(request("PATCH", "/api/v1/admin/media/m"), 200)).toBe(true);
-  expect(producesDispatchWork(request("PATCH", "/api/v1/admin/media/m"), 409)).toBe(false);
-  expect(producesDispatchWork(request("POST", "/api/v1/admin/entries/e/unpublish"), 409)).toBe(
-    false,
-  );
-  expect(producesDispatchWork(request("GET", "/api/v1/admin/media/m"), 200)).toBe(false);
+test("only requests that committed outbox work register a post-commit pass", async () => {
+  const fixture = await workerFixture();
+  await fixture.signIn();
+  fixture.pending.splice(0);
+  /** Runs one request and returns how many passes it registered. */
+  const passes = async (path, init, status) => {
+    const before = fixture.pending.length;
+    const result = await fixture.call(path, init);
+    expect(result.response.status).toBe(status);
+    return { passes: fixture.pending.length - before, result };
+  };
+  const created = await fixture.call("/api/v1/admin/models/posts/entries", {
+    json: { blocks: [], fields: { publishedAt: "2026-09-24" }, slug: "queued", title: "Queued" },
+    method: "POST",
+  });
+  const path = `/api/v1/admin/entries/${created.body.id}`;
+  const draft = { blocks: [], fields: { publishedAt: "2026-09-24" }, slug: "queued" };
+  expect(
+    (
+      await passes(
+        `${path}/draft`,
+        { json: { ...draft, expectedRevision: 1, title: "Saved" }, method: "PUT" },
+        200,
+      )
+    ).passes,
+  ).toBe(0);
+  const publication = {
+    headers: { "idempotency-key": "worker-publication" },
+    json: { expectedRevision: 2 },
+    method: "POST",
+  };
+  const published = await passes(`${path}/publish`, publication, 200);
+  expect(published.passes).toBe(1);
+  expect((await passes(`${path}/publish`, publication, 200)).passes).toBe(0);
+  expect((await passes(path, {}, 200)).passes).toBe(0);
+  expect(
+    (
+      await passes(
+        `${path}/unpublish`,
+        {
+          json: { expectedPublishedSnapshotId: published.result.body.entry.published.id },
+          method: "POST",
+        },
+        200,
+      )
+    ).passes,
+  ).toBe(1);
+  const uploaded = await upload(fixture);
+  expect(
+    (await passes(`/api/v1/admin/media/${uploaded.body.id}`, { method: "DELETE" }, 202)).passes,
+  ).toBe(1);
+  await fixture.settle();
+
+  // Concurrent requests in one isolate are attributed to their own scope.
+  const other = await fixture.call("/api/v1/admin/models/posts/entries", {
+    json: { blocks: [], fields: { publishedAt: "2026-09-24" }, slug: "racing", title: "Racing" },
+    method: "POST",
+  });
+  const publishing = [];
+  const reading = [];
+  const [racingPublication, racingRead] = await Promise.all([
+    fixture.call(`/api/v1/admin/entries/${other.body.id}/publish`, {
+      ctx: { waitUntil: (promise) => void publishing.push(promise) },
+      json: { expectedRevision: 1 },
+      method: "POST",
+    }),
+    fixture.call("/api/v1/admin/site-builds", {
+      ctx: { waitUntil: (promise) => void reading.push(promise) },
+    }),
+  ]);
+  expect(racingPublication.response.status).toBe(200);
+  expect(racingRead.response.status).toBe(200);
+  expect(publishing).toHaveLength(1);
+  expect(reading).toHaveLength(0);
+  await Promise.all(publishing);
 });
 
 /** Adapts the fixture's in-process Worker call to the shared export reader. */

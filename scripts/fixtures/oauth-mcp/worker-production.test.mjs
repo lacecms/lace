@@ -28,12 +28,27 @@ test("production Worker isolate executes OAuth consent, guarded code exchange an
   const compiled = await build({
     // Miniflare dispatchFetch restores the URL but replaces Host with its socket.
     // Restore the edge Host at the harness boundary, before the production entry.
+    // The harness also counts the waitUntil passes of each tagged request; a
+    // streamed MCP response registers them after its headers are sent.
     stdin: {
       contents: `import worker from ${JSON.stringify(new URL("../../../apps/api/worker/index.ts", import.meta.url).pathname)};
-        export default { ...worker, fetch(request, ...args) {
+        const passes = new Map();
+        export default { ...worker, fetch(request, env, ctx) {
+          const url = new URL(request.url);
+          if (url.pathname === "/__test/wait-until")
+            return Response.json(passes.get(url.searchParams.get("id")) ?? null);
+          const id = request.headers.get("x-test-request");
+          if (id !== null) passes.set(id, 0);
+          const counted = {
+            passThroughOnException: () => ctx.passThroughOnException(),
+            waitUntil: (promise) => {
+              if (id !== null) passes.set(id, passes.get(id) + 1);
+              ctx.waitUntil(promise);
+            },
+          };
           const headers = new Headers(request.headers);
-          headers.set("host", new URL(request.url).host);
-          return worker.fetch(new Request(request, { headers }), ...args);
+          headers.set("host", url.host);
+          return worker.fetch(new Request(request, { headers }), env, counted);
         }};`,
       resolveDir: new URL("../../../", import.meta.url).pathname,
       loader: "ts",
@@ -178,6 +193,8 @@ test("production Worker isolate executes OAuth consent, guarded code exchange an
     });
     expect(token.status).toBe(200);
     const tokens = await token.json();
+    // Tags of each publish_entry tool call, in call order.
+    const publications = [];
     client = new Client({ name: "production-isolate-test", version: "0.0.0" });
     await client.connect(
       new StreamableHTTPClientTransport(new URL(`${origin}/mcp`), {
@@ -187,19 +204,27 @@ test("production Worker isolate executes OAuth consent, guarded code exchange an
           headers.set("host", new URL(origin).host);
           headers.set("cf-connecting-ip", "192.0.2.44");
           let body = init.body;
+          let publication = false;
           if (typeof body === "string") {
             const message = JSON.parse(body);
             if (message.method === "initialize") {
               message.params.protocolVersion = "2025-11-25";
               body = JSON.stringify(message);
             }
+            publication =
+              message.method === "tools/call" && message.params?.name === "publish_entry";
+          }
+          if (publication) {
+            publications.push(`publication-${publications.length + 1}`);
+            headers.set("x-test-request", publications.at(-1));
           }
           return mf.dispatchFetch(String(url), { ...init, headers, body });
         },
       }),
     );
     expect((await client.listTools()).tools).toHaveLength(6);
-    const model = config.runtime.content.find((model) => model.kind === "collection");
+    // Posts require `publishedAt` before publication.
+    const model = config.runtime.content.find((model) => model.key === "posts");
     const created = await client.callTool({
       name: "create_entry",
       arguments: { modelKey: model.key, title: "Worker isolate draft", fields: {}, blocks: [] },
@@ -219,7 +244,7 @@ test("production Worker isolate executes OAuth consent, guarded code exchange an
         expectedRevision: 1,
         title: "Worker published",
         slug: "worker-published",
-        fields: {},
+        fields: { publishedAt: "2026-09-24" },
         blocks: [],
       },
     });
@@ -230,12 +255,17 @@ test("production Worker isolate executes OAuth consent, guarded code exchange an
       idempotencyKey: "worker-publication",
     };
     const published = await client.callTool({ name: "publish_entry", arguments: args });
-    expect(published.isError).not.toBe(true);
+    expect(published.isError, JSON.stringify(published.structuredContent)).not.toBe(true);
     expect(published.structuredContent.publication).toBe("published");
     expect(
       (await client.callTool({ name: "publish_entry", arguments: args })).structuredContent
         .publication,
     ).toBe("replayed");
+    // The committed publication queued a build; its replay queued nothing.
+    const passes = [];
+    for (const id of publications)
+      passes.push(await (await mf.dispatchFetch(`${origin}/__test/wait-until?id=${id}`)).json());
+    expect(passes).toEqual([1, 0]);
     expect(
       (
         await database

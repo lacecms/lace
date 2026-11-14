@@ -40,6 +40,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { ulid } from "ulid";
 import { createCloudflareAdminAssets } from "./admin-assets.js";
 import { CloudflareKvCache, NoopCloudflareCache } from "./cache.js";
+import * as postCommitScope from "./post-commit-scope.js";
 import { D1ContentRepository } from "../repository/repository.js";
 import { DeployHookSiteBuildTrigger } from "../deploy/deploy-hook.js";
 import { PagesDeploymentStatusReader } from "../deploy/pages-deployments.js";
@@ -65,26 +66,6 @@ export const SCHEDULED_MEDIA_DELETION_CLAIMS = 5;
 /** Tracked provider deployments checked per scheduled run (one Pages request each). */
 export const SCHEDULED_TRACKING_CHECKS = 5;
 const POST_COMMIT_BUILD_DELAY_MS = SITE_BUILD_DEBOUNCE_MS + 250;
-
-/** Admin mutations that enqueue outbox work and deserve a best-effort post-commit pass. */
-const DISPATCH_PRODUCING_REQUESTS: readonly (readonly [string, RegExp])[] = [
-  ["POST", /^\/api\/v1\/admin\/entries\/[^/]+\/publish$/u],
-  ["POST", /^\/api\/v1\/admin\/entries\/[^/]+\/unpublish$/u],
-  ["DELETE", /^\/api\/v1\/admin\/entries\/[^/]+$/u],
-  ["PATCH", /^\/api\/v1\/admin\/media\/[^/]+$/u],
-  ["DELETE", /^\/api\/v1\/admin\/media\/[^/]+$/u],
-  ["POST", /^\/api\/v1\/admin\/media\/[^/]+\/retry-deletion$/u],
-  ["POST", /^\/api\/v1\/admin\/builds$/u],
-  ["POST", /^\/api\/v1\/admin\/builds\/[^/]+\/retry$/u],
-];
-
-export function producesDispatchWork(request: Request, status: number): boolean {
-  if (status < 200 || status > 299) return false;
-  const pathname = new URL(request.url).pathname;
-  return DISPATCH_PRODUCING_REQUESTS.some(
-    ([method, pattern]) => request.method === method && pattern.test(pathname),
-  );
-}
 
 export interface WorkerOperationalLogger {
   error(entry: Record<string, string>): void;
@@ -213,7 +194,7 @@ export function createCloudflareRuntime(
   const repository = new D1ContentRepository(
     settings.database,
     contentModelResolver(input.config),
-    { nextId: () => ids.next() },
+    { nextId: () => ids.next(), onOutboxWork: postCommitScope.markOutboxWork },
   );
   const clients = new TrustedClientAddresses();
   const security = new D1SecurityService(settings.database, () => clock.now());
@@ -406,14 +387,18 @@ export function createCloudflareWorker(input: CreateCloudflareWorkerInput): Clou
       // Only the Worker ingress accepts Cloudflare's edge-supplied header.
       // Direct runtime.app calls have no trusted client identity.
       runtime.clients.set(request, request.headers.get("cf-connecting-ip"));
-      // Hono reads only `waitUntil`; the account flows defer email delivery through it.
-      const response = await runtime.app.fetch(request, env, {
-        passThroughOnException: () => undefined,
-        props: undefined,
-        waitUntil: (promise: Promise<unknown>) => ctx.waitUntil(promise),
-      });
-      if (producesDispatchWork(request, response.status)) ctx.waitUntil(postCommit(runtime));
-      return response;
+      // The first committed outbox work registers one best-effort pass, whatever
+      // the route or response status; a streamed MCP response may end first.
+      return postCommitScope.run(
+        () => ctx.waitUntil(postCommit(runtime)),
+        () =>
+          // Hono reads only `waitUntil`; the account flows defer email delivery through it.
+          runtime.app.fetch(request, env, {
+            passThroughOnException: () => undefined,
+            props: undefined,
+            waitUntil: (promise: Promise<unknown>) => ctx.waitUntil(promise),
+          }),
+      );
     },
     runtime(env: CloudflareWorkerEnv): CloudflareRuntime {
       const value = resolve(env);
