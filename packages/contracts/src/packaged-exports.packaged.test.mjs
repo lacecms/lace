@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 
 test("packaged entry point keeps its public exports", async () => {
   expect(Object.keys(await import("../dist/index.js")).sort()).toEqual([
+    "AuthenticationRequiredError",
     "BUILD_EXPORT_FORMAT_VERSION",
     "CLOUDFLARE_LIST_QUERY_LIMITS",
     "COLLECTION_MATCHING_VERSION",
