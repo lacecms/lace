@@ -2,7 +2,7 @@
 
 The selected candidate and its coordinates are defined in `release/alpha.json`;
 the npm channel is `next`. The current candidate is `0.1.0-rc4` (ownership
-template `0.49.0`). The oldest supported release is `0.1.0-rc2`
+template `0.50.0`). The oldest supported release is `0.1.0-rc2`
 (template `0.47.0`); earlier prereleases, including `0.1.0-rc1`, remain
 published and immutable but are not supported (see
 [compatibility](./compatibility.md#upgrading-from-rc2)). Preparation and
@@ -19,7 +19,7 @@ The owner confirmed the npm organization `lacecms` and GitHub organization `lace
 | Generator | `create-lace@0.1.0-rc4` | Executable, declarations, templates, ownership inventory, MIT license |
 | Runtime graph | `@lacecms/*@0.1.0-rc4` | Compiled ESM/declarations and complete registry dependency metadata; `platform-cloudflare` also ships the packaged admin |
 | API/admin | `ghcr.io/lacecms/api:0.1.0-rc4` | Compiled API/admin, dispatcher, explicit migrations, bucket initializer and native runtime |
-| Builder | `ghcr.io/lacecms/builder:0.1.0-rc4` | Fixed-command service, non-root work/output mounts and pinned build toolchain |
+| Builder | `ghcr.io/lacecms/builder:0.1.0-rc4` | Fixed-command service, non-root work/output mounts and Node 24.22.3 with pnpm 12 |
 
 Recheck npm and GHCR publishing rights with authenticated accounts before live
 publication. Local artifact preparation does not need publishing credentials.
@@ -35,7 +35,7 @@ Both runtime images support `linux/amd64` and `linux/arm64` only when both platf
 
 ## Prerequisites
 
-- Node 24 or later and the project-pinned pnpm `12.3.4` for preparation. `release:prepare` refuses an older Node or any other pnpm before it creates the output directory. Consumer packages declare the minimum Node `>=24.12.0` (and generated projects pnpm `>=12`) without upper bounds, so prepare on `24.12.0` or newer. CI and the API/builder images stay pinned to the tested Node `24.12.0`; a newer Node is eligible for preparation, not compatibility tested.
+- Node 24 or later and pnpm 12 or later for preparation. `release:prepare` refuses older or invalid versions before it creates the output directory. Consumer packages declare Node `>=24.12.0` and generated projects pnpm `>=12` without upper bounds. CI uses the recorded Node `24.12.0` and pnpm `12.3.4` baseline; Docker images use Node `24.22.3` and install pnpm 12. An eligible version is not automatically compatibility tested.
 - Git, tar, Docker with buildx and the ability to run both Linux platforms (native or emulated), plus enough disk for build layers and four saved images.
 - Public dependency/network access for frozen installs and image base/toolchain downloads. Build does not need npm or GHCR publishing credentials.
 - A clean reviewed source commit for release-eligible preparation. Registry credentials and local runtime data must remain outside tracked release inputs and build contexts.

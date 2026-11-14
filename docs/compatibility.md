@@ -66,7 +66,7 @@ not evidence that every member of the range is continuously tested.
 | Boundary | Supported range | Notes |
 | --- | --- | --- |
 | Node.js | 24.x LTS, starting at 24.12.0 | Node runs the VPS API, builder, CLI, and local tooling. |
-| pnpm | 12.x | Corepack manages the declared pnpm version. |
+| pnpm | 12 or later | The project declares a minimum; CI selects a concrete version. |
 | SQLite | 3.35 or later | Node uses `better-sqlite3`; Cloudflare D1 compatibility is verified separately in its runtime milestone. |
 | Wrangler | 4.x | Cloudflare development and deployment tooling. |
 | Browsers | Current and immediately previous stable Chrome, Edge, Firefox, and Safari | Applies to the future admin SPA; browser-flow coverage is introduced with the admin milestones. |
@@ -105,7 +105,7 @@ mixing artifacts from different versions is unsupported.
 
 | Release | Template | Status |
 | --- | --- | --- |
-| `0.1.0-rc4` | `0.49.0` | Selected candidate; publication pending |
+| `0.1.0-rc4` | `0.50.0` | Selected candidate; publication pending |
 | `0.1.0-rc3` | `0.48.0` | Latest published release |
 | `0.1.0-rc2` | `0.47.0` | Oldest supported release |
 
@@ -123,13 +123,17 @@ former `<25`/`<13` upper bounds. Doctor evaluates the consumer project's own
 declaration, so a project that keeps an explicit upper bound is still held to it.
 
 A version that satisfies a minimum is **eligible**, not tested. Reproducibility
-pins are separate and unchanged by the minimums:
+versions and dependency locks are separate from the minimums:
 
 | Pin | Value | Where |
 | --- | --- | --- |
-| Tested Node | `24.12.0` | CI workflows, `node:24.12.0-bookworm-slim` API/builder images |
+| Tested Node | `24.12.0` | CI workflows and the recorded baseline |
+| Image Node | `24.22.3` | Local development and API/builder image stages; image smoke verification is separate |
 | Preparation Node | major `24` or later | `release:prepare` gate (`scripts/release.mjs`); eligible, not tested |
-| Tested pnpm | `12.3.4` | `packageManager` (root and generated CMS), API/builder images, release preparation (exact) |
+| Tested pnpm | `12.3.4` | CI and the recorded baseline |
+| Root package-manager metadata | `pnpm@12.3.4` | Required by Turborepo and selected by Corepack; Corepack selects this version; set `npm_config_manage_package_manager_versions=false` when using a different installed pnpm |
+| Preparation pnpm | `12` or later | Release preparation gate; eligible versions require a frozen install |
+| Image pnpm | `12` | Selected at build time; patch version is not fixed |
 | Dependencies | exact versions | `pnpm-lock.yaml` and the workspace catalog |
 
 Dependency engine audit (2026-10-06, resolved lockfile metadata): Astro 7.3.1

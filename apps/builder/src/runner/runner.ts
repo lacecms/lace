@@ -44,7 +44,7 @@ export interface BuilderSettings extends SourceSelection, SiteOutputSettings {
   readonly cacheRoot?: string;
   /** Internal test seam; production uses the fixed cache bound. */
   readonly cacheLimitBytes?: number;
-  /** Internal test seam; production always uses image-pinned pnpm from PATH. */
+  /** Internal test seam; production always uses the image-provided pnpm from PATH. */
   readonly toolPath?: string;
   /** Internal test seam; production reads the published export ETag. */
   readonly versionReader?: () => Promise<number>;

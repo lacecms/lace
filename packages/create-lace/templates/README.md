@@ -20,7 +20,7 @@ This README is an index. Every command sequence lives in the scenario guides bel
 
 ## Requirements
 
-- Node `>=24.12.0` and pnpm `>=12`. These are minimums, not tested upper limits. This project pins pnpm `12.3.4` through `packageManager`, and Lace is tested with Node `24.12.0` and pnpm `12.3.4`. Newer Node and pnpm majors satisfy the declaration but stay unverified until the Lace compatibility matrix records them.
+- Node `>=24.12.0` and pnpm `>=12`. These are minimums, not tested upper limits. The project requires pnpm `>=12`; the recorded baseline was tested with Node `24.12.0` and pnpm `12.3.4`. Newer Node and pnpm majors satisfy the declaration but stay unverified until the Lace compatibility matrix records them.
 - Docker with Compose and a running daemon for the Compose scenarios. MinIO's first image build needs network access and disk space.
 - Lace packages, generator and API/builder images from one compatible release: `0.1.0-rc4` or a later compatible release named in `package.json` and `.env.example`. The coordinates are downloadable only after owner publication. Behavior added by a newer ownership template needs matching freshly built packages/images or a later compatible release; published artifacts are immutable and do not gain it retroactively.
 

@@ -1,7 +1,7 @@
 import { withArtifactLock } from "./release-lock.mjs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readReleaseModel, validateReleaseModel } from "./release-model.mjs";
+import { readReleaseModel, supportedPnpmVersion, validateReleaseModel } from "./release-model.mjs";
 import {
   claimOutput,
   completeInventory,
@@ -14,8 +14,8 @@ import {
 
 /** Lowest Node major that may prepare a release (owner decision; CI and images keep their tested pin). */
 export const PREPARATION_NODE_MAJOR = 24;
-/** Exact pnpm used for frozen installation during preparation. */
-export const PREPARATION_PNPM = "12.3.4";
+/** Lowest pnpm major that may prepare a release. */
+export const PREPARATION_PNPM_MAJOR = 12;
 
 /** Returns why this Node/pnpm pair may not prepare a release, or undefined when it may. */
 export function preparationToolchainError(nodeVersion, pnpmVersion) {
@@ -23,9 +23,9 @@ export function preparationToolchainError(nodeVersion, pnpmVersion) {
   if (
     major === undefined ||
     Number(major) < PREPARATION_NODE_MAJOR ||
-    pnpmVersion !== PREPARATION_PNPM
+    !supportedPnpmVersion(pnpmVersion)
   )
-    return `Preparation requires Node ${PREPARATION_NODE_MAJOR} or later and pnpm ${PREPARATION_PNPM} (found Node ${nodeVersion}, pnpm ${pnpmVersion})`;
+    return `Preparation requires Node ${PREPARATION_NODE_MAJOR} or later and pnpm ${PREPARATION_PNPM_MAJOR} or later (found Node ${nodeVersion}, pnpm ${pnpmVersion})`;
   return undefined;
 }
 
@@ -41,7 +41,9 @@ async function prepareUnlocked(
 ) {
   const toolchainError = preparationToolchainError(
     process.versions.node,
-    await run("pnpm", ["--version"], { cwd: root, capture: true }),
+    await (
+      operations.pnpmVersion ?? (() => run("pnpm", ["--version"], { cwd: root, capture: true }))
+    )(),
   );
   if (toolchainError) throw new Error(toolchainError);
   const model = await readReleaseModel(root);

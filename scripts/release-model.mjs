@@ -12,8 +12,20 @@ export const RELEASE_GUIDES = [
   "packages/create-lace/templates/docs/lace-compose-production.md",
   "packages/create-lace/templates/docs/lace-operations.md",
 ];
-/** Minimum-only engine declarations; reproducibility pins live in packageManager, CI and images. */
+/** Minimum-only engine declarations; a concrete pnpm version is selected for CI while lockfiles pin dependencies. */
 export const ENGINE_MINIMUMS = Object.freeze({ node: ">=24.12.0", pnpm: ">=12" });
+export function supportedPnpmVersion(version) {
+  const match =
+    /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u.exec(
+      String(version ?? ""),
+    );
+  if (!match) return false;
+  const [, major, minor, patch, prerelease] = match;
+  return (
+    Number(major) > 12 ||
+    (Number(major) === 12 && (!prerelease || Number(minor) > 0 || Number(patch) > 0))
+  );
+}
 export const RELEASE_DOCKERFILES = ["apps/api/Dockerfile", "apps/builder/Dockerfile"];
 const RELEASE_VERSION = /^\d+\.\d+\.\d+-(?:alpha\.[1-9]\d*|rc[1-9]\d*)$/u;
 const COORDINATE =

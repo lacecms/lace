@@ -6,7 +6,7 @@ Build the image from the repository root:
 docker build -f apps/builder/Dockerfile -t lace-builder:local .
 ```
 
-The image runs Node 24.12.0 and pnpm 12.3.4. Mount a Lace project at `/source`
+The image uses Node 24.22.3 and installs pnpm 12; its exact pnpm patch is selected when the image is built. Mount a Lace project at `/source`
 read-only, a scratch volume at `/work`, and a static-output volume at `/output`.
 Select the Astro project through deployment-only `LACE_BUILD_SITE_DIR` (default `site`) and `LACE_BUILD_OUTPUT_DIR` (default `dist`). Reference Compose explicitly selects `apps/site`. Standalone installations select `.` and require root `package.json`, `pnpm-lock.yaml` and a direct Astro dependency; selected workspace packages also require the root `pnpm-workspace.yaml` and the same installation lockfile. Host `LACE_BUILD_SOURCE_ROOT` is a Compose bind source, never a path interpreted by this process. The source mount must exist, be readable and remain read-only.
 

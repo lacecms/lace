@@ -7,7 +7,7 @@ announce publication. See [release status and evidence](docs/alpha-release.md).
 
 - Collection lists have refined search, filtering and sorting controls, and admin navigation handles overflow more clearly.
 - Content import now uses the media response version for conditional updates, preventing incorrect concurrency failures.
-- Upgrade all Lace packages, both images and the project template (`0.49.0`) together. Back up first, run migrations and synchronization, and rebuild the site; existing rc2 gallery upgrade guidance still applies ([upgrade guide](docs/compatibility.md#upgrading-from-rc2)).
+- Upgrade all Lace packages, both images and the project template (`0.50.0`) together. Back up first, run migrations and synchronization, and rebuild the site; existing rc2 gallery upgrade guidance still applies ([upgrade guide](docs/compatibility.md#upgrading-from-rc2)).
 
 ## 0.1.0-rc3
 

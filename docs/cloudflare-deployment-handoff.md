@@ -127,8 +127,7 @@ project root unless noted.
    repository:
    - root directory: the generated project (the CMS directory);
    - build command: `pnpm build`; build output directory: `site/dist`;
-   - build variables: `NODE_VERSION=24.12.0`, `PNPM_VERSION` matching
-     `packageManager` (confirm that the Pages build image honours it; record
+   - build variables: `NODE_VERSION=24.12.0`, `PNPM_VERSION` set to a compatible pnpm version (12 or later) (confirm that the Pages build image honours it; record
      the image version), `LACE_API_BASE_URL` and `LACE_PUBLIC_BASE_URL` set to
      the Worker origin, and `LACE_BUILD_TOKEN` as an encrypted variable.
    Then create a deploy hook for the production branch and store its URL with

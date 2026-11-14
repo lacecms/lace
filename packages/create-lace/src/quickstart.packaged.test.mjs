@@ -77,7 +77,7 @@ test("development guide commands, setup order and README index match the generat
   const readme = await readFile(join(root, "README.md"), "utf8");
   expect(readme).not.toContain("```bash");
   expect(readme).toContain("Node `>=24.12.0` and pnpm `>=12`");
-  expect(readme).toContain("pins pnpm `12.3.4`");
+  expect(readme).toContain("requires pnpm `>=12`");
   expect(readme).not.toMatch(/<25|<13/u);
   for (const path of [
     "docs/lace-compose-dev.md",

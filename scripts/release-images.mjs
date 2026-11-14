@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { checksum, run } from "./release-artifacts.mjs";
+import { supportedPnpmVersion } from "./release-model.mjs";
 
 export function imageBuildArguments(kind, platform, tag, release, source, snapshot) {
   if (!["api", "builder"].includes(kind) || !release.platforms.includes(platform))
@@ -121,7 +122,7 @@ export async function prepareImages(snapshot, output, release, source, platforms
           ["run", "--rm", "--platform", platform, "--entrypoint", "pnpm", metadata.Id, "--version"],
           { capture: true },
         ).then((version) => {
-          if (version !== "12.3.4") throw new Error("Builder pnpm pin mismatch");
+          if (!supportedPnpmVersion(version)) throw new Error("Builder requires pnpm 12 or later");
         });
       const archive = join(directory, `${kind}-${release.version}-${suffix}.tar`);
       await execute("docker", ["image", "save", "--output", archive, tag]);

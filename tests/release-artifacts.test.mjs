@@ -116,6 +116,7 @@ test("injected preparation failure leaves no inventory or success", async () => 
       prepareRelease(
         { root, output, phase: "packages", preview: true },
         {
+          pnpmVersion: async () => "12.3.5",
           packages: async () => {
             throw new Error("injected pack failure");
           },
@@ -130,7 +131,7 @@ test("injected preparation failure leaves no inventory or success", async () => 
 });
 
 test.each(["24.0.0", "24.12.0", "24.22.1", "v24.22.1", "25.1.0", "26.0.0-pre"])(
-  "preparation accepts Node %s with the pinned pnpm",
+  "preparation accepts Node %s with eligible pnpm",
   (node) => {
     expect(preparationToolchainError(node, "12.3.4")).toBeUndefined();
   },
@@ -142,11 +143,34 @@ test.each([
   ["24", "12.3.4"],
   ["x24.1.0", "12.3.4"],
   [undefined, "12.3.4"],
-  ["24.22.1", "12.3.5"],
   ["24.22.1", "11.25.0"],
+  ["24.22.1", "12.0.0-rc.1"],
+  ["24.22.1", "12.3.4oops"],
+  ["24.22.1", "12.3.4-.."],
+  ["24.22.1", "12"],
 ])("preparation refuses Node %s with pnpm %s", (node, pnpm) => {
-  expect(preparationToolchainError(node, pnpm)).toMatch(/Node 24 or later and pnpm 12\.3\.4/u);
+  expect(preparationToolchainError(node, pnpm)).toMatch(/Node 24 or later and pnpm 12 or later/u);
 });
+
+test("an ineligible pnpm is refused before the output destination is claimed", async () => {
+  const parent = await mkdtemp(join(tmpdir(), "lace-release-pnpm-"));
+  const output = join(parent, "out");
+  try {
+    await expect(
+      prepareRelease(
+        { root: process.cwd(), output, preview: true },
+        { pnpmVersion: async () => "11.9.9" },
+      ),
+    ).rejects.toThrow("pnpm 12 or later");
+    await expect(readdir(output)).rejects.toThrow();
+  } finally {
+    await rm(parent, { recursive: true, force: true });
+  }
+});
+
+test.each(["12.0.0", "12.3.5", "12.18.0", "13.0.0"])("preparation accepts pnpm %s", (pnpm) =>
+  expect(preparationToolchainError("24.22.3", pnpm)).toBeUndefined(),
+);
 
 test("an ineligible Node is refused before the output destination is claimed", async () => {
   const parent = await mkdtemp(join(tmpdir(), "lace-release-toolchain-"));
