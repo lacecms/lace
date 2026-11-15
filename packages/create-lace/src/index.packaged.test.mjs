@@ -70,15 +70,19 @@ test("generates deterministic owned source and hashed managed files", async () =
     await readFile(join(left.path, ".lace/upgrade-instructions.json"), "utf8"),
   );
   expect(instructions).toMatchObject({ schemaVersion: 1, templateVersion: TEMPLATE_VERSION });
-  // Instructions cover the latest release and the oldest supported upgrade path.
+  // Instructions cover the latest published template and the production ingress migration.
   expect(instructions.configuration).toHaveLength(1);
-  expect(instructions.configuration[0]).toContain(`Template ${TEMPLATE_VERSION}:`);
-  expect(instructions.configuration[0]).toMatch(/rc3 installations need no additional schema/u);
-  expect(instructions.configuration[0]).toMatch(/rc2 installations.*pnpm content:sync/u);
+  expect(instructions.configuration[0]).toContain(`Template ${TEMPLATE_VERSION}`);
+  expect(instructions.configuration[0]).toMatch(/no longer publishes the API port/u);
+  expect(instructions.configuration[0]).toMatch(/Nginx defaults to 127\.0\.0\.1:8080/u);
+  expect(instructions.configuration[0]).toMatch(/LACE_API_BASE_URL/u);
+  expect(instructions.configuration[0]).toMatch(/docker compose config.*docker compose ps/u);
+  expect(instructions.configuration[0]).not.toMatch(/rc[23] installations/u);
   expect(instructions.database).toHaveLength(1);
   expect(instructions.database[0]).toMatch(
-    /rc2 database.*baseline migration.*pnpm db:migrate.*SCHEMA_UNSUPPORTED/u,
+    /rc4 database.*baseline migration.*forward migrations.*pnpm db:migrate.*without recreation/u,
   );
+  expect(instructions.database[0]).toMatch(/before rc2.*baseline.*unsupported/u);
   expect(instructions.database[0]).not.toMatch(/remove the SQLite database|create a new D1/u);
   expect(JSON.stringify(instructions)).not.toMatch(/\b00(?:0\d|1[0-5])_[a-z_]+/u);
 
