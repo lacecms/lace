@@ -1,11 +1,9 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy command fixtures, filesystem helpers and recorded adapter calls.
 import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { parseOperatorFile, resolveOperatorEnvironment } from "./operator-environment.js";
-const roots = [];
+const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true })));
 });
@@ -40,6 +38,8 @@ test("unsafe selected files fail closed without raw path or credential", async (
     try {
       await resolveOperatorEnvironment(name, {}, root);
     } catch (e) {
+      expect(e).toBeInstanceOf(Error);
+      if (!(e instanceof Error)) throw e;
       expect(e.message).not.toContain(root);
       expect(e.message).not.toContain("private-sentinel");
     }

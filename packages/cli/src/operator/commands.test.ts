@@ -1,5 +1,5 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy command fixtures, filesystem helpers and recorded adapter calls.
+import * as v from "valibot";
+import type { Command } from "../shared/core.js";
 import { expect, test } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,14 +8,19 @@ import { openNodeDatabase } from "@lacecms/platform-node";
 import { runCommand } from "./commands.js";
 
 const cwd = resolve(import.meta.dirname, "../../../..");
-const command = (name, check = false) => ({ command: name, target: "node", check, json: true });
+const command = (name: Command, check = false) => ({
+  command: name,
+  target: "node" as const,
+  check,
+  json: true,
+});
 
 test("nested sync check reports schema/value paths without writes", async () => {
   const root = join(cwd, ".lace-acceptance");
   await mkdir(root, { recursive: true });
   const directory = await mkdtemp(join(root, "cli-nested-sync-"));
   const environment = { databasePath: join(directory, "lace.sqlite") };
-  const project = async (name, version, child) => {
+  const project = async (name: string, version: number, child: string) => {
     const path = join(directory, name);
     await mkdir(path);
     await writeFile(
@@ -24,7 +29,7 @@ test("nested sync check reports schema/value paths without writes", async () => 
     );
     return path;
   };
-  const sql = (statement, ...params) => {
+  const sql = (statement: string, ...params: (string | number | null)[]) => {
     const database = openNodeDatabase(environment.databasePath);
     try {
       const prepared = database.connection.prepare(statement);
@@ -62,15 +67,15 @@ test("nested sync check reports schema/value paths without writes", async () => 
     const blocked = await runCommand(command("content sync", true), environment, invalid);
     expect(blocked.code).toBe("SYNC_PENDING");
     expect(blocked.exitCode).toBe(2);
-    expect(blocked.data.isValid).toBe(false);
+    expect(v.parse(v.object({ isValid: v.boolean() }), blocked.data).isValid).toBe(false);
     expect((await runCommand(command("content sync"), environment, invalid)).code).toBe(
       "SYNC_BLOCKED",
     );
     expect(blocked.message).toContain("/links/*/title");
     expect(blocked.message).toContain("/fields/links/0/title");
-    expect(blocked.data.diagnostics).toContainEqual(
-      expect.objectContaining({ schemaPath: "/links/*/title" }),
-    );
+    expect(
+      v.parse(v.object({ diagnostics: v.array(v.unknown()) }), blocked.data).diagnostics,
+    ).toContainEqual(expect.objectContaining({ schemaPath: "/links/*/title" }));
     expect(state()).toEqual(before);
     const valid = await project("valid", 2, "title:field.text({renamedFrom:'headline'})");
     expect((await runCommand(command("content sync", true), environment, valid)).code).toBe(
@@ -80,7 +85,14 @@ test("nested sync check reports schema/value paths without writes", async () => 
     expect((await runCommand(command("content sync"), environment, valid)).code).toBe(
       "SYNC_APPLIED",
     );
-    expect(JSON.parse(sql("select fields_json from content_snapshots")[0].fields_json)).toEqual({
+    expect(
+      JSON.parse(
+        v.parse(
+          v.array(v.object({ fields_json: v.string() })),
+          sql("select fields_json from content_snapshots"),
+        )[0]!.fields_json,
+      ),
+    ).toEqual({
       links: [{ title: "Long title" }],
     });
     expect((await runCommand(command("content sync", true), environment, valid)).code).toBe(
@@ -107,7 +119,9 @@ test("operational Node migration, no-write check, sync, and bootstrap", async ()
     );
     const setup = await runCommand(command("auth bootstrap"), environment, cwd);
     expect(setup.code).toBe("BOOTSTRAP_TOKEN");
-    expect(setup.data.token).toMatch(/^[A-Za-z0-9_-]{40,}$/u);
+    expect(v.parse(v.object({ token: v.string() }), setup.data).token).toMatch(
+      /^[A-Za-z0-9_-]{40,}$/u,
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -116,7 +130,7 @@ test("operational Node migration, no-write check, sync, and bootstrap", async ()
 test("first check after upgrading reports pending baselines and sync records them quietly", async () => {
   const directory = await mkdtemp(join(tmpdir(), "lace-cli-baselines-"));
   const environment = { databasePath: join(directory, "lace.sqlite") };
-  const sql = (statement) => {
+  const sql = (statement: string) => {
     const database = openNodeDatabase(environment.databasePath);
     try {
       const prepared = database.connection.prepare(statement);
@@ -136,8 +150,15 @@ test("first check after upgrading reports pending baselines and sync records the
 
     const pending = await runCommand(command("content sync", true), environment, cwd);
     expect(pending.code).toBe("SYNC_PENDING");
-    expect(pending.data.operations.length).toBeGreaterThan(0);
-    expect(pending.data.operations.every((item) => item.action === "record-baseline")).toBe(true);
+    expect(
+      v.parse(v.object({ operations: v.array(v.object({ action: v.string() })) }), pending.data)
+        .operations.length,
+    ).toBeGreaterThan(0);
+    expect(
+      v
+        .parse(v.object({ operations: v.array(v.object({ action: v.string() })) }), pending.data)
+        .operations.every((item) => item.action === "record-baseline"),
+    ).toBe(true);
     expect(pending.message).toContain("- record-baseline");
 
     expect((await runCommand(command("content sync"), environment, cwd)).code).toBe("SYNC_APPLIED");
@@ -150,7 +171,7 @@ test("first check after upgrading reports pending baselines and sync records the
   }
 }, 30_000);
 
-function noteConfigSource(version, migrations) {
+function noteConfigSource(version: number, migrations?: string) {
   const fields =
     version === 1
       ? "{ body: field.text({ required: true }) }"
@@ -185,13 +206,13 @@ test("content sync migrates stored blocks and blocks a throwing migration", asyn
   await mkdir(root, { recursive: true });
   const directory = await mkdtemp(join(root, "cli-block-migrations-"));
   const environment = { databasePath: join(directory, "lace.sqlite") };
-  const project = async (name, source) => {
+  const project = async (name: string, source: string) => {
     const path = join(directory, name);
     await mkdir(path);
     await writeFile(join(path, "lace.config.ts"), source);
     return path;
   };
-  const sql = (statement) => {
+  const sql = (statement: string) => {
     const database = openNodeDatabase(environment.databasePath);
     try {
       const prepared = database.connection.prepare(statement);
@@ -242,7 +263,11 @@ test("content sync migrates stored blocks and blocks a throwing migration", asyn
     const applied = await runCommand(command("content sync"), environment, v2);
     expect(applied.code).toBe("SYNC_APPLIED");
     expect(applied.message).toContain("Migrated blocks: 1 (drafts=1, published=0).");
-    expect(applied.data.migrated).toEqual({ blocks: 1, drafts: 1, published: 0 });
+    expect(v.parse(v.object({ migrated: v.unknown() }), applied.data).migrated).toEqual({
+      blocks: 1,
+      drafts: 1,
+      published: 0,
+    });
     expect(sql("select schema_version, data_json from content_blocks")).toEqual([
       { data_json: '{"text":"Hello"}', schema_version: 2 },
     ]);
@@ -289,13 +314,16 @@ test("Cloudflare local sync and bootstrap use persistent D1 services", async () 
       ).code,
     ).toBe("SYNC_APPLIED");
     expect(
-      (
-        await runCommand(
-          { command: "auth bootstrap", target: "cloudflare-local", check: false, json: true },
-          environment,
-          cwd,
-        )
-      ).data.token,
+      v.parse(
+        v.object({ token: v.string() }),
+        (
+          await runCommand(
+            { command: "auth bootstrap", target: "cloudflare-local", check: false, json: true },
+            environment,
+            cwd,
+          )
+        ).data,
+      ).token,
     ).toMatch(/^[A-Za-z0-9_-]{40,}$/u);
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -311,7 +339,9 @@ test("Cloudflare local migration applies Wrangler journal explicitly", async () 
       cwd,
     );
     expect(outcome.code).toBe("MIGRATED");
-    expect(outcome.data.versions.length).toBeGreaterThan(0);
+    expect(
+      v.parse(v.object({ versions: v.array(v.unknown()) }), outcome.data).versions.length,
+    ).toBeGreaterThan(0);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

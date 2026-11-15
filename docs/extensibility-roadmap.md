@@ -389,6 +389,7 @@ are preserved in the linked archives. Dates refer to the final recorded event.
 
 | Date | Session | Change | Status |
 | --- | --- | --- | --- |
+| 2026-11-15 | EX1D | [Type CLI, generator and app tests](../openspec/changes/archive/2026-11-15-ex01d-type-cli-generator-and-app-tests/) | done: restored typechecking for 29 source test files and retained the remaining baseline |
 | 2026-11-15 | EX1A | [Test size ceiling](../openspec/changes/archive/2026-11-15-ex01a-test-size-ceiling/) | done: workspace test files above 1,000 lines fell from 8 to 0; standalone OAuth/MCP fixture remains outside the guard |
 | 2026-11-15 | EX6A | [Preserve trusted client identity](../openspec/changes/archive/2026-11-15-ex06a-preserve-trusted-client-identity/) | done: request identity survives body replacement on Node and Worker |
 | 2026-11-15 | EX6B | [Restrict production Compose ingress](../openspec/changes/archive/2026-11-15-ex06b-restrict-production-compose-ingress/) | done: production reaches the private API through loopback Nginx; development retains a separate loopback API port |

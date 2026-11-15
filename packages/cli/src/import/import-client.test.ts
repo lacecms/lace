@@ -1,22 +1,33 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy command fixtures, filesystem helpers and recorded adapter calls.
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
-import { ImportClient, parseApiOrigin, retryAfterSeconds } from "./import-client.js";
+import {
+  ImportClient,
+  parseApiOrigin,
+  retryAfterSeconds,
+  type ImportClientOptions,
+} from "./import-client.js";
+import { ImportError } from "./import-format.js";
 
 const TOKEN = "sentinel-token-value";
 const schema = v.strictObject({ ok: v.boolean() });
 
-function client(responses, options = {}) {
-  const calls = [];
-  const waits = [];
-  const fetch = async (url, init) => {
+function client(
+  responses: (
+    | { status: number; body?: unknown; headers?: ConstructorParameters<typeof Headers>[0] }
+    | Error
+  )[],
+  options: Partial<ImportClientOptions> = {},
+) {
+  const calls: { url: string; init: RequestInit | undefined }[] = [];
+  const waits: number[] = [];
+  const fetch: typeof globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init });
     const next = responses.shift();
     if (next instanceof Error) throw next;
+    if (!next) throw new Error("Missing response fixture");
     return new Response(next.body === undefined ? null : JSON.stringify(next.body), {
       status: next.status,
-      headers: next.headers,
+      ...(next.headers === undefined ? {} : { headers: next.headers }),
     });
   };
   return {
@@ -26,7 +37,9 @@ function client(responses, options = {}) {
       origin: "https://cms.example.com",
       token: TOKEN,
       fetch,
-      sleep: async (ms) => waits.push(ms),
+      sleep: async (ms) => {
+        waits.push(ms);
+      },
       now: () => Date.parse("2026-11-01T00:00:00Z"),
       ...options,
     }),
@@ -34,17 +47,18 @@ function client(responses, options = {}) {
 }
 
 const request = {
-  method: "GET",
+  method: "GET" as const,
   path: "/api/v1/admin/media",
   what: "Media lookup",
   schema,
   expect: [200],
 };
 
-async function error(promise) {
+async function error(promise: Promise<unknown>): Promise<ImportError> {
   try {
     await promise;
   } catch (failure) {
+    if (!(failure instanceof ImportError)) throw failure;
     return failure;
   }
   throw new Error("expected failure");
@@ -74,11 +88,11 @@ describe("import API client", () => {
     const { client: api, calls } = client([{ status: 200, body: { ok: true } }]);
     const response = await api.request({ ...request, query: { sha256: "a".repeat(64) } });
     expect(response.body).toEqual({ ok: true });
-    expect(calls[0].url).toBe(
+    expect(calls[0]!.url).toBe(
       `https://cms.example.com/api/v1/admin/media?sha256=${"a".repeat(64)}`,
     );
-    expect(calls[0].url).not.toContain(TOKEN);
-    expect(calls[0].init.headers.authorization).toBe(`Bearer ${TOKEN}`);
+    expect(calls[0]!.url).not.toContain(TOKEN);
+    expect(new Headers(calls[0]!.init?.headers).get("authorization")).toBe(`Bearer ${TOKEN}`);
   });
 
   test("429 waits for Retry-After, clamps it and retries the same request", async () => {

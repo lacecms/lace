@@ -1,18 +1,20 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy command fixtures, filesystem helpers and recorded adapter calls.
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { runPreflight } from "./preflight.js";
-const roots = [];
+const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 const account = "a".repeat(32),
   sentinel = "private-token-sentinel";
-const options = { wranglerAuth: "oauth", operatorEnv: "private", json: true };
-const success = () =>
+const options: import("./preflight-options.js").PreflightOptions = {
+  wranglerAuth: "oauth",
+  operatorEnv: "private",
+  json: true,
+};
+const success: typeof fetch = async (_url, _input) =>
   Response.json({ success: true, result: [{ success: true, results: [{ 1: 1 }] }] });
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "lace-preflight-"));
@@ -29,7 +31,11 @@ async function fixture() {
   );
   return root;
 }
-async function run(root, overrides = {}, opts = options) {
+async function run(
+  root: string,
+  overrides: NonNullable<Parameters<typeof runPreflight>[1]> = {},
+  opts = options,
+) {
   return runPreflight(opts, { cwd: root, environment: {}, request: success, ...overrides });
 }
 test("clean private-file split preflight is concurrent read-only evidence, not OAuth/write proof", async () => {
@@ -47,11 +53,11 @@ test("clean private-file split preflight is concurrent read-only evidence, not O
     wranglerSource: "oauth-candidate",
     sameToken: null,
   });
-  expect(a.report.data.checks.at(-1).status).toBe("unverified");
+  expect(a.report.data.checks.at(-1)?.status).toBe("unverified");
   expect(a.output).not.toContain(sentinel);
   for (const [, input] of request.mock.calls) {
-    expect(JSON.parse(input.body)).toEqual({ batch: [{ sql: "SELECT 1", params: [] }] });
-    expect(input.redirect).toBe("error");
+    expect(JSON.parse(String(input?.body))).toEqual({ batch: [{ sql: "SELECT 1", params: [] }] });
+    expect(input?.redirect).toBe("error");
   }
   expect(
     await Promise.all(
@@ -140,15 +146,15 @@ test("malformed, oversized, thrown and hanging provider responses are bounded", 
     async () => {
       throw new Error(sentinel);
     },
-    () => new Promise(() => {}),
+    () => new Promise<Response>(() => {}),
   ]) {
     const result = await run(root, { request, probeMs: 10, reportMs: 100 });
     expect(result.exitCode).toBe(6);
     expect(result.output).not.toContain(sentinel);
   }
   const controller = new AbortController();
-  const request = (_url, input) => {
-    input.signal.addEventListener("abort", () => controller.abort());
+  const request: typeof fetch = (_url, input) => {
+    input?.signal?.addEventListener("abort", () => controller.abort());
     return new Promise(() => {});
   };
   await run(root, { request, probeMs: 10 });

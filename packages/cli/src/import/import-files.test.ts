@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy command fixtures, filesystem helpers and recorded adapter calls.
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,7 +6,7 @@ import { inspectPackageMedia, isSafeRelativePath, readVerifiedMedia } from "./im
 
 const png = (seed = 0) =>
   new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, seed, 0, 0, 0]);
-const temporary = [];
+const temporary: string[] = [];
 
 async function packageDir() {
   const parent = await realpath(await mkdtemp(join(tmpdir(), "lace-import-files-")));
@@ -40,7 +38,7 @@ describe("package media files", () => {
     );
     await writeFile(join(root, "media/big.png"), new Uint8Array(10 * 1024 * 1024 + 1));
     await symlink(join(root, "../secret.png"), join(root, "media/link.png"));
-    const issues = [];
+    const issues: import("./import-format.js").ImportIssue[] = [];
     const result = await inspectPackageMedia(
       root,
       [
@@ -69,14 +67,14 @@ describe("package media files", () => {
     expect(issues.map((issue) => issue.message).join(" ")).not.toContain("PDF");
     expect(result.metadata.get("ok")).toEqual({ alt: "Same", tags: ["project-a"] });
     expect(result.files.get("ok")).toMatchObject({ filename: "ok.png", mimeType: "image/png" });
-    expect(result.files.get("ok").sha256).toMatch(/^[0-9a-f]{64}$/u);
+    expect(result.files.get("ok")?.sha256).toMatch(/^[0-9a-f]{64}$/u);
   });
 
   test("identical bytes with identical metadata are accepted; changed files fail upload", async () => {
     const root = await packageDir();
     await writeFile(join(root, "media/a.png"), png(2));
     await writeFile(join(root, "media/b.png"), png(2));
-    const issues = [];
+    const issues: import("./import-format.js").ImportIssue[] = [];
     const { files } = await inspectPackageMedia(
       root,
       [
@@ -86,9 +84,9 @@ describe("package media files", () => {
       issues,
     );
     expect(issues).toEqual([]);
-    expect((await readVerifiedMedia("a", files.get("a"))).byteLength).toBe(12);
+    expect((await readVerifiedMedia("a", files.get("a")!)).byteLength).toBe(12);
     await writeFile(join(root, "media/a.png"), png(3));
-    await expect(readVerifiedMedia("a", files.get("a"))).rejects.toMatchObject({
+    await expect(readVerifiedMedia("a", files.get("a")!)).rejects.toMatchObject({
       code: "IMPORT_FAILED",
     });
   });
@@ -96,7 +94,7 @@ describe("package media files", () => {
   test("invalid alt text is located by the server's metadata rules", async () => {
     const root = await packageDir();
     await writeFile(join(root, "media/a.png"), png(4));
-    const issues = [];
+    const issues: import("./import-format.js").ImportIssue[] = [];
     await inspectPackageMedia(root, [{ key: "a", file: "media/a.png", alt: "x\ny" }], issues);
     expect(issues.map((issue) => issue.pointer)).toEqual(["/media/0/alt"]);
   });

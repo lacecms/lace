@@ -1,13 +1,11 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy Node runtime fixtures, partial adapters and project configuration helpers.
-import { expect, test } from "vitest";
-import { createServer } from "node:http";
-import { connect } from "node:net";
+import { expect, test, vi } from "vitest";
+import { createServer, IncomingMessage } from "node:http";
+import { connect, Socket } from "node:net";
 import {
   applyPreparedConfigurationSynchronization,
   prepareConfigurationSynchronization,
 } from "@lacecms/application";
-import { actorId, unixMilliseconds } from "@lacecms/domain";
+import { actorId, mediaId, unixMilliseconds } from "@lacecms/domain";
 import * as platform from "@lacecms/platform-node";
 import {
   createTestActorResolver,
@@ -22,7 +20,23 @@ import {
 import { loadProjectConfig } from "../config/project-config.js";
 import { readCompleteBuildExport } from "@lacecms/test-utils";
 
-const admin = { id: actorId("integration-admin"), role: "admin" };
+function objectField(value: unknown, key: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || !(key in value))
+    throw new Error(`Missing ${key}`);
+  const field = Reflect.get(value, key);
+  if (typeof field !== "object" || field === null || Array.isArray(field))
+    throw new Error(`Invalid ${key}`);
+  return field;
+}
+function stringField(value: unknown, key: string): string {
+  if (typeof value !== "object" || value === null || !(key in value))
+    throw new Error(`Missing ${key}`);
+  const field: unknown = Reflect.get(value, key);
+  if (typeof field !== "string") throw new Error(`Invalid ${key}`);
+  return field;
+}
+
+const admin = { id: actorId("integration-admin"), role: "admin" } as const;
 const { anonymousActorResolver, parseNodeRuntimeSettings } = platform;
 const runtimeEnvironment = Object.freeze({
   LACE_AUTH_SECRET: "test-auth-secret-that-is-long-enough-for-better-auth",
@@ -31,8 +45,8 @@ const runtimeEnvironment = Object.freeze({
 
 async function fixture({ actors = createTestActorResolver(admin) } = {}) {
   const config = await loadProjectConfig();
-  const deletedKeys = [];
-  const storage = {
+  const deletedKeys: string[] = [];
+  const storage: import("@lacecms/application").ObjectStorage = {
     createReadUrl: async () => "memory-object://media",
     delete: async (key) => {
       deletedKeys.push(key);
@@ -77,7 +91,11 @@ async function fixture({ actors = createTestActorResolver(admin) } = {}) {
   };
 }
 
-async function json(server, path, init) {
+async function json(
+  server: Awaited<ReturnType<typeof startNodeServer>>,
+  path: string,
+  init?: RequestInit,
+) {
   const response = await fetch(new URL(path, server.url), init);
   return {
     body: response.status === 204 || response.status === 304 ? undefined : await response.json(),
@@ -90,14 +108,16 @@ test("serves the seeded lifecycle through an actual Node listener", async () => 
   try {
     const models = await json(value.server, "/api/v1/admin/content-models?config=ignored.ts");
     expect(models.response.status).toBe(200);
-    expect(models.body.items.map((model) => model.key)).toEqual([
-      "home",
-      "about",
-      "posts",
-      "notes",
-      "settings",
-      "navigation",
-    ]);
+    expect(models.body).toMatchObject({
+      items: [
+        { key: "home" },
+        { key: "about" },
+        { key: "posts" },
+        { key: "notes" },
+        { key: "settings" },
+        { key: "navigation" },
+      ],
+    });
     const created = await json(value.server, "/api/v1/admin/models/posts/entries", {
       body: JSON.stringify({
         blocks: [],
@@ -109,7 +129,7 @@ test("serves the seeded lifecycle through an actual Node listener", async () => 
       method: "POST",
     });
     expect(created.response.status).toBe(201);
-    const entryId = created.body.id;
+    const entryId = stringField(created.body, "id");
     const saved = await json(value.server, `/api/v1/admin/entries/${entryId}/draft`, {
       body: JSON.stringify({
         blocks: [],
@@ -121,7 +141,7 @@ test("serves the seeded lifecycle through an actual Node listener", async () => 
       headers: { "content-type": "application/json" },
       method: "PUT",
     });
-    expect(saved.body.draft.revision).toBe(2);
+    expect(saved.body).toMatchObject({ draft: { revision: 2 } });
     expect(
       (
         await json(value.server, `/api/v1/admin/entries/${entryId}/publish`, {
@@ -151,7 +171,13 @@ test("serves the seeded lifecycle through an actual Node listener", async () => 
       method: "PUT",
     });
     expect(
-      (await json(value.server, "/api/v1/public/collections/posts/first")).body.entry.title,
+      stringField(
+        objectField(
+          (await json(value.server, "/api/v1/public/collections/posts/first")).body,
+          "entry",
+        ),
+        "title",
+      ),
     ).toBe("Published title");
     const buildToken = await value.runtime.security.createBuildToken({
       name: "integration-build",
@@ -221,7 +247,7 @@ test("serves the seeded lifecycle through an actual Node listener", async () => 
     );
     expect(changed.export.version).toBe(buildExport.export.version + 1);
     expect(changed.etag).toBe(`"${changed.export.version}"`);
-    expect(changed.export.entries.find((entry) => entry.id === entryId).title).toBe(
+    expect(changed.export.entries.find((entry) => entry.id === entryId)?.title).toBe(
       "Draft-only title",
     );
     expect((await json(value.server, "/health/ready")).response.status).toBe(200);
@@ -238,7 +264,7 @@ test("media metadata edits of published media change the export ETag and diction
       createdBy: admin.id,
       filename: "office.png",
       height: 900,
-      id: "office-media",
+      id: mediaId("office-media"),
       mimeType: "image/png",
       size: 1,
       storageKey: "media/office-media",
@@ -265,11 +291,15 @@ test("media metadata edits of published media change the export ETag and diction
     expect(created.response.status).toBe(201);
     expect(
       (
-        await json(value.server, `/api/v1/admin/entries/${created.body.id}/publish`, {
-          body: JSON.stringify({ expectedRevision: 1 }),
-          headers: { "content-type": "application/json" },
-          method: "POST",
-        })
+        await json(
+          value.server,
+          `/api/v1/admin/entries/${stringField(created.body, "id")}/publish`,
+          {
+            body: JSON.stringify({ expectedRevision: 1 }),
+            headers: { "content-type": "application/json" },
+            method: "POST",
+          },
+        )
       ).response.status,
     ).toBe(200);
     const buildToken = await value.runtime.security.createBuildToken({
@@ -282,17 +312,19 @@ test("media metadata edits of published media change the export ETag and diction
       caption: null,
       focalPoint: null,
       height: 900,
-      id: "office-media",
+      id: mediaId("office-media"),
       mimeType: "image/png",
       url: "https://public.lace.test/api/v1/public/media/office-media",
       width: 1600,
     });
     const detail = await json(value.server, "/api/v1/admin/media/office-media");
+    const mediaEtag = detail.response.headers.get("etag");
+    if (mediaEtag === null) throw new Error("Missing media ETag");
     const patched = await json(value.server, "/api/v1/admin/media/office-media", {
       body: JSON.stringify({ alt: "Office", focalPoint: { x: 0.25, y: 0.4 } }),
       headers: {
         "content-type": "application/json",
-        "if-match": detail.response.headers.get("etag"),
+        "if-match": mediaEtag,
       },
       method: "PATCH",
     });
@@ -334,14 +366,14 @@ test("processes queued media deletion outside the HTTP request", async () => {
       createdBy: admin.id,
       filename: "queued.png",
       height: 1,
-      id: "queued-media",
+      id: mediaId("queued-media"),
       mimeType: "image/png",
       size: 1,
       storageKey: "media/queued-media",
       width: 1,
     });
     await value.runtime.repository.markForDeletion({
-      mediaId: "queued-media",
+      mediaId: mediaId("queued-media"),
       requestedAt: unixMilliseconds(2),
       requestedBy: admin,
     });
@@ -354,38 +386,41 @@ test("processes queued media deletion outside the HTTP request", async () => {
 });
 
 test("preflights object storage before binding a Node listener", async () => {
-  const { runtime, settings } = await openNodeTestRuntime(platform, {
+  const storage: import("@lacecms/application").ObjectStorage & { assertReady(): Promise<void> } = {
+    assertReady: async () => {
+      throw new Error("bucket unavailable");
+    },
+    createReadUrl: async () => "memory-object://media",
+    delete: async () => {},
+    get: async () => null,
+    put: async (input) => ({ contentType: input.contentType, key: input.key, size: 0 }),
+  };
+  const { runtime, settings, close } = await openNodeTestRuntime(platform, {
     config: await loadProjectConfig(),
     actor: null,
     runtimeDefaults: true,
     settings: runtimeEnvironment,
-    storage: {
-      assertReady: async () => {
-        throw new Error("bucket unavailable");
-      },
-      createReadUrl: async () => "memory-object://media",
-      delete: async () => {},
-      get: async () => null,
-      put: async (input) => ({ contentType: input.contentType, key: input.key, size: 0 }),
-    },
+    storage,
   });
   await expect(startNodeServer({ runtime, settings: { ...settings, port: 0 } })).rejects.toThrow(
     "bucket unavailable",
   );
+  await close();
 });
 
 test("routes frontend requests to same-origin development upstreams without proxying API paths", async () => {
-  const requests = [];
+  const requests: { body: string; path: string | undefined }[] = [];
   const upstream = createServer((request, response) => {
-    const chunks = [];
+    const chunks: Buffer[] = [];
     request.on("data", (chunk) => chunks.push(chunk));
     request.on("end", () => {
       requests.push({ body: Buffer.concat(chunks).toString("utf8"), path: request.url });
       response.end("upstream");
     });
   });
-  await new Promise((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
   const address = upstream.address();
+  if (!address || typeof address === "string") throw new Error("Expected TCP address");
   const origin = `http://127.0.0.1:${address.port}`;
   const settings = parseNodeRuntimeSettings({
     ...minioTestEnvironment,
@@ -420,7 +455,7 @@ test("routes frontend requests to same-origin development upstreams without prox
     });
     expect((await unavailable(new Request("http://lace.test/"))).status).toBe(502);
   } finally {
-    await new Promise((resolve, reject) =>
+    await new Promise<void>((resolve, reject) =>
       upstream.close((error) => (error ? reject(error) : resolve())),
     );
   }
@@ -429,7 +464,7 @@ test("routes frontend requests to same-origin development upstreams without prox
 test("forwards frontend development upgrades and closes connections on gateway shutdown", async () => {
   const upstream = createServer();
   let upgradeRequests = 0;
-  let upgradedSocket;
+  let upgradedSocket: import("node:stream").Duplex | undefined;
   upstream.on("upgrade", (request, socket) => {
     upgradeRequests += 1;
     upgradedSocket = socket;
@@ -438,8 +473,10 @@ test("forwards frontend development upgrades and closes connections on gateway s
       "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n",
     );
   });
-  await new Promise((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
   const upstreamAddress = upstream.address();
+  if (!upstreamAddress || typeof upstreamAddress === "string")
+    throw new Error("Expected TCP address");
   const upstreamOrigin = `http://127.0.0.1:${upstreamAddress.port}`;
   const settings = parseNodeRuntimeSettings({
     ...minioTestEnvironment,
@@ -453,8 +490,10 @@ test("forwards frontend development upgrades and closes connections on gateway s
   gateway.on("upgrade", (request, socket, head) =>
     proxyNodeDevelopmentUpgrade(request, socket, head, settings),
   );
-  await new Promise((resolve) => gateway.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => gateway.listen(0, "127.0.0.1", resolve));
   const gatewayAddress = gateway.address();
+  if (!gatewayAddress || typeof gatewayAddress === "string")
+    throw new Error("Expected TCP address");
   const client = connect(gatewayAddress.port, "127.0.0.1");
   try {
     const opened = new Promise((resolve, reject) => {
@@ -471,15 +510,15 @@ test("forwards frontend development upgrades and closes connections on gateway s
     await expect(opened).resolves.toContain("101 Switching Protocols");
     expect(upgradeRequests).toBe(1);
   } finally {
-    const clientClosed = new Promise((resolve) => client.once("close", resolve));
+    const clientClosed = new Promise<void>((resolve) => client.once("close", resolve));
     client.destroy();
     await clientClosed;
     upgradedSocket?.destroy();
     gateway.closeAllConnections();
-    await new Promise((resolve, reject) =>
+    await new Promise<void>((resolve, reject) =>
       gateway.close((error) => (error ? reject(error) : resolve())),
     );
-    await new Promise((resolve, reject) =>
+    await new Promise<void>((resolve, reject) =>
       upstream.close((error) => (error ? reject(error) : resolve())),
     );
   }
@@ -519,11 +558,11 @@ test("anonymous browser setup state survives bootstrap and stale clients stay cl
       }),
     });
     expect(login.response.status).toBe(200);
-    const cookie = login.response.headers.getSetCookie()[0].split(";")[0];
+    const cookie = login.response.headers.getSetCookie()[0]!.split(";")[0]!;
     const session = await json(value.server, "/api/auth/get-session", { headers: { cookie } });
     expect(session.response.status).toBe(200);
-    expect(session.body.user.email).toBe("browser@lace.test");
-    expect(session.body.user.role).toBe("admin");
+    expect(stringField(objectField(session.body, "user"), "email")).toBe("browser@lace.test");
+    expect(stringField(objectField(session.body, "user"), "role")).toBe("admin");
 
     const stale = await Promise.all([
       json(value.server, "/api/v1/setup/admin", init),
@@ -548,11 +587,14 @@ test("development gateway keeps MCP discovery and child paths local without fron
     "/api/auth/.well-known/oauth-authorization-server",
     "/api/auth/oauth2/register",
   ];
-  const calls = [];
-  const settings = {
-    adminDevOrigin: new URL("http://127.0.0.1:1"),
-    siteDevOrigin: new URL("http://127.0.0.1:1"),
-  };
+  const calls: Request[] = [];
+  const settings = parseNodeRuntimeSettings({
+    ...minioTestEnvironment,
+    ...runtimeEnvironment,
+    LACE_DATABASE_PATH: "/tmp/lace.sqlite",
+    LACE_ADMIN_DEV_ORIGIN: "http://127.0.0.1:1",
+    LACE_SITE_DEV_ORIGIN: "http://127.0.0.1:1",
+  });
   const gateway = createNodeDevelopmentGateway(async (request) => {
     calls.push(request);
     return new Response("local-disabled", { status: 404 });
@@ -565,21 +607,12 @@ test("development gateway keeps MCP discovery and child paths local without fron
     expect(response.status).toBe(404);
     expect(await response.text()).toBe("local-disabled");
     expect(calls.at(-1)).toBe(request);
-    let destroyed = false;
-    proxyNodeDevelopmentUpgrade(
-      { url: path },
-      {
-        destroy() {
-          destroyed = true;
-        },
-        end() {
-          throw new Error("Must not proxy a local upgrade");
-        },
-      },
-      Buffer.alloc(0),
-      settings,
-    );
-    expect(destroyed).toBe(true);
+    const socket = new Socket();
+    const destroy = vi.spyOn(socket, "destroy");
+    const requestMessage = new IncomingMessage(socket);
+    requestMessage.url = path;
+    proxyNodeDevelopmentUpgrade(requestMessage, socket, Buffer.alloc(0), settings);
+    expect(destroy).toHaveBeenCalled();
   }
 });
 
@@ -608,7 +641,7 @@ test("Node server start runs operations maintenance and purges expired idempoten
       runtime.database.connection
         .prepare("select key from idempotency_records")
         .all()
-        .map((row) => row.key),
+        .map((row) => stringField(row, "key")),
     ).toEqual(["live"]);
   } finally {
     await server.close();

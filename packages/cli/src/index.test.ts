@@ -1,5 +1,4 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy command fixtures, filesystem helpers and recorded adapter calls.
+import { CliError } from "./shared/cli.js";
 import { expect, test } from "vitest";
 import { EXIT, loadEnvironment, parseArguments, presentResult } from "./index.js";
 
@@ -24,6 +23,7 @@ test("validates target settings without repeating supplied secrets", () => {
   try {
     loadEnvironment("cloudflare-remote", { CLOUDFLARE_API_TOKEN: "sensitive-value" });
   } catch (error) {
+    if (!(error instanceof CliError)) throw error;
     expect(error.message).not.toContain("sensitive-value");
     expect(error.exitCode).toBe(EXIT.CONFIG);
   }

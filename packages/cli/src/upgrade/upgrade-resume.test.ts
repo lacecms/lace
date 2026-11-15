@@ -1,9 +1,7 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy command fixtures, filesystem helpers and recorded adapter calls.
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { it, expect } from "vitest";
-import { pair, snapshot } from "../test-support/upgrade-fixtures.ts";
+import { pair, snapshot } from "../test-support/upgrade-fixtures.js";
 import { applyUpgrade } from "./upgrade-apply.js";
 import { loadOperation } from "./upgrade-journal.js";
 import { readUpgradeManifest, upgradeHash } from "./upgrade-input.js";
@@ -25,12 +23,13 @@ it.each(["journal-published", "after-file", "before-manifest", "after-manifest"]
       }),
     ).rejects.toThrow();
     const saved = await loadOperation(options.project);
+    if (!saved) throw new Error("Expected operation");
     expect(saved.pointer.phase).toBe("applying");
     expect((await readUpgradeManifest(options.project)).templateVersion).toBe(
       boundary === "after-manifest" ? "2" : "1",
     );
     expect((await applyUpgrade(options)).status).toBe("resumed");
-    expect((await loadOperation(options.project)).pointer).toEqual({
+    expect((await loadOperation(options.project))?.pointer).toEqual({
       ...saved.pointer,
       phase: "applied",
     });
@@ -57,7 +56,19 @@ it("rejects a different target and unexpected working edits during recovery", as
   expect(await snapshot(options.project)).toEqual(before);
   await writeFile(join(options.project, "b"), "old");
   const location = join(options.template, ".lace/manifest.json");
-  const metadata = JSON.parse(await readFile(location, "utf8"));
+  const metadata: unknown = JSON.parse(await readFile(location, "utf8"));
+  if (
+    typeof metadata !== "object" ||
+    metadata === null ||
+    !("files" in metadata) ||
+    typeof metadata.files !== "object" ||
+    metadata.files === null ||
+    !("b" in metadata.files) ||
+    typeof metadata.files.b !== "object" ||
+    metadata.files.b === null ||
+    !("sha256" in metadata.files.b)
+  )
+    throw new Error("Invalid manifest");
   await writeFile(join(options.template, "b"), "different");
   metadata.files.b.sha256 = upgradeHash(Buffer.from("different"));
   await writeFile(location, JSON.stringify(metadata));

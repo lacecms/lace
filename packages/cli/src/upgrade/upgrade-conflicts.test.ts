@@ -1,9 +1,7 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy command fixtures, filesystem helpers and recorded adapter calls.
 import { readFile, writeFile, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { it, expect } from "vitest";
-import { pair, snapshot } from "../test-support/upgrade-fixtures.ts";
+import { pair, snapshot } from "../test-support/upgrade-fixtures.js";
 import { planUpgrade } from "./upgrade.js";
 import { readTargetTemplate, readUpgradeManifest } from "./upgrade-input.js";
 import { publishUpgradeConflicts } from "./upgrade-conflicts.js";
@@ -28,12 +26,27 @@ it("publishes replacement, deletion and ownership conflicts without changing wor
   expect(await readFile(join(options.project, path, "diffs/compose.diff"), "utf8")).toContain(
     "-local",
   );
-  const index = JSON.parse(await readFile(join(options.project, path, "index.json"), "utf8"));
-  expect(index.conflicts.map((item) => item.resolution).sort()).toEqual([
-    "deletion",
-    "ownership-transfer",
-    "replacement",
-  ]);
+  const index: unknown = JSON.parse(
+    await readFile(join(options.project, path, "index.json"), "utf8"),
+  );
+  if (
+    typeof index !== "object" ||
+    index === null ||
+    !("conflicts" in index) ||
+    !Array.isArray(index.conflicts)
+  )
+    throw new Error("Invalid conflicts");
+  const resolutions = index.conflicts.map((item: unknown) => {
+    if (
+      typeof item !== "object" ||
+      item === null ||
+      !("resolution" in item) ||
+      typeof item.resolution !== "string"
+    )
+      throw new Error("Invalid conflict");
+    return item.resolution;
+  });
+  expect(resolutions.sort()).toEqual(["deletion", "ownership-transfer", "replacement"]);
   const published = await snapshot(options.project);
   await publishUpgradeConflicts(options.project, plan, bytes);
   expect(await snapshot(options.project)).toEqual(published);

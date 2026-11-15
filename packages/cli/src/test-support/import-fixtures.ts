@@ -92,7 +92,7 @@ export const png = (seed = 0) =>
   new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, seed, 0, 0, 0]);
 
 /** A valid package: two media, a home page, a global and two linked posts. */
-export function samplePackage() {
+export function samplePackage(): import("../import/import-format.js").ImportPackage {
   return {
     formatVersion: 1,
     media: [
@@ -135,7 +135,10 @@ export function samplePackage() {
 const directories: string[] = [];
 
 /** Writes a package directory; media files get distinct tiny PNG bytes. */
-export async function writePackage(pkg = samplePackage(), parent?: string) {
+export async function writePackage(
+  pkg: import("../import/import-format.js").ImportPackage = samplePackage(),
+  parent?: string,
+) {
   const base = parent ?? (await realpath(await mkdtemp(join(tmpdir(), "lace-import-package-"))));
   if (parent === undefined) directories.push(base);
   const root = join(base, "out");

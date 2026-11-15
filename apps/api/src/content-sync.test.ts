@@ -1,9 +1,12 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy Node runtime fixtures, partial adapters and project configuration helpers.
 import { expect, test, vi } from "vitest";
 import { definePage, defineConfig } from "@lacecms/config";
 import { defineCollection } from "@lacecms/config";
-import { DomainError, StaleSynchronizationError, unixMilliseconds } from "@lacecms/domain";
+import {
+  DomainError,
+  StaleSynchronizationError,
+  contentModelKey,
+  unixMilliseconds,
+} from "@lacecms/domain";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,18 +22,40 @@ const config = await defineConfig({
   content: [definePage({ key: "home", path: "/", version: 1 })],
 });
 
-function fixture(storedModels = []) {
-  const messages = [];
+type SyncTarget = Parameters<typeof runLocalContentSync>[0]["target"];
+function fixture(storedModels: Awaited<ReturnType<SyncTarget["readConfigurationSyncState"]>> = []) {
+  const messages: string[] = [];
   const target = {
-    readConfigurationSyncState: vi.fn(async () => storedModels),
-    applyConfigurationSynchronization: vi.fn(async () => ({ status: "applied", operations: [] })),
+    readConfigurationSyncMigrationEntries: vi.fn<
+      SyncTarget["readConfigurationSyncMigrationEntries"]
+    >(async () => {
+      throw new Error("Unexpected migration read");
+    }),
+    readConfigurationSyncSnapshots: vi.fn<SyncTarget["readConfigurationSyncSnapshots"]>(
+      async () => {
+        throw new Error("Unexpected snapshot read");
+      },
+    ),
+    readConfigurationSyncState: vi.fn<SyncTarget["readConfigurationSyncState"]>(
+      async () => storedModels,
+    ),
+    applyConfigurationSyncBlockMigrations: vi.fn<
+      SyncTarget["applyConfigurationSyncBlockMigrations"]
+    >(async () => {
+      throw new Error("Unexpected block migration");
+    }),
+    applyConfigurationSynchronization: vi.fn<SyncTarget["applyConfigurationSynchronization"]>(
+      async () => ({ status: "applied", operations: [] }),
+    ),
   };
   const input = {
     clock: { now: () => unixMilliseconds(10) },
     ids: { next: () => "sync-id" },
     models: config.runtime.content,
     target,
-    write: (message) => messages.push(message),
+    write: (message: string) => {
+      messages.push(message);
+    },
   };
   return { input, messages, target };
 }
@@ -48,7 +73,7 @@ test("prints the plan before guarded apply and check never mutates", async () =>
 test("invalid and stale plans report recovery without a successful apply", async () => {
   const value = fixture([
     {
-      key: "home",
+      key: contentModelKey("home"),
       kind: "page",
       version: 2,
       structureHash: "old",

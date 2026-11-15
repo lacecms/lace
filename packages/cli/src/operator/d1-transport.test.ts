@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy command fixtures, filesystem helpers and recorded adapter calls.
 import { expect, test, vi } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -35,7 +33,7 @@ test("maps prepared statements to one REST batch and preserves row order", async
     db.prepare("select ? as value").bind("first"),
     db.prepare("select ? as value").bind("second"),
   ]);
-  expect(rows.map((row) => row.results[0].value)).toEqual(["first", "second"]);
+  expect(rows.map((row) => row.results[0]?.value)).toEqual(["first", "second"]);
   expect(request).toHaveBeenCalledTimes(1);
 });
 
@@ -76,7 +74,7 @@ test("local D1 batch rolls back failed mutations", async () => {
       ]),
     ).rejects.toThrow();
     const row = await opened.database.prepare("select count(*) as count from example").first();
-    expect(row.count).toBe(0);
+    expect(row?.count).toBe(0);
   } finally {
     await opened.close();
     await rm(persistTo, { recursive: true, force: true });
@@ -115,7 +113,7 @@ test("other rejected queries and provider outages keep sanitized distinct causes
     [400, "private-credential", "d1-response"],
     [503, "private-credential", "d1-unavailable"],
     [429, { success: false, errors: [{ message: "private-credential" }] }, "d1-unavailable"],
-  ]) {
+  ] as const) {
     const db = new RemoteD1Database(settings, async () =>
       typeof body === "string" ? new Response(body, { status }) : Response.json(body, { status }),
     );

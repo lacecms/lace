@@ -1,23 +1,38 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy command fixtures, filesystem helpers and recorded adapter calls.
+import * as v from "valibot";
+const stateSchema = v.object({
+  targets: v.record(
+    v.string(),
+    v.object({
+      entries: v.record(v.string(), v.object({ revision: v.number() })),
+      media: v.record(v.string(), v.unknown()),
+    }),
+  ),
+});
+import {
+  adminContentEntrySchema,
+  contentEntryListSchema,
+  mediaListSchema,
+} from "@lacecms/contracts";
 import { mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import { publicationKey } from "./import-apply.js";
 import { runImportCommand } from "./import-command.js";
-import { openImportApi } from "../test-support/import-api.ts";
+import { outcomePlan } from "../test-support/import-outcome.js";
+import { openImportApi } from "../test-support/import-api.js";
 import {
   configSource,
   fixtureConfig,
   removePackages,
   writePackage,
-} from "../test-support/import-fixtures.ts";
+} from "../test-support/import-fixtures.js";
 
 const packageRoot = fileURLToPath(new URL("../..", import.meta.url));
 const { normalized: config } = await fixtureConfig();
-let project;
-const apis = [];
+type TestApi = Awaited<ReturnType<typeof openImportApi>>;
+let project: string;
+const apis: TestApi[] = [];
 beforeAll(async () => {
   project = await mkdtemp(join(packageRoot, ".import-apply-"));
   await writeFile(join(project, "lace.config.ts"), configSource);
@@ -34,7 +49,7 @@ async function api() {
   return opened;
 }
 
-function run(directory, server, args = [], fetch = server.fetch) {
+function run(directory: string, server: TestApi, args: string[] = [], fetch = server.fetch) {
   return runImportCommand([directory, "--url", server.origin, ...args], {
     cwd: project,
     env: { LACE_IMPORT_TOKEN: server.token },
@@ -43,19 +58,26 @@ function run(directory, server, args = [], fetch = server.fetch) {
   });
 }
 
-const writes = (server) =>
+const writes = (server: TestApi) =>
   server.requests
     .filter((request) => !request.startsWith("GET "))
     .map((request) => request.replace(/\/[0-9A-Z]{26}(?=\/|$)/gu, "/:id"));
 
-async function entryBySlug(server, model, slug) {
+async function entryBySlug(server: TestApi, model: string, slug: string) {
   const list = await server.session(`/api/v1/admin/models/${model}/entries?slug=${slug}`);
-  return list.body.items;
+  return v.parse(contentEntryListSchema, list.body).items;
 }
 
-async function singleton(server, model) {
+async function singleton(server: TestApi, model: string) {
   const list = await server.session(`/api/v1/admin/models/${model}/entries`);
-  return (await server.session(`/api/v1/admin/entries/${list.body.items[0].id}`)).body;
+  return v.parse(
+    adminContentEntrySchema,
+    (
+      await server.session(
+        `/api/v1/admin/entries/${v.parse(contentEntryListSchema, list.body).items[0]!.id}`,
+      )
+    ).body,
+  );
 }
 
 describe("import apply", () => {
@@ -83,23 +105,28 @@ describe("import apply", () => {
     ]);
     const [launch] = await entryBySlug(server, "posts", "launch");
     const [second] = await entryBySlug(server, "posts", "second");
-    const launchEntry = (await server.session(`/api/v1/admin/entries/${launch.id}`)).body;
-    expect(launchEntry.draft.fields.related).toBe(`entry:${encodeURIComponent(second.id)}`);
-    expect(launchEntry.published.revision).toBe(launchEntry.draft.revision);
+    const launchEntry = v.parse(
+      adminContentEntrySchema,
+      (await server.session(`/api/v1/admin/entries/${launch!.id}`)).body,
+    );
+    expect(launchEntry.draft.fields.related).toBe(`entry:${encodeURIComponent(second!.id)}`);
+    expect(launchEntry.published?.revision).toBe(launchEntry.draft.revision);
     const home = await singleton(server, "home");
     expect(home.published).toBeDefined();
-    expect(home.draft.seo.image).toBe(home.draft.fields.hero);
+    expect(home.draft.seo?.image).toBe(home.draft.fields.hero);
     expect(home.draft.blocks.map((block) => [block.key, block.hidden])).toEqual([
       ["b1", false],
       ["b2", true],
     ]);
-    const hero = (await server.session(`/api/v1/admin/media/${home.draft.fields.hero}`)).body;
+    const hero = (
+      await server.session(`/api/v1/admin/media/${v.parse(v.string(), home.draft.fields.hero)}`)
+    ).body;
     expect(hero).toMatchObject({ alt: "Hero", tags: ["project-a"] });
     expect((await singleton(server, "settings")).draft.title).toBe("Site settings");
 
     server.requests.length = 0;
     const rerun = await run(directory, server, ["--publish", "--json"]);
-    expect(rerun.data.plan.summary).toMatchObject({
+    expect(outcomePlan(rerun.data).summary).toMatchObject({
       upload: 0,
       mediaUnchanged: 2,
       create: 0,
@@ -113,7 +140,7 @@ describe("import apply", () => {
     await unlink(join(directory, "lace-import.state.json"));
     server.requests.length = 0;
     const stateless = await run(directory, server, ["--publish", "--json"]);
-    expect(stateless.data.plan.summary).toMatchObject({ unchanged: 4, published: 4 });
+    expect(outcomePlan(stateless.data).summary).toMatchObject({ unchanged: 4, published: 4 });
     expect(writes(server)).toEqual([]);
   });
 
@@ -128,17 +155,24 @@ describe("import apply", () => {
       ],
     });
     const first = await run(directory, server, ["--publish", "--json"]);
-    expect(first.data.plan.entries.map((entry) => [entry.key, entry.action])).toEqual([
+    expect(outcomePlan(first.data).entries.map((entry) => [entry.key, entry.action])).toEqual([
       ["q1", "create"],
       ["q2", "create"],
     ]);
     const listed = await server.session("/api/v1/admin/models/quotes/entries");
-    expect(listed.body.items).toHaveLength(2);
+    expect(v.parse(contentEntryListSchema, listed.body).items).toHaveLength(2);
     const rerun = await run(directory, server, ["--publish", "--json"]);
-    expect(rerun.data.plan.summary).toMatchObject({ create: 0, unchanged: 2, published: 2 });
+    expect(outcomePlan(rerun.data).summary).toMatchObject({
+      create: 0,
+      unchanged: 2,
+      published: 2,
+    });
     await unlink(join(directory, "lace-import.state.json"));
     const stateless = await run(directory, server, ["--dry-run", "--json"]);
-    expect(stateless.data.plan.entries.map((entry) => entry.action)).toEqual(["create", "create"]);
+    expect(outcomePlan(stateless.data).entries.map((entry) => entry.action)).toEqual([
+      "create",
+      "create",
+    ]);
   });
 
   test("drafts edited after the import conflict unless --overwrite; equal edits stay unchanged", async () => {
@@ -147,7 +181,7 @@ describe("import apply", () => {
     expect((await run(directory, server)).ok).toBe(true);
     const home = await singleton(server, "home");
     const { draft } = home;
-    const edit = (title) =>
+    const edit = (title: string) =>
       server.session(`/api/v1/admin/entries/${home.id}/draft`, {
         method: "PUT",
         json: {
@@ -161,10 +195,13 @@ describe("import apply", () => {
     expect((await edit("Home")).status).toBe(200);
     server.requests.length = 0;
     const equal = await run(directory, server, ["--json"]);
-    expect(equal.data.plan.entries[0]).toMatchObject({ key: "home", action: "unchanged" });
+    expect(outcomePlan(equal.data).entries[0]).toMatchObject({ key: "home", action: "unchanged" });
     expect(writes(server)).toEqual([]);
-    const state = JSON.parse(await readFile(join(directory, "lace-import.state.json"), "utf8"));
-    expect(state.targets[server.origin].entries.home.revision).toBe(draft.revision + 1);
+    const state = v.parse(
+      stateSchema,
+      JSON.parse(await readFile(join(directory, "lace-import.state.json"), "utf8")) as unknown,
+    );
+    expect(state.targets[server.origin]!.entries.home!.revision).toBe(draft.revision + 1);
 
     const latest = await singleton(server, "home");
     expect(
@@ -185,7 +222,7 @@ describe("import apply", () => {
     const conflict = await run(directory, server, ["--json"]);
     expect(conflict).toMatchObject({ ok: false, code: "IMPORT_CONFLICT", exitCode: 2 });
     expect(conflict.message).toContain("home");
-    expect(conflict.data.plan.entries[0].action).toBe("conflict");
+    expect(outcomePlan(conflict.data).entries[0]?.action).toBe("conflict");
     expect(writes(server)).toEqual([]);
 
     server.requests.length = 0;
@@ -204,22 +241,25 @@ describe("import apply", () => {
     server.failWhen(undefined);
     const resumed = await run(directory, server, ["--publish", "--json"]);
     expect(resumed.ok).toBe(true);
-    expect(resumed.data.plan.summary).toMatchObject({ upload: 0, create: 0 });
+    expect(outcomePlan(resumed.data).summary).toMatchObject({ upload: 0, create: 0 });
     expect(await entryBySlug(server, "posts", "launch")).toHaveLength(1);
     expect(await entryBySlug(server, "posts", "second")).toHaveLength(1);
     const media = await server.session("/api/v1/admin/media");
-    expect(media.body.items).toHaveLength(2);
+    expect(v.parse(mediaListSchema, media.body).items).toHaveLength(2);
   });
 
   test("a concurrent edit stops the run with the completed writes recorded", async () => {
     const server = await api();
     const directory = await writePackage();
     let raced = false;
-    const racing = async (url, init = {}) => {
+    const racing: typeof server.fetch = async (url, init = {}) => {
       if (!raced && init.method === "PUT") {
         raced = true;
-        const path = new URL(url).pathname.replace(/\/draft$/u, "");
-        const current = (await server.session(path)).body.draft;
+        const path = new URL(url instanceof Request ? url.url : url).pathname.replace(
+          /\/draft$/u,
+          "",
+        );
+        const current = v.parse(adminContentEntrySchema, (await server.session(path)).body).draft;
         await server.session(`${path}/draft`, {
           method: "PUT",
           json: {
@@ -237,17 +277,20 @@ describe("import apply", () => {
     const result = await run(directory, server, [], racing);
     expect(result).toMatchObject({ code: "IMPORT_FAILED", exitCode: 6 });
     expect(result.message).toContain("CONTENT_REVISION_CONFLICT");
-    const state = JSON.parse(await readFile(join(directory, "lace-import.state.json"), "utf8"));
-    expect(Object.keys(state.targets[server.origin].media)).toEqual(["hero", "cover"]);
-    expect(Object.keys(state.targets[server.origin].entries)).toEqual(["launch", "second"]);
+    const state = v.parse(
+      stateSchema,
+      JSON.parse(await readFile(join(directory, "lace-import.state.json"), "utf8")) as unknown,
+    );
+    expect(Object.keys(state.targets[server.origin]!.media)).toEqual(["hero", "cover"]);
+    expect(Object.keys(state.targets[server.origin]!.entries)).toEqual(["launch", "second"]);
   });
 
   test("media metadata updates survive a proxy that weakens ETags", async () => {
     const server = await api();
     const directory = await writePackage();
-    const ifMatch = [];
+    const ifMatch: (string | null)[] = [];
     let weakened = 0;
-    const compressing = async (url, init = {}) => {
+    const compressing: typeof server.fetch = async (url, init = {}) => {
       if (init.method === "PATCH") ifMatch.push(new Headers(init.headers).get("if-match"));
       const response = await server.fetch(url, init);
       const etag = response.headers.get("etag");
@@ -263,7 +306,9 @@ describe("import apply", () => {
     expect(ifMatch).toHaveLength(2);
     for (const tag of ifMatch) expect(tag).toMatch(/^"[0-9]+"$/u);
     const media = await server.session("/api/v1/admin/media");
-    expect(media.body.items.find((item) => item.alt === "Hero")).toBeDefined();
+    expect(
+      v.parse(mediaListSchema, media.body).items.find((item) => item.alt === "Hero"),
+    ).toBeDefined();
   });
 
   test("publication keys are deterministic printable ASCII", () => {
