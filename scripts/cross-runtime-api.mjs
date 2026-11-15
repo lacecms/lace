@@ -95,7 +95,7 @@ export async function apiJourney(f) {
     assert.equal(body.error.code, expectation.code, `${path}: error code`);
   };
   report("authentication, roles and common model fixture");
-  await denied("/api/v1/admin/content-models");
+  await denied("/api/v1/admin/content-models", {}, expected.authenticationRequired);
   const models = await json(
     "/api/v1/admin/content-models",
     admin,
@@ -357,8 +357,12 @@ export async function apiJourney(f) {
     contracts.buildTokenCreatedSchema,
   );
   const authorization = { authorization: `Bearer ${issued.token}` };
-  await denied("/api/v1/admin/content-models", { headers: authorization });
-  await denied("/api/v1/public/build-export");
+  await denied(
+    "/api/v1/admin/content-models",
+    { headers: authorization },
+    expected.authenticationRequired,
+  );
+  await denied("/api/v1/public/build-export", {}, expected.authenticationRequired);
   // One entry per page exercises cursor traversal on both runtimes.
   const complete = await readCompleteBuildExport(
     (url, init) => {

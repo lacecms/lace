@@ -68,13 +68,13 @@ test("SM3A media tags expose identical Node and Worker contracts", async () => {
       });
       expect(invalid.status).toBe(422);
       expect((await invalid.json()).error.details.issues[0].path).toBe("/tags/0");
-      for (const headers of [
-        {},
-        { authorization: "Bearer build-token" },
-        { authorization: "Bearer mcp-token" },
+      for (const [headers, status] of [
+        [{}, 401],
+        [{ authorization: "Bearer build-token" }, 403],
+        [{ authorization: "Bearer mcp-token" }, 403],
       ]) {
         const denied = await f.call("/api/v1/admin/media/tags", { headers });
-        expect([401, 403]).toContain(denied.status);
+        expect(denied.status, kind).toBe(status);
       }
       results.push({
         tags: media.tags,
@@ -184,9 +184,9 @@ test("SM4A import tokens, hash and slug lookups behave identically on Node and W
     }
   }
   expect(results[0]).toEqual({
-    afterRevoke: 403,
-    buildExport: 403,
-    cookieAndBadBearer: 403,
+    afterRevoke: 401,
+    buildExport: 401,
+    cookieAndBadBearer: 401,
     credential: {
       name: "Framer",
       permissions: ["content:read", "content:write", "media:write"],

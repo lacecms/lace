@@ -259,9 +259,13 @@ for (const kind of ["node", "worker"]) {
       await restored.restart({
         authSecret: "replacement-auth-secret-operations-long-enough-for-auth",
       });
-      expect(
-        (await restored.call("/api/v1/admin/settings/status", { cookie: staleCookie })).status,
-      ).toBe(403);
+      const staleSession = await restored.call("/api/v1/admin/settings/status", {
+        cookie: staleCookie,
+      });
+      expect(staleSession.status).toBe(401);
+      expect(await staleSession.json()).toMatchObject({
+        error: { code: "AUTHENTICATION_REQUIRED" },
+      });
       const cookie = await restored.login("admin");
       expect((await restored.call("/api/v1/admin/settings/status", { cookie })).status).toBe(200);
       const issued = await restored.call("/api/v1/admin/api-tokens", {
@@ -278,13 +282,13 @@ for (const kind of ["node", "worker"]) {
         (await restored.call(`/api/v1/admin/api-tokens/${old.id}`, { cookie, method: "DELETE" }))
           .status,
       ).toBe(200);
-      expect(
-        (
-          await restored.call("/api/v1/public/build-export", {
-            headers: { authorization: `Bearer ${seed.token}` },
-          })
-        ).status,
-      ).toBe(403);
+      const revokedExport = await restored.call("/api/v1/public/build-export", {
+        headers: { authorization: `Bearer ${seed.token}` },
+      });
+      expect(revokedExport.status).toBe(401);
+      expect(await revokedExport.json()).toMatchObject({
+        error: { code: "AUTHENTICATION_REQUIRED" },
+      });
       expect(
         (
           await restored.call("/api/v1/public/build-export", {

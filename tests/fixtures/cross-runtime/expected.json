@@ -1,6 +1,10 @@
 {
   "models": ["about", "home", "notes", "posts"],
   "globals": ["navigation", "settings"],
+  "authenticationRequired": {
+    "status": 401,
+    "code": "AUTHENTICATION_REQUIRED"
+  },
   "denied": {
     "status": 403,
     "code": "AUTHORIZATION_DENIED"
