@@ -314,29 +314,41 @@ components and local test fixtures through relative paths.
 - **WHEN** a test file that the typecheck-exception baseline does not list disables type checking
 - **THEN** the boundary check fails before the package's typecheck can silently skip the file
 
-### Requirement: Production source files stay within a size limit through a shrinking baseline
+### Requirement: Workspace source and test files stay within a size limit through a shrinking baseline
 
-The boundary checker SHALL fail when a production source file of a workspace member exceeds 1,000 lines. Production source files are the files the checker already scans under each member's `src/`; test files and modules under `src/test-support/` SHALL NOT be counted. A file above the limit SHALL pass only when a committed baseline lists it with a recorded line count and the file is at or under that count. A baseline entry SHALL itself fail the check, naming the entry, when its file no longer exists or is within the limit, so that a split removes its entry in the same change. A repository without a baseline file SHALL be checked against an empty baseline. Architecture section 6 and `AGENTS.md` SHALL document the source layout convention the limit supports: package modules grouped in domain directories with the package entry points at the `src/` root, one responsibility per file, no barrel modules inside subdirectories, and tests beside their module.
+The boundary checker SHALL fail when a covered file exceeds 1,000 physical lines, including blank lines and without counting a final newline as an extra line. A covered file is a production source file already scanned under a workspace member's `src/`, a `*.test.ts`, `*.test.tsx`, `*.type-test.ts` or `*.type-test.tsx` file under that root, or a `*.test.js`, `*.test.cjs` or `*.test.mjs` file under that root, including packaged-output tests. Non-test helpers under `src/test-support/` and tests outside workspace members' `src/` trees remain outside the size check. Test coverage by the size check SHALL leave the dependency graph, layout, JavaScript allowlist and typecheck exception rules intact.
+
+A covered file above the limit SHALL pass only when `scripts/oversized-source-baseline.json` lists it with a recorded line count and the file is at or under that count. A baseline entry SHALL fail the check, naming the entry, when the file is absent, is outside the covered paths or is within the limit. A repository without the baseline file SHALL be checked against an empty baseline. Architecture §6 and `AGENTS.md` SHALL document the source layout convention and limit, including domain directories, entry points at the `src/` root, one responsibility per file, no subdirectory barrels and tests beside their module.
+
+#### Scenario: File reaches the limit
+
+- **WHEN** a covered production source file or test file has exactly 1,000 physical lines and has no baseline entry
+- **THEN** the size check passes
 
 #### Scenario: New oversized file
-- **WHEN** a contributor adds or grows a production source file to 1,001 lines and the baseline does not list it
-- **THEN** the boundary check fails naming the file and the limit
+
+- **WHEN** a covered production source file, workspace test, type test or packaged-output test reaches 1,001 physical lines and has no baseline entry
+- **THEN** the size check fails naming the file, its current count and the limit
 
 #### Scenario: Baselined file grows
-- **WHEN** a production source file listed in the baseline grows past its recorded line count
-- **THEN** the boundary check fails naming the file, its recorded count and its current count
+
+- **WHEN** a covered file listed in the baseline grows past its recorded line count
+- **THEN** the size check fails naming the file, its recorded count and its current count
 
 #### Scenario: Baselined file shrinks but stays oversized
-- **WHEN** a baselined file loses lines but still exceeds 1,000 lines
-- **THEN** the boundary check passes
+
+- **WHEN** a covered file loses lines and stays above 1,000 lines at or below its recorded count
+- **THEN** the size check passes
 
 #### Scenario: Split leaves a stale baseline entry
-- **WHEN** a baselined file is deleted or reduced to 1,000 lines or fewer while its baseline entry remains
-- **THEN** the boundary check fails naming the stale entry
 
-#### Scenario: Tests are not counted
-- **WHEN** a `*.test.ts` file or a module under `src/test-support/` exceeds 1,000 lines
-- **THEN** the boundary check passes without a baseline entry
+- **WHEN** a baselined file is deleted, moves outside the covered paths or is reduced to 1,000 lines or fewer while its baseline entry remains
+- **THEN** the size check fails naming the stale entry
+
+#### Scenario: Standalone verification or test-support helper exceeds the limit
+
+- **WHEN** a non-test helper under `src/test-support/` or a standalone verification test outside workspace member source roots exceeds 1,000 lines
+- **THEN** the size check passes without a baseline entry
 
 ### Requirement: Test typecheck exceptions are limited by a shrinking baseline
 

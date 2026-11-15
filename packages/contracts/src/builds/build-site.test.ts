@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import * as v from "valibot";
 import { expect, test } from "vitest";
 import { buildSiteIdentitySchema, buildSiteUrlSchema } from "./build-site.js";

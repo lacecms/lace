@@ -1,30 +1,41 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy HTTP/process fixtures and recorded runner calls.
-import { Readable } from "node:stream";
+import { IncomingMessage, ServerResponse } from "node:http";
+import { Socket } from "node:net";
+import type { BuildRequest } from "../runner/runner.js";
 import { expect, test, vi } from "vitest";
 import { createBuilderHandler } from "./handler.js";
 
 const secret = "s".repeat(32);
 
-async function invoke(handler, body, token = secret) {
-  const request = Readable.from([typeof body === "string" ? body : JSON.stringify(body)]);
+async function invoke(
+  handler: ReturnType<typeof createBuilderHandler>,
+  body: unknown,
+  token = secret,
+) {
+  const request = new IncomingMessage(new Socket());
   request.method = "POST";
   request.url = "/build";
   request.headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
-  const response = {
-    writeHead(status) {
-      this.status = status;
-    },
-    end(text) {
-      this.body = JSON.parse(text);
-    },
-  };
+  request.push(typeof body === "string" ? body : JSON.stringify(body));
+  request.push(null);
+  const response = new ServerResponse(request);
+  let status = 0;
+  let result: unknown;
+  vi.spyOn(response, "writeHead").mockImplementation(function (code) {
+    status = code;
+    return response;
+  });
+  vi.spyOn(response, "end").mockImplementation(function (chunk) {
+    result = JSON.parse(String(chunk));
+    return response;
+  });
   await handler(request, response);
-  return response;
+  if (typeof result !== "object" || result === null || Array.isArray(result))
+    throw new Error("Invalid response body");
+  return { status, body: result };
 }
 
 test("builder accepts only authorized closed-shape requests", async () => {
-  const calls = [];
+  const calls: BuildRequest[] = [];
   const handler = createBuilderHandler({
     secret,
     build: async (request) => {
@@ -114,8 +125,8 @@ test("authenticated source diagnostics carry only bounded safe relative paths", 
         }),
         { buildId: "diagnostic", targetVersion: 1 },
       );
-      expect(response.body.reason).toBe("source_symlink");
-      expect(response.body.path).toBe(path === "src/page.astro" ? path : undefined);
+      expect(Reflect.get(response.body, "reason")).toBe("source_symlink");
+      expect(Reflect.get(response.body, "path")).toBe(path === "src/page.astro" ? path : undefined);
       expect(Buffer.byteLength(JSON.stringify(response.body))).toBeLessThanOrEqual(1024);
     }
   } finally {

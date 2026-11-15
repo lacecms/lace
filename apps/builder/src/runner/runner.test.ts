@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy HTTP/process fixtures and recorded runner calls.
 import {
   chmod,
   mkdtemp,
@@ -19,7 +17,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { FixedCommandBuilder } from "./runner.js";
 import { parseSiteOutputSettings } from "./settings.js";
 
-const cleanup = [];
+const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
   await Promise.all(cleanup.splice(0).map((item) => item()));
 });
@@ -43,11 +41,19 @@ test("builds from a filtered copy and atomically retains two successful releases
   }
   expect((await readdir(join(output, "releases"))).length).toBe(2);
   const retainedVersions = await Promise.all(
-    (await readdir(join(output, "releases"))).map(
-      async (name) =>
-        JSON.parse(await readFile(join(output, "releases", name, ".lace-release.json"), "utf8"))
-          .version,
-    ),
+    (await readdir(join(output, "releases"))).map(async (name) => {
+      const value: unknown = JSON.parse(
+        await readFile(join(output, "releases", name, ".lace-release.json"), "utf8"),
+      );
+      if (
+        typeof value !== "object" ||
+        value === null ||
+        !("version" in value) ||
+        typeof value.version !== "number"
+      )
+        throw new Error("Invalid release metadata");
+      return value.version;
+    }),
   );
   expect(retainedVersions.sort()).toEqual([2, 3]);
   expect((await lstat(join(output, "current"))).isSymbolicLink()).toBe(true);
@@ -55,21 +61,28 @@ test("builds from a filtered copy and atomically retains two successful releases
 
 test("probes the published version with a single-entry first export page", async () => {
   const { root, source, tool } = await fixture();
-  const requests = [];
+  const requests: { authorization: string | undefined; url: string | undefined }[] = [];
   const api = createServer((request, response) => {
     requests.push({ authorization: request.headers.authorization, url: request.url });
     response.writeHead(200, { "content-type": "application/json", etag: '"4"' });
     response.end("{}");
   });
-  await new Promise((resolve) => api.listen(0, "127.0.0.1", resolve));
-  cleanup.push(() => new Promise((resolve) => api.close(resolve)));
+  await new Promise<void>((resolve) => api.listen(0, "127.0.0.1", resolve));
+  cleanup.push(
+    () =>
+      new Promise<void>((resolve, reject) =>
+        api.close((error) => (error ? reject(error) : resolve())),
+      ),
+  );
+  const address = api.address();
+  if (!address || typeof address === "string") throw new Error("Expected TCP address");
   const builder = new FixedCommandBuilder({
     sourceRoot: source,
     siteDirectory: "apps/site",
     outputDirectory: "dist",
     workRoot: join(root, "work-probe"),
     outputRoot: join(root, "output-probe"),
-    apiBaseUrl: `http://127.0.0.1:${api.address().port}/`,
+    apiBaseUrl: `http://127.0.0.1:${address.port}/`,
     buildToken: "build-token",
     toolPath: tool,
   });
@@ -278,11 +291,13 @@ test("specific source failures keep the old release and a correction is retryabl
 test.each([
   [{}, ""],
   [{ siteIndexing: "off", siteUrl: "https://example.com/" }, "https://example.com/|off|set|set"],
-])("passes only configured site output settings to the build (%#)", async (settings, expected) => {
-  const { root, source, tool } = await fixture();
-  await writeFile(
-    tool,
-    `#!/bin/sh
+] as const)(
+  "passes only configured site output settings to the build (%#)",
+  async (settings, expected) => {
+    const { root, source, tool } = await fixture();
+    await writeFile(
+      tool,
+      `#!/bin/sh
 if [ "$1" = "install" ]; then
   mkdir -p apps/site/node_modules/astro
   exit 0
@@ -294,27 +309,28 @@ else
   printf '' > apps/site/dist/index.html
 fi
 `,
-  );
-  const builder = new FixedCommandBuilder({
-    sourceRoot: source,
-    siteDirectory: "apps/site",
-    outputDirectory: "dist",
-    workRoot: join(root, "settings-work"),
-    outputRoot: join(root, "settings-output"),
-    apiBaseUrl: "http://api.test/",
-    buildToken: "build-token",
-    toolPath: tool,
-    versionReader: async () => 1,
-    ...settings,
-  });
-  expect(await builder.build({ buildId: "settings", targetVersion: 1 })).toEqual({
-    status: "succeeded",
-  });
-  const current = await readlink(join(root, "settings-output/current"));
-  expect(await readFile(join(root, "settings-output", current, "index.html"), "utf8")).toBe(
-    expected,
-  );
-});
+    );
+    const builder = new FixedCommandBuilder({
+      sourceRoot: source,
+      siteDirectory: "apps/site",
+      outputDirectory: "dist",
+      workRoot: join(root, "settings-work"),
+      outputRoot: join(root, "settings-output"),
+      apiBaseUrl: "http://api.test/",
+      buildToken: "build-token",
+      toolPath: tool,
+      versionReader: async () => 1,
+      ...settings,
+    });
+    expect(await builder.build({ buildId: "settings", targetVersion: 1 })).toEqual({
+      status: "succeeded",
+    });
+    const current = await readlink(join(root, "settings-output/current"));
+    expect(await readFile(join(root, "settings-output", current, "index.html"), "utf8")).toBe(
+      expected,
+    );
+  },
+);
 
 test("site output settings treat empty values as absent and accept valid values", () => {
   expect(parseSiteOutputSettings({})).toEqual({});
@@ -340,11 +356,12 @@ test.each([
   try {
     parseSiteOutputSettings(environment);
   } catch (error) {
+    if (!(error instanceof Error)) throw error;
     for (const value of Object.values(environment)) expect(error.message).not.toContain(value);
   }
 });
 
-const lines = async (path) =>
+const lines = async (path: string) =>
   existsSync(path) ? (await readFile(path, "utf8")).trim().split("\n") : [];
 
 test("persistent caches serve the next build and never reach the release", async () => {

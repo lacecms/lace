@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type scripted transport queues, mutable build pages and discriminated responses.
 import { expect, test } from "vitest";
 import { createLaceClient, packageName, userAgent } from "./client.js";
 import {
@@ -16,7 +14,7 @@ function publicEntry({ id = "entry-1", modelKey = "posts", path = "/blog/entry-1
   return { blocks: [], fields: {}, id, modelKey, path, publishedAt: timestamp, title: id };
 }
 
-function mediaItem(id, alt = null) {
+function mediaItem(id: string, alt: string | null = null) {
   return {
     alt,
     caption: null,
@@ -29,19 +27,22 @@ function mediaItem(id, alt = null) {
   };
 }
 
-function single(options) {
+function single(options?: Parameters<typeof publicEntry>[0]) {
   return { entry: publicEntry(options), media: {} };
 }
 
-function json(value, init) {
+function json(value: unknown, init?: ResponseInit) {
   return Response.json(value, init);
 }
 
-function queuedFetch(responses) {
-  const requests = [];
+function queuedFetch(responses: Response[]) {
+  const requests: { headers: Headers; url: string }[] = [];
   return {
-    fetch: async (url, init) => {
-      requests.push({ headers: new Headers(init.headers), url: url.toString() });
+    fetch: async (url: string | URL | Request, init?: RequestInit) => {
+      requests.push({
+        headers: new Headers(init?.headers),
+        url: url instanceof Request ? url.url : url.toString(),
+      });
       const response = responses.shift();
       if (response === undefined) throw new Error("Unexpected request.");
       return response;
@@ -50,13 +51,13 @@ function queuedFetch(responses) {
   };
 }
 
-function abortingFetch(_url, init) {
-  return new Promise((_resolve, reject) => {
+function abortingFetch(_url: URL, init: RequestInit) {
+  return new Promise<Response>((_resolve, reject) => {
     if (init.signal?.aborted) {
       reject(init.signal.reason);
       return;
     }
-    init.signal?.addEventListener("abort", () => reject(init.signal.reason), { once: true });
+    init.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
   });
 }
 
@@ -82,8 +83,8 @@ test("reads public resources with normalized base paths and encoded inputs", asy
     "https://cms.example/lace/api/v1/public/collections/posts/second",
     "https://cms.example/lace/api/v1/public/content/by-path?path=%2Fblog%2Fthird",
   ]);
-  expect(mock.requests[0].headers.get("authorization")).toBeNull();
-  expect(mock.requests[0].headers.get("user-agent")).toBe(userAgent);
+  expect(mock.requests[0]?.headers.get("authorization")).toBeNull();
+  expect(mock.requests[0]?.headers.get("user-agent")).toBe(userAgent);
   expect(client.getPublicMediaUrl("media/a?x=y")).toBe(
     "https://cms.example/lace/api/v1/public/media/media%2Fa%3Fx%3Dy",
   );
@@ -104,7 +105,7 @@ test("follows cursors only through getAllCollection", async () => {
 
   expect(all.items.map((entry) => entry.id)).toEqual(["one", "two"]);
   expect(Object.keys(all.media)).toEqual(["a", "b", "c"]);
-  expect(all.media.b.alt).toBeNull();
+  expect(all.media.b?.alt).toBeNull();
   expect(mock.requests.map((request) => request.url)).toEqual([
     "https://cms.example/api/v1/public/collections/posts?limit=1",
     "https://cms.example/api/v1/public/collections/posts?after=opaque%2Bcursor&limit=1",
@@ -144,10 +145,10 @@ test("scopes the build token to exports and supports changed and unchanged expor
   });
   await client.getPage("home");
 
-  expect(mock.requests[0].headers.get("authorization")).toBe("Bearer build-secret");
-  expect(mock.requests[1].headers.get("authorization")).toBe("Bearer build-secret");
-  expect(mock.requests[1].headers.get("if-none-match")).toBe('"7"');
-  expect(mock.requests[2].headers.get("authorization")).toBeNull();
+  expect(mock.requests[0]?.headers.get("authorization")).toBe("Bearer build-secret");
+  expect(mock.requests[1]?.headers.get("authorization")).toBe("Bearer build-secret");
+  expect(mock.requests[1]?.headers.get("if-none-match")).toBe('"7"');
+  expect(mock.requests[2]?.headers.get("authorization")).toBeNull();
 });
 
 test("maps Lace error envelopes and rejects malformed server data", async () => {
@@ -228,7 +229,7 @@ test.each(['"7"', 'W/"7"'])("preserves received and supplied build validators %s
   const client = createLaceClient({ baseUrl: "https://cms.example", fetch: mock.fetch });
   expect(await client.getBuildExport()).toMatchObject({ etag, export: { version: 7 } });
   expect(await client.getBuildExport({ etag })).toEqual({ changed: false, etag: 'W/"7"' });
-  expect(mock.requests[1].headers.get("if-none-match")).toBe(etag);
+  expect(mock.requests[1]?.headers.get("if-none-match")).toBe(etag);
 });
 
 test.each([200, 304])("diagnoses missing and invalid ETags on %i safely", async (status) => {
@@ -430,7 +431,7 @@ test("reports an error code introduced by a newer API", async () => {
 });
 
 test("rejects an older build-export format and an entry without a manifest", async () => {
-  const exportPage = (formatVersion, entry) =>
+  const exportPage = (formatVersion: number, entry: unknown) =>
     json(
       {
         entries: [entry],
@@ -500,6 +501,7 @@ test("rejects a build export in a newer format with upgrade guidance", async () 
 
   const supported = await client.getBuildExport();
   // An API before route-less collections sends no records; the export holds none.
+  if (!supported.changed) throw new Error("Expected changed export");
   expect(supported.export).toEqual({
     entries: [],
     formatVersion: 2,
@@ -514,7 +516,12 @@ test("rejects a build export in a newer format with upgrade guidance", async () 
 const exportBase = "https://cms.example/api/v1/public/build-export";
 const exportSeo = { defaults: null, models: { posts: { description: "summary", image: null } } };
 
-function firstPage(version, paths, { media = {}, nextCursor, ...extra } = {}) {
+type PageOptions = { media?: Record<string, unknown>; nextCursor?: string; [key: string]: unknown };
+function firstPage(
+  version: number,
+  paths: string[],
+  { media = {}, nextCursor, ...extra }: PageOptions = {},
+) {
   return {
     entries: paths.map((path) => ({
       ...publicEntry({ id: path === "/" ? "home" : path.slice(1).replaceAll("/", "-"), path }),
@@ -539,23 +546,27 @@ function firstPage(version, paths, { media = {}, nextCursor, ...extra } = {}) {
   };
 }
 
-function nextPage(version, paths, { media = {}, nextCursor, ...extra } = {}) {
+function nextPage(
+  version: number,
+  paths: string[],
+  { media = {}, nextCursor, ...extra }: PageOptions = {},
+) {
   const {
     globals: _globals,
     seo: _seo,
     ...page
   } = firstPage(version, paths, {
     media,
-    nextCursor,
+    ...(nextCursor === undefined ? {} : { nextCursor }),
   });
   return { ...page, ...extra };
 }
 
-function page(value) {
+function page(value: { version: number }) {
   return json(value, { headers: { etag: `"${value.version}"` } });
 }
 
-function changed(expectedVersion, actualVersion) {
+function changed(expectedVersion: number, actualVersion: number) {
   return json(
     {
       error: {
@@ -587,6 +598,7 @@ test("assembles a multi-page build export with merged media", async () => {
   const result = await client.getBuildExport({ etag: '"8"', pageSize: 2 });
   expect(result.changed).toBe(true);
   expect(result.etag).toBe('"9"');
+  if (!result.changed) throw new Error("Expected changed export");
   expect(result.export.entries.map((entry) => entry.path)).toEqual(["/", "/a", "/b", "/c"]);
   expect(result.export.globals.map((global) => global.id)).toEqual(["g"]);
   expect(result.export.seo).toEqual(exportSeo);
@@ -633,6 +645,7 @@ test("restarts once from an unconditional first page when content changes", asyn
   const client = createLaceClient({ baseUrl: "https://cms.example/", fetch: mock.fetch });
   const result = await client.getBuildExport({ etag: '"8"' });
   expect(result).toMatchObject({ etag: '"10"', export: { version: 10 } });
+  if (!result.changed) throw new Error("Expected changed export");
   expect(result.export.entries.map((entry) => entry.path)).toEqual(["/a", "/b"]);
   expect(mock.requests.map((request) => request.headers.get("if-none-match"))).toEqual([
     '"8"',
@@ -689,7 +702,7 @@ test("rejects build-export pages that disagree", async () => {
     ],
     ["first page without globals", [nextPage(9, ["/a"])]],
     ["first page without seo", [{ ...firstPage(9, ["/a"]), seo: undefined }]],
-  ];
+  ] as const;
   for (const [name, pages] of cases) {
     const mock = queuedFetch(pages.map((value) => page(value)));
     const client = createLaceClient({ baseUrl: "https://cms.example/", fetch: mock.fetch });
@@ -718,8 +731,10 @@ test("reads single build-export pages and calls the first-page hook first", asyn
     etag: '"9"',
     page: { nextCursor: "c1", version: 9 },
   });
+  if (!first.changed) throw new Error("Expected changed page");
   expect(first.page).not.toHaveProperty("addedLater");
   const next = await client.getBuildExportPage({ after: "c1", limit: 1 });
+  if (!next.changed) throw new Error("Expected changed page");
   expect(next.page).not.toHaveProperty("globals");
   expect(await client.getBuildExportPage({ etag: '"9"' })).toEqual({ changed: false, etag: '"9"' });
   expect(mock.requests.map((request) => request.url)).toEqual([
@@ -737,7 +752,7 @@ test("reads single build-export pages and calls the first-page hook first", asyn
 
   const hooked = queuedFetch([page(firstPage(7, ["/a"], { nextCursor: "c1" }))]);
   const hookedClient = createLaceClient({ baseUrl: "https://cms.example/", fetch: hooked.fetch });
-  const seen = [];
+  const seen: number[] = [];
   await expect(
     hookedClient.getBuildExport({
       onFirstPage: (value) => {
@@ -750,7 +765,7 @@ test("reads single build-export pages and calls the first-page hook first", asyn
   expect(hooked.requests).toHaveLength(1);
 });
 
-function exportRecord(id, modelKey = "testimonials") {
+function exportRecord(id: string, modelKey = "testimonials") {
   return {
     blocks: [],
     fields: { quote: id },
@@ -803,6 +818,7 @@ test("assembles records after the routed entries across pages", async () => {
     token: "t",
   });
   const result = await client.getBuildExport();
+  if (!result.changed) throw new Error("Expected changed export");
   expect(result.export.entries.map((entry) => entry.path)).toEqual(["/a"]);
   expect(result.export.records.map((record) => record.id)).toEqual(["c1", "t1", "t2"]);
 });

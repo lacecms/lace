@@ -1,5 +1,12 @@
-// @ts-nocheck
-// TODO(rf2): Type partial build ports, tracker observations and recorded dispatcher calls.
+import type {
+  BuildTriggerResult,
+  EnqueueSiteBuildInput,
+  ProviderDeploymentObservation,
+  TrackedSiteBuildCheck,
+} from "../ports/builds.js";
+import { buildWorkPort } from "../test-support/build-port.js";
+import type { UnixMilliseconds } from "@lacecms/domain";
+import { actorId, siteBuildId } from "@lacecms/domain";
 import { expect, test } from "vitest";
 import {
   dispatcherEventId,
@@ -26,60 +33,86 @@ test("site-build timing follows the fixed architecture defaults", () => {
 });
 
 test("only administrators can enqueue manual or retry build commands", async () => {
-  const calls = [];
+  const calls: EnqueueSiteBuildInput[] = [];
   const useCases = new SiteBuildUseCases({
     clock: { now: () => unixMilliseconds(42) },
     builds: {
+      listSiteBuilds: () => {
+        throw new Error("Unexpected listSiteBuilds");
+      },
+      getSiteBuild: () => {
+        throw new Error("Unexpected getSiteBuild");
+      },
       requestBuild: async (input) => {
         calls.push(input);
         return { coalesced: false, eventId: dispatcherEventId("event-1"), targetVersion: 3 };
       },
     },
   });
-  const admin = { id: "admin-1", role: "admin" };
+  const admin = { id: actorId("admin-1"), role: "admin" as const };
   await expect(useCases.request(admin)).resolves.toMatchObject({ targetVersion: 3 });
   await expect(useCases.retry(admin, "failed-1")).resolves.toMatchObject({ targetVersion: 3 });
   expect(calls).toMatchObject([{ requestedAt: 42 }, { retryOfBuildId: "failed-1" }]);
-  for (const role of ["editor", "viewer"]) {
-    expect(() => useCases.request({ id: role, role })).toThrow(DomainError);
-    expect(() => useCases.retry({ id: role, role }, "failed-1")).toThrow(DomainError);
+  for (const role of ["editor", "viewer"] as const) {
+    expect(() => useCases.request({ id: actorId(role), role })).toThrow(DomainError);
+    expect(() => useCases.retry({ id: actorId(role), role }, "failed-1")).toThrow(DomainError);
   }
   expect(calls).toHaveLength(2);
 });
 
 test("site-build dispatcher maps every trigger result to one truthful lifecycle write", async () => {
-  const lease = (id) =>
+  const lease = (id: string) =>
     Object.freeze({
-      buildId: id,
-      event: { attempts: 0, availableAt: 0, id, payload: {}, type: "site.build.requested" },
-      expiresAt: 60_000,
+      buildId: siteBuildId(id),
+      event: {
+        attempts: 0,
+        availableAt: unixMilliseconds(0),
+        id: dispatcherEventId(id),
+        payload: {},
+        type: "site.build.requested",
+      },
+      expiresAt: unixMilliseconds(60_000),
       id: dispatcherLeaseId(`lease-${id}`),
       targetVersion: 3,
     });
-  const results = {
+  const results: Record<string, BuildTriggerResult> = {
     accepted: { status: "accepted" },
     acceptedWithId: { status: "accepted", providerBuildId: "dep-1" },
     failed: { status: "failed", reason: "source_missing", path: "pnpm-lock.yaml" },
     succeeded: { status: "succeeded" },
     tracking: { status: "tracking", providerBuildId: "dep-2" },
   };
-  const writes = [];
-  const work = {
+  const writes: [string, unknown][] = [];
+  const work = buildWorkPort({
     claimSiteBuilds: async () => Object.keys(results).map(lease),
     renewSiteBuildLease: async () => true,
-    recordSiteBuildAccepted: async (input) => writes.push(["accepted", input]),
-    recordSiteBuildTracking: async (input) => writes.push(["tracking", input]),
-    recordSiteBuildSuccess: async (input) => writes.push(["succeeded", input]),
-    recordSiteBuildFailure: async (input) => writes.push(["failed", input]),
+    recordSiteBuildAccepted: async (input) => {
+      writes.push(["accepted", input]);
+    },
+    recordSiteBuildTracking: async (input) => {
+      writes.push(["tracking", input]);
+    },
+    recordSiteBuildSuccess: async (input) => {
+      writes.push(["succeeded", input]);
+    },
+    recordSiteBuildFailure: async (input) => {
+      writes.push(["failed", input]);
+    },
     completeTrackedSiteBuild: async () => {
       throw new Error("dispatch never completes tracked builds");
     },
-  };
+  });
   const dispatcher = new SiteBuildDispatcher({
-    clock: { now: () => 7 },
+    clock: { now: () => unixMilliseconds(7) },
     logger: { error: () => undefined },
     random: () => 0,
-    trigger: { trigger: async ({ buildId }) => results[buildId] },
+    trigger: {
+      trigger: async ({ buildId }) => {
+        const result = results[buildId];
+        if (!result) throw new Error("Unknown build");
+        return result;
+      },
+    },
     work,
   });
   await dispatcher.runOnce();
@@ -102,11 +135,23 @@ test("site-build dispatcher maps every trigger result to one truthful lifecycle 
   ]);
 });
 
-function trackingFixture({ checks, observations, reader = "fake", timeoutMs, nowAt = 0 }) {
-  const writes = [];
-  const logs = [];
+function trackingFixture({
+  checks,
+  observations,
+  reader = "fake",
+  timeoutMs,
+  nowAt = 0,
+}: {
+  checks: TrackedSiteBuildCheck[];
+  observations: Record<string, ProviderDeploymentObservation | Error>;
+  reader?: "fake" | null;
+  timeoutMs?: number;
+  nowAt?: number;
+}) {
+  const writes: [string, unknown][] = [];
+  const logs: { readonly buildId: string; readonly reason: string }[] = [];
   let now = nowAt;
-  const work = {
+  const work = buildWorkPort({
     claimTrackedSiteBuildChecks: async (input) => {
       writes.push(["claim", input]);
       return checks;
@@ -120,7 +165,7 @@ function trackingFixture({ checks, observations, reader = "fake", timeoutMs, now
       if (input.buildId === "conflict")
         throw new DomainError("CONTENT_INVALID_STATE", "Build already has a different outcome.");
     },
-  };
+  });
   const tracker = new SiteBuildTracker({
     clock: { now: () => unixMilliseconds(now) },
     logger: { error: (entry) => logs.push(entry) },
@@ -131,6 +176,7 @@ function trackingFixture({ checks, observations, reader = "fake", timeoutMs, now
             read: async (id) => {
               const value = observations[id];
               if (value instanceof Error) throw value;
+              if (!value) throw new Error("Missing observation");
               return value;
             },
           },
@@ -140,7 +186,7 @@ function trackingFixture({ checks, observations, reader = "fake", timeoutMs, now
   });
   return {
     logs,
-    setNow: (value) => {
+    setNow: (value: number) => {
       now = value;
     },
     tracker,
@@ -148,11 +194,17 @@ function trackingFixture({ checks, observations, reader = "fake", timeoutMs, now
   };
 }
 
-const check = (id, extra = {}) => ({
-  buildId: id,
+const check = (
+  id: string,
+  extra: { trackingStartedAt?: number; lastCheckedAt?: number } = {},
+): TrackedSiteBuildCheck => ({
+  buildId: siteBuildId(id),
   providerBuildId: `dep-${id}`,
-  trackingStartedAt: 0,
-  ...extra,
+  // A negative origin models a deadline that began before the synthetic clock.
+  trackingStartedAt: (extra.trackingStartedAt ?? 0) as UnixMilliseconds,
+  ...(extra.lastCheckedAt === undefined
+    ? {}
+    : { lastCheckedAt: unixMilliseconds(extra.lastCheckedAt) }),
 });
 
 test("site-build tracker maps observations to proven outcomes and later checks", async () => {

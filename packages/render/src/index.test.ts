@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type heterogeneous block maps, mutable render fixtures and invalid runtime inputs.
 import {
   ContentValidationError,
   builtInBlocks,
@@ -8,6 +6,9 @@ import {
   validateRichTextDocument,
 } from "@lacecms/content";
 import { expect, test } from "vitest";
+import type { RenderableBlock, RenderableEntry } from "./blocks.js";
+import type { LinkResolver } from "./links.js";
+import type { RichTextDescriptionNode, RichTextElementDescription } from "./rich-text.js";
 import {
   LaceRenderError,
   defineBlockMap,
@@ -20,34 +21,49 @@ import {
 
 const context = Object.freeze({ blockKey: "block-1", entryId: "entry-1", modelKey: "posts" });
 
-function paragraph(...content) {
+function paragraph(...content: unknown[]) {
   return { content, type: "paragraph" };
 }
 
-function text(value, marks) {
+function text(value: string, marks?: unknown[]) {
   return marks === undefined ? { text: value, type: "text" } : { marks, text: value, type: "text" };
 }
 
-function doc(...content) {
+function doc(...content: unknown[]) {
   return { content, type: "doc" };
 }
 
-function block(type, data, overrides = {}) {
+function block(
+  type: string,
+  data: unknown,
+  overrides: Partial<RenderableBlock> = {},
+): RenderableBlock {
   return { data, key: "block-1", position: 0, schemaVersion: 1, type, ...overrides };
 }
 
-function captureError(run) {
+function captureError(run: () => unknown): LaceRenderError {
   try {
     run();
   } catch (error) {
-    return error;
+    if (error instanceof LaceRenderError) return error;
+    throw error;
   }
   throw new Error("Expected a failure.");
 }
 
+function required<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("Expected a value.");
+  return value;
+}
+
+function contentCause(error: LaceRenderError): ContentValidationError {
+  if (!(error.cause instanceof ContentValidationError)) throw error;
+  return error.cause;
+}
+
 const body = doc(paragraph(text("Hello "), text("world", [{ type: "bold" }])));
 
-test.each([
+test.each<[keyof typeof builtInBlocks, unknown]>([
   [
     "hero",
     {
@@ -185,7 +201,7 @@ test("prepareBlocks returns components and props in block order", () => {
     hero: { component: "Hero", definition: builtInBlocks.hero },
     quote: { component: "Quote", definition: builtInBlocks.quote },
   });
-  const mediaUrl = (id) => `https://media.example/${id}`;
+  const mediaUrl = (id: string) => `https://media.example/${id}`;
   const blocks = [
     block("hero", { heading: "Top" }, { key: "a", position: 0 }),
     block("quote", { quote: "Middle" }, { key: "b", position: 1 }),
@@ -197,7 +213,7 @@ test("prepareBlocks returns components and props in block order", () => {
   ];
   const prepared = prepareBlocks(map, { blocks, id: "entry-1", modelKey: "home" }, mediaUrl);
   expect(prepared.map((item) => item.component)).toEqual(["Hero", "Quote", "Cta"]);
-  expect(prepared[1].props).toEqual({
+  expect(required(prepared[1]).props).toEqual({
     link: expect.any(Function),
     block: blocks[1],
     context: { blockKey: "b", entryId: "entry-1", modelKey: "home" },
@@ -228,7 +244,10 @@ const resolvedMedia = {
   },
 };
 
-function describedEntry(media = (id) => resolvedMedia[id]) {
+function describedEntry(
+  media: NonNullable<RenderableEntry["media"]> = (id) =>
+    Object.hasOwn(resolvedMedia, id) ? resolvedMedia[id as keyof typeof resolvedMedia] : undefined,
+) {
   const map = defineBlockMap({ image: { component: "Image", definition: builtInBlocks.image } });
   const blocks = [block("image", { media: "office" }, { key: "img", schemaVersion: 4 })];
   const [prepared] = prepareBlocks(
@@ -236,7 +255,7 @@ function describedEntry(media = (id) => resolvedMedia[id]) {
     { blocks, id: "entry-1", media, modelKey: "posts" },
     (id) => `https://api.example/media/${id}`,
   );
-  return prepared.props.image;
+  return required(prepared).props.image;
 }
 
 test("image descriptions carry resolved dimensions, caption, and focal position", () => {
@@ -300,13 +319,13 @@ test("entries without resolved media fall back to the media URL builder", () => 
     },
     (id) => `https://api.example/media/${id}`,
   );
-  expect(prepared.props.image("office", "Lake")).toEqual({
+  expect(required(prepared).props.image("office", "Lake")).toEqual({
     alt: "Lake",
     src: "https://api.example/media/office",
   });
-  expect(prepared.props.image("office").alt).toBe("");
-  expect(prepared.props.image("office")).not.toHaveProperty("sourceUrl");
-  expect(prepared.props.image("office")).not.toHaveProperty("mimeType");
+  expect(required(prepared).props.image("office").alt).toBe("");
+  expect(required(prepared).props.image("office")).not.toHaveProperty("sourceUrl");
+  expect(required(prepared).props.image("office")).not.toHaveProperty("mimeType");
 });
 
 const banner = defineBlock({
@@ -324,7 +343,7 @@ const envelopeMap = defineBlockMap({
   hero: { component: "Hero", definition: builtInBlocks.hero },
 });
 
-function prepareEnvelope(...blocks) {
+function prepareEnvelope(...blocks: RenderableBlock[]) {
   return prepareBlocks(envelopeMap, { blocks, id: "entry-1", modelKey: "home" }, () => "");
 }
 
@@ -358,7 +377,7 @@ test("block props carry the anchor, the normalized class name and parsed setting
       { anchor: "pricing", className: "wide  dark wide", settings: { layout: "narrow" } },
     ),
   );
-  expect(prepared.props).toMatchObject({
+  expect(required(prepared).props).toMatchObject({
     anchor: "pricing",
     className: "wide dark",
     data: { message: "Hi" },
@@ -368,15 +387,15 @@ test("block props carry the anchor, the normalized class name and parsed setting
 
 test("a block without an envelope gets no anchor or class name and empty settings", () => {
   const [prepared] = prepareEnvelope(block("hero", { heading: "Top" }));
-  expect(Object.hasOwn(prepared.props, "anchor")).toBe(false);
-  expect(Object.hasOwn(prepared.props, "className")).toBe(false);
-  expect(prepared.props.settings).toEqual({});
+  expect(Object.hasOwn(required(prepared).props, "anchor")).toBe(false);
+  expect(Object.hasOwn(required(prepared).props, "className")).toBe(false);
+  expect(required(prepared).props.settings).toEqual({});
 });
 
 test("declared setting defaults apply to missing and empty settings", () => {
   for (const overrides of [{}, { settings: {} }]) {
     const [prepared] = prepareEnvelope(block("banner", { message: "Hi" }, overrides));
-    expect(prepared.props.settings).toEqual({ compact: false, layout: "wide" });
+    expect(required(prepared).props.settings).toEqual({ compact: false, layout: "wide" });
   }
 });
 
@@ -444,8 +463,13 @@ test("describes every allowlisted node and mark", () => {
       { content: [paragraph(text("quoted"))], type: "blockquote" },
     ),
   );
-  const t = (value) => ({ kind: "text", text: value });
-  const el = (tag, source, children, attributes = {}) => ({
+  const t = (value: string): RichTextDescriptionNode => ({ kind: "text", text: value });
+  const el = (
+    tag: RichTextElementDescription["tag"],
+    source: RichTextElementDescription["source"],
+    children: RichTextDescriptionNode[],
+    attributes: RichTextElementDescription["attributes"] = {},
+  ): RichTextElementDescription => ({
     attributes,
     children,
     kind: "element",
@@ -506,9 +530,9 @@ test("invalid rich text carries block context and the full field path", () => {
   expect(error.cause).toBeInstanceOf(ContentValidationError);
 });
 
-const link = (href) => doc(paragraph(text("link", [{ attrs: { href }, type: "link" }])));
+const link = (href: string) => doc(paragraph(text("link", [{ attrs: { href }, type: "link" }])));
 
-const parityCorpus = [
+const parityCorpus: [string, unknown][] = [
   ["empty document", doc()],
   ["empty paragraph", doc({ type: "paragraph" })],
   ["formatted paragraph", body],
@@ -630,12 +654,12 @@ test("renders composite defaults and reports numeric leaf paths with context", (
   );
   expect(error).toBeInstanceOf(LaceRenderError);
   expect(error.cause).toBeInstanceOf(ContentValidationError);
-  expect(error.cause.issues[0].path).toEqual(["rows", 0, "href"]);
+  expect(required(contentCause(error).issues[0]).path).toEqual(["rows", 0, "href"]);
   expect(error.context).toMatchObject(context);
   const oversized = captureError(() =>
     parseBlock(definition, block("nested", { rows: Array(101).fill({ href: "/" }) }), context),
   );
-  expect(oversized.cause.issues[0].code).toBe("list_too_long");
+  expect(required(contentCause(oversized).issues[0]).code).toBe("list_too_long");
 });
 
 test.each([
@@ -653,6 +677,7 @@ test.each([
       type: "paragraph",
     }),
   );
+  if (paragraph?.kind !== "element") throw new Error("Expected a paragraph element.");
   expect(paragraph.children[0]).toEqual({
     attributes: expected,
     children: [{ kind: "text", text: "Link" }],
@@ -736,13 +761,14 @@ test.each(expandedParityCorpus)("expanded content/render acceptance and paths ag
   try {
     validateRichTextDocument(value);
   } catch (error) {
+    if (!(error instanceof ContentValidationError)) throw error;
     const rendered = captureError(() =>
       describeRichText(value, { block: context, fieldPath: ["sections", 0, "body"] }),
     );
     expect(rendered).toMatchObject({
       code: "invalid_rich_text",
       context,
-      fieldPath: ["sections", 0, "body", ...error.issues[0].path],
+      fieldPath: ["sections", 0, "body", ...required(error.issues[0]).path],
     });
     expect(rendered.cause).toBeInstanceOf(ContentValidationError);
     return;
@@ -787,17 +813,20 @@ test("block link props resolve manual targets, preserve required tokens and cont
     expect(() => fallback(value)).toThrow(
       expect.objectContaining({ code: "invalid_link", context }),
     );
-  for (const resolve of [
+  // @ts-expect-error Exercise a resolver that violates its declared return type.
+  const nullResolver: LinkResolver = () => null;
+  const invalidResolvers: LinkResolver[] = [
     () => ({ state: "resolved", href: "entry:target", targetId: "target" }),
     () => ({ state: "resolved", href: "javascript:evil", targetId: "target" }),
     () => ({ state: "unavailable", targetId: "other" }),
     () => ({ state: "unavailable", targetId: "target", href: "#" }),
     () => ({ state: "empty" }),
-    () => null,
+    nullResolver,
     () => {
       throw new Error("bad resolver");
     },
-  ])
+  ];
+  for (const resolve of invalidResolvers)
     expect(() => createLinkResolver(resolve, context)("entry:target")).toThrow(
       expect.objectContaining({ code: "invalid_link", context }),
     );
@@ -824,8 +853,8 @@ test("block link props resolve manual targets, preserve required tokens and cont
     },
     () => "/media",
   );
-  expect(prepared.props.data.url).toBe("entry:target");
-  expect(prepared.props.link(prepared.props.data.url)).toEqual({
+  expect(required(prepared).props.data.url).toBe("entry:target");
+  expect(required(prepared).props.link(required(prepared).props.data.url)).toEqual({
     state: "unavailable",
     targetId: "target",
   });

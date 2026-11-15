@@ -89,7 +89,7 @@ from committed outbox work, and `401 AUTHENTICATION_REQUIRED`.
 
 | Step | Topic | Size | Sessions | Status |
 | --- | --- | :---: | --- | --- |
-| EX1 | Test foundation (from RF9C–RF9F) | L | EX1A → EX1B → EX1C; EX1D independent | planned |
+| EX1 | Test foundation (from RF9C–RF9F) | L | EX1A → EX1B → EX1D; EX1C after EX2D | planned |
 | EX2 | Shared write plans | L | EX2A → EX2B → EX2C → EX2D | planned |
 | EX3 | Typed outbox events | M | EX3A → EX3B | planned |
 | EX4 | Route policies and security use cases | L | EX4A → EX4B → EX4C → EX4D | planned |
@@ -121,8 +121,9 @@ Dependencies:
 | EX7A | RC5 publication | EX1–EX5 when validation can use a separate checkout |
 
 **Order rationale:** EX1A first, because `worker.test.ts` and the
-`platform-node` tests that EX2 rewrites must already be split. EX2 precedes
-EX3 because typed events are enqueued by write plans; doing EX3 first would
+`platform-node` tests that EX2 rewrites must already be split. The selected
+order after EX1B is EX1D → EX2A–EX2D → EX1C. EX2 precedes EX3 because typed
+events are enqueued by write plans; doing EX3 first would
 write the enqueue path twice. EX4 touches the HTTP layer only and runs beside
 EX2. EX1C types platform and `db` tests after EX2 has moved them, as RF9E
 waited for RF5. EX5 follows EX2C because configuration synchronization is the
@@ -185,10 +186,12 @@ Carried over from the refactoring roadmap, not a session:
 
 ### Session EX1A — Test size ceiling (was RF9C)
 
-The boundary checker applies a 1,000-line ceiling with a shrinking baseline
-to test files. The eight package tests in §3 split beside their modules.
-Open question: whether `scripts/fixtures/oauth-mcp/compat.test.mjs` falls
-under the same ceiling or is listed as a fixture exemption.
+The boundary checker applies the shared 1,000-physical-line shrinking baseline
+to workspace `src/` production sources and tests, including type and JavaScript
+tests. Non-test `src/test-support/` helpers and tests outside workspace source
+roots are excluded. The eight package tests in §3 split beside their modules.
+The standalone `scripts/fixtures/oauth-mcp/compat.test.mjs` stays outside the
+guard and retains its existing compatibility commands.
 
 ### Session EX1B — Type core package tests (was RF9D)
 
@@ -200,11 +203,12 @@ them.
 ### Session EX1C — Type `db` and platform tests (was RF9E)
 
 After EX2D: `db` (18), `platform-node` (12) and `platform-cloudflare` (12).
+Remove the typecheck baseline file when its last entries are retired.
 
 ### Session EX1D — Type CLI, generator and app tests (was RF9F)
 
-`cli` (21), `create-lace` (2), `apps/api` (4) and `apps/builder` (2). The
-typecheck baseline file is deleted when it is empty.
+`cli` (21), `create-lace` (2), `apps/api` (4) and `apps/builder` (2). Retire
+those entries before EX2 and keep the `db` and platform entries for EX1C.
 
 ## Step EX2 — Shared write plans
 
@@ -387,5 +391,7 @@ are preserved in the linked archives. Dates refer to the final recorded event.
 
 | Date | Session | Change | Status |
 | --- | --- | --- | --- |
+| 2026-11-15 | EX1D | [Type CLI, generator and app tests](../openspec/changes/archive/2026-11-15-ex01d-type-cli-generator-and-app-tests/) | done: restored typechecking for 29 source test files and retained the remaining baseline |
+| 2026-11-15 | EX1A | [Test size ceiling](../openspec/changes/archive/2026-11-15-ex01a-test-size-ceiling/) | done: workspace test files above 1,000 lines fell from 8 to 0; standalone OAuth/MCP fixture remains outside the guard |
 | 2026-11-15 | EX6A | [Preserve trusted client identity](../openspec/changes/archive/2026-11-15-ex06a-preserve-trusted-client-identity/) | done: request identity survives body replacement on Node and Worker |
 | 2026-11-15 | EX6B | [Restrict production Compose ingress](../openspec/changes/archive/2026-11-15-ex06b-restrict-production-compose-ingress/) | done: production reaches the private API through loopback Nginx; development retains a separate loopback API port |

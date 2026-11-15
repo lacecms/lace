@@ -1,10 +1,8 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy Node runtime fixtures, partial adapters and project configuration helpers.
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { actorId, unixMilliseconds } from "@lacecms/domain";
+import { actorId, siteBuildId, unixMilliseconds } from "@lacecms/domain";
 import {
   migrateNodeDatabase,
   NodeContentRepository,
@@ -19,7 +17,7 @@ test("serves admin bundle and client routes without exposing other paths", async
   try {
     await writeFile(join(root, "index.html"), "admin app");
     const assets = createNodeAdminAssets(root);
-    const get = (path) => assets.fetch(new Request(`http://lace.test${path}`));
+    const get = (path: string) => assets.fetch(new Request(`http://lace.test${path}`));
     expect(await (await get("/admin/builds")).text()).toBe("admin app");
     expect((await get("/other")).status).toBe(404);
     expect((await get("/admin/%2e%2e/private.txt")).status).toBe(404);
@@ -75,7 +73,9 @@ test("a separate worker recovers durable build work after the API connection clo
         work,
       });
       await dispatcher.runOnce();
-      expect(await work.getSiteBuild(receipt.eventId)).toMatchObject({ status: "succeeded" });
+      expect(await work.getSiteBuild(siteBuildId(receipt.eventId))).toMatchObject({
+        status: "succeeded",
+      });
     } finally {
       worker.connection.close();
     }

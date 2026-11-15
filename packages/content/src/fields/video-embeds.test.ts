@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type recursive descriptor fixtures, malformed runtime inputs and table tuples.
 import { test, expect } from "vitest";
 
 test("embed ambient URLs are canonical and ignore input playback parameters", async () => {
@@ -9,6 +7,7 @@ test("embed ambient URLs are canonical and ignore input playback parameters", as
     "https://youtube.com/watch?v=dQw4w9WgXcQ&mute=0",
   ]) {
     const result = parseVideoEmbed(url);
+    if (!result) throw new Error("Expected a video embed");
     expect(result.src).toBe("https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ");
     expect(result.ambientSrc).toBe(
       "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1&mute=1&loop=1&playlist=dQw4w9WgXcQ&controls=0&playsinline=1",
@@ -24,7 +23,7 @@ test("embed ambient URLs are canonical and ignore input playback parameters", as
       ambientSrc: "https://player.vimeo.com/video/123?h=abc&background=1",
     });
   }
-  expect(parseVideoEmbed("https://vimeo.com/123?background=0&mute=0").ambientSrc).toBe(
+  expect(parseVideoEmbed("https://vimeo.com/123?background=0&mute=0")?.ambientSrc).toBe(
     "https://player.vimeo.com/video/123?background=1",
   );
 });

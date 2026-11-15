@@ -1,5 +1,5 @@
-// @ts-nocheck
-// TODO(rf2): Type receipt graph fixtures, branded actors and deliberately tampered target guards.
+import { opaqueCursor } from "../shared/brands.js";
+import { actorId } from "@lacecms/domain";
 import { expect, test } from "vitest";
 
 test("link receipts bind actor, target, action, target guards and the graph without granting permissions", async () => {
@@ -10,9 +10,9 @@ test("link receipts bind actor, target, action, target guards and the graph with
     assertLinkImpactAcknowledgment,
   } = await import("../index.js");
   const evidence = {
-    version: 1,
+    version: 1 as const,
     targetId: "target/日本語",
-    action: "unpublish",
+    action: "unpublish" as const,
     actorId: "admin",
     draftRevision: 3,
     publishedSnapshotId: "published",
@@ -20,7 +20,7 @@ test("link receipts bind actor, target, action, target guards and the graph with
   };
   const receipt = encodeLinkImpactReceipt(evidence);
   expect(decodeLinkImpactReceipt(receipt)).toEqual(evidence);
-  const acknowledgment = { receipt, acknowledgePublishedLinks: true };
+  const acknowledgment = { receipt, acknowledgePublishedLinks: true as const };
   expect(() => assertLinkImpactAcknowledgment(acknowledgment, evidence, true)).not.toThrow();
   expect(() => assertLinkImpactAcknowledgment(undefined, evidence, false)).not.toThrow();
   expect(() => assertLinkImpactAcknowledgment(undefined, evidence, true)).toThrow(
@@ -29,7 +29,7 @@ test("link receipts bind actor, target, action, target guards and the graph with
   for (const change of [
     { targetId: "other" },
     { actorId: "other" },
-    { action: "delete" },
+    { action: "delete" as const },
     { draftRevision: 4 },
     { publishedSnapshotId: null },
     { graphRevision: 10 },
@@ -42,7 +42,7 @@ test("link receipts bind actor, target, action, target guards and the graph with
     expect(() => decodeLinkImpactReceipt(bad)).toThrow(
       expect.objectContaining({ code: "CONTENT_LINK_IMPACT_CHANGED" }),
     );
-  const calls = [];
+  const calls: unknown[] = [];
   const useCases = new ContentLinkUseCases({
     resolveLinkTargets: async (ids) => {
       calls.push(ids);
@@ -59,10 +59,10 @@ test("link receipts bind actor, target, action, target guards and the graph with
   });
   let authorizationChecks = 0;
   const viewer = {
-    id: "viewer",
+    id: actorId("viewer"),
     get role() {
       authorizationChecks++;
-      return "viewer";
+      return "viewer" as const;
     },
   };
   await useCases.resolve(
@@ -72,8 +72,8 @@ test("link receipts bind actor, target, action, target guards and the graph with
   await useCases.list(viewer, { search: "  Studio  ", limit: 20 });
   await useCases.impact(viewer, { targetId: "target", action: "delete", limit: 20 });
   expect(authorizationChecks).toBe(3);
-  expect(calls[1].search).toBe("Studio");
-  expect(calls[2].actorId).toBe("viewer");
+  expect(calls[1]).toMatchObject({ search: "Studio" });
+  expect(calls[2]).toMatchObject({ actorId: "viewer" });
   for (const ids of [["same", "same"], [""], Array.from({ length: 201 }, (_, i) => `${i}`)])
     expect(() => useCases.resolve(viewer, ids)).toThrow();
   expect(() =>
@@ -83,7 +83,7 @@ test("link receipts bind actor, target, action, target guards and the graph with
       limit: 20,
       sourceEntryId: "source",
       snapshotId: "snapshot",
-      after: "mixed",
+      after: opaqueCursor("mixed"),
     }),
   ).toThrow();
   expect(calls).toHaveLength(3);

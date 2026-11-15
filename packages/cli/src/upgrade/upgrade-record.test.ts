@@ -1,9 +1,7 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy command fixtures, filesystem helpers and recorded adapter calls.
 import { readFile, chmod, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { it, expect } from "vitest";
-import { pair, snapshot } from "../test-support/upgrade-fixtures.ts";
+import { pair, snapshot } from "../test-support/upgrade-fixtures.js";
 import { planUpgrade } from "./upgrade.js";
 import { recordUpgrade } from "./upgrade-record.js";
 import { loadOperation } from "./upgrade-journal.js";
@@ -20,11 +18,11 @@ it("captures exact bytes/modes and manifests before working mutation", async () 
   expect(await snapshot(options.project, false)).toEqual(before);
   expect(saved.before.map((value) => value?.toString())).toEqual(["old", undefined, "remove"]);
   expect(saved.after.map((value) => value?.toString())).toEqual(["new", "add", undefined]);
-  expect(saved.operation.entries[0].beforeMode).toBe(0o755);
+  expect(saved.operation.entries[0]?.beforeMode).toBe(0o755);
   expect(saved.oldBytes.toString("base64")).toBe(before[".lace/manifest.json"]);
   expect(saved.operation.directories).toEqual(["new-dir"]);
   await rm(options.template, { recursive: true });
-  expect((await loadOperation(options.project)).after[0].toString()).toBe("new");
+  expect((await loadOperation(options.project))?.after[0]?.toString()).toBe("new");
 });
 it("leaves working files unchanged when staging fails", async () => {
   const options = await pair({ file: "old" }, { file: "new" });

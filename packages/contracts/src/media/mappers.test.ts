@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import { DomainError, unixMilliseconds } from "@lacecms/domain";
 import { describe, expect, test } from "vitest";
 import { classifyError } from "../errors/classification.js";
@@ -17,7 +15,8 @@ describe("media metadata contracts", async () => {
     id: "media-1",
     mimeType: "image/png",
     size: 12,
-    status: "active",
+    status: "active" as const,
+    tags: [],
     updatedAt: unixMilliseconds(1_791_647_444_998),
     usageCount: 0,
     width: 800,

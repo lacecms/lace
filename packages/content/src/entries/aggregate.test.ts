@@ -1,6 +1,7 @@
-// @ts-nocheck
-// TODO(rf2): Type recursive descriptor fixtures, malformed runtime inputs and table tuples.
 import { expect, test } from "vitest";
+import type { JsonObject } from "../shared/json.js";
+import type { EntryAggregateBlock } from "./aggregate.js";
+import type { ContentValidationMode } from "../fields/validation.js";
 import {
   validateEntryAggregate,
   validateEntryPayload,
@@ -19,7 +20,7 @@ import { MAX_SLUG_LENGTH } from "../shared/identifiers.js";
 import { canonicalJsonByteLength } from "./canonical-json.js";
 import { validateFieldValue, validateModelFields } from "../fields/validation.js";
 
-function envelopeAggregate(blocks, mode = "draft") {
+function envelopeAggregate(blocks: EntryAggregateBlock[], mode: ContentValidationMode = "draft") {
   return validateEntryAggregate(
     { blocks, fields: {}, kind: "page", title: "Home" },
     { blocks: ["panel", "hero"], fields: {}, kind: "page" },
@@ -28,16 +29,22 @@ function envelopeAggregate(blocks, mode = "draft") {
   );
 }
 
-function panel(key, envelope = {}, data = { heading: "Hi" }) {
+function panel(
+  key: string,
+  envelope: Record<string, unknown> = {},
+  data: JsonObject = { heading: "Hi" },
+) {
   return { data, key, schemaVersion: 1, type: "panel", ...envelope };
 }
 
-function issueOf(run) {
+function issueOf(run: () => unknown) {
   try {
     run();
   } catch (error) {
     expect(error).toBeInstanceOf(ContentValidationError);
+    if (!(error instanceof ContentValidationError)) throw error;
     const [issue] = error.issues;
+    if (!issue) throw new Error("Expected validation issue");
     return { code: issue.code, path: issue.path.join("/") };
   }
   throw new Error("expected a validation error");
@@ -67,7 +74,7 @@ test("validates and normalizes the block envelope", () => {
     hidden: true,
     settings: { align: "left", boxed: true },
   });
-  expect(envelopeAggregate([panel("b1", { anchor: "pricing" })]).blocks[0].anchor).toBe("pricing");
+  expect(envelopeAggregate([panel("b1", { anchor: "pricing" })]).blocks[0]?.anchor).toBe("pricing");
   for (const anchor of ["Pricing", "2nd", "-top", "", "a".repeat(65), 7]) {
     expect(issueOf(() => envelopeAggregate([panel("b1", { anchor })]))).toEqual({
       code: "invalid_block_anchor",
@@ -245,7 +252,7 @@ test("registers public-DSL built-ins and validates ordered entry aggregates", ()
     registry,
     "publish",
   );
-  expect(ulidAggregate.blocks[0].key).toBe("01M3BW3ZJNKNHQT9VD5SNGEFPV");
+  expect(ulidAggregate.blocks[0]?.key).toBe("01M3BW3ZJNKNHQT9VD5SNGEFPV");
   expect(() =>
     validateEntryAggregate(
       {
@@ -291,7 +298,7 @@ test("registers public-DSL built-ins and validates ordered entry aggregates", ()
 });
 
 test("enforces entry system-field and JSON payload limits", () => {
-  const base = { blocks: [], fields: {}, kind: "collection", title: "Lace" };
+  const base = { blocks: [], fields: {}, kind: "collection" as const, title: "Lace" };
 
   expect(validateEntryPayload(base, "draft")).toEqual(base);
   expect(() => validateEntryPayload(base, "publish")).toThrow(/\$\.slug/u);
@@ -318,24 +325,32 @@ test("enforces entry system-field and JSON payload limits", () => {
 });
 
 test("accepts a global payload without a slug and rejects other kinds", () => {
-  const global = { blocks: [], fields: {}, kind: "global", title: "Site settings" };
+  const global = { blocks: [], fields: {}, kind: "global" as const, title: "Site settings" };
   expect(validateEntryPayload(global, "draft")).toEqual(global);
   expect(validateEntryPayload(global, "publish")).toEqual(global);
-  for (const mode of ["draft", "publish"]) {
+  for (const mode of ["draft", "publish"] as const) {
     expect(() => validateEntryPayload({ ...global, slug: "settings" }, mode)).toThrow(
       /\$\.slug.*not allowed/u,
     );
   }
+  // Exercise rejection of an invalid model kind at runtime.
+  // @ts-expect-error Deliberately invalid model kind.
   expect(() => validateEntryPayload({ ...global, kind: "singleton" }, "draft")).toThrow(
     /\$\.kind/u,
   );
 });
 
 test("route-less collection payloads publish without a slug and reject one", () => {
-  const entry = { blocks: [], fields: {}, kind: "collection", routeLess: true, title: "Ada" };
+  const entry = {
+    blocks: [],
+    fields: {},
+    kind: "collection" as const,
+    routeLess: true,
+    title: "Ada",
+  };
   expect(validateEntryPayload(entry, "draft")).toEqual(entry);
   expect(validateEntryPayload(entry, "publish")).toEqual(entry);
-  for (const mode of ["draft", "publish"]) {
+  for (const mode of ["draft", "publish"] as const) {
     for (const slug of ["ada", ""]) {
       expect(issueFrom(() => validateEntryPayload({ ...entry, slug }, mode))).toMatchObject({
         code: "slug_not_allowed",
@@ -343,17 +358,17 @@ test("route-less collection payloads publish without a slug and reject one", () 
     }
   }
   const aggregate = validateEntryAggregate(
-    { blocks: [], fields: {}, kind: "collection", title: "Ada" },
-    { blocks: [], fields: {}, kind: "collection", routeLess: true },
+    { blocks: [], fields: {}, kind: "collection" as const, title: "Ada" },
+    { blocks: [], fields: {}, kind: "collection" as const, routeLess: true },
     defineBlockRegistry([]),
     "publish",
   );
-  expect(aggregate).toMatchObject({ kind: "collection", title: "Ada" });
+  expect(aggregate).toMatchObject({ kind: "collection" as const, title: "Ada" });
   expect(aggregate).not.toHaveProperty("slug");
   expect(() =>
     validateEntryAggregate(
       { blocks: [], fields: {}, kind: "collection", slug: "ada", title: "Ada" },
-      { blocks: [], fields: {}, kind: "collection", routeLess: true },
+      { blocks: [], fields: {}, kind: "collection" as const, routeLess: true },
       defineBlockRegistry([]),
       "draft",
     ),
@@ -363,7 +378,7 @@ test("route-less collection payloads publish without a slug and reject one", () 
 test("list and snapshot budgets include defaults, hidden blocks and nested lengths", () => {
   const scalarList = field.list({ item: field.text() });
   expect(validateFieldValue(scalarList, Array(100).fill("x"))).toHaveLength(100);
-  expect(issueFrom(() => validateFieldValue(scalarList, Array(101).fill("x"))).code).toBe(
+  expect(issueFrom(() => validateFieldValue(scalarList, Array(101).fill("x")))?.code).toBe(
     "list_too_long",
   );
   expect(() =>
@@ -387,12 +402,12 @@ test("list and snapshot budgets include defaults, hidden blocks and nested lengt
     fields: { list: scalarList, heading: field.text({ required: true }) },
   });
   const model = {
-    kind: "page",
+    kind: "page" as const,
     fields: { one: scalarList, two: scalarList, three: scalarList, four: scalarList },
     blocks: ["items"],
   };
   const input = {
-    kind: "page",
+    kind: "page" as const,
     title: "Budget",
     fields: Object.fromEntries(
       ["one", "two", "three", "four"].map((key) => [key, Array(100).fill("x")]),
@@ -408,7 +423,7 @@ test("list and snapshot budgets include defaults, hidden blocks and nested lengt
     ],
   };
   expect(
-    validateEntryAggregate(input, model, defineBlockRegistry([block]), "publish").blocks[0].hidden,
+    validateEntryAggregate(input, model, defineBlockRegistry([block]), "publish").blocks[0]?.hidden,
   ).toBe(true);
   input.blocks.push({
     key: "overflow",
@@ -420,15 +435,15 @@ test("list and snapshot budgets include defaults, hidden blocks and nested lengt
   const issue = issueFrom(() =>
     validateEntryAggregate(input, model, defineBlockRegistry([block]), "publish"),
   );
-  expect(issue.code).toBe("too_many_list_items");
-  expect(issue.path).toEqual(["blocks", 1, "data", "list"]);
+  expect(issue?.code).toBe("too_many_list_items");
+  expect(issue?.path).toEqual(["blocks", 1, "data", "list"]);
   const defaults = Object.fromEntries(
     Array.from({ length: 6 }, (_, i) => [
       "list" + i,
       field.list({ item: field.text(), defaultValue: Array(100).fill("x") }),
     ]),
   );
-  expect(issueFrom(() => validateModelFields(defaults, {}, "draft")).code).toBe(
+  expect(issueFrom(() => validateModelFields(defaults, {}, "draft"))?.code).toBe(
     "too_many_list_items",
   );
 });

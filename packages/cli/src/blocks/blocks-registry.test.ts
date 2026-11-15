@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy command fixtures, filesystem helpers and recorded adapter calls.
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,15 +5,25 @@ import { pathToFileURL } from "node:url";
 import { afterEach, expect, test } from "vitest";
 import { BlockError, dependencyClosure, loadRegistry } from "./blocks-registry.js";
 
-const roots = [];
+const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-async function registry(items) {
+async function registry(
+  items: {
+    name: string;
+    dependencies?: string[];
+    missingFile?: boolean;
+    manifest?: Record<string, unknown>;
+  }[],
+) {
   const root = await mkdtemp(join(tmpdir(), "lace-registry-"));
   roots.push(root);
-  const index = { schemaVersion: 1, items: [] };
+  const index: {
+    schemaVersion: number;
+    items: { name: string; framework: string; manifest: string }[];
+  } = { schemaVersion: 1, items: [] };
   for (const item of items) {
     const manifest = {
       schemaVersion: 1,
@@ -87,7 +95,7 @@ test("registry accepts CSS companions and rejects ambiguous/unsafe roles", async
   const css = { source: "ListLayout.css", target: "ListLayout.css", role: "stylesheet" };
   const root = await registry([{ name: "cards", manifest: { files: [component, css] } }]);
   await writeFile(new URL("astro/cards/ListLayout.css", root), "@layer lace-layout {}\n");
-  expect((await loadRegistry(root)).items.get("astro/cards").files.map((f) => f.role)).toEqual([
+  expect((await loadRegistry(root)).items.get("astro/cards")!.files.map((f) => f.role)).toEqual([
     "component",
     "stylesheet",
   ]);

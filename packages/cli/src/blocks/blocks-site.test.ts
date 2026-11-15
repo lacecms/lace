@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy command fixtures, filesystem helpers and recorded adapter calls.
 import { readFile } from "node:fs/promises";
 import { expect, test } from "vitest";
 import {
@@ -24,7 +22,7 @@ const builtIns = [
 ];
 const builtInEntries = builtIns.map((type) => ({
   type,
-  component: `src/components/lace/${type[0].toUpperCase()}${type.slice(1)}Block.astro`,
+  component: `src/components/lace/${type.charAt(0).toUpperCase()}${type.slice(1)}Block.astro`,
 }));
 
 test("lock serialization reproduces the committed starter lock", async () => {

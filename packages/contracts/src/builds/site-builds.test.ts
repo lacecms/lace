@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import * as v from "valibot";
 import { expect, test } from "vitest";
 
@@ -80,7 +78,7 @@ test("admin build DTOs carry tracking stage, last check and tracking reasons", a
   const base = {
     id: "build",
     reason: "publication",
-    status: "running",
+    status: "running" as const,
     targetVersion: 4,
     requestedBy: "admin",
     requestedAt: "2026-10-05T00:00:00.000Z",

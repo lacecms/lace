@@ -26,8 +26,10 @@ unit and is not exported, directly or transitively, from its public index.
 Public components retain their folder, test, and index; layer direction and
 cross-slice restrictions remain unchanged (architecture §17).
 Other flat packages adopt the convention during RF4–RF6 or when adding a second
-concern. The boundary checker counts production source physical lines, excluding
-tests and test-support. Oversized legacy files have a committed size baseline:
+concern. The boundary checker counts physical lines in production source and tests under
+workspace members' `src/`, including type tests and JavaScript tests. Non-test
+helpers under `src/test-support/` and tests outside those roots are excluded;
+the standalone OAuth/MCP compatibility fixture keeps its existing commands. Oversized legacy files have a committed size baseline:
 they may shrink but never grow, and missing or within-limit entries fail so a
 split must remove its baseline entry in the same change.
 

@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type recursive descriptor fixtures, malformed runtime inputs and table tuples.
 import { test, expect } from "vitest";
 import { canonicalizeJson, sha256CanonicalJson } from "./canonical-json.js";
 

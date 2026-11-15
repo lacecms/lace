@@ -69,8 +69,8 @@ export async function openImportApi(
   });
   const requests: string[] = [];
   let failAfter: ((request: string, requests: string[]) => boolean) | undefined;
-  const fetch = async (url: string | URL, init: RequestInit = {}) => {
-    const path = new URL(url).pathname;
+  const fetch: typeof globalThis.fetch = async (url, init = {}) => {
+    const path = new URL(url instanceof Request ? url.url : url).pathname;
     requests.push(`${init.method ?? "GET"} ${path}`);
     if (failAfter !== undefined && failAfter(`${init.method ?? "GET"} ${path}`, requests))
       throw new Error("simulated network failure");
@@ -100,7 +100,7 @@ export async function openImportApi(
     requests,
     session,
     runtime,
-    failWhen(predicate: (request: string, requests: string[]) => boolean) {
+    failWhen(predicate: ((request: string, requests: string[]) => boolean) | undefined) {
       failAfter = predicate;
     },
     async close() {

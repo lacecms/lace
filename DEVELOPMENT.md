@@ -261,6 +261,11 @@ tests open runtimes with `openNodeTestRuntime` from
 `@lacecms/platform-node/test`. A new `.mjs` module or non-packaged JavaScript
 test under `src/` fails `pnpm lint` unless
 `scripts/javascript-source-allowlist.json` names it with a reason.
+The shared `scripts/oversized-source-baseline.json` enforces a 1,000-physical-line
+ceiling on workspace `src/` production sources and tests, including type tests
+and JavaScript tests. Non-test `src/test-support/` helpers and tests outside these
+roots are excluded; the standalone OAuth/MCP fixture retains its compatibility
+commands. Baseline entries may not grow and must be removed when stale.
 Source `test` results are cached per dependency closure; declare any other
 repository file a test reads as a package-scoped input in `turbo.json`.
 

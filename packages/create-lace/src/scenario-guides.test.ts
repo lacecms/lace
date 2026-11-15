@@ -1,12 +1,11 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy generated-project fixtures and filesystem helper parameters.
+import { object, parsedObject } from "./test-support/json.js";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { generateProject, runCli } from "./index.js";
 
-const roots = [];
+const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
@@ -32,28 +31,28 @@ const VARIANTS = [
   ["existing-cloudflare", { mode: "existing", path: ".." }, true],
   ["none", { mode: "none" }, false],
   ["none-cloudflare", { mode: "none" }, true],
-];
+] as const;
 
-const GUIDES = ["docs/lace-compose-dev.md", "docs/lace-compose-production.md"];
+const GUIDES = ["docs/lace-compose-dev.md", "docs/lace-compose-production.md"] as const;
 
 /** GitHub-style heading anchors of every heading level. */
-function anchors(markdown) {
+function anchors(markdown: string) {
   return [...markdown.matchAll(/^#{1,6} (.+)$/gmu)].map((match) =>
-    match[1]
+    match[1]!
       .toLowerCase()
       .replace(/[^\p{L}\p{N} _-]/gu, "")
       .replaceAll(" ", "-"),
   );
 }
 
-function fencedLines(markdown) {
+function fencedLines(markdown: string) {
   return [...markdown.matchAll(/```bash\n([\s\S]*?)\n```/gu)].flatMap((match) =>
-    match[1].split("\n"),
+    match[1]!.split("\n"),
   );
 }
 
 /** Fails with the guide and step when `steps` do not appear in order in its fenced commands. */
-function expectOrder(name, markdown, steps) {
+function expectOrder(name: string, markdown: string, steps: readonly string[]) {
   const fenced = `${fencedLines(markdown).join("\n")}\n`;
   let from = 0;
   for (const step of steps) {
@@ -68,12 +67,16 @@ test.each(VARIANTS)(
   async (name, site, cloudflare) => {
     const outer = await parent();
     const project = await generateProject({ target: join(outer, "cms"), site, cloudflare });
-    const expected = cloudflare ? [...GUIDES, "docs/lace-cloudflare.md"] : GUIDES;
+    const expected: readonly string[] = cloudflare
+      ? [...GUIDES, "docs/lace-cloudflare.md"]
+      : GUIDES;
     for (const guide of [...GUIDES, "docs/lace-cloudflare.md"])
       expect(project.manifest.files[guide], `${name}: ${guide}`).toEqual(
         expected.includes(guide) ? { owner: "managed", sha256: expect.any(String) } : undefined,
       );
-    const { scripts } = JSON.parse(await readFile(join(project.path, "package.json"), "utf8"));
+    const scripts = object(
+      parsedObject(await readFile(join(project.path, "package.json"), "utf8")).scripts,
+    );
     const documents = [
       "README.md",
       ...(await readdir(join(project.path, "docs")))
@@ -82,7 +85,8 @@ test.each(VARIANTS)(
     ];
     for (const document of documents) {
       const text = await readFile(join(project.path, document), "utf8");
-      for (const [, link] of text.matchAll(/\]\(([^)\s]+)\)/gu)) {
+      for (const [, matchLink] of text.matchAll(/\]\(([^)\s]+)\)/gu)) {
+        const link = matchLink!;
         if (/^[a-z]+:/u.test(link)) continue;
         const [path, fragment] = link.split("#");
         const file = path
@@ -100,8 +104,9 @@ test.each(VARIANTS)(
       }
       for (const line of fencedLines(text)) {
         const [tool, command] = line.split(" ");
-        if (tool !== "pnpm" || ["install", "exec", "create", "--dir"].includes(command)) continue;
-        expect(scripts, `${name}: ${document} runs "${line}"`).toHaveProperty(command);
+        if (tool !== "pnpm" || ["install", "exec", "create", "--dir"].includes(command ?? ""))
+          continue;
+        expect(scripts, `${name}: ${document} runs "${line}"`).toHaveProperty(command!);
       }
       expect(text, `${name}: ${document}`).not.toMatch(/>=24\.12\.0 <25|>=12 <13/u);
     }
@@ -111,7 +116,7 @@ test.each(VARIANTS)(
     for (const [guide, text] of [
       [GUIDES[0], development],
       [GUIDES[1], production],
-    ]) {
+    ] as const) {
       expect(text, `${name}: ${guide}`).toContain(
         {
           starter: "Site mode: **starter**",
@@ -222,13 +227,18 @@ test.each([false, true])(
     const target = join(outer, "cms");
     await mkdir(target);
     await writeFile(join(target, "README.md"), "existing\n");
-    const output = [];
+    const output: string[] = [];
     expect(
       await runCli(
         ["init", ".", "--starter", ...(cloudflare ? ["--cloudflare"] : [])],
         target,
-        { write: (value) => output.push(value) },
-        { write: () => {} },
+        {
+          write: (value) => {
+            output.push(String(value));
+            return true;
+          },
+        },
+        { write: () => true },
       ),
     ).toBe(0);
     const text = output.join("");
@@ -241,13 +251,18 @@ test.each([false, true])(
 
 test("existing-site generation from the site's CMS directory never rewrites the site README", async () => {
   const outer = await parent();
-  const output = [];
+  const output: string[] = [];
   expect(
     await runCli(
       ["create", "cms", "--existing-site", ".."],
       outer,
-      { write: (value) => output.push(value) },
-      { write: () => {} },
+      {
+        write: (value) => {
+          output.push(String(value));
+          return true;
+        },
+      },
+      { write: () => true },
       { interactive: false },
     ),
   ).toBe(0);

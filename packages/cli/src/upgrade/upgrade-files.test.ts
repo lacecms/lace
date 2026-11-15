@@ -1,10 +1,8 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy command fixtures, filesystem helpers and recorded adapter calls.
 import { mkdir, symlink, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { describe, it, expect } from "vitest";
-import { directory } from "../test-support/upgrade-fixtures.ts";
+import { directory } from "../test-support/upgrade-fixtures.js";
 import {
   inspectDestination,
   inspectRoots,
@@ -39,7 +37,7 @@ describe("safe upgrade paths and metadata", () => {
     expect(await readFile(join(root, "file"), "utf8")).toBe("unexpected");
   });
   it("rejects corrupt/newer metadata and unsafe or user-owned mutation records", () => {
-    const pointer = { schemaVersion: 1, id: randomUUID(), phase: "applying" };
+    const pointer = { schemaVersion: 1, id: randomUUID(), phase: "applying" } as const;
     const old = {
       schemaVersion: 1,
       templateVersion: "1",

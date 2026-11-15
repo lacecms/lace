@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import { unixMilliseconds } from "@lacecms/domain";
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
@@ -18,13 +16,14 @@ describe("media metadata contracts", async () => {
     id: "media-1",
     mimeType: "image/png",
     size: 12,
-    status: "active",
+    status: "active" as const,
+    tags: [],
     updatedAt: unixMilliseconds(1_791_647_444_998),
     usageCount: 0,
     width: 800,
   };
   const url = "https://cms.example/api/v1/public/media/media-1";
-  const issuePaths = (input) => {
+  const issuePaths = (input: unknown) => {
     const result = v.safeParse(updateMediaMetadataRequestSchema, input);
     return result.success
       ? []

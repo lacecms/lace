@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy command fixtures, filesystem helpers and recorded adapter calls.
 import { describe, expect, test } from "vitest";
 import {
   collectReferences,
@@ -19,7 +17,7 @@ const modelFields = {
     item: { type: "group", fields: { image: { type: "media" }, href: { type: "url" } } },
   },
 };
-const blockFields = (type) =>
+const blockFields = (type: string) =>
   type === "image" ? { media: { type: "media" }, link: { type: "url" } } : undefined;
 const keys = {
   media: new Set(["hero"]),
@@ -30,7 +28,9 @@ const keys = {
   ]),
 };
 
-const entry = (overrides = {}) => ({
+const entry = (
+  overrides: Partial<import("./import-format.js").ImportEntry> = {},
+): import("./import-format.js").ImportEntry => ({
   key: "home",
   model: "home",
   title: "Home",
@@ -41,7 +41,7 @@ const entry = (overrides = {}) => ({
 
 describe("package references", () => {
   test("misplaced, unknown, global and malformed references are located", () => {
-    const issues = [];
+    const issues: import("./import-format.js").ImportIssue[] = [];
     const references = collectReferences(
       entry({
         fields: {
@@ -83,7 +83,7 @@ describe("package references", () => {
   });
 
   test("hidden blocks and SEO are not delivered links", () => {
-    const issues = [];
+    const issues: import("./import-format.js").ImportIssue[] = [];
     const references = collectReferences(
       entry({
         fields: { related: { $entry: "contact" } },

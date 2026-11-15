@@ -1,8 +1,9 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable media fixtures, partial storage adapters and invalid multipart/query inputs.
+import * as v from "valibot";
+import { mediaListSchema, adminContentEntrySchema } from "@lacecms/contracts";
+import type { Actor } from "@lacecms/domain";
 import { expect, test } from "vitest";
 
-import { actorId, unixMilliseconds } from "@lacecms/domain";
+import { actorId, mediaId, unixMilliseconds } from "@lacecms/domain";
 
 import {
   admin,
@@ -28,14 +29,9 @@ test("bodyless media lifecycle requests reach the use case without bypassing bod
   for (const [method, path] of [
     ["DELETE", "/api/v1/admin/media/missing"],
     ["POST", "/api/v1/admin/media/missing/retry-deletion"],
-  ]) {
-    const response = await app.fetch(
-      new Request(`https://lace.test${path}`, {
-        body: emptyBody(),
-        duplex: "half",
-        method,
-      }),
-    );
+  ] as const) {
+    const init: RequestInit & { duplex: "half" } = { body: emptyBody(), duplex: "half", method };
+    const response = await app.fetch(new Request(`https://lace.test${path}`, init));
     expect(response.status).toBe(422);
     expect((await response.json()).error.code).toBe("CONTENT_INVALID_STATE");
   }
@@ -159,15 +155,15 @@ test("keeps media uploads, previews, and draft-only public reads separate", asyn
 });
 
 test("media binaries carry immutable validators and answer 304 only after eligibility", async () => {
-  let current = admin;
+  let current: Actor | null = admin;
   const { app, storage } = await fixture({ maxBodyBytes: 8192, resolveActor: async () => current });
-  const reads = [];
+  const reads: string[] = [];
   const get = storage.get.bind(storage);
   storage.get = async (key) => {
     reads.push(key);
     return get(key);
   };
-  const request = (path, headers = {}) =>
+  const request = (path: string, headers: HeadersInit = {}) =>
     app.fetch(new Request(`https://lace.test${path}`, { headers }));
   const form = new FormData();
   form.append(
@@ -229,10 +225,12 @@ test("media binaries carry immutable validators and answer 304 only after eligib
   }
 
   const detail = await request(`/api/v1/admin/media/${cover.id}`);
+  const detailTag = detail.headers.get("etag");
+  if (!detailTag) throw new Error("Expected media ETag");
   const edited = await app.fetch(
     new Request(`https://lace.test/api/v1/admin/media/${cover.id}`, {
       body: JSON.stringify({ alt: "A new description" }),
-      headers: { "content-type": "application/json", "if-match": detail.headers.get("etag") },
+      headers: { "content-type": "application/json", "if-match": detailTag },
       method: "PATCH",
     }),
   );
@@ -289,7 +287,8 @@ test("accepts an authorized retry only for terminal media deletion failures", as
     createdAt: unixMilliseconds(1),
     createdBy: actorId("admin"),
     filename: "failed.png",
-    id: "failed-media",
+    id: mediaId("failed-media"),
+    tags: [],
     mimeType: "image/png",
     size: 1,
     status: "delete_failed",
@@ -319,7 +318,7 @@ test("accepts an authorized retry only for terminal media deletion failures", as
 test("lists media with filters and bound cursors and exposes details with usage", async () => {
   const { app, store } = await fixture();
   store.setActorDisplayNames({ admin: "Ada" });
-  const upload = async (filename) => {
+  const upload = async (filename: string) => {
     const form = new FormData();
     form.append(
       "file",
@@ -341,8 +340,10 @@ test("lists media with filters and bound cursors and exposes details with usage"
     width: 1,
   });
 
-  const ids = async (query) =>
-    (await json(app, `/api/v1/admin/media?${query}`)).body.items.map((item) => item.id);
+  const ids = async (query: string) =>
+    v
+      .parse(mediaListSchema, (await json(app, `/api/v1/admin/media?${query}`)).body)
+      .items.map((item) => item.id);
   expect(await ids("q=%20COVER%20")).toEqual([cover.id]);
   expect(await ids("type=image/png&sort=filename")).toEqual([banner.id, cover.id]);
   expect(await ids("type=image/jpeg")).toEqual([]);
@@ -460,7 +461,7 @@ test("removing a media block from a draft releases the media only after republic
   );
   expect(created.response.status).toBe(201);
   const entryId = created.body.id;
-  const publish = (expectedRevision) =>
+  const publish = (expectedRevision: number) =>
     json(
       app,
       `/api/v1/admin/entries/${entryId}/publish`,
@@ -553,7 +554,7 @@ test("detach=drafts clears draft-only usage before deletion and rejects other va
     }),
   );
   expect(created.response.status).toBe(201);
-  const remove = (query) =>
+  const remove = (query: string) =>
     json(app, `/api/v1/admin/media/${image.id}${query}`, { method: "DELETE" });
   for (const query of ["?detach=all", "?detach=drafts&detach=drafts"]) {
     expect(await remove(query)).toMatchObject({
@@ -571,10 +572,13 @@ test("detach=drafts clears draft-only usage before deletion and rejects other va
     body: { id: image.id, status: "deleting", usageCount: 0 },
     response: { status: 202 },
   });
-  const entry = (await json(app, `/api/v1/admin/entries/${created.body.id}`)).body.draft;
+  const entry = v.parse(
+    adminContentEntrySchema,
+    (await json(app, `/api/v1/admin/entries/${created.body.id}`)).body,
+  ).draft;
   expect(entry).toMatchObject({ fields: { photos: [other.id] }, revision: 2 });
   expect(entry.fields).not.toHaveProperty("cover");
-  expect(entry.seo.image).toBeNull();
+  expect(entry.seo?.image).toBeNull();
   expect(entry.blocks.map((block) => block.data)).toEqual([
     {},
     { images: [{ caption: "One" }, { image: other.id }] },
@@ -584,10 +588,10 @@ test("detach=drafts clears draft-only usage before deletion and rejects other va
 });
 
 test("media metadata route updates with If-Match, returns ETags, and queues builds for published media", async () => {
-  let current = admin;
-  const viewer = { id: actorId("viewer"), role: "viewer" };
+  let current: Actor | null = admin;
+  const viewer: Actor = { id: actorId("viewer"), role: "viewer" };
   const { app, store } = await fixture({ maxBodyBytes: 8192, resolveActor: async () => current });
-  const upload = async (filename) => {
+  const upload = async (filename: string) => {
     const form = new FormData();
     form.append(
       "file",
@@ -599,13 +603,13 @@ test("media metadata route updates with If-Match, returns ETags, and queues buil
     );
     return created.json();
   };
-  const patch = (id, body, ifMatch) =>
+  const patch = (id: string, body: unknown, ifMatch?: string | null) =>
     app.fetch(
       new Request(`https://lace.test/api/v1/admin/media/${id}`, {
         body: JSON.stringify(body),
         headers: {
           "content-type": "application/json",
-          ...(ifMatch === undefined ? {} : { "if-match": ifMatch }),
+          ...(ifMatch == null ? {} : { "if-match": ifMatch }),
         },
         method: "PATCH",
       }),
@@ -672,12 +676,16 @@ test("media metadata route updates with If-Match, returns ETags, and queues buil
     [{ title: "x" }, nextTag, "/title"],
     [{ alt: "a\nb" }, nextTag, "/alt"],
     [{}, nextTag, ""],
-  ]) {
+  ] as const) {
     const refused = await patch(cover.id, body, ifMatch);
     expect(refused.status, JSON.stringify(body)).toBe(422);
     const envelope = await refused.json();
     expect(envelope.error.code).toBe("VALIDATION_FAILED");
-    expect(envelope.error.details.issues.map((issue) => issue.path)).toContain(pointer);
+    expect(envelope).toMatchObject({
+      error: {
+        details: { issues: expect.arrayContaining([expect.objectContaining({ path: pointer })]) },
+      },
+    });
   }
   expect((await patch("missing", { alt: "x" }, nextTag)).status).toBe(404);
 
@@ -705,7 +713,7 @@ test("media metadata route updates with If-Match, returns ETags, and queues buil
 });
 
 test("media tag REST supports upload, replacement, filtering, catalog and precise refusal", async () => {
-  let current = admin;
+  let current: Actor | null = admin;
   const { app, storage } = await fixture({ resolveActor: async () => current });
   let storedObjects = 0;
   const put = storage.put.bind(storage);
@@ -713,7 +721,7 @@ test("media tag REST supports upload, replacement, filtering, catalog and precis
     storedObjects++;
     return put(input);
   };
-  const upload = async (tags, tagFile = false) => {
+  const upload = async (tags: string[], tagFile = false) => {
     const form = new FormData();
     form.append(
       "file",
@@ -744,7 +752,9 @@ test("media tag REST supports upload, replacement, filtering, catalog and precis
   expect(catalog.response.status).toBe(200);
   expect(catalog.body.items).toEqual([{ tag: "birch", count: 2 }]);
   expect(
-    (await json(app, "/api/v1/admin/media?tag=birch&tag=ibiza")).body.items.map((x) => x.id),
+    v
+      .parse(mediaListSchema, (await json(app, "/api/v1/admin/media?tag=birch&tag=ibiza")).body)
+      .items.map((x) => x.id),
   ).toEqual([item.id]);
   const first = (await json(app, "/api/v1/admin/media?tag=birch&limit=1")).body;
   expect(
@@ -756,10 +766,12 @@ test("media tag REST supports upload, replacement, filtering, catalog and precis
   expect(bad.body.error.details.issues[0].path).toBe("/tag/1");
   current = admin;
   const detail = await app.fetch(new Request(`https://lace.test/api/v1/admin/media/${item.id}`));
+  const detailTag = detail.headers.get("etag");
+  if (!detailTag) throw new Error("Expected media ETag");
   const changed = await app.fetch(
     new Request(`https://lace.test/api/v1/admin/media/${item.id}`, {
       method: "PATCH",
-      headers: { "content-type": "application/json", "if-match": detail.headers.get("etag") },
+      headers: { "content-type": "application/json", "if-match": detailTag },
       body: JSON.stringify({ tags: ["Project-2026"] }),
     }),
   );

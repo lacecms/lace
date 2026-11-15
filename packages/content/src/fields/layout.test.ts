@@ -1,19 +1,22 @@
-// @ts-nocheck
-// TODO(rf2): Type recursive descriptor fixtures, malformed runtime inputs and table tuples.
 import { describe, it, expect, test } from "vitest";
 import { field } from "./builders.js";
+import type { FieldDefinition, FormLayout } from "./definitions.js";
 import { toFieldMetadata } from "./metadata.js";
 import { defineBlock, toBlockMetadata } from "../blocks/definition.js";
 
 describe("visual form layout metadata", () => {
   const fields = { title: field.text(), body: field.textarea() };
-  const layout = { mode: "tabs", groups: [{ key: "main", label: "Main", fields: ["body"] }] };
+  const layout = {
+    mode: "tabs" as const,
+    groups: [{ key: "main", label: "Main", fields: ["body" as "body" | "title"] }],
+  };
   it("retains detached recursive layouts without changing values", () => {
     const input = structuredClone(layout);
     const group = field.group({ fields, layout: input });
+    if (!input.groups[0]) throw new Error("Expected layout group");
     input.groups[0].fields[0] = "title";
-    expect(toFieldMetadata(group).layout).toEqual(layout);
-    expect(field.list({ item: group }).item.layout).toEqual(layout);
+    expect(toFieldMetadata(group)).toMatchObject({ layout });
+    expect(field.list({ item: group }).item).toMatchObject({ layout });
     const block = defineBlock({
       type: "layoutTest",
       version: 1,
@@ -26,7 +29,7 @@ describe("visual form layout metadata", () => {
       },
     });
     expect(toBlockMetadata(block).layout).toEqual(layout);
-    expect(Object.isFrozen(group.layout.groups[0].fields)).toBe(true);
+    expect(Object.isFrozen(group.layout.groups[0]?.fields)).toBe(true);
   });
   it.each([
     { mode: "other", groups: layout.groups },
@@ -39,10 +42,15 @@ describe("visual form layout metadata", () => {
     { mode: "tabs", groups: [{ key: "main", label: "Main", fields: ["body", "body"] }] },
     { mode: "tabs", groups: [...layout.groups, ...layout.groups] },
   ])("rejects invalid placement %j", (invalid) => {
-    expect(() => field.group({ fields, layout: invalid })).toThrow();
+    // Intentionally pass forged layout input to runtime validation.
+    expect(() =>
+      field.group({ fields, layout: invalid as FormLayout<"title" | "body"> }),
+    ).toThrow();
   });
   it("rejects layout on scalar/list descriptors and cross-owner settings", () => {
-    expect(() => field.text({ layout })).toThrow();
+    // Exercise rejection of unsupported properties at the runtime boundary.
+    const scalarOptions = { layout, required: false };
+    expect(() => field.text(scalarOptions)).toThrow();
     expect(() => field.list({ item: field.text(), layout })).toThrow();
     expect(() =>
       defineBlock({ type: "layoutTest", version: 1, fields, settingsLayout: layout }),
@@ -51,7 +59,7 @@ describe("visual form layout metadata", () => {
 });
 
 test("layouts survive the maximum six-container branch", () => {
-  const nested = (remaining) =>
+  const nested = (remaining: number): FieldDefinition =>
     field.list({
       item: field.group({
         fields: { child: remaining === 1 ? field.text() : nested(remaining - 1) },
@@ -59,5 +67,7 @@ test("layouts survive the maximum six-container branch", () => {
       }),
     });
   const root = toFieldMetadata(nested(3));
-  expect(root.item.fields.child.item.fields.child.item.layout.groups[0].fields).toEqual(["child"]);
+  const leaf = { layout: { groups: [{ fields: ["child"] }] } };
+  const middle = { item: { fields: { child: { item: leaf } } } };
+  expect(root).toMatchObject({ item: { fields: { child: middle } } });
 });

@@ -1,12 +1,10 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy command fixtures, filesystem helpers and recorded adapter calls.
 import { writeFile, readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { hostname } from "node:os";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { project } from "../test-support/upgrade-fixtures.ts";
+import { project } from "../test-support/upgrade-fixtures.js";
 import { acquireUpgradeLock } from "./upgrade-lock.js";
 
 describe("upgrade mutation locking", () => {

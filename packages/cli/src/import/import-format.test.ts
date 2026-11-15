@@ -1,12 +1,11 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy command fixtures, filesystem helpers and recorded adapter calls.
 import { describe, expect, test } from "vitest";
-import { modelRuleIssues, parseImportPackage, pointer } from "./import-format.js";
+import { ImportError, modelRuleIssues, parseImportPackage, pointer } from "./import-format.js";
 
-function issues(value) {
+function issues(value: unknown) {
   try {
     parseImportPackage(value);
   } catch (error) {
+    if (!(error instanceof ImportError)) throw error;
     expect(error.code).toBe("IMPORT_INVALID");
     return error.issues.map((issue) => issue.pointer);
   }
@@ -75,7 +74,7 @@ describe("import format v1", () => {
   });
 
   test("model rules require collection slugs and refuse global titles", () => {
-    const models = new Map([
+    const models = new Map<string, import("./import-format.js").ImportModelFacts>([
       ["posts", { key: "posts", kind: "collection", seo: false }],
       ["about", { key: "about", kind: "page", seo: true }],
       ["settings", { key: "settings", kind: "global", seo: false }],
@@ -105,7 +104,7 @@ describe("import format v1", () => {
   });
 
   test("route-less collection entries refuse slugs and need no distinct slug", () => {
-    const models = new Map([
+    const models = new Map<string, import("./import-format.js").ImportModelFacts>([
       ["quotes", { key: "quotes", kind: "collection", routeLess: true, seo: false }],
     ]);
     const parsed = parseImportPackage(

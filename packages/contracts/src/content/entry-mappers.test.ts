@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import { field } from "@lacecms/content";
 import { unixMilliseconds } from "@lacecms/domain";
 import * as v from "valibot";
@@ -19,10 +17,11 @@ test("shared content projectors preserve metadata, admin attribution and list ti
     toAdminContentEntryDto(entry, projection.updatedBy),
   );
   const model = {
-    kind: "collection",
+    kind: "collection" as const,
     key: "posts",
     route: "/posts/:slug",
     blocks: [],
+    blockDefinitions: [],
     version: 1,
     fields: { nested: field.group({ fields: { items: field.list({ item: field.text() }) } }) },
   };
@@ -47,6 +46,6 @@ test("shared content projectors preserve metadata, admin attribution and list ti
     ],
     totals: { all: 1, draft: 1, changed: 0, published: 0 },
   });
-  expect(page.items[0].updatedAt).toBe("1970-01-01T00:00:00.001Z");
+  expect(page.items[0]?.updatedAt).toBe("1970-01-01T00:00:00.001Z");
   expect(v.safeParse(contentEntryListSchema, page).success).toBe(true);
 });

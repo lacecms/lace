@@ -64,6 +64,9 @@ before 1,000 lines. No subdirectory barrels or module cycles (including types);
 document directory direction at the package entry. Tests sit beside modules,
 shared helpers in `src/test-support/`. Existing packages adopt this in RF4–RF6
 or when adding a second concern; admin retains its layer/slice structure.
+The 1,000-physical-line ceiling covers workspace `src/` production sources and
+tests, including type and JavaScript tests; non-test `test-support/` helpers and
+tests outside workspace source roots (including the OAuth/MCP fixture) are excluded.
 Remove split files from `scripts/oversized-source-baseline.json`; never grow
 baselined files. The boundary checker also enforces the directory rules in
 `scripts/source-layout.json` (add a package when it adopts the layout; list

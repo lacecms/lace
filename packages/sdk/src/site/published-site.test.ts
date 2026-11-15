@@ -1,5 +1,9 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable export fixtures, scripted transports and invalid loader inputs.
+import type {
+  BuildExportDto,
+  PublicBlockDto,
+  PublicEntryDto,
+  PublicMediaDto,
+} from "@lacecms/contracts";
 import { expect, test } from "vitest";
 import { LaceContractError, LaceHttpError, LaceSdkError } from "../client/errors.js";
 import { LacePublishedSiteError, createPublishedSiteLoader } from "./published-site.js";
@@ -11,7 +15,29 @@ const environment = Object.freeze({
   LACE_BUILD_TOKEN: token,
 });
 
-function exportEntry({ id, modelKey = "posts", path, slug, blocks = [], fields = {} }) {
+type WireBlock = Omit<PublicBlockDto, "settings"> & {
+  settings?: PublicBlockDto["settings"];
+  hidden?: unknown;
+};
+function required<T>(value: T | null | undefined): T {
+  if (value == null) throw new Error("Expected fixture value");
+  return value;
+}
+function exportEntry({
+  id,
+  modelKey = "posts",
+  path,
+  slug,
+  blocks = [],
+  fields = {},
+}: {
+  id: string;
+  modelKey?: string;
+  path: string;
+  slug?: string;
+  blocks?: WireBlock[];
+  fields?: PublicEntryDto["fields"];
+}) {
   return {
     blocks,
     fields,
@@ -25,11 +51,15 @@ function exportEntry({ id, modelKey = "posts", path, slug, blocks = [], fields =
   };
 }
 
-function block(key, position, data = { heading: key }) {
+function block(
+  key: string,
+  position: number,
+  data: PublicBlockDto["data"] = { heading: key },
+): PublicBlockDto {
   return { data, key, position, schemaVersion: 1, settings: {}, type: "hero" };
 }
 
-function mediaItem(id, overrides = {}) {
+function mediaItem(id: string, overrides: Partial<PublicMediaDto> = {}): PublicMediaDto {
   return {
     alt: null,
     caption: null,
@@ -43,7 +73,7 @@ function mediaItem(id, overrides = {}) {
   };
 }
 
-function buildExport(version, entries, media = {}) {
+function buildExport(version: number, entries: unknown[], media: BuildExportDto["media"] = {}) {
   return {
     entries,
     formatVersion: 2,
@@ -54,23 +84,28 @@ function buildExport(version, entries, media = {}) {
   };
 }
 
-function exportResponse(value, etag = `"${value.version}"`) {
+function exportResponse<T extends { version: number }>(value: T, etag = `"${value.version}"`) {
   return Response.json(value, { headers: { etag } });
 }
 
-function notModified(etag) {
+function notModified(etag: string) {
   return new Response(null, { headers: { etag }, status: 304 });
 }
 
-function errorResponse(status, code = "AUTHORIZATION_DENIED") {
+function errorResponse(status: number, code = "AUTHORIZATION_DENIED") {
   return Response.json({ error: { code, message: "Denied." } }, { status });
 }
 
-function scriptedFetch(responses) {
-  const requests = [];
+function scriptedFetch(
+  responses: (Response | Error | (() => Response | Promise<Response>) | undefined)[],
+) {
+  const requests: { headers: Headers; url: string }[] = [];
   return {
-    fetch: async (url, init) => {
-      requests.push({ headers: new Headers(init.headers), url: url.toString() });
+    fetch: async (url: string | URL | Request, init?: RequestInit) => {
+      requests.push({
+        headers: new Headers(init?.headers),
+        url: url instanceof Request ? url.url : url.toString(),
+      });
       const next = responses.shift();
       if (next === undefined) throw new Error("Unexpected request.");
       if (next instanceof Error) throw next;
@@ -81,8 +116,10 @@ function scriptedFetch(responses) {
 }
 
 function deferred() {
-  let resolve;
-  const promise = new Promise((done) => {
+  let resolve: () => void = () => {
+    throw new Error("Promise not initialized");
+  };
+  const promise = new Promise<void>((done) => {
     resolve = done;
   });
   return { promise, resolve };
@@ -114,10 +151,11 @@ const homeExport = buildExport(
   },
 );
 
-async function captureError(promise) {
+async function captureError(promise: Promise<unknown>): Promise<Error> {
   try {
     await promise;
   } catch (error) {
+    if (!(error instanceof Error)) throw error;
     return error;
   }
   throw new Error("Expected the promise to reject.");
@@ -145,7 +183,7 @@ test.each([
   );
   expect(error).toBeInstanceOf(LacePublishedSiteError);
   expect(error).toBeInstanceOf(LaceSdkError);
-  expect(error.code).toBe("missing_configuration");
+  expect(error).toMatchObject({ code: "missing_configuration" });
   expect(error.message).toContain(setting);
   expect(transport.requests).toHaveLength(0);
 });
@@ -160,10 +198,10 @@ test("explicit values take precedence over the environment record", async () => 
     publicBaseUrl: "https://media.example.test",
     token: "explicit-token",
   })();
-  expect(transport.requests[0].url).toBe(
+  expect(transport.requests[0]?.url).toBe(
     "https://explicit.example.test/cms/api/v1/public/build-export",
   );
-  expect(transport.requests[0].headers.get("authorization")).toBe("Bearer explicit-token");
+  expect(transport.requests[0]?.headers.get("authorization")).toBe("Bearer explicit-token");
   expect(site.mediaUrl("hero-media")).toBe(
     "https://media.example.test/api/v1/public/media/hero-media",
   );
@@ -177,8 +215,8 @@ test("media URLs keep the export URL without a public origin and never carry the
   })();
   const url = site.mediaUrl("hero-media");
   expect(url).toBe("https://public.example.test/lace/api/v1/public/media/hero-media");
-  expect(site.media("hero-media").url).toBe(url);
-  expect(site.byPath("/").media("hero-media").url).toBe(url);
+  expect(required(site.media("hero-media")).url).toBe(url);
+  expect(required(required(site.byPath("/")).media("hero-media")).url).toBe(url);
   // An ID the export does not resolve falls back to the API base URL.
   expect(site.mediaUrl("unknown")).toBe(
     "https://api.example.test/lace/api/v1/public/media/unknown",
@@ -192,8 +230,8 @@ test("a configured public origin rewrites resolved media URLs", async () => {
     fetch: scriptedFetch([exportResponse(homeExport)]).fetch,
   })();
   const expected = "https://media.example.test/base/api/v1/public/media/hero-media";
-  expect(site.media("hero-media").url).toBe(expected);
-  expect(site.image("hero-media").url).toBe(expected);
+  expect(required(site.media("hero-media")).url).toBe(expected);
+  expect(required(site.image("hero-media")).url).toBe(expected);
   expect(site.mediaUrl("hero-media")).toBe(expected);
 });
 
@@ -206,15 +244,19 @@ test("resolved media carry a token-free build source under the API base URL", as
     },
     fetch: scriptedFetch([exportResponse(homeExport)]).fetch,
   })();
-  expect(site.media("hero-media").url).toBe(
+  expect(required(site.media("hero-media")).url).toBe(
     "https://cms.example.com/api/v1/public/media/hero-media",
   );
-  expect(site.media("hero-media").sourceUrl).toBe(
+  expect(required(site.media("hero-media")).sourceUrl).toBe(
     "http://api:8787/lace/api/v1/public/media/hero-media",
   );
-  expect(site.image("hero-media").sourceUrl).toBe(site.media("hero-media").sourceUrl);
-  expect(site.byPath("/").media("hero-media").sourceUrl).toBe(site.media("hero-media").sourceUrl);
-  expect(site.media("hero-media").sourceUrl).not.toContain(token);
+  expect(required(site.image("hero-media")).sourceUrl).toBe(
+    required(site.media("hero-media")).sourceUrl,
+  );
+  expect(required(required(site.byPath("/")).media("hero-media")).sourceUrl).toBe(
+    required(site.media("hero-media")).sourceUrl,
+  );
+  expect(required(site.media("hero-media")).sourceUrl).not.toContain(token);
 });
 
 test("optimizeImages false leaves out build sources and nothing else", async () => {
@@ -229,7 +271,7 @@ test("optimizeImages false leaves out build sources and nothing else", async () 
   })();
   expect(site.media("hero-media")).not.toHaveProperty("sourceUrl");
   expect(site.image("hero-media", "Team")).not.toHaveProperty("sourceUrl");
-  const { sourceUrl: _sourceUrl, ...rest } = optimized.media("hero-media");
+  const { sourceUrl: _sourceUrl, ...rest } = required(optimized.media("hero-media"));
   expect(site.media("hero-media")).toEqual(rest);
   expect(site.mediaUrl("hero-media")).toBe(optimized.mediaUrl("hero-media"));
 });
@@ -239,7 +281,7 @@ test("image lookups resolve the effective alt text and keep the media descriptio
     environment,
     fetch: scriptedFetch([exportResponse(homeExport)]).fetch,
   })();
-  const home = site.byPath("/");
+  const home = required(site.byPath("/"));
   expect(home.image("hero-media", "Team at work")).toEqual({
     alt: "Team at work",
     caption: "Our office",
@@ -251,50 +293,16 @@ test("image lookups resolve the effective alt text and keep the media descriptio
     url: "https://public.example.test/lace/api/v1/public/media/hero-media",
     width: 1600,
   });
-  expect(home.image("hero-media").alt).toBe("Office");
-  expect(home.image("hero-media", "  ").alt).toBe("Office");
-  expect(site.image("plain").alt).toBe("");
-  expect(site.media("plain").alt).toBeNull();
+  expect(required(home.image("hero-media")).alt).toBe("Office");
+  expect(required(home.image("hero-media", "  ")).alt).toBe("Office");
+  expect(required(site.image("plain")).alt).toBe("");
+  expect(required(site.media("plain")).alt).toBeNull();
   expect(site.media("unknown")).toBeUndefined();
   expect(site.image("unknown")).toBeUndefined();
   expect(site.media("__proto__")).toBeUndefined();
   expect(site.media("constructor")).toBeUndefined();
   expect(Object.isFrozen(site.media("hero-media"))).toBe(true);
-  expect(Object.isFrozen(site.media("hero-media").focalPoint)).toBe(true);
-});
-
-test("the site view exposes published content only, ordered and immutable", async () => {
-  const transport = scriptedFetch([exportResponse(homeExport)]);
-  const site = await createPublishedSiteLoader({ environment, fetch: transport.fetch })();
-  expect(site.version).toBe(3);
-  const home = site.byPath("/");
-  expect(home).toEqual({
-    internalLinks: [],
-    link: expect.any(Function),
-    blocks: [block("first", 0), block("second", 1)],
-    fields: { summary: "Welcome" },
-    id: "home",
-    image: expect.any(Function),
-    media: expect.any(Function),
-    modelKey: "home",
-    path: "/",
-    publishedAt: timestamp,
-    title: "home published",
-  });
-  expect(JSON.stringify(home)).not.toContain("draft");
-  expect(Object.isFrozen(site)).toBe(true);
-  expect(Object.isFrozen(home)).toBe(true);
-  expect(Object.isFrozen(home.blocks)).toBe(true);
-  expect(site.entries("posts").map((entry) => entry.path)).toEqual(["/blog/a", "/blog/b"]);
-  expect(Object.isFrozen(site.entries("posts"))).toBe(true);
-  expect(site.bySlug("posts", "b")?.id).toBe("post-b");
-  expect(site.entries("recipes").map((entry) => entry.slug)).toEqual(["soup"]);
-  expect(site.byPath("/missing")).toBeUndefined();
-  expect(site.byPath("/blog/a/")).toBeUndefined();
-  expect(site.bySlug("posts", "missing")).toBeUndefined();
-  expect(site.bySlug("constructor", "toString")).toBeUndefined();
-  expect(site.entries("unknown")).toEqual([]);
-  expect(site.entries("constructor")).toEqual([]);
+  expect(Object.isFrozen(required(site.media("hero-media")).focalPoint)).toBe(true);
 });
 
 test("static mode shares one export across sequential and concurrent calls", async () => {
@@ -305,7 +313,7 @@ test("static mode shares one export across sequential and concurrent calls", asy
   expect(first).toBe(second);
   expect(third).toBe(first);
   expect(transport.requests).toHaveLength(1);
-  expect(transport.requests[0].headers.get("if-none-match")).toBeNull();
+  expect(transport.requests[0]?.headers.get("if-none-match")).toBeNull();
 });
 
 test("static mode forgets a failed read and retries", async () => {
@@ -315,7 +323,7 @@ test("static mode forgets a failed read and retries", async () => {
   ]);
   const load = createPublishedSiteLoader({ environment, fetch: transport.fetch });
   const error = await captureError(load());
-  expect(error.code).toBe("api_unavailable");
+  expect(error).toMatchObject({ code: "api_unavailable" });
   const site = await load();
   expect(site.version).toBe(3);
   expect(transport.requests).toHaveLength(2);
@@ -360,9 +368,9 @@ test("a failed revalidation keeps the previous ETag for the next call", async ()
   ]);
   const load = createPublishedSiteLoader({ environment, fetch: transport.fetch, revalidate: true });
   const first = await load();
-  expect((await captureError(load())).code).toBe("api_unavailable");
+  expect(await captureError(load())).toMatchObject({ code: "api_unavailable" });
   expect(await load()).toBe(first);
-  expect(transport.requests[2].headers.get("if-none-match")).toBe('"3"');
+  expect(transport.requests[2]?.headers.get("if-none-match")).toBe('"3"');
 });
 
 test.each([false, true])(
@@ -372,7 +380,7 @@ test.each([false, true])(
     const error = await captureError(
       createPublishedSiteLoader({ environment, fetch: transport.fetch, revalidate })(),
     );
-    expect(error.code).toBe("invalid_export");
+    expect(error).toMatchObject({ code: "invalid_export" });
   },
 );
 
@@ -384,7 +392,7 @@ test("an expected published version that differs fails the build", async () => {
       fetch: transport.fetch,
     })(),
   );
-  expect(error.code).toBe("version_mismatch");
+  expect(error).toMatchObject({ code: "version_mismatch" });
   expect(error.message).toContain("7");
   expect(error.message).toContain("8");
 });
@@ -403,7 +411,7 @@ test.each([401, 403])("HTTP %i from the export is a rejected token", async (stat
   const error = await captureError(
     createPublishedSiteLoader({ environment, fetch: transport.fetch })(),
   );
-  expect(error.code).toBe("rejected_token");
+  expect(error).toMatchObject({ code: "rejected_token" });
   expect(error.cause).toBeInstanceOf(LaceHttpError);
   expect(error.message).not.toContain(token);
 });
@@ -432,7 +440,7 @@ test("other SDK failures propagate unchanged", async () => {
     })(),
   );
   expect(serverError).toBeInstanceOf(LaceHttpError);
-  expect(serverError.status).toBe(500);
+  expect(serverError).toMatchObject({ status: 500 });
   const contractError = await captureError(
     createPublishedSiteLoader({
       environment,
@@ -466,7 +474,7 @@ test.each([
       fetch: scriptedFetch([exportResponse(buildExport(1, entries))]).fetch,
     })(),
   );
-  expect(error.code).toBe("invalid_export");
+  expect(error).toMatchObject({ code: "invalid_export" });
   for (const value of named) expect(error.message).toContain(value);
 });
 
@@ -507,7 +515,7 @@ test("an export in a newer format fails with invalid_export and upgrade guidance
     })(),
   );
   expect(error).toBeInstanceOf(LaceSdkError);
-  expect(error.code).toBe("invalid_export");
+  expect(error).toMatchObject({ code: "invalid_export" });
   expect(error.message).toContain("Upgrade @lacecms/sdk");
   expect(error.message).not.toContain(token);
   expect(error.cause).toBeInstanceOf(LaceContractError);
@@ -515,7 +523,7 @@ test("an export in a newer format fails with invalid_export and upgrade guidance
 });
 
 test("revalidation retains the latest weak 304 validator and recovers after malformed headers", async () => {
-  const conditions = [];
+  const conditions: (string | null)[] = [];
   const responses = [
     exportResponse(buildExport(7, [])),
     notModified('W/"7"'),
@@ -527,8 +535,10 @@ test("revalidation retains the latest weak 304 validator and recovers after malf
     token: "build-secret",
     revalidate: true,
     fetch: async (_url, init) => {
-      conditions.push(new Headers(init.headers).get("if-none-match"));
-      return responses.shift();
+      conditions.push(new Headers(init?.headers).get("if-none-match"));
+      const response = responses.shift();
+      if (!response) throw new Error("Unexpected request");
+      return response;
     },
   });
   const first = await getSite();
@@ -536,212 +546,6 @@ test("revalidation retains the latest weak 304 validator and recovers after malf
   await expect(getSite()).rejects.toBeInstanceOf(LaceContractError);
   expect((await getSite()).version).toBe(8);
   expect(conditions).toEqual([null, '"7"', 'W/"7"', 'W/"7"']);
-});
-
-function exportGlobal({
-  id = "settings-entry",
-  modelKey = "settings",
-  blocks = [],
-  fields = {},
-} = {}) {
-  return { blocks, fields, id, internalLinks: [], modelKey, publishedAt: timestamp };
-}
-
-test("the site view exposes published globals by model key", async () => {
-  const value = {
-    ...buildExport(4, [exportEntry({ id: "home", modelKey: "home", path: "/" })], {
-      logo: mediaItem("logo", { alt: "Lace logo" }),
-    }),
-    globals: [
-      exportGlobal({
-        blocks: [block("second", 2000), block("first", 1000)],
-        fields: { logo: "logo", siteName: "Lace" },
-      }),
-    ],
-  };
-  const site = await createPublishedSiteLoader({
-    environment: { ...environment, LACE_PUBLIC_BASE_URL: "https://media.example.test/base" },
-    fetch: scriptedFetch([exportResponse(value)]).fetch,
-  })();
-  const settings = site.global("settings");
-  expect(settings).toMatchObject({
-    fields: { logo: "logo", siteName: "Lace" },
-    id: "settings-entry",
-    modelKey: "settings",
-    publishedAt: timestamp,
-  });
-  expect(settings.blocks.map((item) => item.key)).toEqual(["first", "second"]);
-  for (const key of ["path", "slug", "title", "draft"]) expect(settings).not.toHaveProperty(key);
-  expect(Object.isFrozen(settings)).toBe(true);
-  expect(settings.image("logo")).toMatchObject({
-    alt: "Lace logo",
-    url: "https://media.example.test/base/api/v1/public/media/logo",
-  });
-  expect(settings.image("logo", "Brand")).toMatchObject({ alt: "Brand" });
-  expect(site.global("home")).toBeUndefined();
-  expect(site.global("footer")).toBeUndefined();
-  expect(site.entries("settings")).toEqual([]);
-  expect(site.byPath("/")).toMatchObject({ id: "home" });
-});
-
-test("an export without globals has no globals", async () => {
-  const site = await createPublishedSiteLoader({
-    environment,
-    fetch: scriptedFetch([exportResponse(buildExport(1, []))]).fetch,
-  })();
-  expect(site.global("settings")).toBeUndefined();
-});
-
-test.each([
-  ["a duplicate global key", [], [exportGlobal(), exportGlobal({ id: "other" })]],
-  [
-    "a global key shared with entries",
-    [exportEntry({ id: "page", modelKey: "settings", path: "/settings" })],
-    [exportGlobal()],
-  ],
-])("rejects %s", async (_name, entries, globals) => {
-  const error = await captureError(
-    createPublishedSiteLoader({
-      environment,
-      fetch: scriptedFetch([exportResponse({ ...buildExport(1, entries), globals })]).fetch,
-    })(),
-  );
-  expect(error.code).toBe("invalid_export");
-  expect(error.message).toContain("settings");
-});
-
-test("published entries pass stored SEO values through without resolving fallbacks", async () => {
-  const seo = {
-    canonical: null,
-    description: null,
-    image: "share",
-    noindex: true,
-    title: "Hello",
-  };
-  const value = {
-    ...buildExport(
-      5,
-      [
-        { ...exportEntry({ id: "hello", path: "/blog/hello", slug: "hello" }), seo },
-        exportEntry({ id: "note", modelKey: "notes", path: "/notes/n", slug: "n" }),
-      ],
-      { share: mediaItem("share") },
-    ),
-    seo: {
-      defaults: null,
-      models: { posts: { description: "summary", image: null } },
-    },
-  };
-  const site = await createPublishedSiteLoader({
-    environment,
-    fetch: scriptedFetch([exportResponse(value)]).fetch,
-  })();
-  expect(site.byPath("/blog/hello").seo).toEqual(seo);
-  expect(Object.isFrozen(site.byPath("/blog/hello").seo)).toBe(true);
-  expect(site.byPath("/notes/n").seo).toBeUndefined();
-});
-
-test.each([
-  ["a relative path", "/blog"],
-  ["another scheme", "ftp://site.example/"],
-  ["credentials", "https://user:secret@site.example/"],
-  ["a query", "https://site.example/?preview=secret"],
-  ["a fragment", "https://site.example/#top"],
-  ["a bare query mark", "https://site.example/?"],
-])("rejects a site URL with %s without echoing it", async (_name, value) => {
-  const transport = scriptedFetch([]);
-  const error = await captureError(
-    createPublishedSiteLoader({
-      environment: { ...environment, LACE_BUILD_SITE_URL: value },
-      fetch: transport.fetch,
-    })(),
-  );
-  expect(error.code).toBe("missing_configuration");
-  expect(error.message).toContain("LACE_BUILD_SITE_URL");
-  expect(error.message).not.toContain(value);
-  expect(transport.requests).toHaveLength(0);
-});
-
-test.each(["no", "OFF", "true"])("rejects the indexing switch %s", async (value) => {
-  const transport = scriptedFetch([]);
-  const error = await captureError(
-    createPublishedSiteLoader({
-      environment: { ...environment, LACE_SITE_INDEXING: value },
-      fetch: transport.fetch,
-    })(),
-  );
-  expect(error.code).toBe("missing_configuration");
-  expect(error.message).toBe("LACE_SITE_INDEXING must be on or off.");
-  expect(transport.requests).toHaveLength(0);
-});
-
-test("without a site URL the view has no URLs and indexing is on", async () => {
-  const site = await createPublishedSiteLoader({
-    environment: { ...environment, LACE_BUILD_SITE_URL: "  ", LACE_SITE_INDEXING: "" },
-    fetch: scriptedFetch([exportResponse(homeExport)]).fetch,
-  })();
-  expect(site.url).toBeUndefined();
-  expect(site.urlFor("/")).toBeUndefined();
-  expect(site.indexing).toBe(true);
-});
-
-test("a site URL with a base path keeps it and joins public paths under it", async () => {
-  const site = await createPublishedSiteLoader({
-    environment: {
-      ...environment,
-      LACE_BUILD_SITE_URL: "https://Example.com/blog",
-      LACE_SITE_INDEXING: " off ",
-    },
-    fetch: scriptedFetch([exportResponse(homeExport)]).fetch,
-  })();
-  expect(site.url).toBe("https://example.com/blog/");
-  expect(site.urlFor("/posts/hello")).toBe("https://example.com/blog/posts/hello");
-  expect(site.urlFor("/")).toBe("https://example.com/blog/");
-  expect(site.indexing).toBe(false);
-});
-
-test("explicit site URL and indexing take precedence over the environment record", async () => {
-  const site = await createPublishedSiteLoader({
-    environment: {
-      ...environment,
-      LACE_BUILD_SITE_URL: "https://env.example/",
-      LACE_SITE_INDEXING: "off",
-    },
-    fetch: scriptedFetch([exportResponse(homeExport)]).fetch,
-    indexing: "on",
-    siteUrl: "https://explicit.example",
-  })();
-  expect(site.url).toBe("https://explicit.example/");
-  expect(site.urlFor("/")).toBe("https://explicit.example/");
-  expect(site.indexing).toBe(true);
-});
-
-test("all entries span every model in path order and leave globals out", async () => {
-  const site = await createPublishedSiteLoader({
-    environment,
-    fetch: scriptedFetch([
-      exportResponse({
-        ...homeExport,
-        globals: [
-          {
-            blocks: [],
-            fields: {},
-            id: "settings-entry",
-            internalLinks: [],
-            modelKey: "settings",
-            publishedAt: timestamp,
-          },
-        ],
-      }),
-    ]).fetch,
-  })();
-  expect(site.allEntries().map((entry) => entry.path)).toEqual([
-    "/",
-    "/blog/a",
-    "/blog/b",
-    "/recipes/soup",
-  ]);
-  expect(Object.isFrozen(site.allEntries())).toBe(true);
 });
 
 test("revalidate mode keeps the settings of the read that produced the view", async () => {
@@ -759,335 +563,4 @@ test("revalidate mode keeps the settings of the read that produced the view", as
   const second = await load();
   expect(first.url).toBe("https://one.example/");
   expect(second.url).toBe("https://two.example/");
-});
-
-test("published blocks carry their envelope and legacy blocks default their settings", async () => {
-  const anchored = {
-    ...block("first", 0),
-    anchor: "pricing",
-    className: "wide",
-    settings: { align: "center" },
-  };
-  const { settings: _settings, ...legacy } = block("second", 1);
-  const transport = scriptedFetch([
-    exportResponse(
-      buildExport(4, [exportEntry({ blocks: [anchored, legacy], id: "home", path: "/" })]),
-    ),
-  ]);
-  const site = await createPublishedSiteLoader({ environment, fetch: transport.fetch })();
-  expect(site.byPath("/").blocks).toEqual([anchored, block("second", 1)]);
-
-  const hidden = scriptedFetch([
-    exportResponse(
-      buildExport(5, [
-        exportEntry({ blocks: [{ ...block("first", 0), hidden: true }], id: "home", path: "/" }),
-      ]),
-    ),
-  ]);
-  await expect(
-    createPublishedSiteLoader({ environment, fetch: hidden.fetch })(),
-  ).rejects.toBeInstanceOf(LaceSdkError);
-});
-
-test("published-site preserves nested fields, empty composites and nested media IDs", async () => {
-  const fields = { team: [{ profile: { photo: "portrait" } }], empty: {}, tags: [] };
-  const exported = buildExport(
-    1,
-    [
-      exportEntry({
-        id: "nested",
-        path: "/blog/nested",
-        slug: "nested",
-        fields,
-        blocks: [block("b", 0, { images: ["portrait"] })],
-      }),
-    ],
-    { portrait: mediaItem("portrait") },
-  );
-  exported.globals = [exportGlobal({ fields })];
-  const site = await createPublishedSiteLoader({
-    environment,
-    fetch: scriptedFetch([exportResponse(exported)]).fetch,
-  })();
-  const entry = site.byPath("/blog/nested");
-  expect(entry.fields).toEqual(fields);
-  expect(entry.blocks[0].data.images).toEqual(["portrait"]);
-  expect(entry.image(entry.fields.team[0].profile.photo)).toMatchObject({ id: "portrait" });
-  expect(site.global("settings").fields).toEqual(fields);
-});
-
-function pagedExport(version, paths) {
-  const pages = paths.map((group, index) => {
-    const entries = group.map((path) =>
-      exportEntry({ id: `post-${path.slice(-1)}`, path, slug: path.slice(-1) }),
-    );
-    const nextCursor = index < paths.length - 1 ? `cursor-${version}-${index}` : undefined;
-    const page = {
-      entries,
-      formatVersion: 2,
-      media: {},
-      ...(nextCursor === undefined ? {} : { nextCursor }),
-      version,
-    };
-    return index === 0 ? { ...page, globals: [], seo: { defaults: null, models: {} } } : page;
-  });
-  return pages.map((page) => exportResponse(page));
-}
-
-function versionChanged(expectedVersion, actualVersion) {
-  return Response.json(
-    {
-      error: {
-        code: "BUILD_EXPORT_VERSION_CHANGED",
-        details: { actualVersion, expectedVersion },
-        message: "Changed.",
-      },
-    },
-    { status: 409 },
-  );
-}
-
-const threePages = [["/blog/a"], ["/blog/b"], ["/blog/c"]];
-
-test("static mode reads one complete page traversal for every call", async () => {
-  const transport = scriptedFetch(pagedExport(5, threePages));
-  const load = createPublishedSiteLoader({ environment, fetch: transport.fetch });
-  const sites = await Promise.all([load(), load(), load()]);
-  expect(await load()).toBe(sites[0]);
-  expect(new Set(sites).size).toBe(1);
-  expect(sites[0].allEntries().map((entry) => entry.path)).toEqual([
-    "/blog/a",
-    "/blog/b",
-    "/blog/c",
-  ]);
-  expect(transport.requests.map((request) => new URL(request.url).search)).toEqual([
-    "",
-    "?after=cursor-5-0",
-    "?after=cursor-5-1",
-  ]);
-});
-
-test("static mode restarts a traversal that failed on a later page", async () => {
-  const transport = scriptedFetch([
-    pagedExport(5, threePages)[0],
-    new TypeError("socket hang up"),
-    ...pagedExport(5, threePages),
-  ]);
-  const load = createPublishedSiteLoader({ environment, fetch: transport.fetch });
-  expect((await captureError(load())).code).toBe("api_unavailable");
-  expect((await load()).allEntries()).toHaveLength(3);
-  expect(transport.requests.map((request) => new URL(request.url).search)).toEqual([
-    "",
-    "?after=cursor-5-0",
-    "",
-    "?after=cursor-5-0",
-    "?after=cursor-5-1",
-  ]);
-});
-
-test("revalidate mode reuses on a first-page 304 and traverses a changed export", async () => {
-  const transport = scriptedFetch([
-    ...pagedExport(3, [["/blog/a"], ["/blog/b"]]),
-    notModified('"3"'),
-    ...pagedExport(4, [["/blog/a"], ["/blog/b"], ["/blog/c"]]),
-  ]);
-  const load = createPublishedSiteLoader({ environment, fetch: transport.fetch, revalidate: true });
-  const first = await load();
-  expect(await load()).toBe(first);
-  const next = await load();
-  expect(next.version).toBe(4);
-  expect(next.allEntries()).toHaveLength(3);
-  expect(transport.requests.map((request) => request.headers.get("if-none-match"))).toEqual([
-    null,
-    null,
-    '"3"',
-    '"3"',
-    null,
-    null,
-  ]);
-});
-
-test("an expected version is checked on the first page before continuing", async () => {
-  const pinned = { ...environment, LACE_EXPECTED_PUBLISHED_VERSION: "7" };
-  const early = scriptedFetch(pagedExport(8, threePages));
-  const mismatch = await captureError(
-    createPublishedSiteLoader({ environment: pinned, fetch: early.fetch })(),
-  );
-  expect(mismatch.code).toBe("version_mismatch");
-  expect(mismatch.message).toContain("expected version 7, received 8");
-  expect(early.requests).toHaveLength(1);
-
-  const [page] = pagedExport(7, threePages);
-  const interrupted = scriptedFetch([page, versionChanged(7, 8)]);
-  const changed = await captureError(
-    createPublishedSiteLoader({ environment: pinned, fetch: interrupted.fetch })(),
-  );
-  expect(changed.code).toBe("version_mismatch");
-  expect(changed.message).toContain("expected version 7, received 8");
-  expect(interrupted.requests).toHaveLength(2);
-});
-
-test("an export that keeps changing fails with version_mismatch after one restart", async () => {
-  const [firstAttempt] = pagedExport(5, threePages);
-  const [secondAttempt] = pagedExport(6, threePages);
-  const transport = scriptedFetch([
-    firstAttempt,
-    versionChanged(5, 6),
-    secondAttempt,
-    versionChanged(6, 7),
-  ]);
-  const error = await captureError(
-    createPublishedSiteLoader({ environment, fetch: transport.fetch })(),
-  );
-  expect(error.code).toBe("version_mismatch");
-  expect(error.message).toContain("kept changing");
-  expect(transport.requests).toHaveLength(4);
-
-  const recovered = scriptedFetch([
-    pagedExport(5, threePages)[0],
-    versionChanged(5, 6),
-    ...pagedExport(6, threePages),
-  ]);
-  expect((await createPublishedSiteLoader({ environment, fetch: recovered.fetch })()).version).toBe(
-    6,
-  );
-});
-
-function linkedEntry(id, targetId, path = `/${id}`) {
-  return {
-    ...exportEntry({
-      id,
-      path,
-      fields: { nested: [{ url: `entry:${targetId}` }], plainText: "entry:untracked" },
-    }),
-    internalLinks: [{ sourceKey: "$fields", area: "fields", pointer: "/nested/0/url", targetId }],
-  };
-}
-function linkedExport(entries, globals = [], version = 1) {
-  return { ...buildExport(version, entries), formatVersion: 2, globals };
-}
-
-test("format 2 preserves manifests across pages and resolves later destinations without target I/O", async () => {
-  const source = linkedEntry("source", "target", "/a");
-  const target = { ...exportEntry({ id: "target", path: "/z-new" }), internalLinks: [] };
-  const global = {
-    id: "global",
-    modelKey: "navigation",
-    fields: { url: "entry:target" },
-    blocks: [],
-    publishedAt: timestamp,
-    internalLinks: [{ sourceKey: "$fields", area: "fields", pointer: "/url", targetId: "target" }],
-  };
-  const transport = scriptedFetch([
-    exportResponse({ ...linkedExport([source], [global]), nextCursor: "later" }),
-    exportResponse({ entries: [target], formatVersion: 2, media: {}, version: 1 }),
-  ]);
-  const load = createPublishedSiteLoader({ environment, fetch: transport.fetch });
-  const site = await load();
-  for (const owner of [site, site.byPath("/a"), site.global("navigation")]) {
-    expect(owner.link("entry:target")).toEqual({
-      state: "resolved",
-      href: "/z-new",
-      targetId: "target",
-    });
-    expect(owner.link("entry:absent")).toEqual({ state: "unavailable", targetId: "absent" });
-    expect(owner.link("/manual#part")).toEqual({ state: "resolved", href: "/manual#part" });
-    expect(owner.link(undefined)).toEqual({ state: "empty" });
-    for (const value of ["entry:%74arget", "entry:", "javascript:bad", "//evil", 42])
-      expect(() => owner.link(value)).toThrow();
-  }
-  expect(site.byPath("/a").fields.nested[0].url).toBe("entry:target");
-  expect(site.byPath("/a").internalLinks).toEqual(source.internalLinks);
-  expect(Object.isFrozen(site.byPath("/a").fields.nested[0])).toBe(true);
-  expect(Object.isFrozen(site.global("navigation").internalLinks)).toBe(true);
-  expect(site.linkDiagnostics).toEqual({ total: 0, items: [], truncated: false });
-  expect(await load()).toBe(site);
-  expect(transport.requests).toHaveLength(2);
-  expect(transport.requests.every((request) => request.url.includes("/public/build-export"))).toBe(
-    true,
-  );
-});
-
-test("duplicate source IDs and inconsistent manifest locations fail before exposing a site", async () => {
-  const source = linkedEntry("source", "target");
-  const global = { ...source, modelKey: "navigation" };
-  delete global.path;
-  delete global.title;
-  const cases = [
-    linkedExport([source, { ...source, path: "/another" }]),
-    linkedExport([source], [global]),
-    linkedExport([
-      { ...source, internalLinks: [...source.internalLinks, ...source.internalLinks] },
-    ]),
-    linkedExport([
-      { ...source, internalLinks: [{ ...source.internalLinks[0], targetId: "different" }] },
-    ]),
-    linkedExport([
-      { ...source, internalLinks: [{ ...source.internalLinks[0], pointer: "/not-found" }] },
-    ]),
-    linkedExport([
-      {
-        ...source,
-        internalLinks: [{ sourceKey: "block", area: "data", pointer: "/url", targetId: "target" }],
-      },
-    ]),
-    linkedExport([{ ...source, path: "//unsafe" }]),
-  ];
-  for (const exported of cases) {
-    const loader = createPublishedSiteLoader({
-      environment,
-      fetch: scriptedFetch([exportResponse(exported)]).fetch,
-    });
-    await expect(loader()).rejects.toMatchObject({ code: "invalid_export" });
-  }
-});
-
-test("unavailable diagnostics are bounded, deterministic, private and reported once per assembled view", async () => {
-  const entries = Array.from({ length: 150 }, (_, i) =>
-    linkedEntry(`source-${String(i).padStart(3, "0")}`, "missing"),
-  ).reverse();
-  const callbacks = [];
-  const transport = scriptedFetch([
-    exportResponse(linkedExport(entries)),
-    notModified('"1"'),
-    exportResponse(
-      linkedExport(
-        [...entries, { ...exportEntry({ id: "missing", path: "/recovered" }), internalLinks: [] }],
-        [],
-        2,
-      ),
-    ),
-  ]);
-  const loader = createPublishedSiteLoader({
-    environment,
-    fetch: transport.fetch,
-    revalidate: true,
-    onLinkDiagnostics: (diagnostics) => callbacks.push(diagnostics),
-  });
-  const first = await loader();
-  expect(first.linkDiagnostics).toMatchObject({ total: 150, truncated: true });
-  expect(first.linkDiagnostics.items).toHaveLength(100);
-  expect(first.linkDiagnostics.items[0]).toEqual({
-    sourceId: "source-000",
-    modelKey: "posts",
-    sourceKey: "$fields",
-    area: "fields",
-    pointer: "/nested/0/url",
-    targetId: "missing",
-  });
-  expect(JSON.stringify(first.linkDiagnostics)).not.toContain("published");
-  expect(JSON.stringify(first.linkDiagnostics)).not.toContain("entry:");
-  expect(Object.isFrozen(first.linkDiagnostics.items[0])).toBe(true);
-  first.link("entry:missing");
-  first.byPath("/source-000").link("entry:missing");
-  expect(await loader()).toBe(first);
-  expect(callbacks).toHaveLength(1);
-  const recovered = await loader();
-  expect(recovered.link("entry:missing")).toEqual({
-    state: "resolved",
-    href: "/recovered",
-    targetId: "missing",
-  });
-  expect(recovered.linkDiagnostics.total).toBe(0);
-  expect(callbacks).toHaveLength(2);
 });

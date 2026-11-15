@@ -1,13 +1,12 @@
-// @ts-nocheck
-// TODO(rf2): Type partial build repositories, branded build records and actor role tables.
 import { expect, test } from "vitest";
-import { SiteBuildUseCases } from "@lacecms/application";
-import { actorId, unixMilliseconds } from "@lacecms/domain";
+import type { EnqueueSiteBuildInput, SiteBuildRecord } from "@lacecms/application";
+import { SiteBuildUseCases, dispatcherEventId } from "@lacecms/application";
+import { actorId, siteBuildId, unixMilliseconds } from "@lacecms/domain";
 
 import { admin, editor, fixture } from "../test-support/app-harness.js";
 
 test("admin build routes queue strict requests without running a trigger", async () => {
-  const calls = [];
+  const calls: EnqueueSiteBuildInput[] = [];
   const builds = new SiteBuildUseCases({
     clock: { now: () => unixMilliseconds(1) },
     builds: {
@@ -15,12 +14,12 @@ test("admin build routes queue strict requests without running a trigger", async
       getSiteBuild: async () => null,
       requestBuild: async (input) => {
         calls.push(input);
-        return { coalesced: false, eventId: "event-1", targetVersion: 4 };
+        return { coalesced: false, eventId: dispatcherEventId("event-1"), targetVersion: 4 };
       },
     },
   });
   const { app } = await fixture({ builds });
-  const post = (path, body) =>
+  const post = (path: string, body?: unknown) =>
     app.fetch(
       new Request(`https://lace.test${path}`, {
         method: "POST",
@@ -45,11 +44,11 @@ test("admin build routes queue strict requests without running a trigger", async
   expect(calls).toHaveLength(2);
 });
 
-test.each([admin, editor, { id: actorId("viewer"), role: "viewer" }])(
+test.each([admin, editor, { id: actorId("viewer"), role: "viewer" as const }])(
   "authenticated build reads expose source diagnostics for $role",
   async (actor) => {
-    const build = {
-      id: "build-1",
+    const build: SiteBuildRecord = {
+      id: siteBuildId("build-1"),
       reason: "publication",
       status: "failed",
       targetVersion: 3,
@@ -65,11 +64,15 @@ test.each([admin, editor, { id: actorId("viewer"), role: "viewer" }])(
       builds: {
         listSiteBuilds: async () => [build],
         getSiteBuild: async (id) => (id === build.id ? build : null),
-        requestBuild: async () => ({ coalesced: false, eventId: "event-1", targetVersion: 3 }),
+        requestBuild: async () => ({
+          coalesced: false,
+          eventId: dispatcherEventId("event-1"),
+          targetVersion: 3,
+        }),
       },
     });
     const { app } = await fixture({ actor, builds });
-    const get = (path) => app.fetch(new Request(`https://lace.test${path}`));
+    const get = (path: string) => app.fetch(new Request(`https://lace.test${path}`));
     expect(await (await get("/api/v1/admin/site-builds")).json()).toMatchObject({
       items: [
         { id: "build-1", targetVersion: 3, error: "source_symlink", errorPath: "src/linked.astro" },
@@ -87,7 +90,7 @@ test.each([admin, editor, { id: actorId("viewer"), role: "viewer" }])(
   },
 );
 
-test.each([admin, editor, { id: actorId("viewer"), role: "viewer" }])(
+test.each([admin, editor, { id: actorId("viewer"), role: "viewer" as const }])(
   "current build site is a safe read for $role",
   async (actor) => {
     const site = { id: "public-site", label: "Public site" };

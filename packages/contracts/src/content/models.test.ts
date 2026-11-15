@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
 import { blockMetadataSchema } from "./metadata.js";
@@ -57,10 +55,17 @@ describe("shared REST contract DTOs", () => {
 
 describe("admin entry list contracts", () => {
   test("content models carry valid collection list fields only", () => {
-    const fields = { author: { required: false, type: "text" } };
-    const collection = { blocks: [], fields, key: "posts", kind: "collection", route: "/b/:slug" };
+    const fields = { author: { required: false, type: "text" as const } };
+    const collection = {
+      blockDefinitions: [],
+      blocks: [],
+      fields,
+      key: "posts",
+      kind: "collection" as const,
+      route: "/b/:slug",
+    };
     const dto = toContentModelDto({ ...collection, listFields: ["author"], version: 1 });
-    expect(v.parse(contentModelListSchema, { items: [dto] }).items[0].listFields).toEqual([
+    expect(v.parse(contentModelListSchema, { items: [dto] }).items[0]?.listFields).toEqual([
       "author",
     ]);
     expect(toContentModelDto({ ...collection, version: 1 })).not.toHaveProperty("listFields");
@@ -94,7 +99,7 @@ test("block definitions match allowed blocks by type in any order", () => {
     path: "/",
     version: 1,
   };
-  const accepts = (blocks, blockDefinitions) =>
+  const accepts = (blocks: unknown, blockDefinitions: unknown) =>
     v.safeParse(contentModelListSchema, { items: [{ ...model, blocks, blockDefinitions }] })
       .success;
   expect(accepts(model.blocks, [quote, hero])).toBe(true);

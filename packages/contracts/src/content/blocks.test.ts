@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import { blockKey } from "@lacecms/domain";
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
@@ -52,9 +50,9 @@ describe("admin entry list contracts", () => {
     ]);
     expect(v.parse(contentEntrySchema, admin)).toEqual(admin);
 
-    const urlFor = (id) => mediaUrl("https://lace.example/", id);
+    const urlFor = (id: string) => mediaUrl("https://lace.example/", id);
     const publicDto = toPublicContentEntryDto(
-      { entry: envelopeEntry, media: [], path: "/blog/welcome" },
+      { entry: envelopeEntry, internalLinks: [], media: [], path: "/blog/welcome" },
       urlFor,
     );
     expect(publicDto.entry.blocks).toEqual([
@@ -70,12 +68,14 @@ describe("admin entry list contracts", () => {
       },
     ]);
     expect(v.parse(publicContentEntrySchema, publicDto)).toEqual(publicDto);
-    const { settings: _settings, ...legacyBlock } = publicDto.entry.blocks[0];
+    const firstBlock = publicDto.entry.blocks[0];
+    if (!firstBlock) throw new Error("Expected a public block");
+    const { settings: _settings, ...legacyBlock } = firstBlock;
     expect(
       v.parse(publicContentEntrySchema, {
         ...publicDto,
         entry: { ...publicDto.entry, blocks: [legacyBlock] },
-      }).entry.blocks[0].settings,
+      }).entry.blocks[0]?.settings,
     ).toEqual({});
     expect(
       v.safeParse(publicContentEntrySchema, {
@@ -85,15 +85,19 @@ describe("admin entry list contracts", () => {
     ).toBe(false);
     expect(
       toPublicContentListDto(
-        { items: [{ entry: envelopeEntry, media: [], path: "/a" }] },
+        { items: [{ entry: envelopeEntry, internalLinks: [], media: [], path: "/a" }] },
         urlFor,
-      ).items[0].blocks.map((value) => value.key),
+      ).items[0]?.blocks.map((value) => value.key),
     ).toEqual(["hero-1"]);
     expect(
       toBuildExportDto(
-        { entries: [{ entry: envelopeEntry, media: [], path: "/a" }], records: [], version: 1 },
+        {
+          entries: [{ entry: envelopeEntry, internalLinks: [], media: [], path: "/a" }],
+          records: [],
+          version: 1,
+        },
         urlFor,
-      ).entries[0].blocks.map((value) => value.key),
+      ).entries[0]?.blocks.map((value) => value.key),
     ).toEqual(["hero-1"]);
 
     const request = {
@@ -101,7 +105,7 @@ describe("admin entry list contracts", () => {
       fields: {},
       title: "Welcome",
     };
-    const withBlock = (envelope) => ({
+    const withBlock = (envelope: Record<string, unknown>) => ({
       ...request,
       blocks: [{ ...request.blocks[0], ...envelope }],
     });

@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import * as v from "valibot";
 import { expect, test } from "vitest";
 
@@ -8,7 +6,8 @@ test("internal-link queries, statuses and impact pages are strict and independen
     ...(await import("./entry-requests.js")),
     ...(await import("./links.js")),
   };
-  const valid = (schema, value) => v.safeParse(schema, value).success;
+  const valid = (schema: v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>, value: unknown) =>
+    v.safeParse(schema, value).success;
   expect(v.parse(c.linkTargetQuerySchema, {})).toEqual({ limit: 20 });
   expect(v.parse(c.linkTargetQuerySchema, { search: "  A_%  ", limit: "50" })).toEqual({
     search: "A_%",

@@ -1,6 +1,4 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
-import { contentEntryId, mediaId, siteBuildId } from "@lacecms/domain";
+import { contentEntryId, contentModelKey, mediaId, siteBuildId } from "@lacecms/domain";
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
 import {
@@ -59,26 +57,32 @@ describe("shared REST contract DTOs", () => {
     ).toMatchObject({ items: [{ id: "entry-1" }], nextCursor: "opaque-next-page" });
 
     const exportDto = toBuildExportDto(
-      { entries: [{ entry, media: [], path: "/blog/welcome" }], records: [], version: 7 },
-      (id) => mediaUrl("https://lace.example/", id),
+      {
+        entries: [{ entry, internalLinks: [], media: [], path: "/blog/welcome" }],
+        records: [],
+        version: 7,
+      },
+      (id: string) => mediaUrl("https://lace.example/", id),
     );
     expect(v.parse(buildExportSchema, exportDto)).toEqual(exportDto);
 
+    const mediaSource = {
+      createdAt: timestamp,
+      createdBy: { displayName: "Ada", id: actor.id },
+      filename: "cover.png",
+      height: 600,
+      id: mediaId("media-1"),
+      mimeType: "image/png",
+      size: 42,
+      status: "active" as const,
+      tags: [],
+      storageKey: "private/media-1",
+      updatedAt: timestamp,
+      usageCount: 2,
+      width: 800,
+    };
     const mediaDto = toMediaMetadataDto(
-      {
-        createdAt: timestamp,
-        createdBy: { displayName: "Ada", id: actor.id },
-        filename: "cover.png",
-        height: 600,
-        id: mediaId("media-1"),
-        mimeType: "image/png",
-        size: 42,
-        status: "active",
-        storageKey: "private/media-1",
-        updatedAt: timestamp,
-        usageCount: 2,
-        width: 800,
-      },
+      mediaSource,
       "https://lace.example/api/v1/public/media/media-1",
     );
     expect(v.parse(mediaMetadataSchema, mediaDto)).toEqual(mediaDto);
@@ -150,6 +154,7 @@ describe("shared REST contract DTOs", () => {
 
     const modelDto = toContentModelDto({
       blocks: ["hero"],
+      blockDefinitions: [{ type: "hero", version: 1, fields: {} }],
       fields: { author: { required: false, type: "text" } },
       key: "posts",
       kind: "collection",
@@ -167,8 +172,15 @@ describe("shared REST contract DTOs", () => {
 
 describe("admin entry list contracts", () => {
   test("global models, entries, public globals, and exports have explicit contracts", () => {
-    const fields = { siteName: { required: true, type: "text" } };
-    const global = { blocks: [], fields, key: "settings", kind: "global", version: 1 };
+    const fields = { siteName: { required: true, type: "text" as const } };
+    const global = {
+      blocks: [],
+      blockDefinitions: [],
+      fields,
+      key: "settings",
+      kind: "global" as const,
+      version: 1,
+    };
     const dto = toContentModelDto(global);
     expect(dto).not.toHaveProperty("path");
     expect(dto).not.toHaveProperty("route");
@@ -188,7 +200,7 @@ describe("admin entry list contracts", () => {
     const globalEntry = {
       ...entry,
       id: contentEntryId("settings"),
-      model: { key: "settings", kind: "global" },
+      model: { key: contentModelKey("settings"), kind: "global" as const },
     };
     const entryDto = toContentEntryDto(globalEntry);
     expect(entryDto.model).toEqual({ key: "settings", kind: "global" });
@@ -200,9 +212,9 @@ describe("admin entry list contracts", () => {
       }).success,
     ).toBe(false);
 
-    const urlFor = (id) => mediaUrl("https://lace.example/", id);
+    const urlFor = (id: string) => mediaUrl("https://lace.example/", id);
     const publicDto = toPublicGlobalContentDto(
-      { entry: globalEntry, media: [{ id: "media-1", mimeType: "image/png" }] },
+      { entry: globalEntry, internalLinks: [], media: [{ id: "media-1", mimeType: "image/png" }] },
       urlFor,
     );
     expect(publicDto.global).toEqual({
@@ -227,9 +239,20 @@ describe("admin entry list contracts", () => {
     const exportDto = toBuildExportDto(
       {
         entries: [
-          { entry, media: [{ id: "media-2", mimeType: "image/png" }], path: "/blog/welcome" },
+          {
+            entry,
+            internalLinks: [],
+            media: [{ id: "media-2", mimeType: "image/png" }],
+            path: "/blog/welcome",
+          },
         ],
-        globals: [{ entry: globalEntry, media: [{ id: "media-1", mimeType: "image/png" }] }],
+        globals: [
+          {
+            entry: globalEntry,
+            internalLinks: [],
+            media: [{ id: "media-1", mimeType: "image/png" }],
+          },
+        ],
         records: [],
         version: 3,
       },

@@ -1,13 +1,13 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import {
   BuildExportVersionChangedError,
   actorId,
   contentEntryId,
+  contentModelKey,
   contentSnapshotId,
   mediaId,
   unixMilliseconds,
 } from "@lacecms/domain";
+import type { JsonObject } from "@lacecms/content";
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
 import { classifyError } from "../errors/classification.js";
@@ -28,7 +28,7 @@ import { tolerantPublicSchemas } from "./tolerant.js";
 
 describe("paged build export contract", () => {
   const publishedAt = unixMilliseconds(Date.UTC(2026, 9, 1));
-  const snapshot = (id, fields) => ({
+  const snapshot = (id: string, fields: JsonObject) => ({
     blocks: [],
     createdAt: publishedAt,
     entryId: contentEntryId(id),
@@ -37,21 +37,21 @@ describe("paged build export contract", () => {
     revision: 1,
     title: id,
     updatedAt: publishedAt,
-    updatedBy: { id: actorId("editor"), role: "editor" },
+    updatedBy: { id: actorId("editor"), role: "editor" as const },
   });
-  const contentEntry = (id, kind, fields = {}) => {
+  const contentEntry = (id: string, kind: "global" | "collection", fields: JsonObject = {}) => {
     const value = snapshot(id, fields);
     return {
-      draft: { ...value, state: "draft" },
+      draft: { ...value, state: "draft" as const },
       id: contentEntryId(id),
       model:
         kind === "global"
-          ? { key: id, kind }
-          : { key: "posts", kind: "collection", route: "/blog/:slug" },
-      published: { ...value, state: "published" },
+          ? { key: contentModelKey(id), kind }
+          : { key: contentModelKey("posts"), kind: "collection" as const, route: "/blog/:slug" },
+      published: { ...value, state: "published" as const },
     };
   };
-  const mediaItem = (id) => ({
+  const mediaItem = (id: string) => ({
     createdAt: publishedAt,
     createdBy: actorId("editor"),
     filename: `${id}.png`,
@@ -62,12 +62,25 @@ describe("paged build export contract", () => {
     storageKey: `media/${id}`,
     updatedAt: publishedAt,
   });
-  const urlFor = (id) => mediaUrl("https://lace.example/", id);
+  const urlFor = (id: string) => mediaUrl("https://lace.example/", id);
   test("first and continuation pages carry their own keys", () => {
     const first = toBuildExportFirstPageDto(
       {
-        entries: [{ entry: contentEntry("a", "collection"), media: [mediaItem("m1")], path: "/a" }],
-        globals: [{ entry: contentEntry("settings", "global"), media: [mediaItem("m2")] }],
+        entries: [
+          {
+            entry: contentEntry("a", "collection"),
+            internalLinks: [],
+            media: [mediaItem("m1")],
+            path: "/a",
+          },
+        ],
+        globals: [
+          {
+            entry: contentEntry("settings", "global"),
+            internalLinks: [],
+            media: [mediaItem("m2")],
+          },
+        ],
         nextCursor: "cursor-1",
         records: [
           { entry: contentEntry("t1", "collection"), internalLinks: [], media: [mediaItem("m3")] },
@@ -93,7 +106,9 @@ describe("paged build export contract", () => {
 
     const continuation = toBuildExportContinuationPageDto(
       {
-        entries: [{ entry: contentEntry("b", "collection"), media: [], path: "/b" }],
+        entries: [
+          { entry: contentEntry("b", "collection"), internalLinks: [], media: [], path: "/b" },
+        ],
         records: [],
         version: 7,
       },
@@ -110,7 +125,7 @@ describe("paged build export contract", () => {
       ),
     ).toThrow(TypeError);
 
-    for (const key of ["globals", "seo"]) {
+    for (const key of ["globals", "seo"] as const) {
       const { [key]: _omitted, ...missing } = first;
       expect(v.safeParse(buildExportFirstPageSchema, missing).success, key).toBe(false);
       expect(v.safeParse(tolerantPublicSchemas.buildExportFirstPage, missing).success, key).toBe(

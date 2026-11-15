@@ -1,5 +1,4 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy generated-project fixtures and filesystem helper parameters.
+import { object, parsedObject } from "./test-support/json.js";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -31,7 +30,7 @@ import {
 } from "./index.js";
 
 const templates = fileURLToPath(new URL("../templates/", import.meta.url));
-const roots = [];
+const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
@@ -43,7 +42,7 @@ async function root() {
 }
 
 /** A minimal standalone Astro project, used as the parent of a `cms/` target. */
-async function astroSite(directory = undefined) {
+async function astroSite(directory?: string) {
   const site = directory ?? (await root());
   await mkdir(join(site, "src/pages"), { recursive: true });
   await writeFile(join(site, "astro.config.mjs"), "export default {};\n");
@@ -55,8 +54,8 @@ async function astroSite(directory = undefined) {
   return site;
 }
 
-async function listFiles(path, prefix = "") {
-  const files = [];
+async function listFiles(path: string, prefix = ""): Promise<string[]> {
+  const files: string[] = [];
   for (const entry of await readdir(join(path, prefix), { withFileTypes: true })) {
     const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
     if (entry.isDirectory()) files.push(...(await listFiles(path, relative)));
@@ -65,8 +64,8 @@ async function listFiles(path, prefix = "") {
   return files.sort();
 }
 
-async function treeHashes(path, skip = new Set()) {
-  const hashes = {};
+async function treeHashes(path: string, skip = new Set<string>()) {
+  const hashes: Record<string, string> = {};
   for (const file of await listFiles(path)) {
     if ([...skip].some((prefix) => file === prefix || file.startsWith(`${prefix}/`))) continue;
     const absolute = join(path, file);
@@ -78,19 +77,33 @@ async function treeHashes(path, skip = new Set()) {
   return hashes;
 }
 
-function cli(args, cwd, terminal = { interactive: false }) {
-  const out = [];
-  const err = [];
+function cli(
+  args: string[],
+  cwd: string,
+  terminal: import("./cli/run.js").CliTerminal = { interactive: false },
+) {
+  const out: string[] = [];
+  const err: string[] = [];
   return runCli(
     args,
     cwd,
-    { write: (value) => out.push(value) },
-    { write: (value) => err.push(value) },
+    {
+      write: (value) => {
+        out.push(String(value));
+        return true;
+      },
+    },
+    {
+      write: (value) => {
+        err.push(String(value));
+        return true;
+      },
+    },
     terminal,
   ).then((code) => ({ code, stdout: out.join(""), stderr: err.join("") }));
 }
 
-const input = (...lines) => Readable.from(lines.map((line) => `${line}\n`));
+const input = (...lines: string[]) => Readable.from(lines.map((line) => `${line}\n`));
 
 test.each([
   [["create", "cms", "--starter", "--no-site"]],
@@ -121,10 +134,10 @@ test.each([
   const result = await cli(args, parent, { interactive: true, input: input() });
   expect(result).toMatchObject({ code: 0, stderr: "" });
   expect(result.stdout).not.toContain("Site mode (");
-  const manifest = JSON.parse(await readFile(join(parent, "cms/.lace/manifest.json"), "utf8"));
+  const manifest = parsedObject(await readFile(join(parent, "cms/.lace/manifest.json"), "utf8"));
   expect(manifest.site).toEqual({ mode, path });
   expect(Object.keys(manifest)).toEqual(["schemaVersion", "templateVersion", "site", "files"]);
-  expect(Object.keys(manifest.files).some((file) => file.startsWith("site/"))).toBe(
+  expect(Object.keys(object(manifest.files)).some((file) => file.startsWith("site/"))).toBe(
     mode === "starter",
   );
   // Nothing outside the generated target changes in any mode.
@@ -151,7 +164,7 @@ test("without a terminal the starter is used and the other flags are named", asy
   expect(result.code).toBe(0);
   expect(result.stdout).toContain("--existing-site <path>");
   expect(result.stdout).toContain("--no-site");
-  const manifest = JSON.parse(await readFile(join(parent, "cms/.lace/manifest.json"), "utf8"));
+  const manifest = parsedObject(await readFile(join(parent, "cms/.lace/manifest.json"), "utf8"));
   expect(manifest.site).toEqual({ mode: "starter", path: "site" });
 });
 
@@ -161,7 +174,7 @@ test("interactive defaults pick an existing site at .. when the parent is an Ast
   expect(result.code).toBe(0);
   expect(result.stdout).toContain("Choose 1-3 [2]");
   expect(result.stdout).toContain("[..]");
-  const manifest = JSON.parse(await readFile(join(parent, "cms/.lace/manifest.json"), "utf8"));
+  const manifest = parsedObject(await readFile(join(parent, "cms/.lace/manifest.json"), "utf8"));
   expect(manifest.site).toEqual({ mode: "existing", path: ".." });
 });
 
@@ -170,7 +183,9 @@ test("interactive default is the starter without an Astro parent", async () => {
   const result = await cli(["my-site"], parent, { interactive: true, input: input("") });
   expect(result.code).toBe(0);
   expect(result.stdout).toContain("Choose 1-3 [1]");
-  const manifest = JSON.parse(await readFile(join(parent, "my-site/.lace/manifest.json"), "utf8"));
+  const manifest = parsedObject(
+    await readFile(join(parent, "my-site/.lace/manifest.json"), "utf8"),
+  );
   expect(manifest.site).toEqual({ mode: "starter", path: "site" });
 });
 
@@ -182,7 +197,9 @@ test("interactive answers are re-prompted and fail after three invalid answers",
   });
   expect(chosen.code).toBe(0);
   expect(chosen.stdout).toContain("Enter 1, 2 or 3.");
-  expect(JSON.parse(await readFile(join(parent, "cms/.lace/manifest.json"), "utf8")).site).toEqual({
+  expect(
+    parsedObject(await readFile(join(parent, "cms/.lace/manifest.json"), "utf8")).site,
+  ).toEqual({
     mode: "none",
     path: null,
   });
@@ -200,9 +217,9 @@ test("interactive answers are re-prompted and fail after three invalid answers",
     input: input("existing", "bad\\path", "../web"),
   });
   expect(nested.code).toBe(0);
-  expect(JSON.parse(await readFile(join(path, "../cms/.lace/manifest.json"), "utf8")).site).toEqual(
-    { mode: "existing", path: "../web" },
-  );
+  expect(
+    parsedObject(await readFile(join(path, "../cms/.lace/manifest.json"), "utf8")).site,
+  ).toEqual({ mode: "existing", path: "../web" });
 });
 
 test("interactive none with --cloudflare generates a headless Worker project", async () => {
@@ -213,11 +230,11 @@ test("interactive none with --cloudflare generates a headless Worker project", a
   });
   expect(result.code).toBe(0);
   expect(result.stdout).toContain("the CMS Worker is in worker/; follow docs/lace-cloudflare.md");
-  const manifest = JSON.parse(await readFile(join(parent, "cms/.lace/manifest.json"), "utf8"));
+  const manifest = parsedObject(await readFile(join(parent, "cms/.lace/manifest.json"), "utf8"));
   expect(manifest.site).toEqual({ mode: "none", path: null });
   expect(manifest.files).toHaveProperty("worker/index.ts");
   expect(manifest.files).not.toHaveProperty(".github/workflows/cloudflare.yml");
-  expect(manifest.files["docs/lace-cloudflare.md"]?.owner).toBe("managed");
+  expect(object(object(manifest.files)["docs/lace-cloudflare.md"]).owner).toBe("managed");
 });
 
 test("existing-site path grammar", () => {
@@ -227,7 +244,7 @@ test("existing-site path grammar", () => {
     ["../web", "../web"],
     ["../../my_site-1", "../../my_site-1"],
     ["../.site", "../.site"],
-  ])
+  ] as const)
     expect(normalizeSitePath(path)).toBe(expected);
   for (const path of [
     "",
@@ -265,7 +282,7 @@ test("existing-site paths must lie outside the target, avoid symlinks and be Ast
     ["../configonly", "is not an Astro project root"],
     ["../missing", "does not exist"],
     ["../-bad", "Invalid existing-site path"],
-  ]) {
+  ] as const) {
     const result = await cli(["cms", "--existing-site", path], parent);
     expect(result.code, path).toBe(1);
     expect(result.stderr, path).toContain(message);
@@ -292,7 +309,7 @@ test("markers render per mode and malformed markers fail", () => {
     "# lace-site: end",
     "",
   ].join("\n");
-  const site = { mode: "existing", path: "../web" };
+  const site = { mode: "existing", path: "../web" } as const;
   // Content before a trailing marker precedes its block and is kept in every mode.
   expect(renderForSite(text, "x.yml", "markers", site)).toBe("a\nb\nc ../web\nkey: value\n");
   expect(renderSiteMarkers(text, "x.yml", "starter")).toBe("a\nb\nkey: value\n");
@@ -310,7 +327,7 @@ test("markers render per mode and malformed markers fail", () => {
     ["# lace-site: sometimes\nx\n# lace-site: end\n", "unknown lace-site mode"],
     ["# lace-site:\n# lace-site: end\n", "unknown lace-site mode"],
     ["<!-- lace-site: starter\n", "malformed"],
-  ])
+  ] as const)
     expect(() => renderSiteMarkers(bad, bad.startsWith("<") ? "r.md" : "x.yml", "starter")).toThrow(
       message,
     );
@@ -330,7 +347,7 @@ test("Cloudflare markers select on/off blocks and nest with site markers", () =>
     "// lace-cloudflare: end",
     "",
   ].join("\n");
-  const starter = { mode: "starter" };
+  const starter = { mode: "starter" } as const;
   expect(renderForSite(text, "x.jsonc", "markers", starter, true)).toBe("a\nworker\nsite site\n");
   expect(renderForSite(text, "x.jsonc", "markers", { mode: "none" }, true)).toBe("a\nworker\n");
   expect(renderForSite(text, "x.jsonc", "markers", starter, false)).toBe("a\nplain\n");
@@ -347,7 +364,7 @@ test("Cloudflare markers select on/off blocks and nest with site markers", () =>
     ["# lace-cloudflare: maybe\nx\n# lace-cloudflare: end\n", "unknown lace-cloudflare value"],
     ["# lace-cloudflare: on off\nx\n# lace-cloudflare: end\n", "unknown lace-cloudflare value"],
     ["<!-- lace-cloudflare: on\n", "malformed"],
-  ])
+  ] as const)
     expect(() =>
       renderCloudflareMarkers(bad, bad.startsWith("<") ? "r.md" : "x.yml", true),
     ).toThrow(message);
@@ -359,19 +376,25 @@ test("starter package.json and workspace bytes equal the committed templates", a
     "cms",
   );
   expect(renderForSite(pkg, "package.json", "root-package", { mode: "starter" }, true)).toBe(pkg);
-  const plain = JSON.parse(renderForSite(pkg, "package.json", "root-package", { mode: "starter" }));
-  const template = JSON.parse(pkg);
-  for (const name of Object.keys(template.scripts).filter((key) => key.startsWith("cf:")))
-    delete template.scripts[name];
-  delete template.dependencies["@lacecms/db"];
-  delete template.dependencies["@lacecms/platform-cloudflare"];
-  delete template.dependencies.miniflare;
+  const plain = parsedObject(
+    renderForSite(pkg, "package.json", "root-package", { mode: "starter" }),
+  );
+  const template = parsedObject(pkg);
+  const templateScripts = object(template.scripts);
+  const templateDependencies = object(template.dependencies);
+  for (const name of Object.keys(templateScripts).filter((key) => key.startsWith("cf:")))
+    delete templateScripts[name];
+  delete templateDependencies["@lacecms/db"];
+  delete templateDependencies["@lacecms/platform-cloudflare"];
+  delete templateDependencies.miniflare;
+  template.scripts = templateScripts;
+  template.dependencies = templateDependencies;
   expect(plain).toEqual(template);
   const workspace = await readFile(join(templates, "pnpm-workspace.yaml"), "utf8");
   expect(renderForSite(workspace, "pnpm-workspace.yaml", "workspace", { mode: "starter" })).toBe(
     workspace,
   );
-  for (const site of [{ mode: "existing", path: ".." }, { mode: "none" }])
+  for (const site of [{ mode: "existing", path: ".." }, { mode: "none" }] as const)
     expect(renderForSite(workspace, "pnpm-workspace.yaml", "workspace", site)).toMatch(
       /^allowBuilds:\n/u,
     );
@@ -385,7 +408,7 @@ test("no template file leaks a marker in any mode", async () => {
     ["none", { mode: "none" }, false],
     ["none-cloudflare", { mode: "none" }, true],
     ["starter-plain", { mode: "starter" }, false],
-  ]) {
+  ] as const) {
     const project = await generateProject({ target: join(parent, name), site, cloudflare });
     for (const file of await listFiles(project.path)) {
       const text = await readFile(join(project.path, file), "utf8");
@@ -411,8 +434,8 @@ test("existing-site managed files select the site at its path", async () => {
     site: { mode: "existing", path: ".." },
     cloudflare: true,
   });
-  const read = (file) => readFile(join(project.path, file), "utf8");
-  const { scripts } = JSON.parse(await read("package.json"));
+  const read = (file: string) => readFile(join(project.path, file), "utf8");
+  const scripts = object(parsedObject(await read("package.json")).scripts);
   expect(scripts.dev).toBe("pnpm --dir .. exec astro dev");
   expect(scripts.build).toBe("pnpm --dir .. exec astro build");
   expect(scripts).not.toHaveProperty("typecheck");
@@ -445,8 +468,8 @@ test("existing-site managed files select the site at its path", async () => {
 test("no-site managed files configure no builder or build site", async () => {
   const parent = await root();
   const project = await generateProject({ target: join(parent, "cms"), site: { mode: "none" } });
-  const read = (file) => readFile(join(project.path, file), "utf8");
-  const { scripts } = JSON.parse(await read("package.json"));
+  const read = (file: string) => readFile(join(project.path, file), "utf8");
+  const scripts = object(parsedObject(await read("package.json")).scripts);
   for (const name of ["dev", "build", "typecheck"]) expect(scripts).not.toHaveProperty(name);
   expect(scripts).toHaveProperty("prod:start");
   expect(await read("pnpm-workspace.yaml")).not.toContain("packages:");
@@ -514,21 +537,22 @@ test.each([
   ["starter", { mode: "starter" }],
   ["existing", { mode: "existing", path: ".." }],
   ["none", { mode: "none" }],
-])("%s generation is deterministic and local links resolve", async (name, site) => {
+] as const)("%s generation is deterministic and local links resolve", async (name, site) => {
   const left = await generateProject({ target: join(await astroSite(), "cms"), site });
   const right = await generateProject({ target: join(await astroSite(), "cms"), site });
   expect(left.manifest).toEqual(right.manifest);
   expect(await treeHashes(left.path)).toEqual(await treeHashes(right.path));
   for (const document of ["README.md", "docs/lace-operations.md"]) {
     const text = await readFile(join(left.path, document), "utf8");
-    for (const [, link] of text.matchAll(/\]\(([^)\s]+)\)/gu)) {
+    for (const [, matchLink] of text.matchAll(/\]\(([^)\s]+)\)/gu)) {
+      const link = matchLink!;
       if (/^[a-z]+:/u.test(link)) continue;
       const [path, fragment] = link.split("#");
       const file = path ? join(left.path, document, "..", path) : join(left.path, document);
       expect((await stat(file)).isFile(), `${document} -> ${link}`).toBe(true);
       if (fragment) {
         const anchors = [...(await readFile(file, "utf8")).matchAll(/^## (.+)$/gmu)].map((match) =>
-          match[1].toLowerCase().replaceAll(",", "").replaceAll(" ", "-"),
+          match[1]!.toLowerCase().replaceAll(",", "").replaceAll(" ", "-"),
         );
         expect(anchors, `${document} -> ${link}`).toContain(fragment);
       }
@@ -543,7 +567,7 @@ test.skipIf(!docker)("generated Compose files are valid in every mode", async ()
     ["starter", { mode: "starter" }],
     ["existing", { mode: "existing", path: ".." }],
     ["none", { mode: "none" }],
-  ]) {
+  ] as const) {
     const project = await generateProject({ target: join(parent, name), site });
     const result = spawnSync("docker", ["compose", "config", "--format", "json"], {
       cwd: project.path,
@@ -560,24 +584,62 @@ test.skipIf(!docker)("generated Compose files are valid in every mode", async ()
       },
     });
     expect(result.status, result.stderr).toBe(0);
-    const { services, volumes } = JSON.parse(result.stdout);
+    const parsed: unknown = JSON.parse(result.stdout);
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      !("services" in parsed) ||
+      !("volumes" in parsed) ||
+      typeof parsed.services !== "object" ||
+      parsed.services === null ||
+      typeof parsed.volumes !== "object" ||
+      parsed.volumes === null
+    )
+      throw new Error("Invalid Compose output");
+    const { services, volumes } = parsed;
+    const serviceEntries = Object.entries(services);
+    const getService = (name: string) => {
+      const service: unknown = serviceEntries.find(([key]) => key === name)?.[1];
+      if (typeof service !== "object" || service === null)
+        throw new Error(`Invalid service ${name}`);
+      const environment: unknown = "environment" in service ? service.environment : {};
+      if (typeof environment !== "object" || environment === null)
+        throw new Error(`Invalid environment ${name}`);
+      const mounts: unknown = "volumes" in service ? service.volumes : [];
+      if (
+        !Array.isArray(mounts) ||
+        !mounts.every(
+          (mount: unknown) =>
+            typeof mount === "object" &&
+            mount !== null &&
+            "source" in mount &&
+            typeof mount.source === "string" &&
+            "target" in mount &&
+            typeof mount.target === "string",
+        )
+      )
+        throw new Error(`Invalid mounts ${name}`);
+      return { environment, volumes: mounts as { source: string; target: string }[] };
+    };
     if (site.mode === "none") {
       expect(services).not.toHaveProperty("builder");
       expect(volumes).not.toHaveProperty("builder-cache");
-      expect(services.dispatcher.environment).not.toHaveProperty("LACE_BUILDER_URL");
-      expect(services.api.environment).not.toHaveProperty("LACE_BUILD_SITE_ID");
+      expect(getService("dispatcher").environment).not.toHaveProperty("LACE_BUILDER_URL");
+      expect(getService("api").environment).not.toHaveProperty("LACE_BUILD_SITE_ID");
     } else {
-      const mount = services.builder.volumes.find((volume) => volume.target === "/source");
-      expect(mount.source).toBe(await realpath(site.mode === "existing" ? parent : project.path));
+      const mount = getService("builder").volumes.find((volume) => volume.target === "/source");
+      expect(mount?.source).toBe(await realpath(site.mode === "existing" ? parent : project.path));
       // Only the builder mounts its persistent cache.
-      const cacheMounts = Object.entries(services).flatMap(([service, { volumes = [] }]) =>
-        volumes.filter((volume) => volume.source === "builder-cache").map(() => service),
+      const cacheMounts = serviceEntries.flatMap(([service]) =>
+        getService(service)
+          .volumes.filter((volume) => volume.source === "builder-cache")
+          .map(() => service),
       );
       expect(cacheMounts).toEqual(["builder"]);
       expect(
-        services.builder.volumes.find((volume) => volume.source === "builder-cache").target,
+        getService("builder").volumes.find((volume) => volume.source === "builder-cache")?.target,
       ).toBe("/cache");
-      expect(services.builder.environment.LACE_BUILD_SITE_DIR).toBe(
+      expect(Reflect.get(getService("builder").environment, "LACE_BUILD_SITE_DIR")).toBe(
         site.mode === "existing" ? "." : "site",
       );
     }

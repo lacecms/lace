@@ -1,7 +1,6 @@
-// @ts-nocheck
-// TODO(rf2): Type scripted HTTP servers, mutable export fixtures and browser-only import probe.
 import { readdir, readFile } from "node:fs/promises";
 import { LacePublishedSiteError, createPublishedSiteLoader } from "@lacecms/sdk";
+import type { Server } from "node:http";
 import { createServer } from "node:http";
 import { gzipSync } from "node:zlib";
 import { afterEach, expect, test, vi } from "vitest";
@@ -13,19 +12,53 @@ const env = Object.freeze({
   LACE_BUILD_TOKEN: token,
   LACE_PUBLIC_BASE_URL: "https://media.example/lace/",
 });
-const fixture = JSON.parse(
-  await readFile(new URL("../../../apps/site/src/fixtures/published-export.json", import.meta.url)),
+const fixtureValue: unknown = JSON.parse(
+  await readFile(
+    new URL("../../../apps/site/src/fixtures/published-export.json", import.meta.url),
+    "utf8",
+  ),
 );
+function isFixture(value: unknown): value is {
+  version: number;
+  globals: unknown[];
+  seo: unknown;
+  entries: { path: string; title: string }[];
+  [key: string]: unknown;
+} {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("entries" in value) ||
+    !Array.isArray(value.entries) ||
+    !("globals" in value) ||
+    !Array.isArray(value.globals) ||
+    !("seo" in value) ||
+    !("version" in value) ||
+    typeof value.version !== "number"
+  )
+    return false;
+  return value.entries.every(
+    (entry: unknown) =>
+      !!entry &&
+      typeof entry === "object" &&
+      "path" in entry &&
+      typeof entry.path === "string" &&
+      "title" in entry &&
+      typeof entry.title === "string",
+  );
+}
+if (!isFixture(fixtureValue)) throw new Error("Invalid published-export fixture");
+const fixture = fixtureValue;
 
 function exportServer() {
-  const conditions = [];
+  const conditions: (string | null)[] = [];
   let version = 7;
   return {
     conditions,
-    publish(next) {
+    publish(next: number) {
       version = next;
     },
-    fetch: async (url, init) => {
+    fetch: async (url: URL, init: RequestInit) => {
       const headers = new Headers(init.headers);
       expect(String(url)).toBe("http://api:3000/api/v1/public/build-export");
       expect(headers.get("authorization")).toBe(`Bearer ${token}`);
@@ -35,7 +68,9 @@ function exportServer() {
         return new Response(null, { headers: { etag }, status: 304 });
       const exported = structuredClone(fixture);
       exported.version = version;
-      exported.entries[0].title = `Home v${version}`;
+      const home = exported.entries[0];
+      if (!home) throw new Error("Expected home fixture");
+      home.title = `Home v${version}`;
       return Response.json(exported, { headers: { etag } });
     },
   };
@@ -43,10 +78,10 @@ function exportServer() {
 
 /** Serves the fixture one entry per page, like the API with `limit=1`. */
 function pagedExportServer(version = 7) {
-  const requests = [];
+  const requests: (string | null)[] = [];
   return {
     requests,
-    fetch: async (url, init) => {
+    fetch: async (url: URL, init: RequestInit) => {
       const headers = new Headers(init.headers);
       expect(headers.get("authorization")).toBe(`Bearer ${token}`);
       const after = new URL(String(url)).searchParams.get("after");
@@ -70,10 +105,10 @@ function pagedExportServer(version = 7) {
 
 test("the Astro loader forwards optimizeImages to the published-site loader", async () => {
   const optimized = await createAstroSiteLoader({ env, fetch: pagedExportServer().fetch })();
-  expect(optimized.media("hero-media").sourceUrl).toBe(
+  expect(optimized.media("hero-media")?.sourceUrl).toBe(
     "http://api:3000/api/v1/public/media/hero-media",
   );
-  expect(optimized.media("hero-media").url).toBe(
+  expect(optimized.media("hero-media")?.url).toBe(
     "https://media.example/lace/api/v1/public/media/hero-media",
   );
   const original = await createAstroSiteLoader({
@@ -108,7 +143,7 @@ const saved = { ...process.env };
 afterEach(() => {
   for (const name of Object.keys(process.env)) if (!(name in saved)) delete process.env[name];
   Object.assign(process.env, saved);
-  delete globalThis.window;
+  vi.unstubAllGlobals();
 });
 
 test("a static build reads one export shared by every route", async () => {
@@ -171,8 +206,9 @@ test("hints follow the loader message and the token never appears", async () => 
 });
 
 test("evaluating the server module in a browser fails", async () => {
-  globalThis.window = {};
-  await expect(import("./index.js?browser")).rejects.toThrow(/server-only/u);
+  vi.stubGlobal("window", {});
+  const browserModule = "./index.js?browser";
+  await expect(import(browserModule)).rejects.toThrow(/server-only/u);
 });
 
 test("the adapter exports only its server module and the generic components", async () => {
@@ -199,41 +235,48 @@ test("the adapter exports only its server module and the generic components", as
   ]);
 });
 
-async function listen(server) {
-  await new Promise((resolve, reject) => {
+async function listen(server: Server) {
+  await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", resolve);
   });
-  return `http://127.0.0.1:${server.address().port}`;
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Expected TCP listener");
+  return `http://127.0.0.1:${address.port}`;
 }
 
-async function close(server) {
+async function close(server: Server) {
   server.closeAllConnections();
-  await new Promise((resolve, reject) =>
+  await new Promise<void>((resolve, reject) =>
     server.close((error) => (error ? reject(error) : resolve())),
   );
 }
 
 test.each([
-  ["published-site static", false, (baseUrl) => createPublishedSiteLoader({ baseUrl, token })],
+  [
+    "published-site static",
+    false,
+    (baseUrl: string) => createPublishedSiteLoader({ baseUrl, token }),
+  ],
   [
     "published-site dev",
     true,
-    (baseUrl) => createPublishedSiteLoader({ baseUrl, token, revalidate: true }),
+    (baseUrl: string) => createPublishedSiteLoader({ baseUrl, token, revalidate: true }),
   ],
   [
     "Astro static",
     false,
-    (baseUrl) => createAstroSiteLoader({ env: { ...env, LACE_API_BASE_URL: baseUrl } }),
+    (baseUrl: string) => createAstroSiteLoader({ env: { ...env, LACE_API_BASE_URL: baseUrl } }),
   ],
   [
     "Astro dev",
     true,
-    (baseUrl) => createAstroSiteLoader({ dev: true, env: { ...env, LACE_API_BASE_URL: baseUrl } }),
+    (baseUrl: string) =>
+      createAstroSiteLoader({ dev: true, env: { ...env, LACE_API_BASE_URL: baseUrl } }),
   ],
 ])("%s works with default fetch through a gzip proxy", async (_name, dev, factory) => {
   let version = 7;
-  const requests = [];
+  const requests: { condition: string | undefined; encoding: string | undefined }[] = [];
   const origin = createServer((request, response) => {
     if (
       request.url !== "/api/v1/public/build-export" ||
@@ -249,7 +292,9 @@ test.each([
     }
     const exported = structuredClone(fixture);
     exported.version = version;
-    exported.entries[0].title = `Home v${version}`;
+    const home = exported.entries[0];
+    if (!home) throw new Error("Expected home fixture");
+    home.title = `Home v${version}`;
     response
       .writeHead(200, { "content-type": "application/json", etag })
       .end(JSON.stringify(exported));
@@ -261,11 +306,14 @@ test.each([
       requests.push({ condition, encoding: request.headers["accept-encoding"] });
       const upstream = await fetch(`${originUrl}${request.url}`, {
         headers: {
-          authorization: request.headers.authorization,
+          ...(request.headers.authorization === undefined
+            ? {}
+            : { authorization: request.headers.authorization }),
           ...(condition === undefined ? {} : { "if-none-match": condition }),
         },
       });
       const etag = upstream.headers.get("etag");
+      if (!etag) throw new Error("Expected upstream ETag");
       if (upstream.status === 304) {
         response.writeHead(304, { etag }).end();
         return;
@@ -307,7 +355,7 @@ test.each([
       expect(changed).toBe(first);
       expect(requests).toHaveLength(1);
     }
-    expect(requests.every(({ encoding }) => encoding.includes("gzip"))).toBe(true);
+    expect(requests.every(({ encoding }) => encoding?.includes("gzip"))).toBe(true);
   } finally {
     await close(proxy);
     await close(origin);
@@ -341,7 +389,7 @@ test("without a site URL the sitemap response has no body and warns once", async
     expect(response.status).toBe(404);
     expect(response.body).toBeNull();
     expect(warn).toHaveBeenCalledOnce();
-    expect(warn.mock.calls[0][0]).toMatch(/LACE_BUILD_SITE_URL is not set: sitemap\.xml/u);
+    expect(warn.mock.calls[0]?.[0]).toMatch(/LACE_BUILD_SITE_URL is not set: sitemap\.xml/u);
   } finally {
     warn.mockRestore();
   }

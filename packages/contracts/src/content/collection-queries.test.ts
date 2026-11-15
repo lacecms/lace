@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import { field } from "@lacecms/content";
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
@@ -67,14 +65,14 @@ describe("configured collection query contracts", async () => {
       },
     ]);
     const input = [
-      { field: "z", op: "in", values: ["b", "a"] },
-      { field: "a", op: "eq", value: false },
+      { field: "z", op: "in" as const, values: ["b", "a"] },
+      { field: "a", op: "eq" as const, value: false },
     ];
     expect(canonicalCollectionFilters(input)).toEqual([
       input[1],
       { ...input[0], values: ["a", "b"] },
     ]);
-    expect(input[0].values).toEqual(["b", "a"]);
+    expect(input[0]?.values).toEqual(["b", "a"]);
   });
   test.each([
     [{ field: "n", op: "eq", value: Infinity }],
@@ -106,10 +104,11 @@ describe("configured collection query contracts", async () => {
   });
   test("metadata validates configured targets independently of columns and detaches mapping", () => {
     const source = {
-      kind: "collection",
+      kind: "collection" as const,
       key: "posts",
       version: 1,
       blocks: [],
+      blockDefinitions: [],
       fields: { text: field.text(), count: field.number() },
       listOptions: { searchableFields: ["text"], sortableFields: ["count"] },
     };
@@ -117,7 +116,7 @@ describe("configured collection query contracts", async () => {
     expect(v.safeParse(contentModelSchema, mapped).success).toBe(true);
     expect(mapped.listFields).toBeUndefined();
     source.listOptions.searchableFields.push("count");
-    expect(mapped.listOptions.searchableFields).toEqual(["text"]);
+    expect(mapped.listOptions?.searchableFields).toEqual(["text"]);
     expect(v.safeParse(contentModelSchema, { ...mapped, kind: "page", path: "/" }).success).toBe(
       false,
     );
@@ -139,10 +138,11 @@ describe("configured collection query contracts", async () => {
   });
   test("metadata carries a default sort that names a sortable field or a system sort", () => {
     const source = {
-      kind: "collection",
+      kind: "collection" as const,
       key: "projects",
       version: 1,
       blocks: [],
+      blockDefinitions: [],
       fields: { order: field.number(), text: field.text() },
       listOptions: { sortableFields: ["order"], defaultSort: "field:order" },
     };
@@ -180,14 +180,13 @@ test("effective capability identity ignores labels and columns but includes sele
     label: "First",
   };
   const identity = collectionCapabilityIdentity(source);
-  expect(
-    collectionCapabilityIdentity({
-      ...source,
-      label: "Second",
-      listFields: [],
-      listOptions: { ...source.listOptions, sortableFields: ["text", "category"] },
-    }),
-  ).toBe(identity);
+  const relabeled = {
+    ...source,
+    label: "Second",
+    listFields: [],
+    listOptions: { ...source.listOptions, sortableFields: ["text", "category"] },
+  };
+  expect(collectionCapabilityIdentity(relabeled)).toBe(identity);
   expect(
     collectionCapabilityIdentity({
       ...source,

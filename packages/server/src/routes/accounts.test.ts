@@ -1,12 +1,10 @@
-// @ts-nocheck
-// TODO(rf2): Type partial account security overrides, deferred tasks and recorded token lookups.
 import { expect, test } from "vitest";
 import { sensitiveRequestLimit } from "../index.js";
 
 import { editor, fixture, TOKEN, accountSecurity, send } from "../test-support/app-harness.js";
 
 test("reset requests answer 202 immediately without awaiting a slow sender", async () => {
-  const deferred = [];
+  const deferred: Promise<unknown>[] = [];
   const { security } = accountSecurity();
   let sendStarted = false;
   const { app } = await fixture({
@@ -74,7 +72,7 @@ test("invalid invitation and reset tokens share one 410 envelope and never echo 
       { password: "long-password-123", token: TOKEN },
       "RESET_INVALID",
     ],
-  ]) {
+  ] as const) {
     const response = await send(app, path, "POST", body);
     expect(response.status).toBe(410);
     const text = await response.text();
@@ -90,9 +88,9 @@ test("invalid invitation and reset tokens share one 410 envelope and never echo 
     password: "short",
     token: TOKEN,
   });
-  expect((await short.json()).error.details.issues.map((issue) => issue.path)).toEqual([
-    "/password",
-  ]);
+  expect(await short.json()).toMatchObject({
+    error: { details: { issues: [{ path: "/password" }] } },
+  });
   expect(JSON.stringify(logs)).not.toContain(TOKEN);
   expect(logs.every((entry) => !entry.path.includes("token"))).toBe(true);
 });
@@ -126,7 +124,7 @@ test("account routes require a session and admin routes require users:manage", a
     ["/api/v1/account/sessions/revoke-others", "POST", {}],
     ["/api/v1/admin/invitations", "GET"],
     ["/api/v1/admin/invitations", "POST", { email: "x@lace.test", role: "viewer" }],
-  ]) {
+  ] as const) {
     const response = await send(anonymous.app, path, method, body);
     expect(response.status, `${method} ${path}`).toBe(401);
     expect(response.headers.get("www-authenticate")).toBe('Session realm="lace"');
@@ -140,14 +138,14 @@ test("account routes require a session and admin routes require users:manage", a
     ["/api/v1/admin/invitations/inv-1", "DELETE"],
     ["/api/v1/admin/users/admin/password-reset", "POST", {}],
     ["/api/v1/admin/users/admin/sessions/revoke", "POST", {}],
-  ]) {
+  ] as const) {
     expect((await send(restricted.app, path, method, body)).status, `${method} ${path}`).toBe(403);
   }
   expect(calls).toEqual([]);
 });
 
 test("self-service routes mark the current session and refuse to end it", async () => {
-  const deferred = [];
+  const deferred: Promise<unknown>[] = [];
   const { security, calls } = accountSecurity();
   const { app } = await fixture({
     actor: editor,
@@ -190,14 +188,14 @@ test("self-service routes mark the current session and refuse to end it", async 
     signOutOtherSessions: true,
   });
   expect(await changed.json()).toEqual({ revoked: 1 });
-  expect(calls.find(([name]) => name === "changePassword")[1]).toMatchObject({
+  expect(calls.find(([name]) => name === "changePassword")?.[1]).toMatchObject({
     keepSessionId: "s-current",
     userId: "editor",
   });
   expect(deferred).toHaveLength(1);
   const renamed = await send(app, "/api/v1/account", "PATCH", { displayName: "  Ada Lovelace " });
   expect(renamed.status).toBe(200);
-  expect(calls.find(([name]) => name === "updateDisplayName")[1]).toMatchObject({
+  expect(calls.find(([name]) => name === "updateDisplayName")?.[1]).toMatchObject({
     displayName: "Ada Lovelace",
     userId: "editor",
   });
@@ -241,7 +239,7 @@ test("both runtimes share one sensitive-limit mapping for account routes", () =>
     ["GET", "/api/v1/admin/import-tokens", undefined],
     ["POST", "/api/v1/admin/media", { operation: "upload", scope: "actor" }],
     ["POST", "/api/v1/admin/settings/email-test", { operation: "email", scope: "actor" }],
-  ];
+  ] as const;
   for (const [method, path, expected] of cases)
     expect(sensitiveRequestLimit(method, path), `${method} ${path}`).toEqual(expected);
 });

@@ -1,9 +1,7 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy command fixtures, filesystem helpers and recorded adapter calls.
 import { readFile, writeFile, chmod, lstat, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { it, expect } from "vitest";
-import { pair, snapshot } from "../test-support/upgrade-fixtures.ts";
+import { pair, snapshot } from "../test-support/upgrade-fixtures.js";
 import { applyUpgrade } from "./upgrade-apply.js";
 import { rollbackUpgrade } from "./upgrade-rollback.js";
 import { loadOperation } from "./upgrade-journal.js";
@@ -57,7 +55,7 @@ it.each(["rollback-recorded", "after-file", "before-manifest", "after-manifest"]
         },
       }),
     ).rejects.toThrow();
-    expect((await loadOperation(options.project)).pointer.phase).toBe("rolling-back");
+    expect((await loadOperation(options.project))?.pointer.phase).toBe("rolling-back");
     await expect(applyUpgrade(options)).rejects.toThrow("Rollback is unfinished");
     await rollbackUpgrade(options);
     expect(await snapshot(options.project, false)).toEqual(before);
@@ -68,6 +66,7 @@ it("refuses missing or corrupted recovery history", async () => {
   await expect(rollbackUpgrade(options)).rejects.toThrow("No recorded upgrade");
   await applyUpgrade(options);
   const saved = await loadOperation(options.project);
+  if (!saved) throw new Error("Expected operation");
   await writeFile(
     join(options.project, `.lace/upgrade/transactions/${saved.pointer.id}/before/0`),
     "corrupt",

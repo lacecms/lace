@@ -1,12 +1,11 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
 import { accountSessionSchema, sessionRevocationResultSchema } from "./sessions.js";
 
 describe("account lifecycle contracts", () => {
   const token = "A".repeat(43);
-  const ok = (schema, value) => v.safeParse(schema, value).success;
+  const ok = (schema: v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>, value: unknown) =>
+    v.safeParse(schema, value).success;
   test("session records reject tokens and IP addresses", () => {
     const session = {
       browser: "Firefox",

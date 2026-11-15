@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type recursive descriptor fixtures, malformed runtime inputs and table tuples.
 import { describe, test, expect } from "vitest";
 import { encodeEntryLink, decodeEntryLink } from "./internal-link-tokens.js";
 import { isUrlFieldTarget, isSafeUrl, validateRichTextDocument } from "./rich-text.js";
@@ -225,17 +223,24 @@ const unsupportedRichNodes = [
 test.each(unsupportedRichNodes)("rejects unsupported expanded rich-text input %#", (node) => {
   const document = { content: [node], type: "doc" };
   expect(() => validateRichTextDocument(document)).toThrow(ContentValidationError);
-  expect(() => field.richText({ defaultValue: document })).toThrow(FieldConfigurationError);
+  // Exercise runtime rejection of a deliberately invalid default.
+  expect(() =>
+    field.richText({
+      defaultValue: document as NonNullable<
+        NonNullable<Parameters<typeof field.richText>[0]>["defaultValue"]
+      >,
+    }),
+  ).toThrow(FieldConfigurationError);
 });
 
-test.each(["draft", "publish"])(
+test.each(["draft", "publish"] as const)(
   "expanded nested defaults and block data share %s validation",
   (mode) => {
     const input = structuredClone(expandedDocument);
-    const body = field.richText({ defaultValue: input, required: true });
+    const body = field.richText({ defaultValue: validateRichTextDocument(input), required: true });
     input.content.length = 0;
     expect(body.defaultValue).toEqual(expandedDocument);
-    expect(Object.isFrozen(body.defaultValue.content)).toBe(true);
+    expect(Object.isFrozen(body.defaultValue?.content)).toBe(true);
     const fields = { sections: field.list({ item: field.group({ fields: { body } }) }) };
     const values = { sections: [{}] };
     const expected = { sections: [{ body: expandedDocument }] };
@@ -244,7 +249,7 @@ test.each(["draft", "publish"])(
     expect(validateBlockData(definition, values, mode)).toEqual(expected);
     const unsafe = { content: [unsupportedRichNodes[1]], type: "doc" };
     expect(
-      issueFrom(() => validateModelFields(fields, { sections: [{ body: unsafe }] }, mode)).path,
+      issueFrom(() => validateModelFields(fields, { sections: [{ body: unsafe }] }, mode))?.path,
     ).toEqual(["sections", 0, "body"]);
   },
 );

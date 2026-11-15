@@ -1,5 +1,13 @@
-// @ts-nocheck
-// TODO(rf2): Type scripted MCP transport payloads, protocol results and malformed content fixtures.
+import * as v from "valibot";
+import {
+  adminContentEntrySchema,
+  contentModelListSchema,
+  contentEntryListSchema,
+  publishContentEntryResultSchema,
+  errorEnvelopeSchema,
+} from "@lacecms/contracts";
+import type { Actor, Permission, Role } from "@lacecms/domain";
+import type { McpToolCompletion } from "./index.js";
 import { afterEach, expect, test } from "vitest";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { createMcpContentHandler } from "./index.js";
@@ -13,15 +21,15 @@ import {
   DeterministicIdGenerator,
 } from "@lacecms/test-utils";
 
-const clients = [];
+const clients: Client[] = [];
 afterEach(async () => {
   for (const client of clients.splice(0)) await client.close();
 });
-const actor = (id, role, write = false) =>
+const actor = (id: string, role: Role, write = false) =>
   attenuateActor(
     { id: actorId(id), role },
     {
-      permissions: ["content:read", ...(write ? ["content:write"] : [])],
+      permissions: ["content:read", ...(write ? ["content:write" as Permission] : [])],
       operations: ["discoverModels", "list", "load", ...(write ? ["create", "save"] : [])],
     },
   );
@@ -48,8 +56,8 @@ async function fixture() {
     idGenerator: new DeterministicIdGenerator("mcp"),
   });
   const handler = createMcpContentHandler({ content, version: "0.0.0-test" });
-  const events = [];
-  const connect = async (identity) => {
+  const events: McpToolCompletion[] = [];
+  const connect = async (identity: Actor) => {
     const client = new Client({ name: "lace-content-test", version: "0.0.0" });
     clients.push(client);
     await client.connect(
@@ -63,8 +71,10 @@ async function fixture() {
               body = JSON.stringify(message);
             }
           }
-          return handler.fetch(new Request(url, { ...init, body }), identity, (event) =>
-            events.push(event),
+          return handler.fetch(
+            new Request(url, { ...init, ...(body === undefined ? {} : { body }) }),
+            identity,
+            (event) => events.push(event),
           );
         },
       }),
@@ -74,10 +84,23 @@ async function fixture() {
   return { store, content, connect, events };
 }
 const draft = { modelKey: "posts", title: "Draft from MCP", fields: {}, blocks: [] };
-const payload = (result) => {
-  expect(JSON.parse(result.content[0].text)).toEqual(result.structuredContent);
-  return result.structuredContent;
-};
+const protocolResult = v.object({
+  content: v.array(v.object({ type: v.literal("text"), text: v.string() })),
+  structuredContent: v.unknown(),
+});
+function payload(result: unknown): unknown {
+  const parsed = v.parse(protocolResult, result);
+  const text = parsed.content[0]?.text;
+  if (text === undefined) throw new Error("Expected text content");
+  expect(JSON.parse(text)).toEqual(parsed.structuredContent);
+  return parsed.structuredContent;
+}
+const entryPayload = (result: unknown) => v.parse(adminContentEntrySchema, payload(result));
+const modelPayload = (result: unknown) => v.parse(contentModelListSchema, payload(result));
+const listPayload = (result: unknown) => v.parse(contentEntryListSchema, payload(result));
+const publishPayload = (result: unknown) =>
+  v.parse(publishContentEntryResultSchema, payload(result));
+const errorPayload = (result: unknown) => v.parse(errorEnvelopeSchema, payload(result));
 
 test("SDK client discovers derived schemas and executes all five shared content tools", async () => {
   const f = await fixture();
@@ -90,20 +113,23 @@ test("SDK client discovers derived schemas and executes all five shared content 
     "create_entry",
     "save_draft",
   ]);
-  const saveSchema = list.tools.find((t) => t.name === "save_draft").inputSchema;
+  const saveSchema = list.tools.find((t) => t.name === "save_draft")?.inputSchema;
+  if (!saveSchema) throw new Error("Expected save tool");
   expect(saveSchema.required).toContain("expectedRevision");
   expect(saveSchema.additionalProperties).toBe(false);
-  const models = payload(await client.callTool({ name: "list_content_models", arguments: {} }));
+  const models = modelPayload(
+    await client.callTool({ name: "list_content_models", arguments: {} }),
+  );
   expect(models.items.map((m) => m.key)).toEqual(["posts", "home", "settings", "about"]);
-  const created = payload(await client.callTool({ name: "create_entry", arguments: draft }));
+  const created = entryPayload(await client.callTool({ name: "create_entry", arguments: draft }));
   expect(created.draft.fields).toEqual({ author: "Unknown" });
   expect(created.published).toBeUndefined();
   expect(created.draft.revision).toBe(1);
-  const loaded = payload(
+  const loaded = entryPayload(
     await client.callTool({ name: "get_entry", arguments: { entryId: created.id } }),
   );
   expect(loaded).toEqual(created);
-  const saved = payload(
+  const saved = entryPayload(
     await client.callTool({
       name: "save_draft",
       arguments: {
@@ -116,10 +142,10 @@ test("SDK client discovers derived schemas and executes all five shared content 
     }),
   );
   expect(saved.draft.revision).toBe(2);
-  const entries = payload(
+  const entries = listPayload(
     await client.callTool({ name: "list_entries", arguments: { modelKey: "posts" } }),
   );
-  expect(entries.items[0].title).toBe("Updated");
+  expect(entries.items[0]?.title).toBe("Updated");
   expect(f.events.map((e) => e.tool)).toEqual([
     "list_content_models",
     "create_entry",
@@ -138,26 +164,26 @@ test("SDK calls preserve safe validation, known application, protocol and intern
     arguments: { entryId: "unknown", title: "x", fields: {}, blocks: [] },
   });
   expect(invalid.isError).toBe(true);
-  expect(payload(invalid).error).toMatchObject({
+  expect(errorPayload(invalid).error).toMatchObject({
     code: "VALIDATION_FAILED",
     details: { issues: [expect.objectContaining({ path: "/expectedRevision" })] },
   });
   const unknown = await client.callTool({ name: "get_entry", arguments: { entryId: "missing" } });
   expect(unknown.isError).toBe(true);
-  expect(payload(unknown).error.code).toBe("NOT_FOUND");
+  expect(errorPayload(unknown).error.code).toBe("NOT_FOUND");
   await expect(client.callTool({ name: "publish", arguments: {} })).rejects.toThrow();
-  const created = payload(await client.callTool({ name: "create_entry", arguments: draft }));
+  const created = entryPayload(await client.callTool({ name: "create_entry", arguments: draft }));
   const stale = await client.callTool({
     name: "save_draft",
     arguments: { entryId: created.id, title: "x", fields: {}, blocks: [], expectedRevision: 0 },
   });
   expect(stale.isError).toBe(true);
-  expect(payload(stale).error.code).toBe("CONTENT_REVISION_CONFLICT");
+  expect(errorPayload(stale).error.code).toBe("CONTENT_REVISION_CONFLICT");
   f.content.loadAdminEntry = async () => {
     throw new Error("SQL SELECT token=private-credential");
   };
   const internal = await client.callTool({ name: "get_entry", arguments: { entryId: created.id } });
-  expect(payload(internal).error).toEqual({
+  expect(errorPayload(internal).error).toEqual({
     code: "INTERNAL_ERROR",
     message: "An unexpected error occurred.",
   });
@@ -176,7 +202,7 @@ test("interleaved identities retain their own visibility and draft attribution",
     admin.callTool({ name: "create_entry", arguments: draft }),
     editor.callTool({ name: "create_entry", arguments: draft }),
   ]);
-  expect(created.map((r) => payload(r).updatedBy.id)).toEqual(["writer-a", "writer-b"]);
+  expect(created.map((r) => entryPayload(r).updatedBy.id)).toEqual(["writer-a", "writer-b"]);
   for (const name of [
     "publish",
     "unpublish",
@@ -205,16 +231,18 @@ test("publish tool shares publication, replay and guards while lifecycle bans re
   expect((await client.listTools()).tools).toHaveLength(6);
   for (const name of ["unpublish_entry", "delete_entry", "revert_draft", "duplicate_entry"])
     await expect(client.callTool({ name, arguments: {} })).rejects.toThrow();
-  const created = payload(
+  const created = entryPayload(
     await client.callTool({ name: "create_entry", arguments: { ...draft, slug: "published" } }),
   );
   const args = { entryId: created.id, expectedRevision: 1, idempotencyKey: "publication-retry" };
-  const published = payload(await client.callTool({ name: "publish_entry", arguments: args }));
+  const published = publishPayload(
+    await client.callTool({ name: "publish_entry", arguments: args }),
+  );
   expect(published.publication).toBe("published");
   expect(published.build).toMatchObject({ status: "queued" });
   expect(published.entry.published).toBeDefined();
   const version = await f.store.publishedContentVersion();
-  const replay = payload(await client.callTool({ name: "publish_entry", arguments: args }));
+  const replay = publishPayload(await client.callTool({ name: "publish_entry", arguments: args }));
   expect(replay).toEqual({
     ...published,
     publication: "replayed",
@@ -226,8 +254,8 @@ test("publish tool shares publication, replay and guards while lifecycle bans re
     arguments: { ...args, expectedRevision: 0, idempotencyKey: "different-key" },
   });
   expect(stale.isError).toBe(true);
-  expect(payload(stale).error.code).toBe("CONTENT_REVISION_CONFLICT");
-  const conflict = payload(
+  expect(errorPayload(stale).error.code).toBe("CONTENT_REVISION_CONFLICT");
+  const conflict = entryPayload(
     await client.callTool({ name: "create_entry", arguments: { ...draft, slug: "published" } }),
   );
   const blocked = await client.callTool({
@@ -235,7 +263,7 @@ test("publish tool shares publication, replay and guards while lifecycle bans re
     arguments: { entryId: conflict.id, expectedRevision: 1 },
   });
   expect(blocked.isError).toBe(true);
-  expect(payload(blocked).error.code).toBe("CONTENT_ROUTE_CONFLICT");
+  expect(errorPayload(blocked).error.code).toBe("CONTENT_ROUTE_CONFLICT");
   for (const code of ["required", "internal_link_unavailable"]) {
     const { ContentValidationError } = await import("@lacecms/content");
     f.content.publish = async () => {
@@ -245,8 +273,10 @@ test("publish tool shares publication, replay and guards while lifecycle bans re
     };
     const failure = await client.callTool({ name: "publish_entry", arguments: args });
     expect(failure.isError).toBe(true);
-    expect(payload(failure).error.code).toBe("VALIDATION_FAILED");
-    expect(payload(failure).error.details.issues[0]).toMatchObject({ code, path: "/fields/link" });
+    expect(errorPayload(failure).error.code).toBe("VALIDATION_FAILED");
+    expect(errorPayload(failure).error.details).toMatchObject({
+      issues: [expect.objectContaining({ code, path: "/fields/link" })],
+    });
   }
 });
 
@@ -298,7 +328,10 @@ test("tools describe conditional fields and publish their projection", async () 
             body = JSON.stringify(message);
           }
         }
-        return handler.fetch(new Request(url, { ...init, body }), identity);
+        return handler.fetch(
+          new Request(url, { ...init, ...(body === undefined ? {} : { body }) }),
+          identity,
+        );
       },
     }),
   );
@@ -309,11 +342,13 @@ test("tools describe conditional fields and publish their projection", async () 
   expect(tools.create_entry).toMatch(/hidden fields are kept and validated as drafts/u);
   expect(tools.save_draft).toMatch(/hidden conditional fields are kept/u);
   expect(tools.publish_entry).toMatch(/never published/u);
-  const models = payload(await client.callTool({ name: "list_content_models", arguments: {} }));
-  expect(models.items[0].visibility).toEqual(
-    content.discoverModels({ actor: identity }).items[0].visibility,
+  const models = modelPayload(
+    await client.callTool({ name: "list_content_models", arguments: {} }),
   );
-  const created = payload(
+  expect(models.items[0]?.visibility).toEqual(
+    content.discoverModels({ actor: identity }).items[0]?.visibility,
+  );
+  const created = entryPayload(
     await client.callTool({
       name: "create_entry",
       arguments: {
@@ -331,11 +366,11 @@ test("tools describe conditional fields and publish their projection", async () 
       arguments: { entryId: created.id, expectedRevision: created.draft.revision },
     }),
   );
-  const read = payload(
+  const read = entryPayload(
     await client.callTool({ name: "get_entry", arguments: { entryId: created.id } }),
   );
   expect(read.draft.fields).toEqual({ kind: "image", videoUrl: "https://example.com/left-over" });
-  expect(read.published.fields).toEqual({ kind: "image" });
+  expect(read.published?.fields).toEqual({ kind: "image" });
 });
 
 test("MCP error matrix shares the classifier body without transport headers", async () => {

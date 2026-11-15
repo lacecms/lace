@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy Node runtime fixtures, partial adapters and project configuration helpers.
 import { expect, test } from "vitest";
 import { ConfigurationError, defineConfig, definePage } from "@lacecms/config";
 import { loadProjectConfig } from "./project-config.js";
@@ -15,15 +13,24 @@ test("loads the root configuration with typed page, collection and global exampl
     { key: "settings", kind: "global" },
   ]);
   expect(config.runtime.blocks.get("hero")).toBeDefined();
-  expect(config.public.content[0].path).toBe("/about");
-  expect(config.public.content[2]).toMatchObject({ blocks: ["navigation"], fields: {} });
-  expect(config.public.content[3].route).toBe("/notes/:slug");
-  expect(config.public.content[3].fields.summary.type).toBe("text");
-  expect(config.public.content[4].route).toBe("/blog/:slug");
-  expect(config.public.content[5].path).toBeUndefined();
-  expect(config.public.content[5].fields.siteName.required).toBe(true);
-  expect(config.public.content[3].seo).toEqual({ description: "summary" });
-  expect(config.public.content[5].seoDefaults).toEqual({
+  const [about, , navigation, notes, posts, settings] = config.public.content;
+  if (
+    about?.kind !== "page" ||
+    navigation?.kind !== "global" ||
+    notes?.kind !== "collection" ||
+    posts?.kind !== "collection" ||
+    settings?.kind !== "global"
+  )
+    throw new Error("Unexpected project models");
+  expect(about.path).toBe("/about");
+  expect(navigation).toMatchObject({ blocks: ["navigation"], fields: {} });
+  expect(notes.route).toBe("/notes/:slug");
+  expect(notes.fields.summary?.type).toBe("text");
+  expect(posts.route).toBe("/blog/:slug");
+  expect(settings).not.toHaveProperty("path");
+  expect(settings.fields.siteName?.required).toBe(true);
+  expect(notes.seo).toEqual({ description: "summary" });
+  expect(settings.seoDefaults).toEqual({
     description: "description",
     image: "image",
     siteName: "siteName",

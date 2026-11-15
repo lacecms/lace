@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type heterogeneous schema fixture tables and mutable forward-compatible DTOs.
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
 import { publicBlockSchema } from "../content/blocks.js";
@@ -163,45 +161,58 @@ const fixtures = {
   publicRecord: [publicRecordSchema, record],
   publicRecordList: [publicRecordListSchema, { items: [record], media, nextCursor: "next" }],
   seoValue: [seoValueSchema, entry.seo],
-};
+} as const;
 
 /** Values under these keys are consumer-owned JSON, not contract objects. */
 const consumerJsonKeys = new Set(["data", "details", "fields", "settings"]);
 /** Records keyed by data (media IDs, model keys); their own keys are not contract keys. */
 const recordKeys = new Set(["media", "models"]);
 
-function isPlainObject(value) {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+type Path = (string | number)[];
 /** Paths of every contract-defined object in a fixture, starting with the root. */
-function contractObjectPaths(value, rootIsRecord, path = [], key = undefined) {
+function contractObjectPaths(
+  value: unknown,
+  rootIsRecord: boolean,
+  path: Path = [],
+  key?: string,
+): Path[] {
   if (key !== undefined && consumerJsonKeys.has(key)) return [];
   if (Array.isArray(value))
-    return value.flatMap((item, index) =>
-      contractObjectPaths(item, false, [...path, index], undefined),
+    return value.flatMap((item: unknown, index) =>
+      contractObjectPaths(item, false, [...path, index]),
     );
   if (!isPlainObject(value)) return [];
-  const isRecord = path.length === 0 ? rootIsRecord : recordKeys.has(key);
+  const isRecord = path.length === 0 ? rootIsRecord : key !== undefined && recordKeys.has(key);
   const nested = Object.entries(value).flatMap(([childKey, child]) =>
     contractObjectPaths(child, false, [...path, childKey], isRecord ? undefined : childKey),
   );
   return isRecord ? nested : [path, ...nested];
 }
 
-function withUnknownKey(value, path) {
-  const copy = structuredClone(value);
-  let target = copy;
-  for (const segment of path) target = target[segment];
-  target.futureKey = { introducedLater: true };
+function targetAt(value: unknown, path: Path): Record<string, unknown> {
+  let target = value;
+  for (const segment of path) {
+    if (Array.isArray(target) && typeof segment === "number") target = target[segment];
+    else if (isPlainObject(target)) target = target[String(segment)];
+    else throw new Error("Invalid fixture path");
+  }
+  if (!isPlainObject(target)) throw new Error("Expected fixture object");
+  return target;
+}
+
+function withUnknownKey(value: unknown, path: Path): unknown {
+  const copy: unknown = structuredClone(value);
+  targetAt(copy, path).futureKey = { introducedLater: true };
   return copy;
 }
 
-function without(value, path, key) {
-  const copy = structuredClone(value);
-  let target = copy;
-  for (const segment of path) target = target[segment];
-  delete target[key];
+function without(value: unknown, path: Path, key: string): unknown {
+  const copy: unknown = structuredClone(value);
+  delete targetAt(copy, path)[key];
   return copy;
 }
 
@@ -215,11 +226,8 @@ describe("strict and tolerant public read schemas", () => {
     expect(v.parse(tolerantPublicSchemas.buildExportContinuationPage, olderPage).records).toEqual(
       [],
     );
-    const unlinked = {
-      ...fixtures.buildExport[1],
-      records: [{ ...record, internalLinks: undefined }],
-    };
-    delete unlinked.records[0].internalLinks;
+    const { internalLinks: _links, ...unlinkedRecord } = record;
+    const unlinked = { ...fixtures.buildExport[1], records: [unlinkedRecord] };
     expect(v.safeParse(tolerantPublicSchemas.buildExport, unlinked).success).toBe(false);
   });
 
@@ -228,7 +236,8 @@ describe("strict and tolerant public read schemas", () => {
     expect(Object.isFrozen(tolerantPublicSchemas)).toBe(true);
   });
 
-  for (const [name, [strict, fixture]] of Object.entries(fixtures)) {
+  for (const name of Object.keys(fixtures) as (keyof typeof fixtures)[]) {
+    const [strict, fixture] = fixtures[name];
     const tolerant = tolerantPublicSchemas[name];
 
     test(`${name}: both variants agree on strict-valid input`, () => {
@@ -251,9 +260,9 @@ describe("strict and tolerant public read schemas", () => {
   test("consumer-owned JSON keeps unknown keys in both variants", () => {
     for (const schema of [publicEntrySchema, tolerantPublicSchemas.publicEntry]) {
       const parsed = v.parse(schema, entry);
-      expect(parsed.fields.nested.extra).toEqual({ deep: true });
-      expect(parsed.blocks[0].data.layout.futureOption).toBe(true);
-      expect(parsed.blocks[0].settings.undeclaredByContract).toBe(1);
+      expect(parsed.fields.nested).toEqual({ list: [1, 2], extra: { deep: true } });
+      expect(parsed.blocks[0]?.data.layout).toEqual({ columns: 3, futureOption: true });
+      expect(parsed.blocks[0]?.settings.undeclaredByContract).toBe(1);
     }
   });
 
@@ -271,7 +280,7 @@ describe("strict and tolerant public read schemas", () => {
         without(fixtures.buildExportContinuationPage[1], [], "media"),
       ],
       ["seoValue", without(entry.seo, [], "noindex")],
-    ];
+    ] as const;
     for (const [name, value] of cases) {
       expect(v.safeParse(fixtures[name][0], value).success, `strict ${name}`).toBe(false);
       expect(v.safeParse(tolerantPublicSchemas[name], value).success, `tolerant ${name}`).toBe(
@@ -287,7 +296,7 @@ describe("strict and tolerant public read schemas", () => {
       ["publicMedia", { ...media["media-1"], width: -1 }],
       ["publicEntry", { ...entry, publishedAt: "yesterday" }],
       ["publicMediaDictionary", { "media-2": media["media-1"] }],
-    ];
+    ] as const;
     for (const [name, value] of cases) {
       expect(v.safeParse(fixtures[name][0], value).success, `strict ${name}`).toBe(false);
       expect(v.safeParse(tolerantPublicSchemas[name], value).success, `tolerant ${name}`).toBe(
