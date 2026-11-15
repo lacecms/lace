@@ -399,7 +399,7 @@ async function smokePackages(snapshot, output, model, records) {
       .join("\n")}\n`,
   );
   await run("pnpm", ["install", "--no-frozen-lockfile"], { cwd: consumer });
-  await run("pnpm", ["install", "--frozen-lockfile", "--offline"], { cwd: consumer });
+  await run("pnpm", ["install", "--frozen-lockfile"], { cwd: consumer });
   await run(process.execPath, ["node_modules/@lacecms/cli/dist/bin.js", "--help"], {
     cwd: consumer,
     capture: true,

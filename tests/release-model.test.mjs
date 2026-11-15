@@ -37,7 +37,10 @@ async function coherentModel(version) {
   for (const requires of Object.values(model.registry))
     for (const name of Object.keys(requires)) requires[name] = model.definition.version;
   for (const file of Object.keys(model.dockerfiles))
-    model.dockerfiles[file] = `FROM node\nARG LACE_VERSION=${model.definition.version}\n`;
+    model.dockerfiles[file] = model.dockerfiles[file].replace(
+      /^ARG LACE_VERSION=.*$/mu,
+      `ARG LACE_VERSION=${model.definition.version}`,
+    );
   for (const file of Object.keys(model.guides))
     model.guides[file] =
       `pnpm create lace@${model.definition.version} my-site\n` +
@@ -150,6 +153,17 @@ test.each([
   if (failure === "guide-package") model.guides[guide] += "pnpm add @lacecms/astro@0.1.0-alpha.1\n";
   if (failure === "guide-image") model.guides[guide] += "ghcr.io/lacecms/api:0.1.0-alpha.1\n";
   expect(() => validateReleaseModel(model)).toThrow();
+});
+
+test.each([
+  ["apps/api/Dockerfile", /pnpm@\S+(?=\n)/u, "pnpm@12"],
+  ["apps/builder/Dockerfile", /pnpm@\S+(?= \\\n)/u, "pnpm@12.21.0"],
+])("rejects pnpm version drift in %s", async (file, pin, replacement) => {
+  const model = await coherentModel();
+  model.dockerfiles[file] = model.dockerfiles[file].replace(pin, replacement);
+  expect(() => validateReleaseModel(model)).toThrow(
+    `Release image must install ${model.rootManifest.packageManager}: ${file}`,
+  );
 });
 
 test("scenario guides are registered release guides with candidate coordinates", async () => {

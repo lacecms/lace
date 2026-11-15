@@ -177,7 +177,7 @@ export async function existingSiteJourney(parent, operations) {
       .join("\n")}\n`,
   );
   await run("existing-site-install", "pnpm", ["install", "--no-frozen-lockfile"], { cwd: root });
-  await run("existing-site-frozen", "pnpm", ["install", "--frozen-lockfile", "--offline"], {
+  await run("existing-site-frozen", "pnpm", ["install", "--frozen-lockfile"], {
     cwd: root,
   });
 

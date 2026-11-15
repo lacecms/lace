@@ -12,7 +12,7 @@ export const RELEASE_GUIDES = [
   "packages/create-lace/templates/docs/lace-compose-production.md",
   "packages/create-lace/templates/docs/lace-operations.md",
 ];
-/** Minimum-only engine declarations; a concrete pnpm version is selected for CI while lockfiles pin dependencies. */
+/** Minimum-only engine declarations, separate from reproducible toolchain pins. */
 export const ENGINE_MINIMUMS = Object.freeze({ node: ">=24.12.0", pnpm: ">=12" });
 export function supportedPnpmVersion(version) {
   const match =
@@ -88,6 +88,8 @@ export async function readReleaseModel(root) {
 
 const EXACT_PNPM_SPECIFICATION = /^pnpm@\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
 const EXACT_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
+const DOCKER_PNPM_INSTALL =
+  /\bnpm\s+(?:install|i)\s+(?:--global|-g)\s+(pnpm(?:@[^\s\\;&|]+)?)(?=[\s\\;&|]|$)/gu;
 
 /**
  * Corepack bundled with the minimum Node (24.12.0) rejects a range in either package-manager
@@ -199,9 +201,18 @@ export function validateReleaseModel(model, { templates = true } = {}) {
       )
         throw new Error(`Template image mismatch: ${kind}`);
     }
+    const pnpmPin = model.rootManifest.packageManager;
+    if (!EXACT_PNPM_SPECIFICATION.test(pnpmPin))
+      throw new Error("Release images require an exact workspace pnpm pin");
     for (const [file, text] of Object.entries(model.dockerfiles ?? {})) {
       if (!text.includes(`ARG LACE_VERSION=${release.version}\n`))
         throw new Error(`Runtime image version default mismatch: ${file}`);
+      const pnpmInstalls = [...text.matchAll(DOCKER_PNPM_INSTALL)];
+      if (
+        !pnpmInstalls.length ||
+        pnpmInstalls.some(([, specification]) => specification !== pnpmPin)
+      )
+        throw new Error(`Release image must install ${pnpmPin}: ${file}`);
     }
     for (const [file, requires] of Object.entries(model.registry ?? {})) {
       for (const [name, range] of Object.entries(requires)) {

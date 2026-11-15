@@ -63,7 +63,7 @@ export async function buildSiteJourney(context, session, operations) {
     await run(`external-${kind}-install`, "pnpm", ["install", "--no-frozen-lockfile"], {
       cwd: root,
     });
-    await run(`external-${kind}-frozen`, "pnpm", ["install", "--frozen-lockfile", "--offline"], {
+    await run(`external-${kind}-frozen`, "pnpm", ["install", "--frozen-lockfile"], {
       cwd: root,
     });
     const secret = `excluded-${kind}-credential`;

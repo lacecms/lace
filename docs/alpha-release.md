@@ -35,15 +35,15 @@ Both runtime images support `linux/amd64` and `linux/arm64` only when both platf
 
 ## Prerequisites
 
-- Node 24 or later and pnpm 12 or later for preparation. `release:prepare` refuses older or invalid versions before it creates the output directory. Consumer packages declare Node `>=24.12.0` and generated projects pnpm `>=12` without upper bounds. CI uses the recorded Node `24.12.0` and pnpm `12.3.4` baseline; Docker images use Node `24.22.3` and install pnpm 12. An eligible version is not automatically compatibility tested.
+- Node 24 or later and pnpm 12 or later for preparation. `release:prepare` checks both versions before creating the output directory. Consumer packages declare Node `>=24.12.0` and generated projects pnpm `>=12`. Use the workspace-pinned pnpm `12.3.4` to reproduce release evidence. CI uses Node `24.12.0`, and Docker builds use Node `24.22.3` and the same pnpm pin as CI.
 - Git, tar, Docker with buildx and the ability to run both Linux platforms (native or emulated), plus enough disk for build layers and four saved images.
-- Public dependency/network access for frozen installs and image base/toolchain downloads. Build does not need npm or GHCR publishing credentials.
+- Public registry access for dependency tarballs, pnpm's supply-chain metadata checks and image base and toolchain downloads. Preparation and acceptance can start with an empty pnpm metadata cache. Local builds use public dependencies and base images.
 - A clean reviewed source commit for release-eligible preparation. Registry credentials and local runtime data must remain outside tracked release inputs and build contexts.
 - That source commit pushed to `https://github.com/lacecms/lace` before preparation: `git status -sb` must not report `ahead`. `inventory.json` records the exact SHA, GitHub finalization tags it, and it must reach the remote unchanged — push it directly or merge with a merge commit, never squash or rebase it. Commit unrelated work (roadmaps, docs) after preparation, or push it together with the source commit.
 
 ## Local preparation
 
-The checked-in `release/alpha.json` is the version/coordinate definition. The validator rejects mismatched manifests, templates, image defaults and private/missing runtime dependencies. It does not rewrite files to hide drift.
+The checked-in `release/alpha.json` is the version/coordinate definition. The validator rejects mismatched manifests, templates, image defaults and private or missing runtime dependencies. It also checks that the API and builder Dockerfiles install the exact workspace pnpm version.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -54,6 +54,8 @@ pnpm release:verify --output .release-artifacts/rc5
 ```
 
 `release:plan` is the mutation-free dry-run plan; it does not build or need Docker. `release:prepare` builds the public graph in an isolated source snapshot, packs inspected archives in a disposable workspace, tests an isolated package consumer with test-only overrides, builds/loads both image platforms locally, exercises migrations/configuration/admin/native runtime and builder health, and saves the tested image archives. It does not build the reference Astro site against a live CMS during package compilation.
+
+The frozen installs for disposable consumers use the versions recorded in their lockfiles. pnpm can fetch missing npm registry metadata to verify those versions. If a run fails, check the failing stage and retry in a new output directory after correcting the cause.
 
 The output contains `inventory.json`, `status.json`, `packages/*.tgz`, `images/*.tar`, a source snapshot and temporary inspection/build trees. `inventory.json` records definition, source commit/fingerprint, versions, archive SHA-256, image platforms/IDs and checks. Only a successful full set from clean source has both `complete: true` and `publicationEligible: true`. This source-integrity flag does not mean that exact-artifact acceptance has passed or that anything is published. Verification recomputes every artifact checksum without rebuilding.
 

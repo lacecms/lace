@@ -1059,7 +1059,7 @@ async function installPackedConsumer(project, tarballs) {
   await run("install", "pnpm", ["install", "--no-frozen-lockfile"], {
     cwd: project,
   });
-  await run("frozen-install", "pnpm", ["install", "--frozen-lockfile", "--offline"], {
+  await run("frozen-install", "pnpm", ["install", "--frozen-lockfile"], {
     cwd: project,
   });
   const lock = await readFile(join(project, "pnpm-lock.yaml"), "utf8");
