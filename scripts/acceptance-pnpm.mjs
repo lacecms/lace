@@ -10,10 +10,14 @@ export async function pinAcceptancePnpm(workspace, temporaryRoot, run) {
   await mkdir(tools);
   await writeFile(
     join(tools, "package.json"),
-    JSON.stringify({ private: true, scripts: { "pnpm-path": "node -p process.env.npm_execpath" } }),
+    JSON.stringify({
+      private: true,
+      packageManager,
+      scripts: { "pnpm-path": "node -p process.env.npm_execpath" },
+    }),
   );
   const executable = (
-    await run("resolve-pnpm", "pnpm", ["with", version, "--silent", "run", "pnpm-path"], {
+    await run("resolve-pnpm", "pnpm", ["--silent", "run", "pnpm-path"], {
       cwd: tools,
     })
   ).trim();
