@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import * as v from "valibot";
 import { expect, test } from "vitest";
 import { adminSessionSchema, setupStateSchema } from "./users.js";
@@ -10,7 +8,7 @@ test("session summaries carry a closed, unique permission list", () => {
     user: { displayName: "Ed", email: "ed@example.com", id: "user-1", role: "editor" },
   };
   expect(v.parse(adminSessionSchema, session)).toEqual(session);
-  const parse = (value) => v.safeParse(adminSessionSchema, value).success;
+  const parse = (value: unknown) => v.safeParse(adminSessionSchema, value).success;
   expect(parse({ ...session, permissions: ["content:read", "content:delete"] })).toBe(false);
   expect(parse({ ...session, permissions: ["content:read", "content:read"] })).toBe(false);
   expect(parse({ ...session, token: "secret" })).toBe(false);

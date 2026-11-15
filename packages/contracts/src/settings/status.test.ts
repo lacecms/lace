@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import * as v from "valibot";
 import { expect, test } from "vitest";
 import { adminSettingsStatusSchema, emailTestResultSchema } from "./status.js";
@@ -26,7 +24,8 @@ test("operational status reports email delivery without provider settings", () =
     engineVersion: "0.1.0-alpha.4",
     ready: true,
   };
-  const parse = (email) => v.safeParse(adminSettingsStatusSchema, { ...status, email }).success;
+  const parse = (email: unknown) =>
+    v.safeParse(adminSettingsStatusSchema, { ...status, email }).success;
   expect(parse({ provider: "none" })).toBe(true);
   expect(parse({ from: "Lace <cms@example.com>", provider: "smtp" })).toBe(true);
   expect(parse({ from: "cms@example.com", provider: "none" })).toBe(false);
@@ -39,7 +38,7 @@ test("operational status reports email delivery without provider settings", () =
 });
 
 test("email test results use closed outcomes", () => {
-  const parse = (value) => v.safeParse(emailTestResultSchema, value).success;
+  const parse = (value: unknown) => v.safeParse(emailTestResultSchema, value).success;
   expect(parse({ status: "sent" })).toBe(true);
   for (const reason of [
     "not_configured",
@@ -60,7 +59,8 @@ test("MCP settings summary is strict and uses a canonical HTTP endpoint", () => 
     engineVersion: "test",
     ready: true,
   };
-  const parse = (mcp) => v.safeParse(adminSettingsStatusSchema, { ...status, mcp }).success;
+  const parse = (mcp: unknown) =>
+    v.safeParse(adminSettingsStatusSchema, { ...status, mcp }).success;
   for (const enabled of [true, false]) {
     expect(parse({ enabled, endpoint: "http://127.0.0.1:54321/mcp" })).toBe(true);
     expect(parse({ enabled, endpoint: "https://cms.example.com/mcp" })).toBe(true);

@@ -1,5 +1,7 @@
-// @ts-nocheck
-// TODO(rf2): Type partial build-token security adapters, export callbacks and mutable publication fixtures.
+import * as v from "valibot";
+import { buildExportFirstPageSchema, buildExportContinuationPageSchema } from "@lacecms/contracts";
+import type { JsonObject } from "@lacecms/content";
+import type { MediaMetadata } from "@lacecms/domain";
 import { expect, test } from "vitest";
 import {
   contentEntryId,
@@ -82,7 +84,7 @@ test("public collection slugs follow the full shared slug rule", async () => {
 
 test("public responses return published entries with one resolved media dictionary", async () => {
   const { app, store } = await fixture();
-  const media = (id, extra = {}) => ({
+  const media = (id: string, extra: Partial<MediaMetadata> = {}): MediaMetadata => ({
     createdAt: unixMilliseconds(1),
     createdBy: admin.id,
     filename: "image.png",
@@ -90,6 +92,7 @@ test("public responses return published entries with one resolved media dictiona
     mimeType: "image/png",
     size: 1,
     status: "active",
+    tags: [],
     storageKey: `private/${id}`,
     updatedAt: unixMilliseconds(1),
     ...extra,
@@ -100,7 +103,7 @@ test("public responses return published entries with one resolved media dictiona
   for (const [id, ids] of [
     ["post-a", ["shared", "only-a"]],
     ["post-b", ["shared"]],
-  ]) {
+  ] as const) {
     await store.create({
       entry: createContentEntry({
         draft: {
@@ -262,7 +265,7 @@ test("serves the build export in version-bound keyset pages", async () => {
     })(),
     filename: "cover.png",
   });
-  const publishPost = async (slug, fields = {}) => {
+  const publishPost = async (slug: string, fields: JsonObject = {}) => {
     const created = await content.create({
       actor: admin,
       blocks: [],
@@ -283,7 +286,9 @@ test("serves the build export in version-bound keyset pages", async () => {
   expect(first.response.headers.get("etag")).toBe(`"${version}"`);
   expect(first.body).toMatchObject({ formatVersion: 2, globals: [], media: {}, version });
   expect(first.body.seo).toEqual({ defaults: null, models: {} });
-  expect(first.body.entries.map((entry) => entry.path)).toEqual(["/blog/a", "/blog/b"]);
+  expect(
+    v.parse(buildExportFirstPageSchema, first.body).entries.map((entry) => entry.path),
+  ).toEqual(["/blog/a", "/blog/b"]);
 
   // A continuation ignores If-None-Match and carries no globals or SEO section.
   const after = encodeURIComponent(first.body.nextCursor);
@@ -300,11 +305,15 @@ test("serves the build export in version-bound keyset pages", async () => {
     "records",
     "version",
   ]);
-  expect(second.body.entries.map((entry) => entry.path)).toEqual(["/blog/c", "/blog/d"]);
+  expect(
+    v.parse(buildExportContinuationPageSchema, second.body).entries.map((entry) => entry.path),
+  ).toEqual(["/blog/c", "/blog/d"]);
   // Only the page whose entry delivers the media resolves it.
   expect(Object.keys(second.body.media)).toEqual([image.id]);
   const third = await json(app, `${path}?after=${encodeURIComponent(second.body.nextCursor)}`);
-  expect(third.body.entries.map((entry) => entry.path)).toEqual(["/blog/e"]);
+  expect(
+    v.parse(buildExportContinuationPageSchema, third.body).entries.map((entry) => entry.path),
+  ).toEqual(["/blog/e"]);
   expect(third.body).not.toHaveProperty("nextCursor");
   expect(third.body.media).toEqual({});
 
@@ -346,7 +355,7 @@ test("serves the build export in version-bound keyset pages", async () => {
   expect(exportLoads()).toBe(loads + 1);
   const openApi = await json(app, "/api/v1/openapi.json");
   const operation = openApi.body.paths[path].get;
-  expect(operation.parameters.map((parameter) => parameter.name).sort()).toEqual([
+  expect(operation.parameters.map((parameter: { name: string }) => parameter.name).sort()).toEqual([
     "after",
     "limit",
   ]);

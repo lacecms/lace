@@ -1,6 +1,9 @@
-// @ts-nocheck
-// TODO(rf2): Type partial security/email adapters, recorded calls and account outcome fixtures.
 import { actorId, unixMilliseconds } from "@lacecms/domain";
+import type { Actor } from "@lacecms/domain";
+import type { AccountUseCasesInput } from "./use-cases.js";
+import type { EmailSender, EmailDeliveryOutcome } from "./email.js";
+import type { SensitiveRateLimiter } from "../ports/security.js";
+import { opaqueTokenSecret } from "../shared/brands.js";
 import { describe, expect, test, vi } from "vitest";
 import {
   AccountError,
@@ -20,8 +23,8 @@ import {
 const NOW = 1_800_000_000_000;
 const BASE = "https://cms.example.com/";
 const TOKEN = "T".repeat(43);
-const admin = { id: actorId("admin-1"), role: "admin" };
-const editor = { id: actorId("editor-1"), role: "editor" };
+const admin: Actor = { id: actorId("admin-1"), role: "admin" };
+const editor: Actor = { id: actorId("editor-1"), role: "editor" };
 
 function memorySecurity() {
   const users = new Map([
@@ -31,16 +34,15 @@ function memorySecurity() {
   ]);
   const sessions = [
     {
-      createdAt: NOW - 10,
+      createdAt: unixMilliseconds(NOW - 10),
       id: "s-current",
-      lastActiveAt: NOW - 1,
-      userAgent: undefined,
+      lastActiveAt: unixMilliseconds(NOW - 1),
       userId: "editor-1",
     },
     {
-      createdAt: NOW - 20,
+      createdAt: unixMilliseconds(NOW - 20),
       id: "s-other",
-      lastActiveAt: NOW - 2,
+      lastActiveAt: unixMilliseconds(NOW - 2),
       userAgent: "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0",
       userId: "editor-1",
     },
@@ -52,65 +54,106 @@ function memorySecurity() {
     id: "inv-1",
     invitedBy: "admin-1",
     invitedByName: "Ada <Admin>",
-    role: "editor",
+    role: "editor" as const,
   };
   return {
     sessions,
     users,
-    acceptInvitation: vi.fn(async () => ({ status: "invalid" })),
-    changePassword: vi.fn(async (input) =>
+    acceptInvitation: vi.fn<AccountUseCasesInput["security"]["acceptInvitation"]>(async () => ({
+      status: "invalid",
+    })),
+    changePassword: vi.fn<AccountUseCasesInput["security"]["changePassword"]>(async (input) =>
       input.currentPassword === "right password"
         ? { revoked: input.keepSessionId === undefined ? 0 : 1, status: "changed" }
         : { status: "invalid_credentials" },
     ),
-    confirmPasswordReset: vi.fn(async () => ({ status: "invalid" })),
-    createInvitation: vi.fn(async (input) =>
+    confirmPasswordReset: vi.fn<AccountUseCasesInput["security"]["confirmPasswordReset"]>(
+      async () => ({ status: "invalid" }),
+    ),
+    createInvitation: vi.fn<AccountUseCasesInput["security"]["createInvitation"]>(async (input) =>
       input.email === "taken@example.com"
         ? { status: "conflict" }
         : {
             invitation: { ...invitation, email: input.email, role: input.role },
             status: "created",
-            token: TOKEN,
+            token: opaqueTokenSecret(TOKEN),
           },
     ),
-    deleteOtherSessions: vi.fn(async () => 1),
-    deleteSession: vi.fn(async ({ sessionId, userId }) =>
-      sessions.some((session) => session.id === sessionId && session.userId === userId),
+    deleteOtherSessions: vi.fn<AccountUseCasesInput["security"]["deleteOtherSessions"]>(
+      async () => 1,
     ),
-    deleteUserSessions: vi.fn(async ({ userId }) => (users.has(userId) ? 2 : null)),
-    inspectInvitation: vi.fn(async () => null),
-    issuePasswordReset: vi.fn(async ({ target }) => {
-      const entry = [...users.entries()].find(([id, value]) =>
-        "email" in target ? value.email === target.email : id === target.userId,
-      );
-      if (entry === undefined) return { status: "not_found" };
-      if (entry[1].disabled) return { status: "disabled" };
-      return { email: entry[1].email, status: "issued", token: TOKEN, userId: entry[0] };
-    }),
-    listInvitations: vi.fn(async () => [
+    deleteSession: vi.fn<AccountUseCasesInput["security"]["deleteSession"]>(
+      async ({ sessionId, userId }) =>
+        sessions.some((session) => session.id === sessionId && session.userId === userId),
+    ),
+    deleteUserSessions: vi.fn<AccountUseCasesInput["security"]["deleteUserSessions"]>(
+      async ({ userId }) => (users.has(userId) ? 2 : null),
+    ),
+    inspectInvitation: vi.fn<AccountUseCasesInput["security"]["inspectInvitation"]>(
+      async () => null,
+    ),
+    issuePasswordReset: vi.fn<AccountUseCasesInput["security"]["issuePasswordReset"]>(
+      async ({ target }) => {
+        const entry = [...users.entries()].find(([id, value]) =>
+          "email" in target ? value.email === target.email : id === target.userId,
+        );
+        if (entry === undefined) return { status: "not_found" };
+        if (entry[1].disabled) return { status: "disabled" };
+        return {
+          email: entry[1].email,
+          status: "issued",
+          token: opaqueTokenSecret(TOKEN),
+          userId: entry[0],
+        };
+      },
+    ),
+    listInvitations: vi.fn<AccountUseCasesInput["security"]["listInvitations"]>(async () => [
       invitation,
       { ...invitation, expiresAt: unixMilliseconds(NOW - 1), id: "inv-old" },
     ]),
-    listSessions: vi.fn(async ({ userId }) =>
+    listSessions: vi.fn<AccountUseCasesInput["security"]["listSessions"]>(async ({ userId }) =>
       sessions.filter((session) => session.userId === userId),
     ),
-    readUserProfile: vi.fn(async (id) => users.get(id) ?? null),
-    reissueInvitation: vi.fn(async () => ({ status: "not_found" })),
-    revokeInvitation: vi.fn(async () => "revoked"),
-    updateDisplayName: vi.fn(async () => true),
+    readUserProfile: vi.fn<AccountUseCasesInput["security"]["readUserProfile"]>(
+      async (id) => users.get(id) ?? null,
+    ),
+    reissueInvitation: vi.fn<AccountUseCasesInput["security"]["reissueInvitation"]>(async () => ({
+      status: "not_found",
+    })),
+    revokeInvitation: vi.fn<AccountUseCasesInput["security"]["revokeInvitation"]>(
+      async () => "revoked",
+    ),
+    updateDisplayName: vi.fn<AccountUseCasesInput["security"]["updateDisplayName"]>(
+      async () => true,
+    ),
+    isSetupComplete: () => {
+      throw new Error("Unexpected isSetupComplete");
+    },
+    bootstrap: () => {
+      throw new Error("Unexpected bootstrap");
+    },
+    disableUser: () => {
+      throw new Error("Unexpected disableUser");
+    },
+    listUsers: () => {
+      throw new Error("Unexpected listUsers");
+    },
+    updateUser: () => {
+      throw new Error("Unexpected updateUser");
+    },
   };
 }
 
-function useCases(overrides = {}) {
-  const security = overrides.security ?? memorySecurity();
-  const email = overrides.email ?? {
+function useCases(overrides: { email?: EmailSender; limiter?: SensitiveRateLimiter } = {}) {
+  const security = memorySecurity();
+  const email = {
     from: "Lace <cms@example.com>",
-    provider: "log",
-    send: vi.fn(async () => EMAIL_SENT),
+    provider: "log" as const,
+    send: vi.fn<EmailSender["send"]>(async () => EMAIL_SENT),
   };
   const accounts = new AccountUseCases({
     clock: { now: () => unixMilliseconds(NOW) },
-    email,
+    email: overrides.email ?? email,
     ...(overrides.limiter === undefined ? {} : { limiter: overrides.limiter }),
     publicBaseUrl: BASE,
     security,
@@ -166,7 +209,8 @@ describe("administrator invitations", () => {
         state: "pending",
       },
     });
-    const message = email.send.mock.calls[0][0];
+    const message = email.send.mock.calls[0]?.[0];
+    if (!message) throw new Error("Expected invitation email");
     expect(message.to).toBe("new@example.com");
     expect(message.text).toContain(`${BASE}admin/accept-invite#token=${TOKEN}`);
     expect(message.text).toContain("Editor");
@@ -251,8 +295,8 @@ describe("administrator invitations", () => {
 describe("password recovery", () => {
   test("reset requests are uniform for unknown and disabled accounts and defer delivery", async () => {
     const { accounts, email, security } = useCases();
-    const deferred = [];
-    const defer = (task) => deferred.push(task);
+    const deferred: Promise<unknown>[] = [];
+    const defer = (task: Promise<unknown>) => deferred.push(task);
     for (const address of ["nobody@example.com", "OFF@example.com"])
       await expect(
         accounts.requestPasswordReset({ defer, email: address }),
@@ -268,36 +312,37 @@ describe("password recovery", () => {
     });
     expect(deferred).toHaveLength(1);
     await deferred[0];
-    expect(email.send.mock.calls[0][0]).toMatchObject({ to: "editor@example.com" });
-    expect(email.send.mock.calls[0][0].text).toContain(
+    expect(email.send.mock.calls[0]?.[0]).toMatchObject({ to: "editor@example.com" });
+    expect(email.send.mock.calls[0]?.[0]?.text).toContain(
       `${BASE}admin/reset-password#token=${TOKEN}`,
     );
   });
 
   test("the response never waits for a slow sender", async () => {
-    let release;
+    let release: ((value: EmailDeliveryOutcome) => void) | undefined;
     const slow = {
       from: "x@example.com",
-      provider: "smtp",
-      send: () => new Promise((resolve) => (release = resolve)),
+      provider: "smtp" as const,
+      send: () => new Promise<EmailDeliveryOutcome>((resolve) => (release = resolve)),
     };
     const { accounts } = useCases({ email: slow });
-    const deferred = [];
+    const deferred: Promise<unknown>[] = [];
     await accounts.requestPasswordReset({
       defer: (task) => deferred.push(task),
       email: "editor@example.com",
     });
     expect(deferred).toHaveLength(1);
+    if (!release) throw new Error("Expected pending email");
     release(EMAIL_SENT);
   });
 
   test("per-email limits refuse a fourth request before issuing", async () => {
-    const counts = new Map();
+    const counts = new Map<string, number>();
     const limiter = {
-      check: vi.fn(async ({ operation, subject }) => {
+      check: vi.fn<SensitiveRateLimiter["check"]>(async ({ operation, subject }) => {
         const key = `${operation}:${subject}`;
         counts.set(key, (counts.get(key) ?? 0) + 1);
-        return { allowed: counts.get(key) <= 3, retryAfterSeconds: 1200 };
+        return { allowed: (counts.get(key) ?? 0) <= 3, retryAfterSeconds: 1200 };
       }),
     };
     const { accounts, security } = useCases({ limiter });
@@ -352,8 +397,8 @@ describe("password recovery", () => {
 describe("self-service", () => {
   test("password changes require the current password and defer the notice", async () => {
     const { accounts, email, security } = useCases();
-    const deferred = [];
-    const defer = (task) => deferred.push(task);
+    const deferred: Promise<unknown>[] = [];
+    const defer = (task: Promise<unknown>) => deferred.push(task);
     await expect(
       accounts.changePassword(editor, "s-current", {
         currentPassword: "wrong",
@@ -376,7 +421,7 @@ describe("self-service", () => {
     );
     expect(deferred).toHaveLength(1);
     await deferred[0];
-    expect(email.send.mock.calls[0][0]).toMatchObject({
+    expect(email.send.mock.calls[0]?.[0]).toMatchObject({
       subject: "Your Lace CMS password was changed",
       to: "editor@example.com",
     });
@@ -386,7 +431,7 @@ describe("self-service", () => {
       newPassword: "x".repeat(12),
       signOutOtherSessions: false,
     });
-    expect(security.changePassword.mock.lastCall[0]).not.toHaveProperty("keepSessionId");
+    expect(security.changePassword.mock.lastCall?.[0]).not.toHaveProperty("keepSessionId");
   });
 
   test("no password-changed notice is scheduled without an email provider", async () => {
@@ -407,18 +452,18 @@ describe("self-service", () => {
     expect(sessions).toEqual([
       {
         browser: "Unknown",
-        createdAt: NOW - 10,
+        createdAt: unixMilliseconds(NOW - 10),
         current: true,
         id: "s-current",
-        lastActiveAt: NOW - 1,
+        lastActiveAt: unixMilliseconds(NOW - 1),
         os: "Unknown",
       },
       {
         browser: "Firefox",
-        createdAt: NOW - 20,
+        createdAt: unixMilliseconds(NOW - 20),
         current: false,
         id: "s-other",
-        lastActiveAt: NOW - 2,
+        lastActiveAt: unixMilliseconds(NOW - 2),
         os: "Linux",
       },
     ]);
@@ -459,7 +504,7 @@ describe("self-service", () => {
 });
 
 test("user agents classify into coarse browser and OS families", () => {
-  const cases = [
+  const cases: [string | undefined, string, string][] = [
     [
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 Edg/129.0.0.0",
       "Edge",

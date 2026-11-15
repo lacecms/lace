@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import * as v from "valibot";
 import { expect, test } from "vitest";
 
@@ -56,8 +54,9 @@ test("MCP envelopes reuse draft validation, typed filters and explicit revision 
     ],
   });
   expect(bad.success).toBe(false);
+  if (bad.success) throw new Error("Expected invalid MCP arguments");
   const issues = toContractValidationIssues(bad.issues);
-  expect(issues[0].path).toBe("/blocks/0/secret");
+  expect(issues[0]?.path).toBe("/blocks/0/secret");
   expect(JSON.stringify(issues)).not.toContain("do-not-repeat");
   const block = v.parse(contentBlockSchema, {
     key: "block",

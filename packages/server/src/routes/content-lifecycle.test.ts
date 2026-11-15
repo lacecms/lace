@@ -1,11 +1,19 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable content/model fixtures, branded snapshots and invalid lifecycle request matrices.
+import * as v from "valibot";
+import { contentModelListSchema, buildExportSchema } from "@lacecms/contracts";
+import type { JsonObject } from "@lacecms/content";
+import type { Actor } from "@lacecms/domain";
 import { expect, test } from "vitest";
 import { defineCollection, defineGlobal, definePage } from "@lacecms/config";
 import { defineBlock, field } from "@lacecms/content";
 import { actorId, mediaId, unixMilliseconds } from "@lacecms/domain";
 
 import { admin, editor, fixture, json } from "../test-support/app-harness.js";
+
+const issueEnvelope = v.object({
+  error: v.object({
+    details: v.object({ issues: v.array(v.object({ path: v.string(), code: v.string() })) }),
+  }),
+});
 
 test("globals are read by model key and refused as routed or deletable entries", async () => {
   const models = [
@@ -27,10 +35,14 @@ test("globals are read by model key and refused as routed or deletable entries",
     mimeType: "image/png",
     size: 1,
     status: "active",
+    tags: [],
     storageKey: "private/logo",
     updatedAt: unixMilliseconds(1),
   });
-  const call = (path, { body, method = "POST" } = {}) =>
+  const call = (
+    path: string,
+    { body, method = "POST" }: { body?: unknown; method?: string } = {},
+  ) =>
     json(app, path, {
       method,
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -38,7 +50,9 @@ test("globals are read by model key and refused as routed or deletable entries",
     });
 
   const listed = await json(app, "/api/v1/admin/content-models");
-  const settingsModel = listed.body.items.find((model) => model.key === "settings");
+  const settingsModel = v
+    .parse(contentModelListSchema, listed.body)
+    .items.find((model) => model.key === "settings");
   expect(settingsModel).toMatchObject({ key: "settings", kind: "global", label: "Site settings" });
   expect(settingsModel).not.toHaveProperty("path");
   expect(settingsModel).not.toHaveProperty("route");
@@ -91,7 +105,9 @@ test("globals are read by model key and refused as routed or deletable entries",
   const exported = await json(app, "/api/v1/public/build-export");
   expect(exported.response.headers.get("etag")).not.toBe(before.response.headers.get("etag"));
   expect(exported.body.entries).toEqual([]);
-  expect(exported.body.globals.map((item) => item.modelKey)).toEqual(["settings"]);
+  expect(v.parse(buildExportSchema, exported.body).globals.map((item) => item.modelKey)).toEqual([
+    "settings",
+  ]);
   expect(Object.keys(exported.body.media)).toEqual(["logo"]);
 
   for (const [path, init] of [
@@ -100,7 +116,7 @@ test("globals are read by model key and refused as routed or deletable entries",
       `${entryPath}/duplicate`,
       { body: "{}", headers: { "content-type": "application/json" }, method: "POST" },
     ],
-  ]) {
+  ] as const) {
     expect(await json(app, path, init), path).toMatchObject({
       body: { error: { code: "CONTENT_PAGE_SINGLETON" } },
       response: { status: 409 },
@@ -125,10 +141,17 @@ test("globals are read by model key and refused as routed or deletable entries",
 });
 
 test("entry lifecycle routes unpublish, revert, and duplicate with stable contracts", async () => {
-  let current = admin;
-  const viewer = { id: actorId("viewer"), role: "viewer" };
+  let current: Actor = admin;
+  const viewer: Actor = { id: actorId("viewer"), role: "viewer" };
   const { app, store } = await fixture({ maxBodyBytes: 4096, resolveActor: async () => current });
-  const call = (path, { body, headers = {}, method = "POST" } = {}) =>
+  const call = (
+    path: string,
+    {
+      body,
+      headers = {},
+      method = "POST",
+    }: { body?: unknown; headers?: Record<string, string>; method?: string } = {},
+  ) =>
     json(app, path, {
       method,
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -280,28 +303,35 @@ test("SEO values travel through admin, public and export contracts", async () =>
       mimeType: "image/png",
       size: 1,
       status: "active",
+      tags: [],
       storageKey: `private/${id}`,
       updatedAt: unixMilliseconds(1),
     });
   }
-  const call = (path, { body, method = "POST" } = {}) =>
+  const call = (
+    path: string,
+    { body, method = "POST" }: { body?: unknown; method?: string } = {},
+  ) =>
     json(app, path, {
       method,
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       headers: { "content-type": "application/json" },
     });
 
-  const listed = (await json(app, "/api/v1/admin/content-models")).body.items;
-  expect(listed.find((model) => model.key === "posts").seo).toEqual({
+  const listed = v.parse(
+    contentModelListSchema,
+    (await json(app, "/api/v1/admin/content-models")).body,
+  ).items;
+  expect(listed.find((model) => model.key === "posts")?.seo).toEqual({
     description: "summary",
     image: "cover",
   });
-  expect(listed.find((model) => model.key === "home").seo).toEqual({
+  expect(listed.find((model) => model.key === "home")?.seo).toEqual({
     description: null,
     image: null,
   });
   expect(listed.find((model) => model.key === "notes")).not.toHaveProperty("seo");
-  expect(listed.find((model) => model.key === "settings").seoDefaults).toEqual({
+  expect(listed.find((model) => model.key === "settings")?.seoDefaults).toEqual({
     description: null,
     image: null,
     siteName: "siteName",
@@ -333,16 +363,18 @@ test("SEO values travel through admin, public and export contracts", async () =>
     [{ canonical: "/hello" }, "/seo/canonical"],
     [{ title: "x".repeat(201) }, "/seo/title"],
     [{ keywords: "x" }, "/seo"],
-  ]) {
+  ] as const) {
     const invalid = await call(`${entryPath}/draft`, {
       body: { blocks: [], expectedRevision: 1, fields: {}, seo, slug: "hello", title: "Hello" },
       method: "PUT",
     });
     expect(invalid.response.status).toBe(422);
     expect(invalid.body.error.code).toBe("VALIDATION_FAILED");
-    expect(invalid.body.error.details.issues.some((issue) => issue.path.startsWith(pointer))).toBe(
-      true,
-    );
+    expect(
+      v
+        .parse(issueEnvelope, invalid.body)
+        .error.details.issues.some((issue) => issue.path.startsWith(pointer)),
+    ).toBe(true);
   }
   const refused = await call("/api/v1/admin/models/notes/entries", {
     body: { blocks: [], fields: {}, seo: { title: "x" }, slug: "n", title: "Note" },
@@ -374,7 +406,10 @@ test("SEO values travel through admin, public and export contracts", async () =>
   expect(await store.loadPublicMedia(mediaId("share"))).toMatchObject({ id: "share" });
   expect(await store.loadPublicMedia(mediaId("other"))).toBeNull();
 
-  const exported = (await json(app, "/api/v1/public/build-export")).body;
+  const exported = v.parse(
+    buildExportSchema,
+    (await json(app, "/api/v1/public/build-export")).body,
+  );
   expect(exported.seo).toEqual({
     defaults: {
       description: null,
@@ -388,7 +423,7 @@ test("SEO values travel through admin, public and export contracts", async () =>
       posts: { description: "summary", image: "cover" },
     },
   });
-  expect(exported.entries.find((item) => item.modelKey === "posts").seo).toEqual(fullSeo);
+  expect(exported.entries.find((item) => item.modelKey === "posts")?.seo).toEqual(fullSeo);
   expect(exported.entries.find((item) => item.modelKey === "notes")).not.toHaveProperty("seo");
   expect(Object.keys(exported.media)).toEqual(["share"]);
 
@@ -421,17 +456,26 @@ test("block envelopes travel through admin, public and export contracts", async 
       mimeType: "image/png",
       size: 1,
       status: "active",
+      tags: [],
       storageKey: `private/${id}`,
       updatedAt: unixMilliseconds(1),
     });
   }
-  const call = (path, { body, method = "POST" } = {}) =>
+  const call = (
+    path: string,
+    { body, method = "POST" }: { body?: unknown; method?: string } = {},
+  ) =>
     json(app, path, {
       method,
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       headers: { "content-type": "application/json" },
     });
-  const block = (key, position, envelope = {}, data = { heading: key }) => ({
+  const block = (
+    key: string,
+    position: number,
+    envelope: Record<string, unknown> = {},
+    data: JsonObject = { heading: key },
+  ) => ({
     data,
     key,
     position,
@@ -440,10 +484,10 @@ test("block envelopes travel through admin, public and export contracts", async 
     ...envelope,
   });
 
-  const panelMetadata = (await json(app, "/api/v1/admin/content-models")).body.items.find(
-    (model) => model.key === "posts",
-  ).blockDefinitions[0];
-  expect(panelMetadata.settings).toEqual({
+  const panelMetadata = v
+    .parse(contentModelListSchema, (await json(app, "/api/v1/admin/content-models")).body)
+    .items.find((model) => model.key === "posts")?.blockDefinitions?.[0];
+  expect(panelMetadata?.settings).toEqual({
     align: { defaultValue: "left", options: ["left", "center"], required: false, type: "select" },
   });
 
@@ -503,7 +547,7 @@ test("block envelopes travel through admin, public and export contracts", async 
     [{ hidden: "yes" }, "/blocks/0/hidden", undefined],
     [{ settings: { width: 2 } }, "/blocks/0/settings/width", "unknown_field"],
     [{ settings: { align: "right" } }, "/blocks/0/settings/align", undefined],
-  ]) {
+  ] as const) {
     const invalid = await call(`${entryPath}/draft`, {
       body: {
         blocks: [block("b1", 1000, envelope)],
@@ -516,9 +560,11 @@ test("block envelopes travel through admin, public and export contracts", async 
     });
     expect(invalid.response.status, JSON.stringify(envelope)).toBe(422);
     expect(invalid.body.error.code).toBe("VALIDATION_FAILED");
-    const issue = invalid.body.error.details.issues.find((value) => value.path === pointer);
+    const issue = v
+      .parse(issueEnvelope, invalid.body)
+      .error.details.issues.find((value) => value.path === pointer);
     expect(issue, JSON.stringify(invalid.body.error.details.issues)).toBeDefined();
-    if (code !== undefined) expect(issue.code).toBe(code);
+    if (code !== undefined) expect(issue?.code).toBe(code);
   }
   const duplicate = await call(`${entryPath}/draft`, {
     body: {
@@ -580,8 +626,11 @@ test("block envelopes travel through admin, public and export contracts", async 
   expect((await json(app, "/api/v1/public/collections/posts")).body.items[0].blocks).toEqual(
     delivered,
   );
-  const exported = (await json(app, "/api/v1/public/build-export")).body;
-  expect(exported.entries[0].blocks).toEqual(delivered);
+  const exported = v.parse(
+    buildExportSchema,
+    (await json(app, "/api/v1/public/build-export")).body,
+  );
+  expect(exported.entries[0]?.blocks).toEqual(delivered);
   expect(Object.keys(exported.media)).toEqual(["shown"]);
   expect((await json(app, "/api/v1/public/media/shown")).response.status).not.toBe(404);
   expect((await json(app, "/api/v1/public/media/secret")).response.status).toBe(404);

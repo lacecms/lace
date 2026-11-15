@@ -1,5 +1,4 @@
-// @ts-nocheck
-// TODO(rf2): Type partial OAuth/MCP adapters, attenuated actors and protocol completion event fixtures.
+import type { LaceAppInput } from "../index.js";
 import { expect, test } from "vitest";
 import { sensitiveRequestLimit } from "../index.js";
 import { OAuthConnectionUseCases } from "@lacecms/application";
@@ -31,7 +30,7 @@ test("unexpected MCP and OAuth failures keep the protocol server_error body", as
 
 test("account MCP connection routes keep ownership, CSRF, strict bodies and safe projections", async () => {
   const now = 1800000000000;
-  const calls = [];
+  const calls: { userId: string; after: string | undefined; limit: number }[] = [];
   const records = ["admin", "viewer"].map((userId) => ({
     id: `connection-${userId}`,
     userId,
@@ -43,7 +42,7 @@ test("account MCP connection routes keep ownership, CSRF, strict bodies and safe
     userGeneration: 0,
     createdAt: now,
     expiresAt: now + 100000,
-    revokedAt: null,
+    revokedAt: null as number | null,
   }));
   const connections = new OAuthConnectionUseCases({
     clock: { now: () => unixMilliseconds(now) },
@@ -61,7 +60,7 @@ test("account MCP connection routes keep ownership, CSRF, strict bodies and safe
       invalidateUser: async () => {},
     },
   });
-  for (const role of ["admin", "editor", "viewer"]) {
+  for (const role of ["admin", "editor", "viewer"] as const) {
     const { app } = await fixture({
       actor: { id: actorId(role), role },
       oauthConnections: connections,
@@ -82,22 +81,22 @@ test("account MCP connection routes keep ownership, CSRF, strict bodies and safe
     actor: { id: actorId("viewer"), role: "viewer" },
     oauthConnections: connections,
   });
-  const revoke = (id, origin = "https://lace.test", body = {}) =>
+  const revoke = (id: string, origin = "https://lace.test", body: unknown = {}) =>
     app.request(`https://lace.test/api/v1/account/mcp-connections/${id}/revoke`, {
       method: "POST",
       headers: { origin, "content-type": "application/json" },
       body: JSON.stringify(body),
     });
   expect((await revoke("connection-admin")).status).toBe(404);
-  expect(records[0].revokedAt).toBeNull();
+  expect(records[0]?.revokedAt).toBeNull();
   expect((await revoke("connection-viewer", "https://attacker.test")).status).toBe(403);
   expect((await revoke("connection-viewer", "https://lace.test", { accept: true })).status).toBe(
     422,
   );
-  expect(records[1].revokedAt).toBeNull();
+  expect(records[1]?.revokedAt).toBeNull();
   expect((await revoke("connection-viewer")).status).toBe(204);
   expect((await revoke("connection-viewer")).status).toBe(204);
-  expect(records[1].revokedAt).toBe(now);
+  expect(records[1]?.revokedAt).toBe(now);
   for (const query of ["limit=51", "limit=0", "limit=1&unknown=x"])
     expect(
       (await app.request(`https://lace.test/api/v1/account/mcp-connections?${query}`)).status,
@@ -128,8 +127,8 @@ test("disabled and anonymous MCP account routes do not disclose connections", as
 });
 
 test("MCP routing preserves protocol responses, actor rate context and one safe completion log", async () => {
-  const requests = [];
-  const scopes = [];
+  const requests: Parameters<LaceAppInput["rateLimiter"]["check"]>[0][] = [];
+  const scopes: Parameters<NonNullable<LaceAppInput["mcp"]>["resolve"]>[1][] = [];
   const { app, logs } = await fixture({
     mcpEnabled: true,
     mcp: {
@@ -166,7 +165,7 @@ test("MCP routing preserves protocol responses, actor rate context and one safe 
   expect(response.headers.get("x-request-id")).toBeTypeOf("string");
   expect(response.headers.get("content-type")).toBe("application/json");
   expect(scopes).toEqual(["content:write"]);
-  expect(requests[0].actor.id).toBe("admin");
+  expect(requests[0]?.actor?.id).toBe("admin");
   expect(logs).toHaveLength(1);
   expect(logs[0]).toMatchObject({
     actorId: "admin",
@@ -262,6 +261,7 @@ test("OAuth rate routing separates registration, token/client address, MCP user 
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ client_id: "client-a" }),
   });
+  if (!limit) throw new Error("Expected token rate limit");
   expect(await sensitiveRequestSubject(limit, request, "192.0.2.1")).toBe(
     '["192.0.2.1","client-a"]',
   );
@@ -301,6 +301,8 @@ test("settings MCP summary follows configuration, not request forwarding headers
     expect(result.response.status).toBe(403);
     expect(result.body).not.toHaveProperty("mcp");
   }
+  // A null URL exercises invalid runtime configuration.
+  // @ts-expect-error Deliberately invalid configuration.
   const { app } = await fixture({ publicBaseUrl: null });
   const missing = await json(app, "/api/v1/admin/settings/status");
   expect(missing.response.status).toBe(500);
@@ -310,7 +312,7 @@ test("settings MCP summary follows configuration, not request forwarding headers
 
 test("MCP publish calls require the publication scope before handler work and logs omit bearer credentials", async () => {
   let calls = 0;
-  const scopes = [];
+  const scopes: Parameters<NonNullable<LaceAppInput["mcp"]>["resolve"]>[1][] = [];
   const f = await fixture({
     mcpEnabled: true,
     maxBodyBytes: 1024,
@@ -359,7 +361,10 @@ test("enabled MCP connection routes describe their existing contracts in OpenAPI
   const doc = (await json(app, "/api/v1/openapi.json")).body;
   const list = doc.paths["/api/v1/account/mcp-connections"].get;
   const revoke = doc.paths["/api/v1/account/mcp-connections/{connectionId}/revoke"].post;
-  expect(list.parameters.map(({ name }) => name).sort()).toEqual(["after", "limit"]);
+  expect(list.parameters.map(({ name }: { name: string }) => name).sort()).toEqual([
+    "after",
+    "limit",
+  ]);
   expect(Object.keys(list.responses).sort()).toEqual(["200", "401", "403", "422"]);
   expect(revoke.parameters).toEqual(
     expect.arrayContaining([

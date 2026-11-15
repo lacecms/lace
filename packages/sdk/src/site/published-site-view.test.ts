@@ -1,5 +1,11 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable export fixtures, scripted transports and invalid loader inputs.
+import * as v from "valibot";
+import type {
+  BuildExportDto,
+  PublicBlockDto,
+  PublicEntryDto,
+  PublicGlobalDto,
+  PublicMediaDto,
+} from "@lacecms/contracts";
 import { expect, test } from "vitest";
 import { LaceSdkError } from "../client/errors.js";
 import { createPublishedSiteLoader } from "./published-site.js";
@@ -11,7 +17,29 @@ const environment = Object.freeze({
   LACE_BUILD_TOKEN: token,
 });
 
-function exportEntry({ id, modelKey = "posts", path, slug, blocks = [], fields = {} }) {
+type WireBlock = Omit<PublicBlockDto, "settings"> & {
+  settings?: PublicBlockDto["settings"];
+  hidden?: unknown;
+};
+function required<T>(value: T | null | undefined): T {
+  if (value == null) throw new Error("Expected fixture value");
+  return value;
+}
+function exportEntry({
+  id,
+  modelKey = "posts",
+  path,
+  slug,
+  blocks = [],
+  fields = {},
+}: {
+  id: string;
+  modelKey?: string;
+  path: string;
+  slug?: string;
+  blocks?: WireBlock[];
+  fields?: PublicEntryDto["fields"];
+}) {
   return {
     blocks,
     fields,
@@ -25,11 +53,15 @@ function exportEntry({ id, modelKey = "posts", path, slug, blocks = [], fields =
   };
 }
 
-function block(key, position, data = { heading: key }) {
+function block(
+  key: string,
+  position: number,
+  data: PublicBlockDto["data"] = { heading: key },
+): PublicBlockDto {
   return { data, key, position, schemaVersion: 1, settings: {}, type: "hero" };
 }
 
-function mediaItem(id, overrides = {}) {
+function mediaItem(id: string, overrides: Partial<PublicMediaDto> = {}): PublicMediaDto {
   return {
     alt: null,
     caption: null,
@@ -43,26 +75,31 @@ function mediaItem(id, overrides = {}) {
   };
 }
 
-function buildExport(version, entries, media = {}) {
+function buildExport(version: number, entries: unknown[], media: BuildExportDto["media"] = {}) {
   return {
     entries,
     formatVersion: 2,
-    globals: [],
+    globals: [] as PublicGlobalDto[],
     media,
     seo: { defaults: null, models: {} },
     version,
   };
 }
 
-function exportResponse(value, etag = `"${value.version}"`) {
+function exportResponse<T extends { version: number }>(value: T, etag = `"${value.version}"`) {
   return Response.json(value, { headers: { etag } });
 }
 
-function scriptedFetch(responses) {
-  const requests = [];
+function scriptedFetch(
+  responses: (Response | Error | (() => Response | Promise<Response>) | undefined)[],
+) {
+  const requests: { headers: Headers; url: string }[] = [];
   return {
-    fetch: async (url, init) => {
-      requests.push({ headers: new Headers(init.headers), url: url.toString() });
+    fetch: async (url: string | URL | Request, init?: RequestInit) => {
+      requests.push({
+        headers: new Headers(init?.headers),
+        url: url instanceof Request ? url.url : url.toString(),
+      });
       const next = responses.shift();
       if (next === undefined) throw new Error("Unexpected request.");
       if (next instanceof Error) throw next;
@@ -98,10 +135,11 @@ const homeExport = buildExport(
   },
 );
 
-async function captureError(promise) {
+async function captureError(promise: Promise<unknown>): Promise<Error> {
   try {
     await promise;
   } catch (error) {
+    if (!(error instanceof Error)) throw error;
     return error;
   }
   throw new Error("Expected the promise to reject.");
@@ -112,7 +150,12 @@ function exportGlobal({
   modelKey = "settings",
   blocks = [],
   fields = {},
-} = {}) {
+}: {
+  id?: string;
+  modelKey?: string;
+  blocks?: PublicBlockDto[];
+  fields?: PublicGlobalDto["fields"];
+} = {}): PublicGlobalDto {
   return { blocks, fields, id, internalLinks: [], modelKey, publishedAt: timestamp };
 }
 
@@ -132,7 +175,7 @@ test("the site view exposes published globals by model key", async () => {
     environment: { ...environment, LACE_PUBLIC_BASE_URL: "https://media.example.test/base" },
     fetch: scriptedFetch([exportResponse(value)]).fetch,
   })();
-  const settings = site.global("settings");
+  const settings = required(site.global("settings"));
   expect(settings).toMatchObject({
     fields: { logo: "logo", siteName: "Lace" },
     id: "settings-entry",
@@ -175,7 +218,7 @@ test.each([
       fetch: scriptedFetch([exportResponse({ ...buildExport(1, entries), globals })]).fetch,
     })(),
   );
-  expect(error.code).toBe("invalid_export");
+  expect(error).toMatchObject({ code: "invalid_export" });
   expect(error.message).toContain("settings");
 });
 
@@ -205,9 +248,9 @@ test("published entries pass stored SEO values through without resolving fallbac
     environment,
     fetch: scriptedFetch([exportResponse(value)]).fetch,
   })();
-  expect(site.byPath("/blog/hello").seo).toEqual(seo);
-  expect(Object.isFrozen(site.byPath("/blog/hello").seo)).toBe(true);
-  expect(site.byPath("/notes/n").seo).toBeUndefined();
+  expect(required(site.byPath("/blog/hello")).seo).toEqual(seo);
+  expect(Object.isFrozen(required(site.byPath("/blog/hello")).seo)).toBe(true);
+  expect(required(site.byPath("/notes/n")).seo).toBeUndefined();
 });
 
 test.each([
@@ -225,7 +268,7 @@ test.each([
       fetch: transport.fetch,
     })(),
   );
-  expect(error.code).toBe("missing_configuration");
+  expect(error).toMatchObject({ code: "missing_configuration" });
   expect(error.message).toContain("LACE_BUILD_SITE_URL");
   expect(error.message).not.toContain(value);
   expect(transport.requests).toHaveLength(0);
@@ -239,7 +282,7 @@ test.each(["no", "OFF", "true"])("rejects the indexing switch %s", async (value)
       fetch: transport.fetch,
     })(),
   );
-  expect(error.code).toBe("missing_configuration");
+  expect(error).toMatchObject({ code: "missing_configuration" });
   expect(error.message).toBe("LACE_SITE_INDEXING must be on or off.");
   expect(transport.requests).toHaveLength(0);
 });
@@ -327,7 +370,7 @@ test("published blocks carry their envelope and legacy blocks default their sett
     ),
   ]);
   const site = await createPublishedSiteLoader({ environment, fetch: transport.fetch })();
-  expect(site.byPath("/").blocks).toEqual([anchored, block("second", 1)]);
+  expect(required(site.byPath("/")).blocks).toEqual([anchored, block("second", 1)]);
 
   const hidden = scriptedFetch([
     exportResponse(
@@ -361,18 +404,22 @@ test("published-site preserves nested fields, empty composites and nested media 
     environment,
     fetch: scriptedFetch([exportResponse(exported)]).fetch,
   })();
-  const entry = site.byPath("/blog/nested");
+  const entry = required(site.byPath("/blog/nested"));
   expect(entry.fields).toEqual(fields);
-  expect(entry.blocks[0].data.images).toEqual(["portrait"]);
-  expect(entry.image(entry.fields.team[0].profile.photo)).toMatchObject({ id: "portrait" });
-  expect(site.global("settings").fields).toEqual(fields);
+  expect(entry.blocks[0]?.data.images).toEqual(["portrait"]);
+  const nested = v.parse(
+    v.object({ team: v.array(v.object({ profile: v.object({ photo: v.string() }) })) }),
+    entry.fields,
+  );
+  expect(entry.image(required(nested.team[0]).profile.photo)).toMatchObject({ id: "portrait" });
+  expect(required(site.global("settings")).fields).toEqual(fields);
 });
 
 test("the site view exposes published content only, ordered and immutable", async () => {
   const transport = scriptedFetch([exportResponse(homeExport)]);
   const site = await createPublishedSiteLoader({ environment, fetch: transport.fetch })();
   expect(site.version).toBe(3);
-  const home = site.byPath("/");
+  const home = required(site.byPath("/"));
   expect(home).toEqual({
     internalLinks: [],
     link: expect.any(Function),

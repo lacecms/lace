@@ -1,6 +1,5 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import { blockKey, mediaId } from "@lacecms/domain";
+import type { ContentBlock } from "@lacecms/domain";
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
 import { toContentEntryDto } from "../content/entry-mappers.js";
@@ -16,7 +15,7 @@ import {
 import { timestamp, draft, published, entry } from "../test-support/rest-fixtures.js";
 
 describe("public delivery DTOs", () => {
-  const blocks = [
+  const blocks: [ContentBlock, ContentBlock] = [
     {
       data: { text: "Second" },
       hidden: false,
@@ -36,7 +35,7 @@ describe("public delivery DTOs", () => {
       type: "image",
     },
   ];
-  const delivered = ({ hidden: _hidden, ...value }) => value;
+  const delivered = ({ hidden: _hidden, ...value }: ContentBlock) => value;
   const publicEntry = {
     ...entry,
     draft: { ...draft, title: "DRAFT ONLY" },
@@ -52,10 +51,15 @@ describe("public delivery DTOs", () => {
     width: 1600,
   };
   const bare = { id: mediaId("media-a"), mimeType: "image/png" };
-  const urlFor = (id) => mediaUrl("https://lace.example/base/", id);
+  const urlFor = (id: string) => mediaUrl("https://lace.example/base/", id);
   test("returns the published entry with ordered blocks and resolved media", () => {
     const dto = toPublicContentEntryDto(
-      { entry: publicEntry, media: [described, bare, described], path: "/blog/welcome" },
+      {
+        entry: publicEntry,
+        internalLinks: [],
+        media: [described, bare, described],
+        path: "/blog/welcome",
+      },
       urlFor,
     );
     expect(v.parse(publicContentEntrySchema, dto)).toEqual(dto);
@@ -94,8 +98,8 @@ describe("public delivery DTOs", () => {
     const dto = toPublicContentListDto(
       {
         items: [
-          { entry: publicEntry, media: [described], path: "/blog/welcome" },
-          { entry: publicEntry, media: [described, bare], path: "/blog/other" },
+          { entry: publicEntry, internalLinks: [], media: [described], path: "/blog/welcome" },
+          { entry: publicEntry, internalLinks: [], media: [described, bare], path: "/blog/other" },
         ],
         nextCursor: "next",
       },
@@ -107,7 +111,7 @@ describe("public delivery DTOs", () => {
   });
   test("rejects legacy and malformed public payloads", () => {
     const dto = toPublicContentEntryDto(
-      { entry: publicEntry, media: [described], path: "/blog/welcome" },
+      { entry: publicEntry, internalLinks: [], media: [described], path: "/blog/welcome" },
       urlFor,
     );
     expect(() =>

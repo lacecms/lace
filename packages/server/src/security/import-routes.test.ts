@@ -1,5 +1,8 @@
-// @ts-nocheck
-// TODO(rf2): Type import capability matrices, partial token security adapters and malformed query cases.
+import * as v from "valibot";
+import { contentEntryListSchema, mediaListSchema } from "@lacecms/contracts";
+import { opaqueTokenSecret } from "@lacecms/application";
+import type { SecurityService } from "@lacecms/application";
+import { unixMilliseconds } from "@lacecms/domain";
 import { expect, test } from "vitest";
 import { IMPORT_ROUTE_ALLOWLIST, isImportRoute } from "../index.js";
 
@@ -29,7 +32,7 @@ test("the import route allowlist is exactly the specified surface", () => {
     ["GET", "/api/v1/admin/models//entries"],
     ["GET", "/api/v1/admin/entries/e-1/link-impact"],
     ["GET", "/api/v1/admin/content-models/extra"],
-  ])
+  ] as const)
     expect(isImportRoute(method, path), `${method} ${path}`).toBe(false);
 });
 
@@ -59,7 +62,7 @@ test("import tokens reach allowlisted routes as their creator without a session"
   const bySlug = await (
     await call("GET", "/api/v1/admin/models/posts/entries?slug=hello-world")
   ).json();
-  expect(bySlug.items.map((item) => item.id)).toEqual([entry.id]);
+  expect(v.parse(contentEntryListSchema, bySlug).items.map((item) => item.id)).toEqual([entry.id]);
   expect(bySlug.totals.all).toBe(1);
 
   const form = new FormData();
@@ -74,7 +77,7 @@ test("import tokens reach allowlisted routes as their creator without a session"
   expect(media.sha256).toMatch(/^[0-9a-f]{64}$/u);
   expect(limited).toContain("admin");
   const found = await (await call("GET", `/api/v1/admin/media?sha256=${media.sha256}`)).json();
-  expect(found.items.map((item) => item.id)).toEqual([media.id]);
+  expect(v.parse(mediaListSchema, found).items.map((item) => item.id)).toEqual([media.id]);
   expect((await (await call("GET", `/api/v1/admin/media?sha256=${hash}`)).json()).items).toEqual(
     [],
   );
@@ -104,7 +107,7 @@ test("import tokens are denied everywhere else and never fall back to a session"
     ["GET", "/api/v1/admin/import-tokens"],
     ["POST", "/api/v1/admin/import-tokens"],
     ["GET", "/api/v1/account/sessions"],
-  ]) {
+  ] as const) {
     const response = await call(method, path, method === "GET" ? undefined : {});
     expect(response.status, `${method} ${path}`).toBe(403);
     expect((await response.json()).error.code).toBe("AUTHORIZATION_DENIED");
@@ -131,7 +134,7 @@ test("publication through an import token needs its publish capability", async (
   for (const [capabilities, status] of [
     [["content:import"], 403],
     [["content:import", "content:publish"], 200],
-  ]) {
+  ] as const) {
     const { call } = await importFixture(capabilities);
     const created = await (
       await call("POST", "/api/v1/admin/models/posts/entries", {
@@ -188,18 +191,27 @@ test("anonymous import requests challenge both accepted credentials", async () =
 });
 
 test("administrators issue, list and revoke import tokens through session routes", async () => {
-  const calls = [];
-  const security = {
+  const calls: (
+    | ["create", Parameters<SecurityService["createImportToken"]>[0]]
+    | ["revoke", string]
+  )[] = [];
+  const security: Partial<SecurityService> = {
     async createImportToken(input) {
       calls.push(["create", input]);
-      return { ...importToken(input.capabilities), name: input.name, token: "plaintext" };
+      return {
+        ...importToken(input.capabilities),
+        name: input.name,
+        token: opaqueTokenSecret("plaintext"),
+      };
     },
     async listImportTokens() {
       return [importToken()];
     },
     async revokeImportToken(input) {
       calls.push(["revoke", input.tokenId]);
-      return input.tokenId === "import-1" ? { ...importToken(), revokedAt: 5 } : null;
+      return input.tokenId === "import-1"
+        ? { ...importToken(), revokedAt: unixMilliseconds(5) }
+        : null;
     },
   };
   let current = admin;
@@ -208,7 +220,7 @@ test("administrators issue, list and revoke import tokens through session routes
     resolveActor: async () => current,
     security,
   });
-  const send = (method, path, body) =>
+  const send = (method: string, path: string, body?: unknown) =>
     app.fetch(
       new Request(`https://lace.test${path}`, {
         method,
@@ -227,12 +239,14 @@ test("administrators issue, list and revoke import tokens through session routes
     capabilities: ["content:import", "content:publish"],
     token: "plaintext",
   });
-  expect(calls[0][1]).toMatchObject({
+  const firstCall = calls[0];
+  if (!firstCall || firstCall[0] !== "create") throw new Error("Expected token creation");
+  expect(firstCall[1]).toMatchObject({
     capabilities: ["content:import", "content:publish"],
     createdBy: "admin",
     name: "Framer",
   });
-  expect(calls[0][1].expiresAt - calls[0][1].now).toBe(3 * 86_400_000);
+  expect(firstCall[1].expiresAt - firstCall[1].now).toBe(3 * 86_400_000);
   const listed = await (await send("GET", "/api/v1/admin/import-tokens")).json();
   expect(listed.items).toHaveLength(1);
   expect(listed.items[0]).not.toHaveProperty("token");
@@ -243,9 +257,13 @@ test("administrators issue, list and revoke import tokens through session routes
     name: "Framer",
   });
   expect(invalid.status).toBe(422);
-  expect((await invalid.json()).error.details.issues.map((issue) => issue.path)).toContain(
-    "/expiresInDays",
-  );
+  expect(await invalid.json()).toMatchObject({
+    error: {
+      details: {
+        issues: expect.arrayContaining([expect.objectContaining({ path: "/expiresInDays" })]),
+      },
+    },
+  });
   current = editor;
   expect(
     (await send("POST", "/api/v1/admin/import-tokens", { expiresInDays: 1, name: "x" })).status,
@@ -265,7 +283,7 @@ test("slug and hash list parameters are validated and bind cursors", async () =>
       slug,
       title: slug,
     });
-  const get = async (path) => {
+  const get = async (path: string) => {
     const response = await app.fetch(new Request(`https://lace.test${path}`));
     return { body: await response.json(), status: response.status };
   };
@@ -284,9 +302,13 @@ test("slug and hash list parameters are validated and bind cursors", async () =>
     ["/api/v1/admin/models/home/entries?slug=home", "/slug"],
     [`/api/v1/admin/media?sha256=${"A".repeat(64)}`, "/sha256"],
     ["/api/v1/admin/media?sha256=abc", "/sha256"],
-  ]) {
+  ] as const) {
     const result = await get(path);
     expect(result.status, path).toBe(422);
-    expect(result.body.error.details.issues.map((issue) => issue.path)).toContain(pointer);
+    expect(result.body).toMatchObject({
+      error: {
+        details: { issues: expect.arrayContaining([expect.objectContaining({ path: pointer })]) },
+      },
+    });
   }
 });

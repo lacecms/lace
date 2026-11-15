@@ -1,6 +1,7 @@
-// @ts-nocheck
-// TODO(rf2): Type visibility evolution tables, mutable descriptors and partial synchronization adapters.
 import { expect, test } from "vitest";
+import type { NormalizedContentModel } from "@lacecms/config";
+import type { FieldVisibility, JsonObject, ModelFieldDefinitions } from "@lacecms/content";
+import type { ConfigurationSyncMigrationSnapshot } from "./types.js";
 import { defineCollection, defineConfig } from "@lacecms/config";
 import { builtInBlocks, defineBlock, field } from "@lacecms/content";
 import {
@@ -25,33 +26,43 @@ const kinds = () => ({
   }),
 });
 
-async function works({ fields, visibility, version = 1, ...rest } = {}) {
-  const config = await defineConfig({
-    blocks,
-    content: [
-      defineCollection({
-        blocks: [],
-        fields: fields ?? {
-          ...kinds(),
-          media: field.media(),
-          videoUrl: field.url({ required: true }),
-        },
-        key: "works",
-        route: "/works/:slug",
-        version,
-        ...(visibility === undefined ? {} : { visibility }),
-        ...rest,
-      }),
-    ],
-  });
-  return config.runtime.content[0];
+async function works({
+  fields,
+  visibility,
+  version = 1,
+  ...rest
+}: {
+  fields?: ModelFieldDefinitions;
+  visibility?: FieldVisibility;
+  version?: number;
+  removedFields?: readonly string[];
+} = {}) {
+  const input = {
+    blocks: [],
+    fields: fields ?? { ...kinds(), media: field.media(), videoUrl: field.url({ required: true }) },
+    key: "works",
+    route: "/works/:slug",
+    version,
+    ...rest,
+  };
+  const collection =
+    visibility === undefined
+      ? defineCollection<ModelFieldDefinitions>(input)
+      : defineCollection<ModelFieldDefinitions, FieldVisibility>({ ...input, visibility });
+  const config = await defineConfig({ blocks, content: [collection] });
+  const model = config.runtime.content[0];
+  if (!model?.structure) throw new Error("Expected model structure");
+  return { ...model, structure: model.structure };
 }
 
-const stored = (model) => storedModelFixture(model, "fingerprint");
+const stored = (model: NormalizedContentModel) => storedModelFixture(model, "fingerprint");
 const snapshot = snapshotFixture;
-const port = (models, snapshots) => scanFixture(models, snapshots);
+const port = (
+  models: Parameters<typeof scanFixture>[0],
+  snapshots: Parameters<typeof scanFixture>[1],
+) => scanFixture(models, snapshots);
 
-const video = { field: "kind", values: ["video"] };
+const video = { field: "kind" as const, values: ["video" as const] };
 
 test("classifies added, removed, narrowed, widened and controller changes", async () => {
   const none = await works();
@@ -60,7 +71,10 @@ test("classifies added, removed, narrowed, widened and controller changes", asyn
     version: 3,
     visibility: { videoUrl: { field: "kind", values: ["video", "embed"] } },
   });
-  const diff = (before, after) =>
+  const diff = (
+    before: Awaited<ReturnType<typeof works>>,
+    after: Awaited<ReturnType<typeof works>>,
+  ) =>
     diffContentModelStructures(before.structure, after.structure, after).map(
       ({ class: kind, kind: change, target }) => [kind, change, target],
     );
@@ -70,7 +84,7 @@ test("classifies added, removed, narrowed, widened and controller changes", asyn
   expect(diff(widened, added)).toEqual([["compatible", "field-visibility-changed", "videoUrl"]]);
   expect(diff(added, added)).toEqual([]);
   const [change] = diffContentModelStructures(widened.structure, added.structure, added);
-  expect(change.visibility).toEqual({
+  expect(change?.visibility).toEqual({
     before: { field: "kind", values: ["video", "embed"] },
     after: video,
   });
@@ -127,7 +141,7 @@ test("pairs renamed targets and controllers and reports only field changes for a
 });
 
 test("nested group rules use schema paths", async () => {
-  const gallery = (visibility) =>
+  const gallery = (visibility?: FieldVisibility) =>
     works({
       version: visibility ? 2 : 1,
       fields: {
@@ -237,7 +251,12 @@ test("revealed published occurrences must satisfy publication; hidden ones keep 
     unconditional.structure,
     unconditional,
   );
-  const reveal = (fields, state = "published", model = unconditional, changes = removal) =>
+  const reveal = (
+    fields: JsonObject,
+    state: "draft" | "published" = "published",
+    model = unconditional,
+    changes = removal,
+  ) =>
     transformConfigurationSyncFields(model.fields, changes, fields, state, model.visibility)
       .violations;
   expect(reveal({ kind: "image" })).toEqual({ videoUrl: "/fields/videoUrl" });
@@ -295,6 +314,8 @@ test("sync plans prune published values, report affected counts and refuse revea
   });
   expect(prepared.plan.isValid).toBe(true);
   const [operation] = prepared.plan.operations;
+  if (!operation || !("evolution" in operation) || !operation.evolution)
+    throw new Error("Expected evolution");
   expect(operation.evolution.recursiveFields).toBe(true);
   expect(operation.evolution.changes).toMatchObject([
     {
@@ -320,10 +341,10 @@ test("sync plans prune published values, report affected counts and refuse revea
   expect(refused.plan.diagnostics).toMatchObject([
     { code: "CONSTRAINT_VIOLATED", fieldKey: "videoUrl", affectedCount: 1 },
   ]);
-  expect(refused.plan.diagnostics[0].snapshots).toEqual([
+  expect(refused.plan.diagnostics[0]?.snapshots).toEqual([
     { entryId: "entry-2", state: "published", title: "Title 2" },
   ]);
-  expect(refused.plan.diagnostics[0].message).toContain("reveals field videoUrl");
+  expect(refused.plan.diagnostics[0]?.message).toContain("reveals field videoUrl");
 });
 
 test("published block migrations store the published projection of block data", async () => {
@@ -334,11 +355,12 @@ test("published block migrations store the published projection of block data", 
     visibility: { ctaUrl: { field: "hasCta", values: [true] } },
     migrations: { 2: (block) => block },
   });
-  const snap = (id, state) => ({
+  const snap = (id: string, state: "draft" | "published"): ConfigurationSyncMigrationSnapshot => ({
     blocks: [
       {
         data: { ctaUrl: "https://example.com" },
         hidden: false,
+        position: 1000,
         key: "b1",
         schemaVersion: 1,
         settings: {},
@@ -357,7 +379,9 @@ test("published block migrations store the published projection of block data", 
     new Map([["cta", cta]]),
     "system:content-sync",
   ).unit;
-  const plan = (state) => unit.snapshots.find((value) => value.state === state);
-  expect(plan("published").blocks[0].data).toEqual({});
-  expect(plan("draft").blocks[0].data).toEqual({ ctaUrl: "https://example.com" });
+  if (!unit) throw new Error("Expected migration unit");
+  const plan = (state: "draft" | "published") =>
+    unit.snapshots.find((value) => value.state === state);
+  expect(plan("published")?.blocks[0]?.data).toEqual({});
+  expect(plan("draft")?.blocks[0]?.data).toEqual({ ctaUrl: "https://example.com" });
 });

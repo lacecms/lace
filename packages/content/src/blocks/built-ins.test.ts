@@ -1,5 +1,5 @@
-// @ts-nocheck
-// TODO(rf2): Type recursive descriptor fixtures, malformed runtime inputs and table tuples.
+import type { BlockDefinition } from "./types.js";
+import type { ModelFieldDefinitions, FieldDefinition } from "../fields/definitions.js";
 import { test, expect } from "vitest";
 import {
   validateBlockData,
@@ -27,7 +27,7 @@ test("image version 4 keeps alt text optional", () => {
   expect(validateBlockSettings(builtInBlocks.image, {})).toEqual({ lightbox: false });
   const metadata = toBlockRegistryMetadata(defineBlockRegistry([builtInBlocks.image]))[0];
   expect(metadata).toMatchObject({ type: "image", version: 4 });
-  expect(metadata.fields.alt.required).toBe(false);
+  expect(metadata?.fields.alt?.required).toBe(false);
 });
 
 test("image blocks and gallery items take an optional safe link", () => {
@@ -41,8 +41,8 @@ test("image blocks and gallery items take an optional safe link", () => {
   const [imageMetadata, galleryMetadata] = toBlockRegistryMetadata(
     defineBlockRegistry([image, gallery]),
   );
-  expect(imageMetadata.fields.link).toMatchObject(link);
-  expect(galleryMetadata.fields.images.item.fields.link).toMatchObject(link);
+  expect(imageMetadata?.fields.link).toMatchObject(link);
+  expect(galleryMetadata?.fields.images).toMatchObject({ item: { fields: { link } } });
   for (const value of ["/work/kitchen", "#contact", "https://example.com/", "mailto:a@b.co"])
     expect(validateBlockData(image, { link: value, media: "m" }, "publish")).toEqual({
       link: value,
@@ -64,7 +64,7 @@ test("image blocks and gallery items take an optional safe link", () => {
   });
   expect(
     issueFrom(() => validateBlockData(image, { link: "javascript:alert(1)", media: "m" }, "draft"))
-      .path,
+      ?.path,
   ).toEqual(["link"]);
   expect(
     issueFrom(() =>
@@ -73,7 +73,7 @@ test("image blocks and gallery items take an optional safe link", () => {
         { images: [{ media: "m" }, { link: "javascript:alert(1)", media: "n" }] },
         "publish",
       ),
-    ).path,
+    )?.path,
   ).toEqual(["images", 1, "link"]);
 });
 
@@ -82,8 +82,11 @@ test("image and gallery items declare media first without changing identity", as
   const [imageMetadata, galleryMetadata] = toBlockRegistryMetadata(
     defineBlockRegistry([image, gallery]),
   );
-  expect(Object.keys(imageMetadata.fields)).toEqual(["media", "alt", "caption", "link"]);
-  expect(Object.keys(galleryMetadata.fields.images.item.fields)).toEqual([
+  expect(Object.keys(imageMetadata?.fields ?? {})).toEqual(["media", "alt", "caption", "link"]);
+  const imageList = galleryMetadata?.fields.images;
+  if (imageList?.type !== "list" || imageList.item.type !== "group")
+    throw new Error("Expected gallery item metadata");
+  expect(Object.keys(imageList.item.fields)).toEqual([
     "kind",
     "media",
     "videoUrl",
@@ -96,16 +99,16 @@ test("image and gallery items declare media first without changing identity", as
     "aspectRatio",
     "placement",
   ]);
-  const sorted = (fields) =>
+  const sorted = (fields: ModelFieldDefinitions): Record<string, FieldDefinition> =>
     Object.fromEntries(Object.entries(fields).sort(([a], [b]) => a.localeCompare(b)));
   const { images } = gallery.fields;
-  const block = (definition, fields) =>
+  const block = (definition: BlockDefinition, fields: ModelFieldDefinitions) =>
     defineBlock({
-      description: definition.description,
+      ...(definition.description === undefined ? {} : { description: definition.description }),
       fields,
-      label: definition.label,
-      migrations: definition.migrations,
-      settings: definition.settings,
+      ...(definition.label === undefined ? {} : { label: definition.label }),
+      ...(definition.migrations === undefined ? {} : { migrations: definition.migrations }),
+      ...(definition.settings === undefined ? {} : { settings: definition.settings }),
       ...(definition.settingsLayout ? { settingsLayout: definition.settingsLayout } : {}),
       ...(definition.settingsVisibility
         ? { settingsVisibility: definition.settingsVisibility }
@@ -130,12 +133,18 @@ test("image and gallery items declare media first without changing identity", as
       }),
     }),
   ];
-  expect(Object.keys(alphabetical[0].fields)).toEqual(["alt", "caption", "link", "media"]);
+  expect(Object.keys(alphabetical[0]?.fields ?? {})).toEqual(["alt", "caption", "link", "media"]);
   for (const [index, definition] of [image, gallery].entries()) {
     const reordered = toBlockMetadata(definition);
-    const original = toBlockMetadata(alphabetical[index]);
-    expect(canonicalizeJson(reordered)).toBe(canonicalizeJson(original));
-    expect(await sha256CanonicalJson(reordered)).toBe(await sha256CanonicalJson(original));
+    const originalDefinition = alphabetical[index];
+    if (!originalDefinition) throw new Error("Expected reordered definition");
+    const original = toBlockMetadata(originalDefinition);
+    expect(canonicalizeJson(JSON.parse(JSON.stringify(reordered)))).toBe(
+      canonicalizeJson(JSON.parse(JSON.stringify(original))),
+    );
+    expect(await sha256CanonicalJson(JSON.parse(JSON.stringify(reordered)))).toBe(
+      await sha256CanonicalJson(JSON.parse(JSON.stringify(original))),
+    );
   }
   expect([image.version, gallery.version]).toEqual([4, 6]);
 });
@@ -183,7 +192,7 @@ test("gallery collects image items that become publishable with one image", () =
   expect(
     issueFrom(() => validateBlockData(gallery, { images: [{ caption: "Draft" }] }, "publish")),
   ).toMatchObject({ code: "missing_required_field", path: ["images", 0, "media"] });
-  for (const mode of ["draft", "publish"])
+  for (const mode of ["draft", "publish"] as const)
     expect(
       issueFrom(() => validateBlockData(gallery, { images: Array(51).fill(item) }, mode)),
     ).toMatchObject({ code: "list_too_long", path: ["images"] });
@@ -191,7 +200,7 @@ test("gallery collects image items that become publishable with one image", () =
     issueFrom(() => validateBlockData(gallery, { images: [{ ...item, width: 3 }] }, "draft")),
   ).toMatchObject({ code: "unknown_field", path: ["images", 0, "width"] });
   const metadata = toBlockRegistryMetadata(defineBlockRegistry([gallery]))[0];
-  expect(metadata.fields.images).toMatchObject({
+  expect(metadata?.fields.images).toMatchObject({
     defaultValue: [],
     itemLabel: "caption",
     label: "Images and videos",
@@ -214,10 +223,13 @@ test("gallery items hold an image or a video through conditional fields", () => 
     playback: { field: "kind", values: ["video"] },
     aspectRatio: { field: "kind", values: ["video"] },
   });
-  const metadata = toBlockMetadata(gallery).fields.images.item.fields;
+  const metadataImages = toBlockMetadata(gallery).fields.images;
+  if (metadataImages?.type !== "list" || metadataImages.item.type !== "group")
+    throw new Error("Expected gallery item metadata");
+  const metadata = metadataImages.item.fields;
   const embed = toBlockMetadata(videoEmbed);
-  expect(metadata.playback).toEqual({ ...embed.settings.playback, defaultValue: "ambient" });
-  expect(embed.settings.playback.defaultValue).toBe("player");
+  expect(metadata.playback).toEqual({ ...embed.settings?.playback, defaultValue: "ambient" });
+  expect(embed.settings?.playback?.defaultValue).toBe("player");
   expect(validateBlockSettings(videoEmbed, {}).playback).toBe("player");
   expect(metadata.placement).toMatchObject({
     defaultValue: "auto",
@@ -231,8 +243,8 @@ test("gallery items hold an image or a video through conditional fields", () => 
     presentation: { control: "cards" },
     required: true,
   });
-  expect(metadata.size.description).toMatch(/natural image keeps its own width/i);
-  expect(metadata.aspectRatio).toEqual(embed.settings.aspectRatio);
+  expect(metadata.size?.description).toMatch(/natural image keeps its own width/i);
+  expect(metadata.aspectRatio).toEqual(embed.settings?.aspectRatio);
   expect(metadata.kind).toMatchObject({
     defaultValue: "image",
     label: "Type",
@@ -256,7 +268,7 @@ test("gallery items hold an image or a video through conditional fields", () => 
   expect(parsed).toEqual({ images: [{ ...parsedVideo, size: "fill" }] });
   expect(publishedBlockData(gallery, parsed)).toEqual({ images: [parsedVideo] });
   const minimal = { kind: "video", videoUrl: video.videoUrl, videoTitle: "Tour" };
-  expect(validateBlockData(gallery, { images: [minimal] }, "publish").images[0]).toMatchObject({
+  expect(validateBlockData(gallery, { images: [minimal] }, "publish").images?.[0]).toMatchObject({
     aspectRatio: "16:9",
     placement: "auto",
     playback: "ambient",
@@ -268,13 +280,13 @@ test("gallery items hold an image or a video through conditional fields", () => 
     code: "missing_required_field",
     path: ["images", 0, "videoUrl"],
   });
-  for (const mode of ["draft", "publish"])
+  for (const mode of ["draft", "publish"] as const)
     expect(
       issueFrom(() =>
         validateBlockData(gallery, { images: [{ ...minimal, videoTitle: "" }] }, mode),
-      ).path,
+      )?.path,
     ).toEqual(["images", 0, "videoTitle"]);
-  for (const mode of ["draft", "publish"])
+  for (const mode of ["draft", "publish"] as const)
     expect(
       issueFrom(() =>
         validateBlockData(
@@ -282,12 +294,12 @@ test("gallery items hold an image or a video through conditional fields", () => 
           { images: [{ ...minimal, videoUrl: "https://example.com/clip" }] },
           mode,
         ),
-      ).path,
+      )?.path,
     ).toEqual(["images", 0, "videoUrl"]);
 
   const stale = { ...video, media: "m", alt: "Old", link: "/work" };
   const staleParsed = validateBlockData(gallery, { images: [stale] }, "publish");
-  expect(staleParsed.images[0]).toMatchObject({ media: "m", alt: "Old", link: "/work" });
+  expect(staleParsed.images?.[0]).toMatchObject({ media: "m", alt: "Old", link: "/work" });
   expect(publishedBlockData(gallery, staleParsed)).toEqual({ images: [parsedVideo] });
   const image = { kind: "image", media: "m", videoUrl: video.videoUrl, caption: "Kept" };
   expect(
@@ -317,11 +329,11 @@ test("gallery items carry a placement and image items a size", () => {
         { images: [{ media: "m" }, { media: "n", size: "cover" }] },
         "draft",
       ),
-    ).path,
+    )?.path,
   ).toEqual(["images", 1, "size"]);
   expect(
     issueFrom(() => validateBlockData(gallery, { images: [{ placement: "center" }] }, "draft"))
-      .path,
+      ?.path,
   ).toEqual(["images", 0, "placement"]);
 });
 
@@ -340,12 +352,12 @@ test("only gallery declares a migration; older stored versions have no migration
   for (const definition of Object.values(builtInBlocks))
     if (definition.type !== "gallery")
       expect(definition, definition.type).not.toHaveProperty("migrations");
-  expect(Object.keys(builtInBlocks.gallery.migrations)).toEqual(["6"]);
+  expect(Object.keys(builtInBlocks.gallery.migrations ?? {})).toEqual(["6"]);
   for (const [definition, from] of [
     [builtInBlocks.gallery, 4],
     [builtInBlocks.image, 3],
     [builtInBlocks.videoEmbed, 1],
-  ])
+  ] as const)
     expect(() => migrateBlockData(definition, { data: {}, settings: {} }, from)).toThrowError(
       expect.objectContaining({ code: "missing_step" }),
     );
@@ -366,7 +378,9 @@ test("navigation allows one submenu level with safe URLs within the list budget"
   expect(navigation.version).toBe(1);
   expect(navigation.settings).toBeUndefined();
   expect(validateBlockData(navigation, {}, "draft")).toEqual({ links: [] });
-  expect(issueFrom(() => validateBlockData(navigation, {}, "publish")).code).toBe("list_too_short");
+  expect(issueFrom(() => validateBlockData(navigation, {}, "publish"))?.code).toBe(
+    "list_too_short",
+  );
   const docs = { children: [{ label: "Guide", url: "/guide" }], label: "Docs" };
   expect(validateBlockData(navigation, { links: [docs], name: "Main" }, "publish")).toEqual({
     links: [docs],
@@ -388,7 +402,7 @@ test("navigation allows one submenu level with safe URLs within the list budget"
         { links: [{ children: [{ label: "Bad", url: "javascript:alert(1)" }], label: "Docs" }] },
         "draft",
       ),
-    ).path,
+    )?.path,
   ).toEqual(["links", 0, "children", 0, "url"]);
   const children = Array.from({ length: 20 }, (_, index) => ({
     label: `Child ${index}`,
@@ -413,7 +427,7 @@ test("videoEmbed is a public DSL block with draft and publication semantics", as
   const definition = builtInBlocks.videoEmbed;
   expect(definition.version).toBe(2);
   // Pinned before the gallery adopted the shared aspect ratio and playback descriptors.
-  expect(await sha256CanonicalJson(toBlockMetadata(definition))).toBe(
+  expect(await sha256CanonicalJson(JSON.parse(JSON.stringify(toBlockMetadata(definition))))).toBe(
     "50d325160598a2beedd32ce00e752643731897d349ff188109d2028a7506fec8",
   );
   expect(validateBlockSettings(definition, {})).toEqual({
@@ -429,14 +443,19 @@ test("videoEmbed is a public DSL block with draft and publication semantics", as
   for (const settings of [{ aspectRatio: "21:9" }, { playback: "autoplay" }])
     expect(() => validateBlockSettings(definition, settings)).toThrow();
   const metadata = toBlockMetadata(definition);
-  expect(metadata.settings.aspectRatio.presentation.choices).toHaveLength(5);
-  expect(metadata.settings.playback.presentation.choices).toHaveLength(2);
-  for (const setting of Object.values(metadata.settings)) {
+  const videoSettings = metadata.settings;
+  if (videoSettings?.aspectRatio?.type !== "select" || videoSettings.playback?.type !== "select")
+    throw new Error("Expected video select settings");
+  expect(videoSettings.aspectRatio.presentation?.choices).toHaveLength(5);
+  expect(videoSettings.playback.presentation?.choices).toHaveLength(2);
+  for (const setting of Object.values(videoSettings)) {
+    if (setting.type !== "select" || !setting.presentation)
+      throw new Error("Expected card choices");
     expect(setting.required).toBe(true);
     expect(setting.presentation.control).toBe("cards");
     for (const choice of setting.presentation.choices) {
       expect(choice.label.length).toBeGreaterThan(0);
-      expect(choice.description.length).toBeGreaterThan(0);
+      expect(choice.description?.length).toBeGreaterThan(0);
     }
   }
   expect(validateBlockData(definition, {}, "draft")).toEqual({});

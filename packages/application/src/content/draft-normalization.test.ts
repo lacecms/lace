@@ -1,14 +1,19 @@
-// @ts-nocheck
-// TODO(rf2): Type partial content repositories and mutable normalized draft fixtures.
 import { expect, test } from "vitest";
 import { defineCollection, defineConfig, defineGlobal } from "@lacecms/config";
 import { builtInBlocks, field } from "@lacecms/content";
+import { actorId, blockKey, mediaId, unixMilliseconds } from "@lacecms/domain";
+import type { Actor, ContentEntry } from "@lacecms/domain";
+import type { JsonObject } from "@lacecms/content";
+import { contentPort } from "../test-support/content-port.js";
+import { mediaRecord } from "../test-support/media-fixtures.js";
+import type { NormalizedDraftCandidate } from "./draft-normalization.js";
 import {
   canonicalizeJson,
   ContentUseCases,
   encodeEntryLink,
   normalizeDraftCandidate,
   normalizeMediaTags,
+  ContentValidationError,
 } from "../index.js";
 
 const config = await defineConfig({
@@ -31,7 +36,8 @@ const config = await defineConfig({
 });
 const posts = config.runtime.content.find((model) => model.key === "posts");
 const settings = config.runtime.content.find((model) => model.key === "settings");
-const actor = { id: "user", role: "admin" };
+if (!posts || !settings) throw new Error("Expected configured models");
+const actor: Actor = { id: actorId("user"), role: "admin" };
 
 function draft() {
   return {
@@ -40,9 +46,15 @@ function draft() {
     fields: { description: "  Hello  ", related: encodeEntryLink("abc/1") },
     seo: { title: "Launch title", noindex: false },
     blocks: [
-      { key: "b1", position: 1, schemaVersion: 1, type: "quote", data: { quote: "Quoted" } },
       {
-        key: "b2",
+        key: blockKey("b1"),
+        position: 1,
+        schemaVersion: 1,
+        type: "quote",
+        data: { quote: "Quoted" },
+      },
+      {
+        key: blockKey("b2"),
         position: 2,
         schemaVersion: 4,
         type: "image",
@@ -53,30 +65,39 @@ function draft() {
   };
 }
 
-function projection(value) {
-  return canonicalizeJson({
-    blocks: value.blocks,
-    fields: value.fields,
-    seo: value.seo ?? null,
-    slug: value.slug ?? null,
-    title: value.title,
-  });
+function projection(value: NormalizedDraftCandidate) {
+  return canonicalizeJson(
+    JSON.parse(
+      JSON.stringify({
+        blocks: value.blocks,
+        fields: value.fields,
+        seo: value.seo ?? null,
+        slug: value.slug ?? null,
+        title: value.title,
+      }),
+    ),
+  );
 }
 
 test("client prediction matches the draft a save stores", async () => {
-  let stored;
+  let stored: ContentEntry | undefined;
   const cases = new ContentUseCases({
     config: config.runtime,
-    clock: { now: () => 1 },
+    clock: { now: () => unixMilliseconds(1) },
     idGenerator: { next: () => "entry-1" },
-    media: { loadMediaMany: async (ids) => ids.map((id) => ({ id, status: "active" })) },
-    content: {
+    media: {
+      loadMedia: async () => {
+        throw new Error("Unexpected loadMedia");
+      },
+      loadMediaMany: async (ids) => ids.map((id) => mediaRecord({ id: mediaId(id) })),
+    },
+    content: contentPort({
       create: async ({ entry }) => {
         stored = entry;
-        return { entry };
+        return { entry, status: "created" };
       },
       resolveLinkTargets: async () => ({}),
-    },
+    }),
   });
   const entry = await cases.create({ actor, modelKey: "posts", ...draft() });
   const predicted = normalizeDraftCandidate({
@@ -86,8 +107,9 @@ test("client prediction matches the draft a save stores", async () => {
     model: posts,
   });
   expect(predicted.fields.author).toBe("Ada");
-  expect(predicted.blocks[1].settings).toEqual({ lightbox: false });
+  expect(predicted.blocks[1]?.settings).toEqual({ lightbox: false });
   expect(projection(predicted)).toBe(projection(entry.draft));
+  if (!stored) throw new Error("Expected stored entry");
   expect(projection(predicted)).toBe(projection(stored.draft));
 });
 
@@ -103,20 +125,27 @@ test("a global's title is replaced by its label", () => {
 
 test("invalid block data fails with the draft-save issue path", () => {
   const input = draft();
-  input.blocks[0].data = { quote: 42 };
+  const first = input.blocks[0];
+  if (!first) throw new Error("Expected a block");
+  // Numeric quote deliberately tests runtime validation.
+  const invalid = {
+    ...input,
+    blocks: [{ ...first, data: { quote: 42 } }, ...input.blocks.slice(1)],
+  };
   let failure;
   try {
     normalizeDraftCandidate({
       blocks: config.runtime.blocks,
-      draft: input,
+      draft: invalid,
       mode: "draft",
       model: posts,
     });
   } catch (error) {
     failure = error;
   }
-  expect(failure?.name).toBe("ContentValidationError");
-  expect(failure.issues[0].path).toEqual(["blocks", 0, "data", "quote"]);
+  expect(failure).toBeInstanceOf(ContentValidationError);
+  if (!(failure instanceof ContentValidationError)) throw failure;
+  expect(failure.issues[0]?.path).toEqual(["blocks", 0, "data", "quote"]);
 });
 
 test("application re-exports the portable import helpers", () => {
@@ -149,7 +178,8 @@ test("draft candidates keep hidden values and publish without hidden requirement
     ],
   });
   const model = conditional.runtime.content.find((candidate) => candidate.key === "works");
-  const candidate = (fields, mode) =>
+  if (!model) throw new Error("Expected configured model");
+  const candidate = (fields: JsonObject, mode: "draft" | "publish") =>
     normalizeDraftCandidate({
       blocks: conditional.runtime.blocks,
       draft: { title: "Work", slug: "work", fields, blocks: [] },

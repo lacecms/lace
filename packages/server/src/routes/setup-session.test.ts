@@ -1,5 +1,4 @@
-// @ts-nocheck
-// TODO(rf2): Type partial account/email providers, session role matrices and limiter callbacks.
+import type { EmailDeliveryOutcome, EmailMessage, EmailSender } from "@lacecms/application";
 import { expect, test } from "vitest";
 import { actorId } from "@lacecms/domain";
 
@@ -21,7 +20,7 @@ test("settings status exposes only useful read-only state to administrators", as
     body: { error: { code: "AUTHORIZATION_DENIED" } },
     response: { status: 403 },
   });
-  for (const actor of [null, { id: actorId("viewer"), role: "viewer" }]) {
+  for (const actor of [null, { id: actorId("viewer"), role: "viewer" as const }]) {
     const other = await fixture({ actor });
     const result = await json(other.app, "/api/v1/admin/settings/status", {
       headers: { authorization: "Bearer build-token" },
@@ -44,7 +43,7 @@ test("session summary returns identity and the exact permissions for each role",
     editor: ["content:read", "content:write", "media:write"],
     viewer: ["content:read"],
   };
-  for (const role of ["admin", "editor", "viewer"]) {
+  for (const role of ["admin", "editor", "viewer"] as const) {
     const { app } = await fixture({
       actor: { id: actorId(role), role },
       security: profileSecurity,
@@ -53,15 +52,17 @@ test("session summary returns identity and the exact permissions for each role",
     expect(result.response.status).toBe(200);
     expect(result.response.headers.get("cache-control")).toBe("no-store");
     expect(result.body.permissions).toEqual(expected[role]);
+    const profile = profiles[role];
+    if (!profile) throw new Error("Expected profile");
     expect(result.body.user).toEqual({
-      ...(profiles[role].name === undefined ? {} : { displayName: profiles[role].name }),
-      email: profiles[role].email,
+      ...(profile.name === undefined ? {} : { displayName: profile.name }),
+      email: profile.email,
       id: role,
       role,
     });
     expect(JSON.stringify(result.body)).not.toMatch(/token|password|session/iu);
   }
-  for (const actor of [null, { id: actorId("disabled"), role: "admin" }]) {
+  for (const actor of [null, { id: actorId("disabled"), role: "admin" as const }]) {
     const { app } = await fixture({ actor, security: profileSecurity });
     const result = await json(app, "/api/v1/admin/session");
     expect(result.response.status).toBe(401);
@@ -72,16 +73,20 @@ test("session summary returns identity and the exact permissions for each role",
 
 test("settings status reports the composed email provider without settings", async () => {
   const { app } = await fixture({
-    email: { from: "Lace <cms@lace.test>", provider: "smtp", send: async () => ({}) },
+    email: {
+      from: "Lace <cms@lace.test>",
+      provider: "smtp",
+      send: async () => ({ status: "sent" }),
+    },
   });
   const result = await json(app, "/api/v1/admin/settings/status");
   expect(result.body.email).toEqual({ from: "Lace <cms@lace.test>", provider: "smtp" });
 });
 
 test("email test sends only to the acting administrator and reports closed outcomes", async () => {
-  const sent = [];
-  let outcome = { status: "sent" };
-  const email = {
+  const sent: EmailMessage[] = [];
+  let outcome: EmailDeliveryOutcome = { status: "sent" };
+  const email: EmailSender = {
     from: "cms@lace.test",
     provider: "resend",
     send: async (message) => {
@@ -104,8 +109,8 @@ test("email test sends only to the acting administrator and reports closed outco
     response: { status: 200 },
   });
   expect(sent).toHaveLength(1);
-  expect(sent[0].to).toBe("admin@lace.test");
-  expect(sent[0].text).toContain("https://lace.test/");
+  expect(sent[0]?.to).toBe("admin@lace.test");
+  expect(sent[0]?.text).toContain("https://lace.test/");
   outcome = { reason: "rate_limited", status: "failed" };
   expect(await json(app, "/api/v1/admin/settings/email-test", post())).toMatchObject({
     body: { reason: "rate_limited", status: "failed" },
@@ -119,7 +124,7 @@ test("email test sends only to the acting administrator and reports closed outco
   expect(named.response.status).toBe(422);
   expect(named.body.error.code).toBe("VALIDATION_FAILED");
   expect(sent).toHaveLength(2);
-  for (const role of ["editor", "viewer"]) {
+  for (const role of ["editor", "viewer"] as const) {
     const denied = await fixture({
       actor: { id: actorId(role), role },
       email,
@@ -133,10 +138,17 @@ test("email test sends only to the acting administrator and reports closed outco
 });
 
 test("email test passes the acting administrator to the rate limiter before sending", async () => {
-  const checks = [];
-  const sent = [];
+  const checks: (string | undefined)[] = [];
+  const sent: EmailMessage[] = [];
   const { app } = await fixture({
-    email: { from: "cms@lace.test", provider: "smtp", send: async (m) => sent.push(m) },
+    email: {
+      from: "cms@lace.test",
+      provider: "smtp",
+      send: async (m) => {
+        sent.push(m);
+        return { status: "sent" };
+      },
+    },
     rateLimiter: {
       check: async (input) => {
         if (new URL(input.request.url).pathname === "/api/v1/admin/settings/email-test")

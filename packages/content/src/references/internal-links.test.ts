@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type recursive descriptor fixtures, malformed runtime inputs and table tuples.
 import { describe, test, expect } from "vitest";
 import { field } from "../fields/builders.js";
 import { defineBlock } from "../blocks/definition.js";
@@ -21,10 +19,10 @@ describe("descriptor-driven internal link projection", () => {
     },
     settings: { note: field.text({ defaultValue: "entry:ignored" }) },
   });
-  const model = { kind: "global", blocks: [block.type], fields: { links } };
+  const model = { kind: "global" as const, blocks: [block.type], fields: { links } };
   const registry = defineBlockRegistry([block]);
-  const payload = (count) => ({
-    kind: "global",
+  const payload = (count: number) => ({
+    kind: "global" as const,
     title: "Links",
     fields: { links: Array(100).fill("entry:same") },
     blocks: [
@@ -37,36 +35,39 @@ describe("descriptor-driven internal link projection", () => {
       },
     ],
   });
-  test.each(["draft", "publish"])("counts defaults and hidden occurrences in %s", (mode) => {
-    const normalized = validateEntryAggregate(payload(99), model, registry, mode);
-    const references = collectSnapshotInternalLinks(
-      model.fields,
-      normalized.fields,
-      normalized.blocks.map((item) => ({ ...item, fields: block.fields })),
-    );
-    expect(references).toHaveLength(200);
-    expect(references[0]).toEqual({
-      area: "fields",
-      sourceKey: "$fields",
-      pointer: "/links/0",
-      delivered: true,
-      targetId: "same",
-    });
-    expect(references[199]).toEqual({
-      area: "data",
-      sourceKey: "links",
-      pointer: "/destination",
-      delivered: false,
-      targetId: "default",
-    });
-    expect(
-      issueFrom(() => validateEntryAggregate(payload(100), model, registry, mode)),
-    ).toMatchObject({
-      code: "too_many_internal_links",
-      path: ["blocks", 0, "data", "destination"],
-    });
-    expect(Object.isFrozen(references[0])).toBe(true);
-  });
+  test.each(["draft", "publish"] as const)(
+    "counts defaults and hidden occurrences in %s",
+    (mode) => {
+      const normalized = validateEntryAggregate(payload(99), model, registry, mode);
+      const references = collectSnapshotInternalLinks(
+        model.fields,
+        normalized.fields,
+        normalized.blocks.map((item) => ({ ...item, fields: block.fields })),
+      );
+      expect(references).toHaveLength(200);
+      expect(references[0]).toEqual({
+        area: "fields",
+        sourceKey: "$fields",
+        pointer: "/links/0",
+        delivered: true,
+        targetId: "same",
+      });
+      expect(references[199]).toEqual({
+        area: "data",
+        sourceKey: "links",
+        pointer: "/destination",
+        delivered: false,
+        targetId: "default",
+      });
+      expect(
+        issueFrom(() => validateEntryAggregate(payload(100), model, registry, mode)),
+      ).toMatchObject({
+        code: "too_many_internal_links",
+        path: ["blocks", 0, "data", "destination"],
+      });
+      expect(Object.isFrozen(references[0])).toBe(true);
+    },
+  );
   test("walks normalized nested defaults and preserves exact item paths", () => {
     const fields = {
       group: field.group({

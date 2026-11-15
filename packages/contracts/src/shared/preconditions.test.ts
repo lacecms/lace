@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
 import { ContractValidationError } from "../errors/envelope.js";
@@ -12,7 +10,7 @@ import { entityTagSchema, toIsoTimestamp } from "./primitives.js";
 import { timestamp } from "../test-support/rest-fixtures.js";
 
 /** A contract validation failure whose single request-level issue mentions `text`. */
-const precondition = (text) =>
+const precondition = (text: string) =>
   expect.objectContaining({
     name: "ContractValidationError",
     issues: [expect.objectContaining({ message: expect.stringContaining(text), path: "" })],

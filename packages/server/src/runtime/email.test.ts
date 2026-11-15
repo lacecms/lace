@@ -1,5 +1,4 @@
-// @ts-nocheck
-// TODO(rf2): Type discriminated email settings, scripted HTTP requests and intentionally incomplete runtime senders.
+import type { EmailSettingsResult, EmailFailureReporter } from "./email.js";
 import { describe, expect, test, vi } from "vitest";
 import {
   createEmailSender,
@@ -9,14 +8,22 @@ import {
   parseEmailSettings,
 } from "../index.js";
 
-const node = { production: true, runtime: "node" };
-const worker = { production: true, runtime: "cloudflare" };
-const dev = { production: false, runtime: "node" };
+const node = { production: true, runtime: "node" as const };
+const worker = { production: true, runtime: "cloudflare" as const };
+const dev = { production: false, runtime: "node" as const };
 const from = "Lace <cms@example.com>";
 const message = { subject: "Hello", text: "Body", to: "ada@example.com" };
 
-function variables(result) {
+function variables(result: EmailSettingsResult) {
   return result.issues.map((issue) => `${issue.reason}:${issue.variable}`);
+}
+function smtp(result: EmailSettingsResult) {
+  if (result.settings?.provider !== "smtp") throw new Error("Expected SMTP settings");
+  return result.settings.smtp;
+}
+function resendSettings(result: EmailSettingsResult) {
+  if (result.settings?.provider !== "resend") throw new Error("Expected Resend settings");
+  return result.settings.resend;
 }
 
 describe("parseEmailSettings", () => {
@@ -61,7 +68,7 @@ describe("parseEmailSettings", () => {
     expect(
       parseEmailSettings(
         { LACE_EMAIL_FROM: from, LACE_EMAIL_PROVIDER: "log" },
-        { production: false, runtime: "cloudflare" },
+        { production: false, runtime: "cloudflare" as const },
       ).settings,
     ).toEqual({ from, provider: "log", timeoutMs: 10_000 });
     expect(
@@ -82,16 +89,25 @@ describe("parseEmailSettings", () => {
       "invalid:LACE_SMTP_SECURITY",
     ]);
     expect(
-      parseEmailSettings(
-        { ...base, LACE_SMTP_PORT: "1025", LACE_SMTP_SECURITY: "none", LACE_SMTP_HOST: "mailpit" },
-        dev,
-      ).settings.smtp,
+      smtp(
+        parseEmailSettings(
+          {
+            ...base,
+            LACE_SMTP_PORT: "1025",
+            LACE_SMTP_SECURITY: "none",
+            LACE_SMTP_HOST: "mailpit",
+          },
+          dev,
+        ),
+      ),
     ).toEqual({ host: "mailpit", port: 1025, security: "none" });
     expect(
-      parseEmailSettings(
-        { ...base, LACE_SMTP_PASSWORD: " p@ss ", LACE_SMTP_SECURITY: "tls", LACE_SMTP_USER: "u" },
-        node,
-      ).settings.smtp,
+      smtp(
+        parseEmailSettings(
+          { ...base, LACE_SMTP_PASSWORD: " p@ss ", LACE_SMTP_SECURITY: "tls", LACE_SMTP_USER: "u" },
+          node,
+        ),
+      ),
     ).toEqual({
       auth: { password: " p@ss ", user: "u" },
       host: "smtp.x",
@@ -120,7 +136,7 @@ describe("parseEmailSettings", () => {
       ["LACE_EMAIL_TIMEOUT_MS", "0"],
       ["LACE_EMAIL_TIMEOUT_MS", "60001"],
       ["LACE_SMTP_SECURITY", "ssl"],
-    ]) {
+    ] as const) {
       const result = parseEmailSettings({ ...base, [variable]: value }, node);
       expect(variables(result)).toEqual([`invalid:${variable}`]);
       expect(JSON.stringify(result)).not.toContain(value);
@@ -131,8 +147,10 @@ describe("parseEmailSettings", () => {
   test("parses Resend with an HTTPS-only endpoint outside development", () => {
     const base = { LACE_EMAIL_FROM: from, LACE_EMAIL_PROVIDER: "resend" };
     expect(variables(parseEmailSettings(base, worker))).toEqual(["missing:LACE_RESEND_API_KEY"]);
-    const parsed = parseEmailSettings({ ...base, LACE_RESEND_API_KEY: "re_123" }, worker).settings;
-    expect(parsed.resend.baseUrl.href).toBe("https://api.resend.com/");
+    const parsed = resendSettings(
+      parseEmailSettings({ ...base, LACE_RESEND_API_KEY: "re_123" }, worker),
+    );
+    expect(parsed.baseUrl.href).toBe("https://api.resend.com/");
     expect(
       variables(
         parseEmailSettings(
@@ -142,10 +160,12 @@ describe("parseEmailSettings", () => {
       ),
     ).toEqual(["invalid:LACE_RESEND_API_BASE_URL"]);
     expect(
-      parseEmailSettings(
-        { ...base, LACE_RESEND_API_BASE_URL: "http://127.0.0.1:9200", LACE_RESEND_API_KEY: "k" },
-        dev,
-      ).settings.resend.baseUrl.href,
+      resendSettings(
+        parseEmailSettings(
+          { ...base, LACE_RESEND_API_BASE_URL: "http://127.0.0.1:9200", LACE_RESEND_API_KEY: "k" },
+          dev,
+        ),
+      ).baseUrl.href,
     ).toBe("http://127.0.0.1:9200/");
     expect(
       variables(parseEmailSettings({ ...base, LACE_RESEND_API_KEY: "has space" }, node)),
@@ -155,11 +175,11 @@ describe("parseEmailSettings", () => {
 
 describe("log sender", () => {
   test("writes the whole message as one record", async () => {
-    const lines = [];
+    const lines: string[] = [];
     const sender = createLogEmailSender({ from, write: (line) => lines.push(line) });
     expect(await sender.send(message)).toEqual({ status: "sent" });
     expect(lines).toHaveLength(1);
-    expect(JSON.parse(lines[0])).toEqual({
+    expect(JSON.parse(lines[0] ?? "")).toEqual({
       component: "email",
       from,
       provider: "log",
@@ -173,9 +193,10 @@ describe("log sender", () => {
 describe("resend sender", () => {
   const settings = { apiKey: "re_secret_key", baseUrl: new URL("https://api.resend.com/") };
 
-  function sender(respond, report = () => undefined) {
-    const calls = [];
-    const fetch = vi.fn(async (url, init) => {
+  function sender(respond: () => Response, report: EmailFailureReporter = () => undefined) {
+    const calls: { init: RequestInit; url: string }[] = [];
+    const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (!init) throw new Error("Expected request options");
       calls.push({ init, url: String(url) });
       return respond();
     });
@@ -196,16 +217,18 @@ describe("resend sender", () => {
     const { calls, sender: resend } = sender(() => new Response('{"id":"x"}', { status: 200 }));
     expect(await resend.send({ ...message, html: "<p>Body</p>" })).toEqual({ status: "sent" });
     expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe("https://api.resend.com/emails");
-    expect(calls[0].init.method).toBe("POST");
+    const call = calls[0];
+    if (!call) throw new Error("Expected request");
+    expect(call.url).toBe("https://api.resend.com/emails");
+    expect(call.init.method).toBe("POST");
     // Workers reject redirect: "error"; redirects are never followed.
-    expect(calls[0].init.redirect).toBe("manual");
-    expect(calls[0].init.headers).toMatchObject({
+    expect(call.init.redirect).toBe("manual");
+    expect(call.init.headers).toMatchObject({
       authorization: "Bearer re_secret_key",
       "content-type": "application/json",
       "idempotency-key": "key-1",
     });
-    expect(JSON.parse(calls[0].init.body)).toEqual({
+    expect(JSON.parse(typeof call.init.body === "string" ? call.init.body : "")).toEqual({
       from,
       html: "<p>Body</p>",
       subject: "Hello",
@@ -223,8 +246,8 @@ describe("resend sender", () => {
       [500, "unavailable"],
       [503, "unavailable"],
       [302, "unavailable"],
-    ]) {
-      const reports = [];
+    ] as const) {
+      const reports: Parameters<EmailFailureReporter>[0][] = [];
       const { sender: resend } = sender(
         () => new Response('{"message":"The ada@example.com domain is not verified"}', { status }),
         (entry) => reports.push(entry),
@@ -243,7 +266,7 @@ describe("resend sender", () => {
     const timeout = createResendEmailSender({
       fetch: (_url, init) =>
         new Promise((_resolve, reject) =>
-          init.signal.addEventListener("abort", () => reject(init.signal.reason)),
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason)),
         ),
       from,
       report: () => undefined,
@@ -261,7 +284,11 @@ describe("createEmailSender", () => {
     expect(await none.send(message)).toEqual({ reason: "not_configured", status: "failed" });
     const log = createEmailSender({ from, provider: "log", timeoutMs: 1 }, { write: () => {} });
     expect(emailDeliveryStatus(log)).toEqual({ from, provider: "log" });
-    const runtimeSender = vi.fn(() => ({ from, provider: "smtp", send: async () => ({}) }));
+    const runtimeSender = vi.fn(() => ({
+      from,
+      provider: "smtp" as const,
+      send: async () => ({ status: "sent" as const }),
+    }));
     const smtp = createEmailSender(
       { from, provider: "smtp", smtp: { host: "h", port: 1, security: "tls" }, timeoutMs: 1 },
       { runtimeSender },

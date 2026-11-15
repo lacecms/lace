@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy model evidence, partial synchronization ports and detached plan fixtures.
 import { expect, test } from "vitest";
 import {
   checkConfigurationSynchronization,
@@ -14,29 +12,60 @@ import {
 } from "../index.js";
 import { defineCollection, defineConfig, defineGlobal, definePage } from "@lacecms/config";
 import { field } from "@lacecms/content";
+import type { NormalizedContentModel } from "@lacecms/config";
+import {
+  contentModelKey,
+  contentEntryId,
+  contentSnapshotId,
+  unixMilliseconds,
+} from "@lacecms/domain";
+import { scanFixture } from "../test-support/configuration-fixtures.js";
+import type { StoredContentModelState, ApplyConfigurationSynchronizationInput } from "./types.js";
 
-function model(overrides = {}) {
-  return {
-    key: "posts",
-    kind: "collection",
-    projectionHash: "projection-a",
-    structureHash: "structure-a",
+type ModelOverrides = {
+  key?: string;
+  kind?: "collection" | "global" | "page";
+  version?: number;
+  projectionHash?: string;
+  structureHash?: string;
+  renamedFrom?: string;
+};
+function model(overrides: ModelOverrides = {}): NormalizedContentModel {
+  const { key = "posts", kind = "collection", version = 1, ...rest } = overrides;
+  const common = {
+    key,
     version: 1,
-    ...overrides,
+    ...(rest.renamedFrom === undefined ? {} : { renamedFrom: rest.renamedFrom }),
+  };
+  const definition =
+    kind === "global"
+      ? defineGlobal(common)
+      : kind === "page"
+        ? definePage({ ...common, path: "/" })
+        : defineCollection({ ...common, route: "/:slug" });
+  return {
+    ...definition,
+    version,
+    projectionHash: rest.projectionHash ?? "projection-a",
+    publicProjectionHash: "projection-a",
+    structureHash: rest.structureHash ?? "structure-a",
   };
 }
 
-function stored(overrides = {}) {
+function stored(
+  overrides: Omit<Partial<StoredContentModelState>, "key"> & { key?: string } = {},
+): StoredContentModelState {
+  const { key = "posts", ...rest } = overrides;
   return {
     draftSnapshotCount: 0,
     entryCount: 0,
-    key: "posts",
     kind: "collection",
     projectionHash: "projection-a",
     publishedSnapshotCount: 0,
     structureHash: "structure-a",
     version: 1,
-    ...overrides,
+    ...rest,
+    key: contentModelKey(key),
   };
 }
 
@@ -125,7 +154,7 @@ test("requires explicit safe renames and protects stored entries and snapshots",
     isValid: false,
     operations: [{ action: "incompatible-change", model: { key: "posts" } }],
   });
-  expect(snapshotChange.diagnostics[0].message).toContain("draft=1, published=2");
+  expect(snapshotChange.diagnostics[0]?.message).toContain("draft=1, published=2");
 });
 
 test("refuses kind changes involving globals and blocks removing a synchronized global", () => {
@@ -134,7 +163,7 @@ test("refuses kind changes involving globals and blocks removing a synchronized 
     ["page", "global"],
     ["collection", "global"],
     ["global", "collection"],
-  ]) {
+  ] as const) {
     const plan = planConfigurationSynchronization({
       models: [model({ key: "settings", kind: configured })],
       storedModels: [stored({ entryCount: 1, key: "settings", kind: storedKind })],
@@ -143,7 +172,7 @@ test("refuses kind changes involving globals and blocks removing a synchronized 
     expect(plan.operations).toMatchObject([
       { action: "incompatible-change", model: { key: "settings" } },
     ]);
-    expect(plan.diagnostics[0].code).toBe("MODEL_KIND_CHANGED");
+    expect(plan.diagnostics[0]?.code).toBe("MODEL_KIND_CHANGED");
   }
   const renamed = planConfigurationSynchronization({
     models: [model({ key: "settings", kind: "global", renamedFrom: "posts" })],
@@ -173,12 +202,13 @@ test("materializes a global singleton entry for a created global", async () => {
     }),
     projectionHash: "projection-settings",
     structureHash: "structure-settings",
+    publicProjectionHash: "projection-settings",
   };
   const entry = createConfigurationSyncSingletonEntry({
-    appliedAt: 1,
-    entryId: "entry-settings",
+    appliedAt: unixMilliseconds(1),
+    entryId: contentEntryId("entry-settings"),
     model: settings,
-    snapshotId: "snapshot-settings",
+    snapshotId: contentSnapshotId("snapshot-settings"),
   });
   expect(entry.entry.model).toEqual({ key: "settings", kind: "global" });
   expect(entry.entry.draft).toMatchObject({
@@ -189,15 +219,11 @@ test("materializes a global singleton entry for a created global", async () => {
   expect(entry.entry.draft).not.toHaveProperty("slug");
   const prepared = await prepareConfigurationSynchronization({
     models: [settings],
-    state: {
-      async readConfigurationSyncState() {
-        return [];
-      },
-    },
+    state: scanFixture([], []),
   });
-  let received;
+  let received: ApplyConfigurationSynchronizationInput | undefined;
   await applyPreparedConfigurationSynchronization({
-    clock: { now: () => 1 },
+    clock: { now: () => unixMilliseconds(1) },
     ids: {
       next: (() => {
         let id = 0;
@@ -207,23 +233,28 @@ test("materializes a global singleton entry for a created global", async () => {
     models: [settings],
     prepared,
     target: {
+      ...scanFixture([], []),
+      applyConfigurationSyncBlockMigrations: () => {
+        throw new Error("Unexpected migration");
+      },
       async applyConfigurationSynchronization(input) {
         received = input;
         return { operations: input.plan.operations, status: "applied", targetVersion: 1 };
       },
     },
   });
-  expect(received.singletonEntries.map((item) => item.modelKey)).toEqual(["settings"]);
+  expect(received?.singletonEntries.map((item) => item.modelKey)).toEqual(["settings"]);
   expect(() =>
     createConfigurationSyncSingletonEntry({
-      appliedAt: 1,
-      entryId: "entry-posts",
+      appliedAt: unixMilliseconds(1),
+      entryId: contentEntryId("entry-posts"),
       model: {
         ...defineCollection({ key: "posts", route: "/p/:slug", version: 1 }),
         projectionHash: "p",
         structureHash: "s",
+        publicProjectionHash: "p",
       },
-      snapshotId: "snapshot-posts",
+      snapshotId: contentSnapshotId("snapshot-posts"),
     }),
   ).toThrow(/page and global/u);
 });
@@ -312,20 +343,17 @@ test("prepares a detached dry run and materializes page defaults only for apply"
     }),
     projectionHash: "projection-home",
     structureHash: "structure-home",
+    publicProjectionHash: "projection-home",
   };
-  const state = {
-    async readConfigurationSyncState() {
-      return [];
-    },
-  };
+  const state = scanFixture([], []);
   const prepared = await prepareConfigurationSynchronization({ models: [page], state });
   expect(prepared.report.check.exitCode).toBe(1);
   expect(prepared.storedModels).toEqual([]);
   const pageEntry = createConfigurationSyncSingletonEntry({
-    appliedAt: 1,
-    entryId: "entry-home",
+    appliedAt: unixMilliseconds(1),
+    entryId: contentEntryId("entry-home"),
     model: page,
-    snapshotId: "snapshot-home",
+    snapshotId: contentSnapshotId("snapshot-home"),
   });
   expect(pageEntry.entry.draft).toMatchObject({
     blocks: [],
@@ -334,9 +362,9 @@ test("prepares a detached dry run and materializes page defaults only for apply"
     updatedBy: contentSyncActor,
   });
 
-  let received;
+  let received: ApplyConfigurationSynchronizationInput | undefined;
   await applyPreparedConfigurationSynchronization({
-    clock: { now: () => 1 },
+    clock: { now: () => unixMilliseconds(1) },
     ids: {
       next: (() => {
         let id = 0;
@@ -346,17 +374,21 @@ test("prepares a detached dry run and materializes page defaults only for apply"
     models: [page],
     prepared,
     target: {
+      ...scanFixture([], []),
+      applyConfigurationSyncBlockMigrations: () => {
+        throw new Error("Unexpected migration");
+      },
       async applyConfigurationSynchronization(input) {
         received = input;
         return { operations: input.plan.operations, status: "applied", targetVersion: 1 };
       },
     },
   });
-  expect(received.singletonEntries[0].entry.draft.fields).toEqual({ greeting: "Hello" });
+  expect(received?.singletonEntries[0]?.entry.draft.fields).toEqual({ greeting: "Hello" });
 });
 
 test("plans a list-field change as a projection-only label update", async () => {
-  const collection = (listFields) =>
+  const collection = (listFields?: "author"[]) =>
     defineCollection({
       fields: { author: field.text() },
       key: "posts",
@@ -369,13 +401,14 @@ test("plans a list-field change as a projection-only label update", async () => 
     defineConfig({ content: [collection(["author"])] }),
   ]);
   const storedModel = before.content[0];
+  if (!storedModel) throw new Error("Expected stored model");
   const plan = planConfigurationSynchronization({
     models: after.content,
     storedModels: [
       {
         draftSnapshotCount: 3,
         entryCount: 3,
-        key: storedModel.key,
+        key: contentModelKey(storedModel.key),
         kind: storedModel.kind,
         projectionHash: storedModel.projectionHash,
         publishedSnapshotCount: 2,

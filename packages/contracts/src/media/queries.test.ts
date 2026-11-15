@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import { unixMilliseconds } from "@lacecms/domain";
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
@@ -37,24 +35,29 @@ describe("admin entry list contracts", () => {
       id: "media-1",
       mimeType: "image/png",
       size: 42,
-      status: "active",
+      status: "active" as const,
+      tags: [],
       updatedAt: unixMilliseconds(Date.UTC(2026, 0, 1)),
       usage: [
         {
           entryId: "post-1",
           locations: [
-            { field: "cover", source: "field", states: ["draft", "published"] },
+            {
+              field: "cover",
+              source: "field" as const,
+              states: ["draft", "published"] as ("draft" | "published")[],
+            },
             {
               blockKey: "hero-1",
               blockType: "hero",
               field: "image",
-              source: "block",
-              states: ["published"],
+              source: "block" as const,
+              states: ["published"] as ("draft" | "published")[],
             },
           ],
           modelKey: "posts",
           slug: "welcome",
-          status: "changed",
+          status: "changed" as const,
           title: "Welcome",
         },
       ],
@@ -77,6 +80,7 @@ describe("admin entry list contracts", () => {
     }
 
     const [entry] = detail.usage;
+    if (!entry) throw new Error("Expected a usage entry");
     const location = entry.locations[0];
     for (const invalid of [
       { ...detail, usage: Array.from({ length: 51 }, () => entry) },
@@ -130,10 +134,11 @@ test("ASCII media tag contracts normalize input and preserve precise issue point
     ],
     [c.updateMediaMetadataRequestSchema, { tags: ["a".repeat(201)] }, "tags.0"],
     [c.mediaTagCatalogQuerySchema, { q: "a b" }, "q"],
-  ]) {
+  ] as const) {
     const parsed = v.safeParse(schema, input);
     expect(parsed.success).toBe(false);
-    expect(parsed.issues.map(v.getDotPath)).toContain(path);
+    if (parsed.success) throw new Error("Expected invalid query");
+    expect(parsed.issues.map((issue) => v.getDotPath(issue))).toContain(path);
   }
   expect(
     v.safeParse(c.mediaTagCatalogSchema, { items: [{ tag: "bad tag", count: 1 }] }).success,

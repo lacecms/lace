@@ -1,5 +1,5 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable export fixtures, scripted transports and invalid loader inputs.
+import * as v from "valibot";
+import type { BuildExportDto, PublicBlockDto, PublicEntryDto } from "@lacecms/contracts";
 import { expect, test } from "vitest";
 
 import { createPublishedSiteLoader } from "./published-site.js";
@@ -11,7 +11,29 @@ const environment = Object.freeze({
   LACE_BUILD_TOKEN: token,
 });
 
-function exportEntry({ id, modelKey = "posts", path, slug, blocks = [], fields = {} }) {
+type WireBlock = Omit<PublicBlockDto, "settings"> & {
+  settings?: PublicBlockDto["settings"];
+  hidden?: unknown;
+};
+function required<T>(value: T | null | undefined): T {
+  if (value == null) throw new Error("Expected fixture value");
+  return value;
+}
+function exportEntry({
+  id,
+  modelKey = "posts",
+  path,
+  slug,
+  blocks = [],
+  fields = {},
+}: {
+  id: string;
+  modelKey?: string;
+  path: string;
+  slug?: string;
+  blocks?: WireBlock[];
+  fields?: PublicEntryDto["fields"];
+}) {
   return {
     blocks,
     fields,
@@ -25,7 +47,7 @@ function exportEntry({ id, modelKey = "posts", path, slug, blocks = [], fields =
   };
 }
 
-function buildExport(version, entries, media = {}) {
+function buildExport(version: number, entries: unknown[], media: BuildExportDto["media"] = {}) {
   return {
     entries,
     formatVersion: 2,
@@ -36,19 +58,24 @@ function buildExport(version, entries, media = {}) {
   };
 }
 
-function exportResponse(value, etag = `"${value.version}"`) {
+function exportResponse<T extends { version: number }>(value: T, etag = `"${value.version}"`) {
   return Response.json(value, { headers: { etag } });
 }
 
-function notModified(etag) {
+function notModified(etag: string) {
   return new Response(null, { headers: { etag }, status: 304 });
 }
 
-function scriptedFetch(responses) {
-  const requests = [];
+function scriptedFetch(
+  responses: (Response | Error | (() => Response | Promise<Response>) | undefined)[],
+) {
+  const requests: { headers: Headers; url: string }[] = [];
   return {
-    fetch: async (url, init) => {
-      requests.push({ headers: new Headers(init.headers), url: url.toString() });
+    fetch: async (url: string | URL | Request, init?: RequestInit) => {
+      requests.push({
+        headers: new Headers(init?.headers),
+        url: url instanceof Request ? url.url : url.toString(),
+      });
       const next = responses.shift();
       if (next === undefined) throw new Error("Unexpected request.");
       if (next instanceof Error) throw next;
@@ -58,16 +85,17 @@ function scriptedFetch(responses) {
   };
 }
 
-async function captureError(promise) {
+async function captureError(promise: Promise<unknown>): Promise<Error> {
   try {
     await promise;
   } catch (error) {
+    if (!(error instanceof Error)) throw error;
     return error;
   }
   throw new Error("Expected the promise to reject.");
 }
 
-function pagedExport(version, paths) {
+function pagedExport(version: number, paths: string[][]) {
   const pages = paths.map((group, index) => {
     const entries = group.map((path) =>
       exportEntry({ id: `post-${path.slice(-1)}`, path, slug: path.slice(-1) }),
@@ -85,7 +113,7 @@ function pagedExport(version, paths) {
   return pages.map((page) => exportResponse(page));
 }
 
-function versionChanged(expectedVersion, actualVersion) {
+function versionChanged(expectedVersion: number, actualVersion: number) {
   return Response.json(
     {
       error: {
@@ -100,7 +128,7 @@ function versionChanged(expectedVersion, actualVersion) {
 
 const threePages = [["/blog/a"], ["/blog/b"], ["/blog/c"]];
 
-function linkedEntry(id, targetId, path = `/${id}`) {
+function linkedEntry(id: string, targetId: string, path = `/${id}`) {
   return {
     ...exportEntry({
       id,
@@ -110,7 +138,7 @@ function linkedEntry(id, targetId, path = `/${id}`) {
     internalLinks: [{ sourceKey: "$fields", area: "fields", pointer: "/nested/0/url", targetId }],
   };
 }
-function linkedExport(entries, globals = [], version = 1) {
+function linkedExport(entries: unknown[], globals: unknown[] = [], version = 1) {
   return { ...buildExport(version, entries), formatVersion: 2, globals };
 }
 
@@ -139,7 +167,7 @@ test("static mode restarts a traversal that failed on a later page", async () =>
     ...pagedExport(5, threePages),
   ]);
   const load = createPublishedSiteLoader({ environment, fetch: transport.fetch });
-  expect((await captureError(load())).code).toBe("api_unavailable");
+  expect(await captureError(load())).toMatchObject({ code: "api_unavailable" });
   expect((await load()).allEntries()).toHaveLength(3);
   expect(transport.requests.map((request) => new URL(request.url).search)).toEqual([
     "",
@@ -178,7 +206,7 @@ test("an expected version is checked on the first page before continuing", async
   const mismatch = await captureError(
     createPublishedSiteLoader({ environment: pinned, fetch: early.fetch })(),
   );
-  expect(mismatch.code).toBe("version_mismatch");
+  expect(mismatch).toMatchObject({ code: "version_mismatch" });
   expect(mismatch.message).toContain("expected version 7, received 8");
   expect(early.requests).toHaveLength(1);
 
@@ -187,7 +215,7 @@ test("an expected version is checked on the first page before continuing", async
   const changed = await captureError(
     createPublishedSiteLoader({ environment: pinned, fetch: interrupted.fetch })(),
   );
-  expect(changed.code).toBe("version_mismatch");
+  expect(changed).toMatchObject({ code: "version_mismatch" });
   expect(changed.message).toContain("expected version 7, received 8");
   expect(interrupted.requests).toHaveLength(2);
 });
@@ -204,7 +232,7 @@ test("an export that keeps changing fails with version_mismatch after one restar
   const error = await captureError(
     createPublishedSiteLoader({ environment, fetch: transport.fetch })(),
   );
-  expect(error.code).toBe("version_mismatch");
+  expect(error).toMatchObject({ code: "version_mismatch" });
   expect(error.message).toContain("kept changing");
   expect(transport.requests).toHaveLength(4);
 
@@ -235,7 +263,7 @@ test("format 2 preserves manifests across pages and resolves later destinations 
   ]);
   const load = createPublishedSiteLoader({ environment, fetch: transport.fetch });
   const site = await load();
-  for (const owner of [site, site.byPath("/a"), site.global("navigation")]) {
+  for (const owner of [site, required(site.byPath("/a")), required(site.global("navigation"))]) {
     expect(owner.link("entry:target")).toEqual({
       state: "resolved",
       href: "/z-new",
@@ -247,10 +275,14 @@ test("format 2 preserves manifests across pages and resolves later destinations 
     for (const value of ["entry:%74arget", "entry:", "javascript:bad", "//evil", 42])
       expect(() => owner.link(value)).toThrow();
   }
-  expect(site.byPath("/a").fields.nested[0].url).toBe("entry:target");
-  expect(site.byPath("/a").internalLinks).toEqual(source.internalLinks);
-  expect(Object.isFrozen(site.byPath("/a").fields.nested[0])).toBe(true);
-  expect(Object.isFrozen(site.global("navigation").internalLinks)).toBe(true);
+  const entry = required(site.byPath("/a"));
+  const fields = entry.fields;
+  if (!v.is(v.object({ nested: v.array(v.object({ url: v.string() })) }), fields))
+    throw new Error("Expected nested link fields");
+  expect(required(fields.nested[0]).url).toBe("entry:target");
+  expect(entry.internalLinks).toEqual(source.internalLinks);
+  expect(Object.isFrozen(required(fields.nested[0]))).toBe(true);
+  expect(Object.isFrozen(required(site.global("navigation")).internalLinks)).toBe(true);
   expect(site.linkDiagnostics).toEqual({ total: 0, items: [], truncated: false });
   expect(await load()).toBe(site);
   expect(transport.requests).toHaveLength(2);
@@ -261,9 +293,7 @@ test("format 2 preserves manifests across pages and resolves later destinations 
 
 test("duplicate source IDs and inconsistent manifest locations fail before exposing a site", async () => {
   const source = linkedEntry("source", "target");
-  const global = { ...source, modelKey: "navigation" };
-  delete global.path;
-  delete global.title;
+  const { path: _path, title: _title, ...global } = { ...source, modelKey: "navigation" };
   const cases = [
     linkedExport([source, { ...source, path: "/another" }]),
     linkedExport([source], [global]),
@@ -297,7 +327,9 @@ test("unavailable diagnostics are bounded, deterministic, private and reported o
   const entries = Array.from({ length: 150 }, (_, i) =>
     linkedEntry(`source-${String(i).padStart(3, "0")}`, "missing"),
   ).reverse();
-  const callbacks = [];
+  const callbacks: Parameters<
+    NonNullable<NonNullable<Parameters<typeof createPublishedSiteLoader>[0]>["onLinkDiagnostics"]>
+  >[0][] = [];
   const transport = scriptedFetch([
     exportResponse(linkedExport(entries)),
     notModified('"1"'),
@@ -330,7 +362,7 @@ test("unavailable diagnostics are bounded, deterministic, private and reported o
   expect(JSON.stringify(first.linkDiagnostics)).not.toContain("entry:");
   expect(Object.isFrozen(first.linkDiagnostics.items[0])).toBe(true);
   first.link("entry:missing");
-  first.byPath("/source-000").link("entry:missing");
+  required(first.byPath("/source-000")).link("entry:missing");
   expect(await loader()).toBe(first);
   expect(callbacks).toHaveLength(1);
   const recovered = await loader();

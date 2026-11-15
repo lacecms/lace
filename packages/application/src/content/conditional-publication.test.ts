@@ -1,8 +1,21 @@
-// @ts-nocheck
-// TODO(rf2): Type branded content snapshots and conditional publication fixture mutations.
 import { describe, expect, it } from "vitest";
 import { defineCollection, defineConfig } from "@lacecms/config";
 import { defineBlock, encodeEntryLink, field } from "@lacecms/content";
+import {
+  actorId,
+  blockKey,
+  contentEntryId,
+  contentModelKey,
+  contentSnapshotId,
+  mediaId,
+  unixMilliseconds,
+} from "@lacecms/domain";
+import type { Actor, ContentEntry, DraftSnapshot } from "@lacecms/domain";
+import type { JsonValue } from "@lacecms/content";
+import type { PublishContentEntryCommand } from "../ports/content.js";
+import type { ContentUseCaseDependencies } from "./use-case-inputs.js";
+import { contentPort } from "../test-support/content-port.js";
+import { mediaRecord } from "../test-support/media-fixtures.js";
 import { ContentUseCases, ContentValidationError } from "../index.js";
 
 const kind = () =>
@@ -63,58 +76,72 @@ const config = await defineConfig({
   ],
 });
 
-const actor = { id: "user", role: "admin" };
+const actor: Actor = { id: actorId("user"), role: "admin" };
 const IMAGE = "media-image";
 const STALE = "media-stale";
 
-function draftOf(input) {
-  return {
-    id: "draft-1",
-    entryId: "entry-1",
+function draftOf<T extends Partial<DraftSnapshot>>(input: T) {
+  const base: DraftSnapshot = {
+    id: contentSnapshotId("draft-1"),
+    entryId: contentEntryId("entry-1"),
     revision: 3,
-    state: "draft",
-    createdAt: 1,
-    updatedAt: 1,
-    updatedBy: { id: "user" },
+    state: "draft" as const,
+    createdAt: unixMilliseconds(1),
+    updatedAt: unixMilliseconds(1),
+    updatedBy: actor,
     title: "Work",
     slug: "work",
     fields: {},
     blocks: [],
-    ...input,
   };
+  return { ...base, ...input };
 }
 
-function harness(draft, modelKey = "works", targets = {}) {
-  const commands = [];
+function harness(
+  draft: DraftSnapshot,
+  modelKey = "works",
+  targets: Awaited<
+    ReturnType<NonNullable<ContentUseCaseDependencies["content"]["resolveLinkTargets"]>>
+  > = {},
+) {
+  const commands: PublishContentEntryCommand[] = [];
+  const entry: ContentEntry = {
+    id: contentEntryId("entry-1"),
+    model: { key: contentModelKey(modelKey), kind: "collection", route: `/${modelKey}/:slug` },
+    draft,
+  };
   const cases = new ContentUseCases({
     config: config.runtime,
-    clock: { now: () => 10 },
+    clock: { now: () => unixMilliseconds(10) },
     idGenerator: { next: () => "snapshot-2" },
-    media: { loadMediaMany: async (ids) => ids.map((id) => ({ id, status: "active" })) },
-    content: {
-      load: async () => ({
-        id: "entry-1",
-        model: { key: modelKey, kind: "collection", route: `/${modelKey}/:slug` },
-        draft,
-      }),
+    media: {
+      loadMedia: async () => {
+        throw new Error("Unexpected loadMedia");
+      },
+      loadMediaMany: async (ids) => ids.map((id) => mediaRecord({ id: mediaId(id) })),
+    },
+    content: contentPort({
+      load: async () => entry,
       publish: async (command) => {
         commands.push(command);
         return {
-          entry: { id: "entry-1", model: { key: modelKey }, draft },
+          entry,
+          status: "published",
           outcome: "published",
           targetVersion: 2,
         };
       },
       resolveLinkTargets: async () => targets,
-    },
+    }),
   });
   const publish = (expectedRevision = 3) =>
-    cases.publish({ actor, entryId: "entry-1", expectedRevision });
+    cases.publish({ actor, entryId: contentEntryId("entry-1"), expectedRevision });
   return { commands, publish };
 }
 
-function issueOf(error) {
+function issueOf(error: unknown) {
   expect(error).toBeInstanceOf(ContentValidationError);
+  if (!(error instanceof ContentValidationError)) throw error;
   return error.issues[0];
 }
 
@@ -135,7 +162,7 @@ const galleryDraft = () =>
     },
     blocks: [
       {
-        key: "b1",
+        key: blockKey("b1"),
         position: 1,
         schemaVersion: 1,
         type: "feature",
@@ -144,7 +171,7 @@ const galleryDraft = () =>
         settings: {},
       },
       {
-        key: "b2",
+        key: blockKey("b2"),
         position: 2,
         schemaVersion: 1,
         type: "feature",
@@ -153,7 +180,7 @@ const galleryDraft = () =>
         settings: {},
       },
       {
-        key: "b3",
+        key: blockKey("b3"),
         position: 3,
         schemaVersion: 1,
         type: "plain",
@@ -168,10 +195,18 @@ describe("conditional publication", () => {
   it("publishes the projection of fields, every block and their references", async () => {
     const draft = galleryDraft();
     const { commands, publish } = harness(draft, "works", {
-      published: { state: "published", path: "/notes/p" },
+      published: {
+        id: "published",
+        state: "published",
+        modelKey: "notes",
+        modelKind: "collection",
+        title: "P",
+        path: "/notes/p",
+      },
     });
     await publish();
     const [command] = commands;
+    if (!command?.projection) throw new Error("Expected publication projection");
     expect(command.expectedRevision).toBe(3);
     expect(command.projection.fields).toEqual({
       hasCta: false,
@@ -181,9 +216,9 @@ describe("conditional publication", () => {
       ],
     });
     expect(command.projection.blocks).toEqual([
-      { key: "b1", data: { kind: "image", media: IMAGE } },
-      { key: "b2", data: { kind: "video", caption: "Hidden default" } },
-      { key: "b3", data: { media: IMAGE } },
+      { key: blockKey("b1"), data: { kind: "image", media: IMAGE } },
+      { key: blockKey("b2"), data: { kind: "video", caption: "Hidden default" } },
+      { key: blockKey("b3"), data: { media: IMAGE } },
     ]);
     expect(command.projection.mediaReferences).toEqual([
       { fieldPath: "/gallery/0/media", mediaId: IMAGE, sourceKey: "$fields" },
@@ -200,17 +235,31 @@ describe("conditional publication", () => {
       },
     ]);
     // The draft keeps every hidden value; the use case never rewrites it.
-    expect(draft.fields.gallery[1].media).toBe(STALE);
+    expect(draft.fields.gallery[1]?.media).toBe(STALE);
   });
 
   it("does not check hidden links but still checks visible ones", async () => {
     const hidden = harness(galleryDraft(), "works", {
-      published: { state: "published", path: "/notes/p" },
+      published: {
+        id: "published",
+        state: "published",
+        modelKey: "notes",
+        modelKind: "collection",
+        title: "P",
+        path: "/notes/p",
+      },
     });
     await expect(hidden.publish()).resolves.toMatchObject({ publication: "published" });
     const draft = galleryDraft();
     const visible = harness({ ...draft, fields: { ...draft.fields, hasCta: true } }, "works", {
-      published: { state: "published", path: "/notes/p" },
+      published: {
+        id: "published",
+        state: "published",
+        modelKey: "notes",
+        modelKind: "collection",
+        title: "P",
+        path: "/notes/p",
+      },
     });
     const issue = await visible.publish().then(
       () => undefined,
@@ -222,7 +271,14 @@ describe("conditional publication", () => {
 
   it("refuses a stale revision before attaching a projection", async () => {
     const { commands, publish } = harness(galleryDraft(), "works", {
-      published: { state: "published", path: "/notes/p" },
+      published: {
+        id: "published",
+        state: "published",
+        modelKey: "notes",
+        modelKind: "collection",
+        title: "P",
+        path: "/notes/p",
+      },
     });
     await expect(publish(2)).rejects.toMatchObject({ code: "CONTENT_REVISION_CONFLICT" });
     expect(commands).toEqual([]);
@@ -234,7 +290,7 @@ describe("conditional publication", () => {
         fields: { cover: IMAGE },
         blocks: [
           {
-            key: "b1",
+            key: blockKey("b1"),
             position: 1,
             schemaVersion: 1,
             type: "plain",
@@ -252,16 +308,28 @@ describe("conditional publication", () => {
 
   it("enforces visible required targets with exact paths on the server", async () => {
     const draft = galleryDraft();
+    const firstItem = draft.fields.gallery[0];
+    const firstBlock = draft.blocks[0];
+    if (!firstItem || !firstBlock) throw new Error("Expected draft fixtures");
     const missing = harness(
       {
         ...draft,
         fields: {
           ...draft.fields,
-          gallery: [draft.fields.gallery[0], { kind: "video" }],
+          gallery: [firstItem, { kind: "video" }],
         },
       },
       "works",
-      { published: { state: "published", path: "/notes/p" } },
+      {
+        published: {
+          id: "published",
+          state: "published",
+          modelKey: "notes",
+          modelKind: "collection",
+          title: "P",
+          path: "/notes/p",
+        },
+      },
     );
     const issue = await missing.publish().then(
       () => undefined,
@@ -272,9 +340,18 @@ describe("conditional publication", () => {
       path: ["fields", "gallery", 1, "videoUrl"],
     });
     const block = harness(
-      { ...draft, blocks: [{ ...draft.blocks[0], data: { kind: "image" } }] },
+      { ...draft, blocks: [{ ...firstBlock, data: { kind: "image" } }] },
       "works",
-      { published: { state: "published", path: "/notes/p" } },
+      {
+        published: {
+          id: "published",
+          state: "published",
+          modelKey: "notes",
+          modelKind: "collection",
+          title: "P",
+          path: "/notes/p",
+        },
+      },
     );
     const blockIssue = await block.publish().then(
       () => undefined,
@@ -289,21 +366,26 @@ describe("conditional publication", () => {
 
 describe("conditional drafts", () => {
   it("create keeps hidden values and validates them as drafts", async () => {
-    const stored = [];
+    const stored: ContentEntry[] = [];
     const cases = new ContentUseCases({
       config: config.runtime,
-      clock: { now: () => 1 },
+      clock: { now: () => unixMilliseconds(1) },
       idGenerator: { next: () => `id-${stored.length}` },
-      media: { loadMediaMany: async (ids) => ids.map((id) => ({ id, status: "active" })) },
-      content: {
+      media: {
+        loadMedia: async () => {
+          throw new Error("Unexpected loadMedia");
+        },
+        loadMediaMany: async (ids) => ids.map((id) => mediaRecord({ id: mediaId(id) })),
+      },
+      content: contentPort({
         create: async ({ entry }) => {
           stored.push(entry);
-          return { entry };
+          return { entry, status: "created" };
         },
         resolveLinkTargets: async () => ({}),
-      },
+      }),
     });
-    const draft = (gallery) => ({
+    const draft = (gallery: JsonValue[]) => ({
       actor,
       modelKey: "works",
       title: "Work",
@@ -312,7 +394,7 @@ describe("conditional drafts", () => {
       blocks: [],
     });
     await cases.create(draft([{ kind: "image", videoUrl: "https://example.com/kept" }]));
-    expect(stored[0].draft.fields.gallery).toEqual([
+    expect(stored[0]?.draft.fields.gallery).toEqual([
       { kind: "image", videoUrl: "https://example.com/kept" },
     ]);
     const issue = await cases.create(draft([{ kind: "image", videoUrl: "not a url" }])).then(

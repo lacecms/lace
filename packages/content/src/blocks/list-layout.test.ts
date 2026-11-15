@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type recursive descriptor fixtures, malformed runtime inputs and table tuples.
 import { test, expect } from "vitest";
 import { defineBlock, validateBlockData, validateBlockSettings } from "./definition.js";
 import { builtInBlocks } from "./built-ins.js";
@@ -13,17 +11,19 @@ test("list settings are fresh ordinary scalars reusable by any block", async () 
   expect(listLayoutSettings()).not.toBe(settings);
   expect(Object.isFrozen(settings)).toBe(true);
   const custom = defineBlock({ type: "cardList", version: 1, fields: {}, settings });
-  expect(validateBlockSettings(custom, {}, "draft")).toEqual({
+  expect(validateBlockSettings(custom, {})).toEqual({
     layoutMode: "grid",
     layoutWrap: true,
     layoutPreset: "auto",
   });
-  for (const key of ["layoutMode", "layoutPreset"]) {
+  for (const key of ["layoutMode", "layoutPreset"] as const) {
     expect(settings[key].presentation.choices).toHaveLength(settings[key].options.length);
-    expect(settings[key].presentation.choices.every((c) => c.diagram.cells.length > 0)).toBe(true);
+    expect(
+      settings[key].presentation.choices.every((c) => (c.diagram?.cells.length ?? 0) > 0),
+    ).toBe(true);
   }
   expect(() =>
-    validateBlockSettings(custom, { layoutMode: "flex-row", layoutPreset: "wrong" }, "draft"),
+    validateBlockSettings(custom, { layoutMode: "flex-row", layoutPreset: "wrong" }),
   ).toThrow();
 });
 
@@ -31,7 +31,7 @@ test("Gallery and custom lists share visibility without structural setting chang
   const { listLayoutSettings, listLayoutSettingsVisibility } = await import("./list-layout.js");
   const visibility = listLayoutSettingsVisibility();
   expect(listLayoutSettingsVisibility()).not.toBe(visibility);
-  expect(Object.isFrozen(visibility.layoutWrap.values)).toBe(true);
+  expect(Object.isFrozen(visibility.layoutWrap?.values)).toBe(true);
   const custom = defineBlock({
     type: "cards",
     version: 1,
@@ -63,7 +63,7 @@ test("featured-first is no longer a grid preset", async () => {
   for (const layoutMode of ["grid", "flex-row"])
     expect(
       issueFrom(() => validateBlockSettings(custom, { layoutMode, layoutPreset: "featured-first" }))
-        .path,
+        ?.path,
     ).toEqual(["layoutPreset"]);
 });
 
@@ -114,6 +114,6 @@ test("list items adopt the reusable grid placement field", async () => {
   expect(
     issueFrom(() =>
       validateBlockData(cardList, { cards: [{ title: "A" }, { placement: "center" }] }, "draft"),
-    ).path,
+    )?.path,
   ).toEqual(["cards", 1, "placement"]);
 });

@@ -1,5 +1,16 @@
-// @ts-nocheck
-// TODO(rf2): Type partial synchronization adapters, migration batches and branded snapshot fixtures.
+import type { NormalizedContentModel } from "@lacecms/config";
+import type { BlockDefinition, BlockMigration, JsonObject } from "@lacecms/content";
+import { contentModelKey, unixMilliseconds } from "@lacecms/domain";
+import type { UnixMilliseconds } from "@lacecms/domain";
+import type {
+  ConfigurationSyncMigrationBlock,
+  ConfigurationSyncMediaReference,
+  ConfigurationSyncMigrationSnapshot,
+  ConfigurationSyncMigrationScanInput,
+  ApplyConfigurationSyncBlockMigrationsInput,
+  ApplyConfigurationSynchronizationInput,
+  ConfigurationSyncOperation,
+} from "./types.js";
 import { expect, test } from "vitest";
 import { defineCollection, defineConfig } from "@lacecms/config";
 import { builtInBlocks, defineBlock, field } from "@lacecms/content";
@@ -11,13 +22,23 @@ import {
   renderConfigurationSyncPlanJson,
 } from "../index.js";
 
+function required<T>(value: T | null | undefined): T {
+  if (value === undefined || value === null) throw new Error("Expected fixture value");
+  return value;
+}
+
+function evolution(operation: ConfigurationSyncOperation | undefined) {
+  if (!operation || !("evolution" in operation)) throw new Error("Expected evolution operation");
+  return operation.evolution;
+}
+
 const noteV1 = defineBlock({
   fields: { body: field.text({ required: true }), image: field.media() },
   type: "note",
   version: 1,
 });
 
-function noteV3(migrations = {}) {
+function noteV3(migrations: Record<number, BlockMigration> = {}) {
   return defineBlock({
     fields: {
       cover: field.media(),
@@ -28,7 +49,7 @@ function noteV3(migrations = {}) {
         data: {
           ...rest,
           ...(image === undefined ? {} : { cover: image }),
-          ...(body === undefined ? {} : { quote: body }),
+          ...(body === undefined ? {} : { quote: body ?? null }),
         },
       }),
       3: ({ data: { quote, ...rest } }) => ({
@@ -41,7 +62,7 @@ function noteV3(migrations = {}) {
   });
 }
 
-async function config(block, version) {
+async function config(block: BlockDefinition, version: number) {
   return defineConfig({
     blocks: [block],
     content: [
@@ -56,7 +77,12 @@ async function config(block, version) {
   });
 }
 
-function block(key, data, schemaVersion = 1, envelope = {}) {
+function block(
+  key: string,
+  data: JsonObject,
+  schemaVersion = 1,
+  envelope: Partial<ConfigurationSyncMigrationBlock> & { anchor?: string } = {},
+): MutableBlock {
   return {
     data,
     hidden: false,
@@ -69,19 +95,45 @@ function block(key, data, schemaVersion = 1, envelope = {}) {
   };
 }
 
-function snap(id, state, revision, blocks, references = []) {
+type Mutable<T> = { -readonly [K in keyof T]: T[K] };
+type MutableBlock = Mutable<ConfigurationSyncMigrationBlock>;
+type MutableSnapshot = Omit<
+  Mutable<ConfigurationSyncMigrationSnapshot>,
+  "blocks" | "references"
+> & {
+  blocks: MutableBlock[];
+  references: ConfigurationSyncMediaReference[];
+  updatedAt?: UnixMilliseconds;
+  updatedBy?: string;
+};
+type MutableEntry = { entryId: string; draft?: MutableSnapshot; published?: MutableSnapshot };
+
+function snap(
+  id: string,
+  state: "draft" | "published",
+  revision: number,
+  blocks: MutableBlock[],
+  references: ConfigurationSyncMediaReference[] = [],
+): MutableSnapshot {
   return { blocks, fields: {}, references, revision, snapshotId: id, state, title: `Title ${id}` };
 }
 
 /** In-memory synchronization store with guarded block-migration writes. */
-function store(baseline, entries, options = {}) {
-  const writes = [];
-  const finals = [];
+function store(
+  baseline: NormalizedContentModel | undefined,
+  entries: MutableEntry[],
+  options: { failAfterUnits?: number } = {},
+) {
+  if (!baseline) throw new Error("Expected baseline model");
+  const writes: ApplyConfigurationSyncBlockMigrationsInput[] = [];
+  const finals: ApplyConfigurationSynchronizationInput[] = [];
   let unitsWritten = 0;
   const snapshots = () =>
     entries
       .flatMap((entry) =>
-        [entry.draft, entry.published].filter(Boolean).map((snapshot) => ({ entry, snapshot })),
+        [entry.draft, entry.published]
+          .filter((snapshot): snapshot is MutableSnapshot => snapshot !== undefined)
+          .map((snapshot) => ({ entry, snapshot })),
       )
       .sort((left, right) => left.snapshot.snapshotId.localeCompare(right.snapshot.snapshotId));
   const fingerprint = () =>
@@ -99,12 +151,12 @@ function store(baseline, entries, options = {}) {
         {
           draftSnapshotCount: entries.filter((entry) => entry.draft).length,
           entryCount: entries.length,
-          key: baseline.key,
+          key: contentModelKey(baseline.key),
           kind: baseline.kind,
           projectionHash: baseline.projectionHash,
           publishedSnapshotCount: entries.filter((entry) => entry.published).length,
           snapshotFingerprint: fingerprint(),
-          structure: baseline.structure,
+          ...(baseline.structure === undefined ? {} : { structure: baseline.structure }),
           structureHash: baseline.structureHash,
           version: baseline.version,
         },
@@ -115,7 +167,7 @@ function store(baseline, entries, options = {}) {
         items: snapshots().map(({ entry, snapshot }) => ({
           blocks: snapshot.blocks.map(({ key, schemaVersion, type, data, settings, hidden }) => ({
             data,
-            settings,
+            ...(settings === undefined ? {} : { settings }),
             hidden,
             key,
             schemaVersion,
@@ -131,8 +183,12 @@ function store(baseline, entries, options = {}) {
         })),
       };
     },
-    async readConfigurationSyncMigrationEntries({ after, limit, targets }) {
-      const stale = (snapshot) =>
+    async readConfigurationSyncMigrationEntries({
+      after,
+      limit,
+      targets,
+    }: ConfigurationSyncMigrationScanInput) {
+      const stale = (snapshot: MutableSnapshot | undefined) =>
         snapshot?.blocks.some((value) =>
           targets.some(
             (target) => target.type === value.type && target.version !== value.schemaVersion,
@@ -145,9 +201,10 @@ function store(baseline, entries, options = {}) {
         )
         .sort((left, right) => left.entryId.localeCompare(right.entryId));
       const items = matching.slice(0, limit).map((entry) => structuredClone(entry));
-      return matching.length > limit ? { items, next: items.at(-1).entryId } : { items };
+      const last = items.at(-1);
+      return matching.length > limit && last ? { items, next: last.entryId } : { items };
     },
-    async applyConfigurationSyncBlockMigrations(input) {
+    async applyConfigurationSyncBlockMigrations(input: ApplyConfigurationSyncBlockMigrationsInput) {
       writes.push(input);
       const counts = { blocks: 0, drafts: 0, published: 0 };
       for (const unit of input.units) {
@@ -155,13 +212,16 @@ function store(baseline, entries, options = {}) {
           throw new Error("Injected failure; the synchronization plan is stale.");
         }
         const entry = entries.find((value) => value.entryId === unit.entryId);
+        if (!entry) throw new Error("Missing migration entry");
         for (const migration of unit.snapshots) {
           const snapshot = entry[migration.state];
+          if (!snapshot) throw new Error("Missing migration snapshot");
           if (snapshot.revision !== migration.expectedRevision) {
             throw new Error("Block migration guard failed; the synchronization plan is stale.");
           }
           for (const migrated of migration.blocks) {
             const stored = snapshot.blocks.find((value) => value.key === migrated.key);
+            if (!stored) throw new Error("Missing migration block");
             stored.data = migrated.data;
             stored.schemaVersion = migrated.schemaVersion;
             stored.settings = migrated.settings;
@@ -181,14 +241,14 @@ function store(baseline, entries, options = {}) {
       }
       return counts;
     },
-    async applyConfigurationSynchronization(input) {
+    async applyConfigurationSynchronization(input: ApplyConfigurationSynchronizationInput) {
       finals.push(input);
-      return { operations: input.plan.operations, status: "applied", targetVersion: 2 };
+      return { operations: input.plan.operations, status: "applied" as const, targetVersion: 2 };
     },
   };
 }
 
-function seed() {
+function seed(): MutableEntry[] {
   return [
     {
       draft: snap("d1", "draft", 1, [block("b1", { body: "draft only" })]),
@@ -217,18 +277,20 @@ function seed() {
       published: snap("p3", "published", 4, [block("b1", { body: "older" })]),
     },
   ].map((entry) => {
-    for (const snapshot of [entry.draft, entry.published].filter(Boolean)) {
+    for (const snapshot of [entry.draft, entry.published].filter(
+      (snapshot): snapshot is MutableSnapshot => snapshot !== undefined,
+    )) {
       snapshot.blocks = snapshot.blocks.map((value) =>
-        value.schemaVersion === 2 ? { ...value, data: { quote: value.data.body } } : value,
+        value.schemaVersion === 2 ? { ...value, data: { quote: value.data.body ?? null } } : value,
       );
     }
     return entry;
   });
 }
-
 test("plans entry migrations with the revision rule and published snapshots first", () => {
   const definitions = new Map([["note", noteV3()]]);
-  const [draftOnly, inSync, changed] = seed();
+  const [draftOnly, inSync, changed] = seed().map(required);
+  if (!draftOnly || !inSync || !changed) throw new Error("Expected migration seeds");
 
   expect(planEntryMigration(draftOnly, definitions, "system:content-sync").unit).toEqual({
     entryId: "e1",
@@ -253,7 +315,7 @@ test("plans entry migrations with the revision rule and published snapshots firs
     ],
   });
 
-  const synced = planEntryMigration(inSync, definitions, "system:content-sync").unit;
+  const synced = required(planEntryMigration(inSync, definitions, "system:content-sync").unit);
   expect(synced.snapshots.map((value) => [value.state, value.revision])).toEqual([
     ["published", 4],
     ["draft", 4],
@@ -262,16 +324,16 @@ test("plans entry migrations with the revision rule and published snapshots firs
     draftGuard: { revision: 3, snapshotId: "d2" },
     references: [{ fieldPath: "cover", mediaId: "m1", sourceKey: "b1" }],
   });
-  expect(synced.snapshots[0].blocks.map((value) => value.key)).toEqual(["b1"]);
+  expect(required(synced.snapshots[0]).blocks.map((value) => value.key)).toEqual(["b1"]);
   expect(synced.snapshots[0]).not.toHaveProperty("updatedBy");
 
   const diverged = planEntryMigration(changed, definitions, "system:content-sync");
-  expect(diverged.unit.snapshots.map((value) => [value.state, value.revision])).toEqual([
+  expect(required(diverged.unit).snapshots.map((value) => [value.state, value.revision])).toEqual([
     ["published", 4],
     ["draft", 6],
   ]);
-  expect(diverged.unit.snapshots[0]).not.toHaveProperty("draftGuard");
-  expect(diverged.unit.snapshots[1].blocks[0]).toMatchObject({
+  expect(required(diverged.unit).snapshots[0]).not.toHaveProperty("draftGuard");
+  expect(required(required(diverged.unit).snapshots[1]).blocks[0]).toMatchObject({
     data: { text: "newer draft" },
     expectedSchemaVersion: 2,
   });
@@ -280,7 +342,6 @@ test("plans entry migrations with the revision rule and published snapshots firs
     { fromVersion: 2, state: "draft", type: "note" },
   ]);
 });
-
 test("validates migrated drafts and published snapshots in their own modes", () => {
   const definitions = new Map([["note", noteV3()]]);
   const draft = planEntryMigration(
@@ -289,7 +350,7 @@ test("validates migrated drafts and published snapshots in their own modes", () 
     "system:content-sync",
   );
   expect(draft.findings).toEqual([]);
-  expect(draft.unit.snapshots[0].blocks[0].data).toEqual({});
+  expect(required(required(required(draft.unit).snapshots[0]).blocks[0]).data).toEqual({});
 
   const published = planEntryMigration(
     { entryId: "e", published: snap("p", "published", 1, [block("b1", {})]) },
@@ -345,7 +406,6 @@ test("validates migrated drafts and published snapshots in their own modes", () 
     { kind: "invalid", reference: { reason: "media references would exceed 200" } },
   ]);
 });
-
 test("validates hidden published blocks in draft mode and migrates settings", () => {
   const definitions = new Map([["note", noteV3()]]);
   const hidden = planEntryMigration(
@@ -357,9 +417,12 @@ test("validates hidden published blocks in draft mode and migrates settings", ()
     "system:content-sync",
   );
   expect(hidden.findings).toEqual([]);
-  expect(hidden.unit.snapshots[0].blocks[0]).toMatchObject({ data: {}, settings: {} });
+  expect(required(required(hidden.unit).snapshots[0]).blocks[0]).toMatchObject({
+    data: {},
+    settings: {},
+  });
 
-  const themed = (migration) =>
+  const themed = (migration: BlockMigration) =>
     new Map([
       [
         "note",
@@ -380,13 +443,16 @@ test("validates hidden published blocks in draft mode and migrates settings", ()
     { draft: snap("d", "draft", 1, [stored]), entryId: "e" },
     themed(({ data, settings: { tone, ...rest } }) => ({
       data,
-      settings: { ...rest, theme: tone },
+      settings: { ...rest, theme: tone ?? null },
     })),
     "system:content-sync",
   );
   expect(renamed.findings).toEqual([]);
   // New settings receive their declared defaults.
-  expect(renamed.unit.snapshots[0].blocks[0].settings).toEqual({ align: "left", theme: "dark" });
+  expect(required(required(required(renamed.unit).snapshots[0]).blocks[0]).settings).toEqual({
+    align: "left",
+    theme: "dark",
+  });
 
   const kept = planEntryMigration(
     { draft: snap("d", "draft", 1, [stored]), entryId: "e" },
@@ -399,16 +465,16 @@ test("validates hidden published blocks in draft mode and migrates settings", ()
 
   const bare = planEntryMigration(
     { draft: snap("d", "draft", 1, [stored]), entryId: "e" },
+    // @ts-expect-error A bare JSON object deliberately violates the migration output contract.
     themed(({ data }) => data),
     "system:content-sync",
   );
   expect(bare.findings).toMatchObject([{ kind: "invalid", type: "note" }]);
 });
-
 test("refuses failed, missing and ahead migrations and plans valid ones from evidence", async () => {
   const baseline = (await config(noteV1, 1)).runtime.content[0];
   const target = await config(noteV3(), 2);
-  const model = target.runtime.content[0];
+  const model = required(target.runtime.content[0]);
   const state = store(baseline, seed());
 
   const prepared = await prepareConfigurationSynchronization({
@@ -417,7 +483,7 @@ test("refuses failed, missing and ahead migrations and plans valid ones from evi
     state,
   });
   expect(prepared.plan.isValid).toBe(true);
-  expect(prepared.plan.operations[0].evolution.migrations).toEqual([
+  expect(evolution(prepared.plan.operations[0]).migrations).toEqual([
     {
       blockType: "note",
       blocks: 5,
@@ -455,7 +521,7 @@ test("refuses failed, missing and ahead migrations and plans valid ones from evi
   );
   const failed = await prepareConfigurationSynchronization({
     blocks: throwing.runtime.blocks,
-    models: [throwing.runtime.content[0]],
+    models: [required(throwing.runtime.content[0])],
     state,
   });
   expect(failed.plan.diagnostics).toMatchObject([
@@ -479,7 +545,7 @@ test("refuses failed, missing and ahead migrations and plans valid ones from evi
   const missingConfig = await config(onlyThree, 2);
   const missing = await prepareConfigurationSynchronization({
     blocks: missingConfig.runtime.blocks,
-    models: [missingConfig.runtime.content[0]],
+    models: [required(missingConfig.runtime.content[0])],
     state,
   });
   expect(missing.plan.diagnostics.map((value) => value.code)).toEqual([
@@ -489,7 +555,9 @@ test("refuses failed, missing and ahead migrations and plans valid ones from evi
 
   const v2 = defineBlock({
     fields: { quote: field.text() },
-    migrations: { 2: ({ data: { body, ...rest } }) => ({ data: { ...rest, quote: body } }) },
+    migrations: {
+      2: ({ data: { body, ...rest } }) => ({ data: { ...rest, quote: body ?? null } }),
+    },
     type: "note",
     version: 2,
   });
@@ -499,7 +567,7 @@ test("refuses failed, missing and ahead migrations and plans valid ones from evi
   const downgrade = await config(v2, 2);
   const refused = await prepareConfigurationSynchronization({
     blocks: downgrade.runtime.blocks,
-    models: [downgrade.runtime.content[0]],
+    models: [required(downgrade.runtime.content[0])],
     state: ahead,
   });
   expect(refused.plan.diagnostics).toMatchObject([
@@ -510,20 +578,19 @@ test("refuses failed, missing and ahead migrations and plans valid ones from evi
   const unversioned = await config(sameVersion, 2);
   const blocked = await prepareConfigurationSynchronization({
     blocks: unversioned.runtime.blocks,
-    models: [unversioned.runtime.content[0]],
+    models: [required(unversioned.runtime.content[0])],
     state,
   });
   expect(blocked.plan.diagnostics).toMatchObject([{ code: "BLOCK_DEFINITION_CHANGE_HAS_BLOCKS" }]);
-  expect(blocked.plan.diagnostics[0].message).toContain(
+  expect(blocked.plan.diagnostics[0]?.message).toContain(
     "Increase the block version and declare migrations.",
   );
 });
-
 test("migrates in units, re-prepares, and resumes after an interruption", async () => {
   const baseline = (await config(noteV1, 1)).runtime.content[0];
   const target = await config(noteV3(), 2);
-  const model = target.runtime.content[0];
-  const clock = { now: () => 500 };
+  const model = required(target.runtime.content[0]);
+  const clock = { now: () => unixMilliseconds(500) };
   const ids = { next: () => "id" };
 
   const interrupted = store(baseline, seed(), { failAfterUnits: 1 });
@@ -543,8 +610,12 @@ test("migrates in units, re-prepares, and resumes after an interruption", async 
     }),
   ).rejects.toThrow("stale");
   expect(interrupted.finals).toEqual([]);
-  expect(interrupted.entries[0].draft.blocks[0].schemaVersion).toBe(3);
-  expect(interrupted.entries[1].draft.blocks[0].schemaVersion).toBe(1);
+  expect(required(required(required(interrupted.entries[0]).draft).blocks[0]).schemaVersion).toBe(
+    3,
+  );
+  expect(required(required(required(interrupted.entries[1]).draft).blocks[0]).schemaVersion).toBe(
+    1,
+  );
 
   const resumed = store(baseline, interrupted.entries);
   const rerun = await applyPreparedConfigurationSynchronization({
@@ -564,7 +635,9 @@ test("migrates in units, re-prepares, and resumes after an interruption", async 
     status: "applied",
   });
   expect(resumed.finals).toHaveLength(1);
-  expect(resumed.finals[0].plan.operations[0].evolution).not.toHaveProperty("migrations");
+  expect(evolution(required(resumed.finals[0]).plan.operations[0])).not.toHaveProperty(
+    "migrations",
+  );
 
   const clean = store(baseline, seed());
   await applyPreparedConfigurationSynchronization({
@@ -580,20 +653,19 @@ test("migrates in units, re-prepares, and resumes after an interruption", async 
     target: clean,
   });
   expect(resumed.entries).toEqual(clean.entries);
-  expect(clean.entries.map((entry) => [entry.draft.revision, entry.published?.revision])).toEqual([
+  expect(clean.entries.map((entry) => [entry.draft?.revision, entry.published?.revision])).toEqual([
     [2, undefined],
     [4, 4],
     [6, 4],
   ]);
-  expect(clean.entries[1].published.references).toEqual([
+  expect(required(required(clean.entries[1]).published).references).toEqual([
     { fieldPath: "cover", mediaId: "m1", sourceKey: "b1" },
   ]);
 });
-
 test("stops before the final mutation when the reviewed plan changed", async () => {
   const baseline = (await config(noteV1, 1)).runtime.content[0];
   const target = await config(noteV3(), 2);
-  const model = target.runtime.content[0];
+  const model = required(target.runtime.content[0]);
   const state = store(baseline, seed());
   const prepared = await prepareConfigurationSynchronization({
     blocks: target.runtime.blocks,
@@ -604,11 +676,11 @@ test("stops before the final mutation when the reviewed plan changed", async () 
     draft: snap("d4", "draft", 1, [block("b1", { body: "x" }, 2)]),
     entryId: "e4",
   });
-  state.entries[3].draft.blocks[0].data = { quote: "late" };
+  required(required(required(state.entries[3]).draft).blocks[0]).data = { quote: "late" };
   await expect(
     applyPreparedConfigurationSynchronization({
       blocks: target.runtime.blocks,
-      clock: { now: () => 1 },
+      clock: { now: () => unixMilliseconds(1) },
       ids: { next: () => "id" },
       models: [model],
       prepared,
@@ -617,7 +689,6 @@ test("stops before the final mutation when the reviewed plan changed", async () 
   ).rejects.toThrow("stale after block migration");
   expect(state.finals).toEqual([]);
 });
-
 test("refuses stored built-in blocks below their version because built-ins declare no migrations", async () => {
   const imageV1 = defineBlock({
     fields: {
@@ -628,7 +699,7 @@ test("refuses stored built-in blocks below their version because built-ins decla
     type: "image",
     version: 1,
   });
-  const imageConfig = (definition, version) =>
+  const imageConfig = (definition: BlockDefinition, version: number) =>
     defineConfig({
       blocks: [definition],
       content: [
@@ -637,7 +708,7 @@ test("refuses stored built-in blocks below their version because built-ins decla
     });
   const baseline = (await imageConfig(imageV1, 1)).runtime.content[0];
   const target = await imageConfig(builtInBlocks.image, 2);
-  const model = target.runtime.content[0];
+  const model = required(target.runtime.content[0]);
   const data = { alt: "A lake", caption: "Morning", media: "m1" };
   const image = () => ({
     data: { ...data },
@@ -668,7 +739,7 @@ test("refuses stored built-in blocks below their version because built-ins decla
   await expect(
     applyPreparedConfigurationSynchronization({
       blocks: target.runtime.blocks,
-      clock: { now: () => 500 },
+      clock: { now: () => unixMilliseconds(500) },
       ids: { next: () => "id" },
       models: [model],
       prepared,
@@ -677,7 +748,6 @@ test("refuses stored built-in blocks below their version because built-ins decla
   ).rejects.toThrow();
   expect(JSON.stringify(state.entries)).toBe(before);
 });
-
 test("synchronizes a stored rc2 featured-first gallery to version 6", async () => {
   // The rc2 (version 5) gallery shape, reduced to what the stored data uses.
   const galleryV5 = defineBlock({
@@ -703,7 +773,7 @@ test("synchronizes a stored rc2 featured-first gallery to version 6", async () =
     type: "gallery",
     version: 5,
   });
-  const galleryConfig = (definition, version) =>
+  const galleryConfig = (definition: BlockDefinition, version: number) =>
     defineConfig({
       blocks: [definition],
       content: [
@@ -712,7 +782,7 @@ test("synchronizes a stored rc2 featured-first gallery to version 6", async () =
     });
   const baseline = (await galleryConfig(galleryV5, 1)).runtime.content[0];
   const target = await galleryConfig(builtInBlocks.gallery, 2);
-  const model = target.runtime.content[0];
+  const model = required(target.runtime.content[0]);
   const video = { kind: "video", videoTitle: "Tour", videoUrl: "https://vimeo.com/76979871" };
   const gallery = () => ({
     data: { images: [{ media: "m1" }, { kind: "image", media: "m2" }, { ...video }] },
@@ -741,12 +811,12 @@ test("synchronizes a stored rc2 featured-first gallery to version 6", async () =
     state,
   });
   expect(prepared.plan.isValid).toBe(true);
-  expect(prepared.plan.operations[0].evolution.migrations).toEqual([
+  expect(evolution(prepared.plan.operations[0]).migrations).toEqual([
     { blockType: "gallery", blocks: 2, draft: 1, fromVersions: [5], published: 1, toVersion: 6 },
   ]);
   const result = await applyPreparedConfigurationSynchronization({
     blocks: target.runtime.blocks,
-    clock: { now: () => 500 },
+    clock: { now: () => unixMilliseconds(500) },
     ids: { next: () => "id" },
     models: [model],
     prepared,
@@ -756,7 +826,10 @@ test("synchronizes a stored rc2 featured-first gallery to version 6", async () =
     migrated: { blocks: 2, drafts: 1, published: 1 },
     status: "applied",
   });
-  for (const snapshot of [state.entries[0].draft, state.entries[0].published]) {
+  for (const snapshot of [
+    required(required(state.entries[0]).draft),
+    required(required(state.entries[0]).published),
+  ]) {
     expect(snapshot.blocks[0]).toMatchObject({
       data: {
         images: [
@@ -771,7 +844,6 @@ test("synchronizes a stored rc2 featured-first gallery to version 6", async () =
     expect(snapshot.references).toEqual(references);
   }
 });
-
 test("checks complete resulting composite budgets and nested prior-media locations", () => {
   const migrated = defineBlock({
     type: "note",
@@ -779,7 +851,7 @@ test("checks complete resulting composite budgets and nested prior-media locatio
     fields: {
       images: field.list({ item: field.media() }),
     },
-    migrations: { 2: ({ data }) => ({ data: { images: data.images } }) },
+    migrations: { 2: ({ data }) => ({ data: { images: data.images ?? null } }) },
   });
   const unchanged = defineBlock({
     type: "other",
@@ -791,12 +863,12 @@ test("checks complete resulting composite budgets and nested prior-media locatio
   const definitions = new Map([["note", migrated]]);
   const context = {
     fields: { rows: field.list({ item: field.text() }) },
-    blocks: new Map([
+    blocks: new Map<string, BlockDefinition>([
       ["note", migrated],
       ["other", unchanged],
     ]),
   };
-  const snapshot = (extra) => ({
+  const snapshot = (extra: number) => ({
     ...snap(
       "d",
       "draft",
@@ -820,7 +892,7 @@ test("checks complete resulting composite budgets and nested prior-media locatio
     context,
   );
   expect(valid.findings).toEqual([]);
-  expect(valid.unit.snapshots[0].references).toEqual([
+  expect(required(required(valid.unit).snapshots[0]).references).toEqual([
     { fieldPath: "/images/0", mediaId: "m1", sourceKey: "b1" },
   ]);
   const invalid = planEntryMigration(
@@ -848,7 +920,7 @@ test("checks complete resulting composite budgets and nested prior-media locatio
       "system:content-sync",
       {
         ...context,
-        blocks: new Map([
+        blocks: new Map<string, BlockDefinition>([
           ["note", defaulted],
           ["other", unchanged],
         ]),
@@ -856,7 +928,8 @@ test("checks complete resulting composite budgets and nested prior-media locatio
     ).findings,
   ).toMatchObject([{ kind: "invalid", reference: { reason: "too_many_list_items" } }]);
   const foreign = snapshot(0);
-  foreign.blocks[0].data.images = ["m2"];
+  const foreignBlock = required(foreign.blocks[0]);
+  foreignBlock.data = { ...foreignBlock.data, images: ["m2"] };
   expect(
     planEntryMigration(
       { entryId: "e", draft: foreign },
@@ -866,7 +939,6 @@ test("checks complete resulting composite budgets and nested prior-media locatio
     ).findings,
   ).toMatchObject([{ kind: "invalid", reference: { reason: "media_not_previously_referenced" } }]);
 });
-
 test("a later model removal cannot make an unsafe migration intermediate acceptable", async () => {
   const other = defineBlock({
     type: "other",
@@ -880,7 +952,7 @@ test("a later model removal cannot make an unsafe migration intermediate accepta
     fields: { rows: field.list({ item: field.text() }) },
     migrations: { 2: () => ({ data: { rows: ["new"] } }) },
   });
-  const make = (note, version) =>
+  const make = (note: BlockDefinition, version: number) =>
     defineConfig({
       blocks: [note, other],
       content: [

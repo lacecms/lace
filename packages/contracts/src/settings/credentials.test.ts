@@ -1,5 +1,4 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
+import { unixMilliseconds } from "@lacecms/domain";
 import * as v from "valibot";
 import { expect, test } from "vitest";
 
@@ -26,10 +25,11 @@ test("import-token, slug and hash contracts are strict and point at their parame
   ]) {
     const parsed = v.safeParse(c.importTokenCreateRequestSchema, input);
     expect(parsed.success).toBe(false);
-    expect(parsed.issues.map(v.getDotPath)).toContain(path);
+    if (parsed.success) throw new Error("Expected invalid input");
+    expect(parsed.issues.map((issue) => v.getDotPath(issue))).toContain(path);
   }
   const token = {
-    capabilities: ["content:import", "content:publish"],
+    capabilities: ["content:import", "content:publish"] as const,
     createdAt: "2026-10-31T00:00:00.000Z",
     createdBy: { email: "admin@lace.test", id: "admin-1" },
     expiresAt: "2026-11-07T00:00:00.000Z",
@@ -40,8 +40,8 @@ test("import-token, slug and hash contracts are strict and point at their parame
   expect(
     c.toImportTokenDto({
       ...token,
-      createdAt: Date.parse(token.createdAt),
-      expiresAt: Date.parse(token.expiresAt),
+      createdAt: unixMilliseconds(Date.parse(token.createdAt)),
+      expiresAt: unixMilliseconds(Date.parse(token.expiresAt)),
     }),
   ).toEqual(token);
   expect(v.parse(c.importTokenSchema, token).capabilities).toEqual([
@@ -74,20 +74,22 @@ test("import-token, slug and hash contracts are strict and point at their parame
     [c.mediaListQuerySchema, { sha256: hash.toUpperCase() }, "sha256"],
     [c.mediaListQuerySchema, { sha256: hash.slice(1) }, "sha256"],
     [c.mediaListQuerySchema, { sha256: `${hash}\n` }, "sha256"],
-  ]) {
+  ] as const) {
     const parsed = v.safeParse(schema, input);
     expect(parsed.success).toBe(false);
-    expect(parsed.issues.map(v.getDotPath)).toContain(path);
+    if (parsed.success) throw new Error("Expected invalid input");
+    expect(parsed.issues.map((issue) => v.getDotPath(issue))).toContain(path);
   }
   const media = {
-    createdAt: 1,
+    createdAt: unixMilliseconds(1),
     createdBy: { displayName: "Ada", id: "u" },
     filename: "a.png",
     id: "m",
     mimeType: "image/png",
     size: 1,
-    status: "active",
-    updatedAt: 1,
+    status: "active" as const,
+    tags: [],
+    updatedAt: unixMilliseconds(1),
     usageCount: 0,
   };
   expect(c.toMediaMetadataDto({ ...media, sha256: hash }, "/m").sha256).toBe(hash);

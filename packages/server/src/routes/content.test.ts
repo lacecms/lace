@@ -1,8 +1,8 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable content/model fixtures, branded snapshots and invalid lifecycle request matrices.
 import { expect, test } from "vitest";
 import { defineCollection, defineGlobal, definePage } from "@lacecms/config";
 
+import * as v from "valibot";
+import { contentModelListSchema } from "@lacecms/contracts";
 import { actorId } from "@lacecms/domain";
 
 import { editor, fixture, json } from "../test-support/app-harness.js";
@@ -17,7 +17,7 @@ test("content model discovery retains interleaved declaration order", async () =
   const { app } = await fixture({ actor: editor, models });
   const result = await json(app, "/api/v1/admin/content-models");
   expect(result.response.status).toBe(200);
-  expect(result.body.items.map((item) => item.key)).toEqual([
+  expect(v.parse(contentModelListSchema, result.body).items.map((item) => item.key)).toEqual([
     "zebra",
     "posts",
     "about",
@@ -28,7 +28,7 @@ test("content model discovery retains interleaved declaration order", async () =
 test("editor and viewer mutations are denied by the API independently of Admin controls", async () => {
   const editorApp = (await fixture({ actor: editor })).app;
   const viewerApp = (await fixture({ actor: { id: actorId("viewer"), role: "viewer" } })).app;
-  const post = (body) => ({
+  const post = (body: unknown): RequestInit => ({
     body: JSON.stringify(body),
     headers: { "content-type": "application/json" },
     method: "POST",
@@ -43,7 +43,7 @@ test("editor and viewer mutations are denied by the API independently of Admin c
     ],
     ["/api/v1/admin/invitations", post({ email: "other@example.test", role: "viewer" })],
     ["/api/v1/admin/api-tokens", post({ name: "disallowed" })],
-  ]) {
+  ] as const) {
     expect((await json(editorApp, path, init)).response.status).toBe(403);
   }
   expect(

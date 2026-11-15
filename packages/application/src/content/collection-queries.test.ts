@@ -1,8 +1,20 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable query/model fixtures, branded actors and deliberately invalid query operands.
 import { expect, test } from "vitest";
 import { defineCollection, defineConfig, defineGlobal, definePage } from "@lacecms/config";
 import { field } from "@lacecms/content";
+import { actorId, unixMilliseconds } from "@lacecms/domain";
+import type { Actor } from "@lacecms/domain";
+import type { ListContentEntriesInput } from "../ports/content.js";
+import type { ListQueryLimits } from "@lacecms/content";
+import { contentPort } from "../test-support/content-port.js";
+
+const unused = () => {
+  throw new Error("Unexpected dependency call");
+};
+const dependencies = {
+  clock: { now: () => unixMilliseconds(1) },
+  idGenerator: { next: unused },
+  media: { loadMedia: unused, loadMediaMany: unused },
+};
 
 test("configured list queries resolve before reads with role parity and detached canonical operands", async () => {
   const { defineConfig, defineCollection } = await import("@lacecms/config");
@@ -29,25 +41,30 @@ test("configured list queries resolve before reads with role parity and detached
       }),
     ],
   });
-  const calls = [];
+  const calls: ListContentEntriesInput[] = [];
   const page = { items: [], totals: { all: 0, changed: 0, draft: 0, published: 0 } };
   const useCases = new ContentUseCases({
+    ...dependencies,
     config: config.runtime,
-    content: {
+    content: contentPort({
       list: async (query) => {
         calls.push(query);
         return page;
       },
-    },
+    }),
   });
-  const filters = [
+  const filters: [
+    { field: string; op: "eq"; value: number },
+    { field: string; op: "in"; values: string[] },
+    { field: string; op: "eq"; value: boolean },
+  ] = [
     { field: "count", op: "eq", value: 0 },
     { field: "category", op: "in", values: ["b", "a"] },
     { field: "flag", op: "eq", value: false },
   ];
-  for (const role of ["viewer", "editor", "admin"]) {
+  for (const role of ["viewer", "editor", "admin"] as const) {
     const result = await useCases.list({
-      actor: { id: "reader", role },
+      actor: { id: actorId("reader"), role },
       modelKey: "posts",
       limit: 5,
       sort: "-field:count",
@@ -59,15 +76,15 @@ test("configured list queries resolve before reads with role parity and detached
   }
   expect(calls[1]).toEqual(calls[0]);
   expect(calls[2]).toEqual(calls[0]);
-  expect(calls[0].query.filters).toEqual(
+  expect(calls[0]?.query?.filters).toEqual(
     [filters[1], filters[0], filters[2]].map((filter) =>
       filter.op === "in" ? { ...filter, values: ["a", "b"] } : filter,
     ),
   );
-  expect(calls[0].q).toBe("Москва");
-  expect(calls[0].listFields).toEqual([]);
+  expect(calls[0]?.q).toBe("Москва");
+  expect(calls[0]?.listFields).toEqual([]);
   filters[1].values.push("changed");
-  expect(calls[0].query.filters[0].values).toEqual(["a", "b"]);
+  expect(calls[0]?.query?.filters[0]).toMatchObject({ values: ["a", "b"] });
   for (const [query, pointer] of [
     [{ sort: "field:description" }, "/sort"],
     [{ filters: [{ field: "missing", op: "isSet" }] }, "/filters/0/field"],
@@ -77,10 +94,10 @@ test("configured list queries resolve before reads with role parity and detached
     [{ filters: [{ field: "description", op: "eq", value: "" }] }, "/filters/0/value"],
     [{ filters: [{ field: "count", op: "contains", value: "0" }] }, "/filters/0/op"],
     [{ filters: Array(17).fill({ field: "count", op: "isSet" }) }, "/filters"],
-  ])
+  ] as const)
     await expect(
       useCases.list({
-        actor: { id: "reader", role: "viewer" },
+        actor: { id: actorId("reader"), role: "viewer" },
         modelKey: "posts",
         limit: 5,
         ...query,
@@ -88,20 +105,29 @@ test("configured list queries resolve before reads with role parity and detached
     ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE", pointer });
   for (const slug of ["Hello", "a--b", "-a", "x".repeat(101), ""])
     await expect(
-      useCases.list({ actor: { id: "reader", role: "viewer" }, modelKey: "posts", limit: 5, slug }),
+      useCases.list({
+        actor: { id: actorId("reader"), role: "viewer" },
+        modelKey: "posts",
+        limit: 5,
+        slug,
+      }),
     ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE", pointer: "/slug" });
   expect(calls).toHaveLength(3);
   await expect(
-    useCases.list({ actor: { id: "reader", role: "nobody" }, modelKey: "posts", limit: 5 }),
+    useCases.list({
+      actor: { id: actorId("reader"), role: "nobody" as Actor["role"] },
+      modelKey: "posts",
+      limit: 5,
+    }),
   ).rejects.toThrow();
   expect(calls).toHaveLength(3);
   const canonical = await useCases.list({
-    actor: { id: "reader", role: "viewer" },
+    actor: { id: actorId("reader"), role: "viewer" },
     modelKey: "posts",
     limit: 5,
     filters: [{ field: "time", op: "range", from: "2026-10-25T12:00:00+02:00" }],
   });
-  expect(calls[3].query.filters).toEqual([
+  expect(calls[3]?.query?.filters).toEqual([
     { field: "time", op: "range", from: "2026-10-25T10:00:00.000Z" },
   ]);
   expect(canonical).toEqual(page);
@@ -121,24 +147,29 @@ test("trusted runtime LIKE budgets reject before reads and preserve original fil
       }),
     ],
   });
-  const calls = [];
+  const calls: ListContentEntriesInput[] = [];
   const policy = { ...CLOUDFLARE_LIST_QUERY_LIMITS };
-  const make = (listQueryLimits) =>
+  const make = (listQueryLimits: ListQueryLimits) =>
     new ContentUseCases({
+      ...dependencies,
       config: config.runtime,
       listQueryLimits,
-      content: {
+      content: contentPort({
         list: async (query) => {
           calls.push(query);
           return { items: [], totals: { all: 0, draft: 0, changed: 0, published: 0 } };
         },
-      },
+      }),
     });
   const cloud = make(policy),
     node = make(NODE_LIST_QUERY_LIMITS);
   policy.maxSearchLength = 200;
   policy.maxLikePatternBytes = null;
-  const input = { actor: { id: "reader", role: "viewer" }, modelKey: "posts", limit: 5 };
+  const input = {
+    actor: { id: actorId("reader"), role: "viewer" as const },
+    modelKey: "posts",
+    limit: 5,
+  };
   // Each accepted pattern is exactly 50 bytes after wrappers and escaping.
   for (const value of [
     "a".repeat(48),
@@ -150,7 +181,7 @@ test("trusted runtime LIKE budgets reject before reads and preserve original fil
     "😀".repeat(12),
   ]) {
     await cloud.list({ ...input, q: ` ${value} ` });
-    expect(calls.at(-1).q).toBe(value);
+    expect(calls.at(-1)?.q).toBe(value);
     await cloud.list({ ...input, filters: [{ field: "text", op: "contains", value }] });
   }
   const accepted = calls.length;
@@ -161,9 +192,8 @@ test("trusted runtime LIKE budgets reject before reads and preserve original fil
     "😀".repeat(12) + "a",
     "aя".repeat(16) + "a",
   ]) {
-    await expect(
-      cloud.list({ ...input, q: value, listQueryLimits: NODE_LIST_QUERY_LIMITS }),
-    ).rejects.toMatchObject({ pointer: "/q" });
+    const untrusted = { ...input, q: value, listQueryLimits: NODE_LIST_QUERY_LIMITS };
+    await expect(cloud.list(untrusted)).rejects.toMatchObject({ pointer: "/q" });
     await expect(
       cloud.list({
         ...input,
@@ -184,13 +214,17 @@ test("trusted runtime LIKE budgets reject before reads and preserve original fil
     q: "я".repeat(200),
     filters: [{ field: "text", op: "contains", value: "%".repeat(200) }],
   });
-  expect(calls.at(-1).listQueryLimits).toEqual(NODE_LIST_QUERY_LIMITS);
+  expect(calls.at(-1)?.listQueryLimits).toEqual(NODE_LIST_QUERY_LIMITS);
   const finalCount = calls.length;
   await expect(node.list({ ...input, q: "x".repeat(201) })).rejects.toMatchObject({
     pointer: "/q",
   });
   await expect(
-    cloud.list({ ...input, actor: { id: "bad", role: "nobody" }, q: "x".repeat(201) }),
+    cloud.list({
+      ...input,
+      actor: { id: actorId("bad"), role: "nobody" as Actor["role"] },
+      q: "x".repeat(201),
+    }),
   ).rejects.toThrow();
   expect(calls).toHaveLength(finalCount);
 });
@@ -204,18 +238,19 @@ test("entry lists pass an exact collection slug and refuse it for singleton mode
       defineGlobal({ key: "settings", version: 1 }),
     ],
   });
-  const calls = [];
+  const calls: ListContentEntriesInput[] = [];
   const page = { items: [], totals: { all: 0, changed: 0, draft: 0, published: 0 } };
   const useCases = new ContentUseCases({
+    ...dependencies,
     config: config.runtime,
-    content: {
+    content: contentPort({
       list: async (query) => {
         calls.push(query);
         return page;
       },
-    },
+    }),
   });
-  const actor = { id: "reader", role: "viewer" };
+  const actor: Actor = { id: actorId("reader"), role: "viewer" };
   await useCases.list({ actor, limit: 5, modelKey: "posts", slug: "hello-world", q: "x" });
   expect(calls[0]).toMatchObject({ q: "x", slug: "hello-world" });
   await useCases.list({ actor, limit: 5, modelKey: "posts" });
@@ -250,25 +285,26 @@ test("a request without sort uses the collection's configured default", async ()
       defineGlobal({ key: "settings", version: 1 }),
     ],
   });
-  const calls = [];
+  const calls: ListContentEntriesInput[] = [];
   const page = { items: [], totals: { all: 0, changed: 0, draft: 0, published: 0 } };
   const useCases = new ContentUseCases({
+    ...dependencies,
     config: config.runtime,
-    content: {
+    content: contentPort({
       list: async (query) => {
         calls.push(query);
         return page;
       },
-    },
+    }),
   });
-  const actor = { id: "reader", role: "viewer" };
-  const sortOf = async (modelKey, sort) => {
+  const actor: Actor = { id: actorId("reader"), role: "viewer" };
+  const sortOf = async (modelKey: string, sort?: string) => {
     await useCases.list({ actor, limit: 5, modelKey, ...(sort === undefined ? {} : { sort }) });
-    return calls.at(-1).sort;
+    return calls.at(-1)?.sort;
   };
   // The default is the explicit sort, with its resolved field target.
   expect(await sortOf("projects")).toBe("field:order");
-  expect(calls.at(-1).query.sortableFields).toEqual([{ key: "order", type: "number" }]);
+  expect(calls.at(-1)?.query?.sortableFields).toEqual([{ key: "order", type: "number" }]);
   expect(await sortOf("titled")).toBe("title");
   // An explicit sort, including the old default, always wins.
   expect(await sortOf("projects", "-updatedAt")).toBe("-updatedAt");

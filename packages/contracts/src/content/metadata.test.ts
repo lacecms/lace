@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import { defineBlock, field, toBlockMetadata } from "@lacecms/content";
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
@@ -55,7 +53,7 @@ test("composite metadata and content round-trip with nested issue pointers", () 
       cards: { ...cards, item: { ...cards.item, fields: { invalid: { type: "wrong" } } } },
     }).success,
   ).toBe(false);
-  let deep = field.text();
+  let deep: unknown = field.text();
   for (let i = 0; i < 4; i++)
     deep = {
       type: "list",
@@ -71,11 +69,17 @@ test("composite metadata and content round-trip with nested issue pointers", () 
     },
   ]);
   expect(failure.status).toBe(422);
-  expect(failure.body.error.details.issues[0].path).toBe("/blocks/0/data/images/2/image");
+  expect(failure.body.error.details).toMatchObject({
+    issues: [{ path: "/blocks/0/data/images/2/image" }],
+  });
 });
 
 test("cyclic and accessor-backed forged metadata are refused without evaluation", () => {
-  const cyclic = { type: "group", required: false, fields: {} };
+  const cyclic: { type: string; required: boolean; fields: Record<string, unknown> } = {
+    type: "group",
+    required: false,
+    fields: {},
+  };
   cyclic.fields.child = cyclic;
   expect(v.safeParse(fieldMetadataSchema, cyclic).success).toBe(false);
   expect(
@@ -97,7 +101,7 @@ test("list label metadata survives recursive contracts and invalid targets fail"
     itemLabel: "title",
     item: field.group({ fields: { title: field.text(), image: field.media() } }),
   });
-  expect(v.parse(fieldMetadataMapSchema, { cards }).cards.itemLabel).toBe("title");
+  expect(v.parse(fieldMetadataMapSchema, { cards }).cards).toMatchObject({ itemLabel: "title" });
   for (const itemLabel of ["image", "absent", "title.child", 1])
     expect(v.safeParse(fieldMetadataMapSchema, { cards: { ...cards, itemLabel } }).success).toBe(
       false,
@@ -131,7 +135,10 @@ test("recursive metadata preserves placeholders and rejects misplaced prompts", 
 });
 
 test("layout metadata round trips and rejects ambiguous references", () => {
-  const layout = { mode: "tabs", groups: [{ key: "main", label: "Main", fields: ["body"] }] };
+  const layout = {
+    mode: "tabs" as const,
+    groups: [{ key: "main", label: "Main", fields: ["body" as const] }],
+  };
   const fields = {
     body: field.text(),
     nested: field.list({ item: field.group({ fields: { body: field.text() }, layout }) }),
@@ -239,7 +246,7 @@ test("block visibility metadata uses shared validation for forged REST input", (
   expect(
     v.safeParse(blockMetadataSchema, {
       ...block,
-      settings: { ...block.settings, mode: { ...block.settings.mode, required: false } },
+      settings: { ...block.settings, mode: { ...block.settings?.mode, required: false } },
     }).success,
   ).toBe(false);
 });
@@ -249,8 +256,8 @@ test("visibility metadata round trips at every owner and rejects forged rules", 
     kind: field.select({ options: ["image", "video"], required: true, defaultValue: "image" }),
   };
   const rules = {
-    media: { field: "kind", values: ["image"] },
-    videoUrl: { field: "kind", values: ["video"] },
+    media: { field: "kind" as const, values: ["image" as const] },
+    videoUrl: { field: "kind" as const, values: ["video" as const] },
   };
   const fields = {
     ...kinds,
@@ -290,8 +297,11 @@ test("visibility metadata round trips at every owner and rejects forged rules", 
   const forged = [
     { media: { field: "missing", values: ["image"] } },
     { media: { field: "kind", values: ["audio"] } },
-    { media: { field: "kind", values: ["image"], equals: "image" } },
-    { media: { field: "kind", values: ["image"] }, kind: { field: "media", values: ["x"] } },
+    { media: { field: "kind" as const, values: ["image" as const], equals: "image" } },
+    {
+      media: { field: "kind" as const, values: ["image" as const] },
+      kind: { field: "media", values: ["x"] },
+    },
   ];
   for (const visibility of forged) {
     expect(v.safeParse(contentModelSchema, { ...json, visibility }).success).toBe(false);
@@ -317,6 +327,7 @@ test("visibility metadata round trips at every owner and rejects forged rules", 
     version: 1,
     fields: kinds,
     blocks: [],
+    blockDefinitions: [],
   });
   expect(plain).not.toHaveProperty("visibility");
 });

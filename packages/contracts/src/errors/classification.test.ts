@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import { DomainError, BlockOrderError } from "@lacecms/domain";
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
@@ -8,14 +6,15 @@ import { classifyError, transportError } from "./classification.js";
 import { errorEnvelopeSchema, validationError } from "./envelope.js";
 
 describe("account lifecycle contracts", () => {
-  const ok = (schema, value) => v.safeParse(schema, value).success;
+  const ok = (schema: v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>, value: unknown) =>
+    v.safeParse(schema, value).success;
   test("account error codes map to their documented statuses", () => {
     for (const [code, status] of [
       ["CONFLICT", 409],
       ["INVALID_CREDENTIALS", 400],
       ["INVITATION_INVALID", 410],
       ["RESET_INVALID", 410],
-    ]) {
+    ] as const) {
       const error = transportError(code);
       expect(error.status).toBe(status);
       expect(ok(errorEnvelopeSchema, error.body)).toBe(true);
@@ -135,7 +134,7 @@ test.each([
   ["session", 'Session realm="lace"'],
   ["bearer", 'Bearer realm="lace"'],
   ["session-or-bearer", 'Session realm="lace", Bearer realm="lace"'],
-])("authentication challenge %s", (challenge, header) => {
+] as const)("authentication challenge %s", (challenge, header) => {
   const result = classifyError(new AuthenticationRequiredError(challenge));
   expect(result).toEqual({
     status: 401,

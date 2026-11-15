@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
 import {
@@ -26,7 +24,8 @@ describe("account lifecycle contracts", () => {
     state: "pending",
   };
   const link = `https://cms.example.com/admin/accept-invite#token=${token}`;
-  const ok = (schema, value) => v.safeParse(schema, value).success;
+  const ok = (schema: v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>, value: unknown) =>
+    v.safeParse(schema, value).success;
   test("issue results carry a link only when delivery was not sent", () => {
     expect(ok(invitationIssueResultSchema, { delivery: { status: "sent" }, invitation })).toBe(
       true,
@@ -59,7 +58,7 @@ describe("account lifecycle contracts", () => {
     const short = "x".repeat(11);
     const result = v.safeParse(invitationAcceptRequestSchema, { password: short, token });
     expect(result.success).toBe(false);
-    expect(result.issues.map((issue) => issue.path.map((item) => item.key).join("/"))).toEqual([
+    expect(result.issues?.map((issue) => issue.path?.map((item) => item.key).join("/"))).toEqual([
       "password",
     ]);
     expect(ok(passwordResetConfirmRequestSchema, { password: short, token })).toBe(false);

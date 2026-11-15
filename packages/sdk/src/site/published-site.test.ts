@@ -1,5 +1,9 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable export fixtures, scripted transports and invalid loader inputs.
+import type {
+  BuildExportDto,
+  PublicBlockDto,
+  PublicEntryDto,
+  PublicMediaDto,
+} from "@lacecms/contracts";
 import { expect, test } from "vitest";
 import { LaceContractError, LaceHttpError, LaceSdkError } from "../client/errors.js";
 import { LacePublishedSiteError, createPublishedSiteLoader } from "./published-site.js";
@@ -11,7 +15,29 @@ const environment = Object.freeze({
   LACE_BUILD_TOKEN: token,
 });
 
-function exportEntry({ id, modelKey = "posts", path, slug, blocks = [], fields = {} }) {
+type WireBlock = Omit<PublicBlockDto, "settings"> & {
+  settings?: PublicBlockDto["settings"];
+  hidden?: unknown;
+};
+function required<T>(value: T | null | undefined): T {
+  if (value == null) throw new Error("Expected fixture value");
+  return value;
+}
+function exportEntry({
+  id,
+  modelKey = "posts",
+  path,
+  slug,
+  blocks = [],
+  fields = {},
+}: {
+  id: string;
+  modelKey?: string;
+  path: string;
+  slug?: string;
+  blocks?: WireBlock[];
+  fields?: PublicEntryDto["fields"];
+}) {
   return {
     blocks,
     fields,
@@ -25,11 +51,15 @@ function exportEntry({ id, modelKey = "posts", path, slug, blocks = [], fields =
   };
 }
 
-function block(key, position, data = { heading: key }) {
+function block(
+  key: string,
+  position: number,
+  data: PublicBlockDto["data"] = { heading: key },
+): PublicBlockDto {
   return { data, key, position, schemaVersion: 1, settings: {}, type: "hero" };
 }
 
-function mediaItem(id, overrides = {}) {
+function mediaItem(id: string, overrides: Partial<PublicMediaDto> = {}): PublicMediaDto {
   return {
     alt: null,
     caption: null,
@@ -43,7 +73,7 @@ function mediaItem(id, overrides = {}) {
   };
 }
 
-function buildExport(version, entries, media = {}) {
+function buildExport(version: number, entries: unknown[], media: BuildExportDto["media"] = {}) {
   return {
     entries,
     formatVersion: 2,
@@ -54,23 +84,28 @@ function buildExport(version, entries, media = {}) {
   };
 }
 
-function exportResponse(value, etag = `"${value.version}"`) {
+function exportResponse<T extends { version: number }>(value: T, etag = `"${value.version}"`) {
   return Response.json(value, { headers: { etag } });
 }
 
-function notModified(etag) {
+function notModified(etag: string) {
   return new Response(null, { headers: { etag }, status: 304 });
 }
 
-function errorResponse(status, code = "AUTHORIZATION_DENIED") {
+function errorResponse(status: number, code = "AUTHORIZATION_DENIED") {
   return Response.json({ error: { code, message: "Denied." } }, { status });
 }
 
-function scriptedFetch(responses) {
-  const requests = [];
+function scriptedFetch(
+  responses: (Response | Error | (() => Response | Promise<Response>) | undefined)[],
+) {
+  const requests: { headers: Headers; url: string }[] = [];
   return {
-    fetch: async (url, init) => {
-      requests.push({ headers: new Headers(init.headers), url: url.toString() });
+    fetch: async (url: string | URL | Request, init?: RequestInit) => {
+      requests.push({
+        headers: new Headers(init?.headers),
+        url: url instanceof Request ? url.url : url.toString(),
+      });
       const next = responses.shift();
       if (next === undefined) throw new Error("Unexpected request.");
       if (next instanceof Error) throw next;
@@ -81,8 +116,10 @@ function scriptedFetch(responses) {
 }
 
 function deferred() {
-  let resolve;
-  const promise = new Promise((done) => {
+  let resolve: () => void = () => {
+    throw new Error("Promise not initialized");
+  };
+  const promise = new Promise<void>((done) => {
     resolve = done;
   });
   return { promise, resolve };
@@ -114,10 +151,11 @@ const homeExport = buildExport(
   },
 );
 
-async function captureError(promise) {
+async function captureError(promise: Promise<unknown>): Promise<Error> {
   try {
     await promise;
   } catch (error) {
+    if (!(error instanceof Error)) throw error;
     return error;
   }
   throw new Error("Expected the promise to reject.");
@@ -145,7 +183,7 @@ test.each([
   );
   expect(error).toBeInstanceOf(LacePublishedSiteError);
   expect(error).toBeInstanceOf(LaceSdkError);
-  expect(error.code).toBe("missing_configuration");
+  expect(error).toMatchObject({ code: "missing_configuration" });
   expect(error.message).toContain(setting);
   expect(transport.requests).toHaveLength(0);
 });
@@ -160,10 +198,10 @@ test("explicit values take precedence over the environment record", async () => 
     publicBaseUrl: "https://media.example.test",
     token: "explicit-token",
   })();
-  expect(transport.requests[0].url).toBe(
+  expect(transport.requests[0]?.url).toBe(
     "https://explicit.example.test/cms/api/v1/public/build-export",
   );
-  expect(transport.requests[0].headers.get("authorization")).toBe("Bearer explicit-token");
+  expect(transport.requests[0]?.headers.get("authorization")).toBe("Bearer explicit-token");
   expect(site.mediaUrl("hero-media")).toBe(
     "https://media.example.test/api/v1/public/media/hero-media",
   );
@@ -177,8 +215,8 @@ test("media URLs keep the export URL without a public origin and never carry the
   })();
   const url = site.mediaUrl("hero-media");
   expect(url).toBe("https://public.example.test/lace/api/v1/public/media/hero-media");
-  expect(site.media("hero-media").url).toBe(url);
-  expect(site.byPath("/").media("hero-media").url).toBe(url);
+  expect(required(site.media("hero-media")).url).toBe(url);
+  expect(required(required(site.byPath("/")).media("hero-media")).url).toBe(url);
   // An ID the export does not resolve falls back to the API base URL.
   expect(site.mediaUrl("unknown")).toBe(
     "https://api.example.test/lace/api/v1/public/media/unknown",
@@ -192,8 +230,8 @@ test("a configured public origin rewrites resolved media URLs", async () => {
     fetch: scriptedFetch([exportResponse(homeExport)]).fetch,
   })();
   const expected = "https://media.example.test/base/api/v1/public/media/hero-media";
-  expect(site.media("hero-media").url).toBe(expected);
-  expect(site.image("hero-media").url).toBe(expected);
+  expect(required(site.media("hero-media")).url).toBe(expected);
+  expect(required(site.image("hero-media")).url).toBe(expected);
   expect(site.mediaUrl("hero-media")).toBe(expected);
 });
 
@@ -206,15 +244,19 @@ test("resolved media carry a token-free build source under the API base URL", as
     },
     fetch: scriptedFetch([exportResponse(homeExport)]).fetch,
   })();
-  expect(site.media("hero-media").url).toBe(
+  expect(required(site.media("hero-media")).url).toBe(
     "https://cms.example.com/api/v1/public/media/hero-media",
   );
-  expect(site.media("hero-media").sourceUrl).toBe(
+  expect(required(site.media("hero-media")).sourceUrl).toBe(
     "http://api:8787/lace/api/v1/public/media/hero-media",
   );
-  expect(site.image("hero-media").sourceUrl).toBe(site.media("hero-media").sourceUrl);
-  expect(site.byPath("/").media("hero-media").sourceUrl).toBe(site.media("hero-media").sourceUrl);
-  expect(site.media("hero-media").sourceUrl).not.toContain(token);
+  expect(required(site.image("hero-media")).sourceUrl).toBe(
+    required(site.media("hero-media")).sourceUrl,
+  );
+  expect(required(required(site.byPath("/")).media("hero-media")).sourceUrl).toBe(
+    required(site.media("hero-media")).sourceUrl,
+  );
+  expect(required(site.media("hero-media")).sourceUrl).not.toContain(token);
 });
 
 test("optimizeImages false leaves out build sources and nothing else", async () => {
@@ -229,7 +271,7 @@ test("optimizeImages false leaves out build sources and nothing else", async () 
   })();
   expect(site.media("hero-media")).not.toHaveProperty("sourceUrl");
   expect(site.image("hero-media", "Team")).not.toHaveProperty("sourceUrl");
-  const { sourceUrl: _sourceUrl, ...rest } = optimized.media("hero-media");
+  const { sourceUrl: _sourceUrl, ...rest } = required(optimized.media("hero-media"));
   expect(site.media("hero-media")).toEqual(rest);
   expect(site.mediaUrl("hero-media")).toBe(optimized.mediaUrl("hero-media"));
 });
@@ -239,7 +281,7 @@ test("image lookups resolve the effective alt text and keep the media descriptio
     environment,
     fetch: scriptedFetch([exportResponse(homeExport)]).fetch,
   })();
-  const home = site.byPath("/");
+  const home = required(site.byPath("/"));
   expect(home.image("hero-media", "Team at work")).toEqual({
     alt: "Team at work",
     caption: "Our office",
@@ -251,16 +293,16 @@ test("image lookups resolve the effective alt text and keep the media descriptio
     url: "https://public.example.test/lace/api/v1/public/media/hero-media",
     width: 1600,
   });
-  expect(home.image("hero-media").alt).toBe("Office");
-  expect(home.image("hero-media", "  ").alt).toBe("Office");
-  expect(site.image("plain").alt).toBe("");
-  expect(site.media("plain").alt).toBeNull();
+  expect(required(home.image("hero-media")).alt).toBe("Office");
+  expect(required(home.image("hero-media", "  ")).alt).toBe("Office");
+  expect(required(site.image("plain")).alt).toBe("");
+  expect(required(site.media("plain")).alt).toBeNull();
   expect(site.media("unknown")).toBeUndefined();
   expect(site.image("unknown")).toBeUndefined();
   expect(site.media("__proto__")).toBeUndefined();
   expect(site.media("constructor")).toBeUndefined();
   expect(Object.isFrozen(site.media("hero-media"))).toBe(true);
-  expect(Object.isFrozen(site.media("hero-media").focalPoint)).toBe(true);
+  expect(Object.isFrozen(required(site.media("hero-media")).focalPoint)).toBe(true);
 });
 
 test("static mode shares one export across sequential and concurrent calls", async () => {
@@ -271,7 +313,7 @@ test("static mode shares one export across sequential and concurrent calls", asy
   expect(first).toBe(second);
   expect(third).toBe(first);
   expect(transport.requests).toHaveLength(1);
-  expect(transport.requests[0].headers.get("if-none-match")).toBeNull();
+  expect(transport.requests[0]?.headers.get("if-none-match")).toBeNull();
 });
 
 test("static mode forgets a failed read and retries", async () => {
@@ -281,7 +323,7 @@ test("static mode forgets a failed read and retries", async () => {
   ]);
   const load = createPublishedSiteLoader({ environment, fetch: transport.fetch });
   const error = await captureError(load());
-  expect(error.code).toBe("api_unavailable");
+  expect(error).toMatchObject({ code: "api_unavailable" });
   const site = await load();
   expect(site.version).toBe(3);
   expect(transport.requests).toHaveLength(2);
@@ -326,9 +368,9 @@ test("a failed revalidation keeps the previous ETag for the next call", async ()
   ]);
   const load = createPublishedSiteLoader({ environment, fetch: transport.fetch, revalidate: true });
   const first = await load();
-  expect((await captureError(load())).code).toBe("api_unavailable");
+  expect(await captureError(load())).toMatchObject({ code: "api_unavailable" });
   expect(await load()).toBe(first);
-  expect(transport.requests[2].headers.get("if-none-match")).toBe('"3"');
+  expect(transport.requests[2]?.headers.get("if-none-match")).toBe('"3"');
 });
 
 test.each([false, true])(
@@ -338,7 +380,7 @@ test.each([false, true])(
     const error = await captureError(
       createPublishedSiteLoader({ environment, fetch: transport.fetch, revalidate })(),
     );
-    expect(error.code).toBe("invalid_export");
+    expect(error).toMatchObject({ code: "invalid_export" });
   },
 );
 
@@ -350,7 +392,7 @@ test("an expected published version that differs fails the build", async () => {
       fetch: transport.fetch,
     })(),
   );
-  expect(error.code).toBe("version_mismatch");
+  expect(error).toMatchObject({ code: "version_mismatch" });
   expect(error.message).toContain("7");
   expect(error.message).toContain("8");
 });
@@ -369,7 +411,7 @@ test.each([401, 403])("HTTP %i from the export is a rejected token", async (stat
   const error = await captureError(
     createPublishedSiteLoader({ environment, fetch: transport.fetch })(),
   );
-  expect(error.code).toBe("rejected_token");
+  expect(error).toMatchObject({ code: "rejected_token" });
   expect(error.cause).toBeInstanceOf(LaceHttpError);
   expect(error.message).not.toContain(token);
 });
@@ -398,7 +440,7 @@ test("other SDK failures propagate unchanged", async () => {
     })(),
   );
   expect(serverError).toBeInstanceOf(LaceHttpError);
-  expect(serverError.status).toBe(500);
+  expect(serverError).toMatchObject({ status: 500 });
   const contractError = await captureError(
     createPublishedSiteLoader({
       environment,
@@ -432,7 +474,7 @@ test.each([
       fetch: scriptedFetch([exportResponse(buildExport(1, entries))]).fetch,
     })(),
   );
-  expect(error.code).toBe("invalid_export");
+  expect(error).toMatchObject({ code: "invalid_export" });
   for (const value of named) expect(error.message).toContain(value);
 });
 
@@ -473,7 +515,7 @@ test("an export in a newer format fails with invalid_export and upgrade guidance
     })(),
   );
   expect(error).toBeInstanceOf(LaceSdkError);
-  expect(error.code).toBe("invalid_export");
+  expect(error).toMatchObject({ code: "invalid_export" });
   expect(error.message).toContain("Upgrade @lacecms/sdk");
   expect(error.message).not.toContain(token);
   expect(error.cause).toBeInstanceOf(LaceContractError);
@@ -481,7 +523,7 @@ test("an export in a newer format fails with invalid_export and upgrade guidance
 });
 
 test("revalidation retains the latest weak 304 validator and recovers after malformed headers", async () => {
-  const conditions = [];
+  const conditions: (string | null)[] = [];
   const responses = [
     exportResponse(buildExport(7, [])),
     notModified('W/"7"'),
@@ -493,8 +535,10 @@ test("revalidation retains the latest weak 304 validator and recovers after malf
     token: "build-secret",
     revalidate: true,
     fetch: async (_url, init) => {
-      conditions.push(new Headers(init.headers).get("if-none-match"));
-      return responses.shift();
+      conditions.push(new Headers(init?.headers).get("if-none-match"));
+      const response = responses.shift();
+      if (!response) throw new Error("Unexpected request");
+      return response;
     },
   });
   const first = await getSite();

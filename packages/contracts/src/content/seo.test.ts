@@ -1,6 +1,4 @@
-// @ts-nocheck
-// TODO(rf2): Type mutable transport fixtures and deliberately malformed metadata.
-import { contentEntryId, mediaId } from "@lacecms/domain";
+import { contentEntryId, contentModelKey, mediaId } from "@lacecms/domain";
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
 import { toBuildExportDto } from "../delivery/build-export-mappers.js";
@@ -19,7 +17,7 @@ import { published, entry } from "../test-support/rest-fixtures.js";
 
 describe("admin entry list contracts", () => {
   test("SEO values have explicit admin, request, public, model and export contracts", () => {
-    const seo = { image: mediaId("media-1"), noindex: true, title: "Hello" };
+    const seo = { image: mediaId("media-1"), noindex: true as const, title: "Hello" };
     const seoEntry = {
       ...entry,
       draft: { ...entry.draft, seo },
@@ -45,7 +43,7 @@ describe("admin entry list contracts", () => {
       { seo: true },
     );
     expect(admin.draft.seo).toEqual(full);
-    expect(admin.published.seo).toMatchObject({
+    expect(admin.published?.seo).toMatchObject({
       canonical: "https://example.com/a",
       noindex: false,
     });
@@ -83,23 +81,24 @@ describe("admin entry list contracts", () => {
       expect(v.safeParse(seoInputSchema, invalid).success).toBe(false);
     }
 
-    const urlFor = (id) => mediaUrl("https://lace.example/", id);
-    const source = { entry: seoEntry, media: [], path: "/blog/welcome" };
+    const urlFor = (id: string) => mediaUrl("https://lace.example/", id);
+    const source = { entry: seoEntry, internalLinks: [], media: [], path: "/blog/welcome" };
     const enabled = toPublicContentEntryDto(source, urlFor, { seoModels: new Set(["posts"]) });
     expect(enabled.entry.seo).toMatchObject({ canonical: "https://example.com/a", title: null });
     expect(v.parse(publicContentEntrySchema, enabled)).toEqual(enabled);
     expect(toPublicContentEntryDto(source, urlFor).entry).not.toHaveProperty("seo");
     expect(
       toPublicContentListDto({ items: [source] }, urlFor, { seoModels: new Set(["posts"]) })
-        .items[0].seo,
+        .items[0]?.seo,
     ).toMatchObject({ canonical: "https://example.com/a" });
 
     const fields = {
-      cover: { required: false, type: "media" },
-      summary: { required: false, type: "textarea" },
+      cover: { required: false, type: "media" as const },
+      summary: { required: false, type: "textarea" as const },
     };
     const model = toContentModelDto({
       blocks: [],
+      blockDefinitions: [],
       fields,
       key: "posts",
       kind: "collection",
@@ -110,6 +109,7 @@ describe("admin entry list contracts", () => {
     expect(model.seo).toEqual({ description: "summary", image: null });
     const defaults = toContentModelDto({
       blocks: [],
+      blockDefinitions: [],
       fields: { siteName: { required: true, type: "text" } },
       key: "settings",
       kind: "global",
@@ -130,20 +130,22 @@ describe("admin entry list contracts", () => {
       expect(v.safeParse(contentModelListSchema, { items: [invalid] }).success).toBe(false);
     }
 
+    if (!defaults.seoDefaults) throw new Error("Expected SEO defaults");
     const exportSeo = {
       defaults: { ...defaults.seoDefaults, modelKey: "settings" },
       models: { posts: { description: "summary", image: null } },
     };
     const exportDto = toBuildExportDto(
       {
-        entries: [{ entry: seoEntry, media: [], path: "/blog/welcome" }],
+        entries: [{ entry: seoEntry, internalLinks: [], media: [], path: "/blog/welcome" }],
         globals: [
           {
             entry: {
               ...seoEntry,
               id: contentEntryId("settings"),
-              model: { key: "settings", kind: "global" },
+              model: { key: contentModelKey("settings"), kind: "global" },
             },
+            internalLinks: [],
             media: [],
           },
         ],
@@ -154,7 +156,7 @@ describe("admin entry list contracts", () => {
       exportSeo,
     );
     expect(exportDto.seo).toEqual(exportSeo);
-    expect(exportDto.entries[0].seo).toMatchObject({ canonical: "https://example.com/a" });
+    expect(exportDto.entries[0]?.seo).toMatchObject({ canonical: "https://example.com/a" });
     expect(exportDto.globals[0]).not.toHaveProperty("seo");
     expect(v.parse(buildExportSchema, exportDto)).toEqual(exportDto);
     const { seo: _seo, ...withoutSeo } = exportDto;
