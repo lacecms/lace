@@ -53,7 +53,7 @@
     "security": ["shared"],
     "links": ["shared"],
     "publication": ["builds", "content", "links", "shared", "write-plan"],
-    "sync": ["links", "shared"],
+    "sync": ["content", "links", "shared", "write-plan"],
     "content": ["links", "shared", "write-plan"],
     "media": ["content", "shared", "write-plan"],
     "delivery": ["content", "media", "shared"],

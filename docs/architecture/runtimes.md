@@ -21,6 +21,12 @@ narrow, and use cases depend only on the capabilities they call.
 `SecurityService` combines the account, session and token ports with
 `UserProfileReader`; runtime adapters implement the combined contract.
 
+The `ConfigurationSyncStateReadPort` and `ConfigurationSyncApplyPort` contracts
+live in `packages/application/src/configuration`. The application prepares
+the report for operator review, coordinates resumable block migrations and
+prepares a fresh report for final apply. The `db` package compiles the
+revalidated report into the ordered final write plan.
+
 Both runtimes compose the portable services in one place:
 `composeLaceServices` in `packages/server` receives the runtime adapters
 (repository, security, object storage, image inspector, clock, ids, list-query
@@ -215,14 +221,15 @@ connections always keep foreign keys on.
 ### Runtime deltas
 
 Node SQLite and D1 share every row mapper, every identical read
-(`SqlContentReader`), configuration-sync and link statement builders, and
-ordered plans for entry, media, build and outbox mutations. Shared enqueue
-statements derive the target version and inherited retry lineage inside the
-atomic write, after any public-state bump. Typed admission, ordered statements, result slots, exact counts
-and outbox markers belong to the plan; executors retain their runtime-specific
-transaction boundaries ([ADR 0002](../adr/0002-d1-batches-and-node-transactions.md)). Every
-remaining intentional difference is listed here; where it could be observable,
-a shared repository contract case pins the result.
+(`SqlContentReader`), block-migration and link statement builders, and ordered
+plans for entry, media, build, outbox and final configuration-sync mutations.
+Shared enqueue statements derive the target version and inherited retry
+lineage inside the atomic write, after any public-state bump. Typed admission,
+ordered statements, result slots, exact counts and outbox markers belong to
+the plan. Executors retain their runtime-specific transaction boundaries
+([ADR 0002](../adr/0002-d1-batches-and-node-transactions.md)). The table lists
+the runtime differences and how the repository contracts verify observable
+results.
 
 | Area | Node SQLite | D1 | Observable result pinned by |
 | --- | --- | --- | --- |
@@ -232,6 +239,8 @@ a shared repository contract case pins the result.
 | `mutation_guards` | in-transaction dirty token for shared sync link statements | batch-unique guard tokens, removed inside the batch | no persistent plan token |
 | Build export page | both read groups in one read transaction | two `batch()` calls with a version re-read | contract build-export cases; Node one extra in-transaction version read |
 | Collection `list` and configuration-sync scans | numbered parameters, `NODE_LIST_QUERY_LIMITS` | positional parameters, `CLOUDFLARE_LIST_QUERY_LIMITS` | collection-query contract cases (§12 limits differ by design) |
+| Final configuration-sync apply | revalidates the report and reads recursive rewrite inputs inside the immediate write transaction | reads before one batch that guards every mutation on the stored summary and link predicates | shared plan preserves operation order, baselines, rewrites, stale and link errors, and commit-time build version |
+| Resumable block migrations | one transaction per entry unit | packs whole units into guarded batches and splits an oversized entry published snapshot first, draft second | committed units survive interruption and the final apply queues any rebuild |
 | Bind chunk for identifier lists | 200 | 100 (`D1_MAX_BOUND_PARAMETERS`) | not observable |
 | Superseded snapshots and idempotency expiry | one transaction | guarded batch | aligned: shared `deleteSupersededSnapshotsStatement`, live-record read and expired-record replacement, purge statement; contract retention cases |
 | Entry reads for writes | synchronous loader inside publication transactions | awaited shared reader before the batch | covered by the publication result row |

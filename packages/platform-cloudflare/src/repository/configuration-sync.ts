@@ -1,12 +1,3 @@
-import type { FieldVisibility } from "@lacecms/content";
-import {
-  configurationSyncSnapshotRewrites,
-  configurationSyncAdvancesPublicState,
-  configurationSyncContentWrites,
-  configurationSyncBaseline,
-  planConfigurationSynchronization,
-  renderConfigurationSyncPlanJson,
-} from "@lacecms/application";
 import type {
   ApplyConfigurationSynchronizationInput,
   ApplyConfigurationSynchronizationResult,
@@ -22,7 +13,10 @@ import type {
   StoredContentModelState,
 } from "@lacecms/application";
 import {
-  syncInternalLinkStatements,
+  configurationSyncApplyResult,
+  configurationSyncRecursiveScans,
+  configurationSyncWritePlan,
+  prepareConfigurationSync,
   COMMIT_SYNC_LINK_GRAPH_SQL,
   STORED_MODEL_BASELINES_SQL,
   STORED_MODEL_STATE_JSON_SQL,
@@ -34,8 +28,6 @@ import {
   SYNC_SNAPSHOTS_SQL,
   assertMigrationPageSize,
   configurationSyncMigrationStatements,
-  configurationSyncWriteStatements,
-  configurationSyncSnapshotRewriteStatements,
   SYNC_FIELD_REWRITE_ROWS_SQL,
   staleBlockMigration,
   failedSynchronizationGuard,
@@ -43,16 +35,15 @@ import {
   syncMigrationSnapshotIds,
   syncMigrationTargetsJson,
   syncSnapshotPage,
-  assertDraftPersistenceBounds,
   assertPageSize,
   chunks,
   failure,
-  parseObject,
-  sameStoredModelStates,
+  sqliteWriteError,
   storedModelStates,
 } from "@lacecms/db";
 import type {
   SyncBlockRow,
+  SyncFieldRewriteRow,
   SyncMigrationBlockRow,
   SyncMigrationEntryRow,
   SyncMigrationReferenceRow,
@@ -60,12 +51,11 @@ import type {
   SyncSnapshotRow,
   StoredModelStateRow,
 } from "@lacecms/db";
-import { isSingletonKind } from "@lacecms/domain";
 import { D1_MAX_BATCH_STATEMENTS, D1_MAX_BOUND_PARAMETERS } from "../d1/database.js";
-import { GUARD_SQL } from "./batch.js";
+import { D1RepositoryBase } from "./base.js";
+import { D1WritePlanBudgetError, executeWritePlan } from "./write-plan.js";
 
 declare const crypto: { randomUUID(): string };
-import { D1RepositoryBase } from "./base.js";
 
 /** D1 configuration-sync scans and guarded synchronization batches. */
 export class D1ConfigurationSync
@@ -238,200 +228,45 @@ export class D1ConfigurationSync
     input: ApplyConfigurationSynchronizationInput,
   ): Promise<ApplyConfigurationSynchronizationResult> {
     const { json, state } = await this.readSyncState();
-    const actualPlan = planConfigurationSynchronization({
-      evidence: input.evidence,
-      models: input.models,
-      storedModels: state,
-    });
-    if (
-      !input.plan.isValid ||
-      !sameStoredModelStates(input.expectedStoredModels, state) ||
-      renderConfigurationSyncPlanJson(input.plan) !== renderConfigurationSyncPlanJson(actualPlan)
-    )
-      await failedSynchronizationGuard();
-    if (!actualPlan.requiresApply)
-      return Object.freeze({ operations: Object.freeze([]), status: "noop" as const });
-    const expectedByKey = new Map(input.expectedStoredModels.map((model) => [model.key, model]));
-    const configurationByKey = new Map(input.models.map((model) => [model.key, model]));
-    const singletonEntries = new Map(input.singletonEntries.map((page) => [page.modelKey, page]));
-    const batch = this.batch();
-    const linkDirtyToken = crypto.randomUUID();
-    const linkStatements = syncInternalLinkStatements(input.linkRewrites ?? [], linkDirtyToken);
-    const links = { valid: linkStatements.valid, first: this.first.bind(this) };
-    const token = this.guard(batch, input.appliedAt, {
-      params: [json, ...linkStatements.valid.flatMap((valid) => valid.params)],
-      sql: `${STORED_MODEL_STATE_JSON_SQL} = ?${linkStatements.valid.map((valid) => ` and (${valid.sql})`).join("")}`,
-    });
-    for (const operation of actualPlan.operations) {
-      if (operation.action === "create") {
-        const configuration = configurationByKey.get(operation.model.key);
-        if (configuration === undefined) failure("Synchronization model is unavailable.");
-        batch.checkpoint("sync.model.create");
-        const baseline = configurationSyncBaseline(configuration);
-        batch.add(
-          `insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, public_projection_hash, public_projection_source_hash, structure_json, structure_json_hash, created_at, updated_at) select ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? where ${GUARD_SQL}`,
-          operation.model.key,
-          operation.model.kind,
-          configuration.label ?? configuration.key,
-          operation.model.version,
-          operation.model.structureHash,
-          operation.model.projectionHash,
-          configuration.publicProjectionHash ?? null,
-          operation.model.projectionHash,
-          baseline.json,
-          baseline.hash,
-          input.appliedAt,
-          input.appliedAt,
-          token,
+    const report = prepareConfigurationSync(input, state);
+    if (!report.requiresApply) return configurationSyncApplyResult(report);
+    const rewrites = new Map<string, ConfigurationSyncSnapshotRewrite[]>();
+    for (const scan of configurationSyncRecursiveScans(input.models, report)) {
+      const replacements: ConfigurationSyncSnapshotRewrite[] = [];
+      let after = "";
+      while (true) {
+        const rows = await this.all<SyncFieldRewriteRow>(
+          SYNC_FIELD_REWRITE_ROWS_SQL,
+          scan.readKey,
+          after,
         );
-        if (isSingletonKind(configuration.kind)) {
-          const page = singletonEntries.get(operation.model.key);
-          if (page === undefined || page.entry.model.key !== operation.model.key) {
-            failure("Singleton synchronization entry is missing or invalid.");
-          }
-          const draft = page.entry.draft;
-          assertDraftPersistenceBounds(draft.blocks, []);
-          batch.checkpoint("sync.page.entry");
-          batch.add(
-            `insert into content_entries (id, model_key, singleton_key, created_by, created_at, updated_at) select ?, ?, 1, ?, ?, ? where ${GUARD_SQL}`,
-            page.entry.id,
-            operation.model.key,
-            draft.updatedBy.id,
-            draft.createdAt,
-            draft.updatedAt,
-            token,
-          );
-          batch.checkpoint("sync.page.snapshot");
-          this.addSnapshotInsert(batch, draft, operation.model.version, token);
-          this.addBlockInserts(batch, draft.id, draft.updatedAt, draft.blocks, token);
-          batch.add(
-            `update content_entries set draft_snapshot_id = ? where id = ? and ${GUARD_SQL}`,
-            draft.id,
-            page.entry.id,
-            token,
-          );
-        }
-        continue;
+        replacements.push(...scan.rewritePage(rows));
+        if (rows.length < 100) break;
+        after = rows.at(-1)!.id;
       }
-      if (operation.action === "remove") {
-        const expected = expectedByKey.get(operation.model.key);
-        if (expected === undefined) failure("Synchronization removal guard is missing.");
-        batch.checkpoint("sync.model.remove");
-        batch.add(
-          `delete from content_models where key = ? and kind = ? and config_version = ? and structure_hash = ? and projection_hash = ? and ${GUARD_SQL}`,
-          expected.key,
-          expected.kind,
-          expected.version,
-          expected.structureHash,
-          expected.projectionHash,
-          token,
-        );
-        continue;
-      }
-      if (operation.action === "blocked-removal" || operation.action === "incompatible-change") {
-        failure("Configuration synchronization plan contains an unsafe operation.");
-      }
-      const configuration = configurationByKey.get(operation.model.key);
-      if (configuration === undefined) failure("Synchronization model is unavailable.");
-      const previousKey =
-        operation.action === "rename" ? operation.renamedFrom : operation.model.key;
-      const expected = expectedByKey.get(previousKey);
-      if (expected === undefined) failure("Synchronization update guard is missing.");
-      batch.checkpoint(`sync.model.${operation.action}`);
-      const baseline = configurationSyncBaseline(configuration);
-      batch.add(
-        `update content_models set key = ?, kind = ?, label = ?, config_version = ?, structure_hash = ?, projection_hash = ?, public_projection_hash = ?, public_projection_source_hash = ?, structure_json = ?, structure_json_hash = ?, updated_at = ? where key = ? and kind = ? and config_version = ? and structure_hash = ? and projection_hash = ? and ${GUARD_SQL}`,
-        operation.model.key,
-        operation.model.kind,
-        configuration.label ?? configuration.key,
-        operation.model.version,
-        operation.model.structureHash,
-        operation.model.projectionHash,
-        configuration.publicProjectionHash ?? null,
-        operation.model.projectionHash,
-        baseline.json,
-        baseline.hash,
-        input.appliedAt,
-        expected.key,
-        expected.kind,
-        expected.version,
-        expected.structureHash,
-        expected.projectionHash,
-        token,
-      );
-      if (
-        (operation.action === "version-update" || operation.action === "rename") &&
-        operation.evolution?.recursiveFields
-      ) {
-        const replacements: ConfigurationSyncSnapshotRewrite[] = [];
-        let after = "";
-        while (true) {
-          const rows = await this.all<import("@lacecms/db").SyncFieldRewriteRow>(
-            SYNC_FIELD_REWRITE_ROWS_SQL,
-            previousKey,
-            after,
-          );
-          replacements.push(
-            ...configurationSyncSnapshotRewrites(
-              configuration.fields,
-              operation.evolution.changes,
-              rows.map((row) => ({
-                id: row.id,
-                fields: parseObject(row.fields_json, "Snapshot fields"),
-                state: row.state,
-              })),
-              configuration.visibility as FieldVisibility | undefined,
-            ),
-          );
-          if (rows.length < 100) break;
-          after = rows.at(-1)!.id;
-        }
-        const statements = configurationSyncSnapshotRewriteStatements(
-          replacements,
-          operation.model.key,
-        );
-        for (const [index, statement] of statements.entries()) {
-          batch.checkpoint(`sync.model.rewrite-fields.${index}`);
-          batch.add(`${statement.sql} and ${GUARD_SQL}`, ...statement.params, token);
-        }
-      }
-      for (const write of configurationSyncContentWrites(operation, configuration)) {
-        batch.checkpoint(`sync.model.${write.action}`);
-        for (const statement of configurationSyncWriteStatements(write, operation.model.key)) {
-          batch.add(`${statement.sql} and ${GUARD_SQL}`, ...statement.params, token);
-        }
-      }
+      rewrites.set(scan.writeKey, replacements);
     }
-    for (const write of linkStatements.writes)
-      batch.add(`${write.sql} and ${GUARD_SQL}`, ...write.params, token);
-    if (linkStatements.writes.length) {
-      batch.add(`${COMMIT_SYNC_LINK_GRAPH_SQL} and ${GUARD_SQL}`, linkDirtyToken, token);
-      this.releaseGuard(batch, linkDirtyToken);
-    }
-    if (!configurationSyncAdvancesPublicState(actualPlan)) {
-      this.releaseGuard(batch, token);
-      const results = await this.execute(batch, true);
-      if (results[0]!.meta.changes !== 1) await failedSynchronizationGuard(links);
-      return Object.freeze({ operations: actualPlan.operations, status: "applied" as const });
-    }
-    const stateStatements = this.addPublicStateBump(
-      batch,
-      { params: [token], sql: GUARD_SQL },
-      {
-        reason: "configuration_sync",
-        requestedAt: input.appliedAt,
-        requestedBy: "system:content-sync",
-        snapshotId: null,
-      },
-    );
-    this.releaseGuard(batch, token);
-    const results = await this.execute(batch, true);
-    if (results[0]!.meta.changes !== 1) await failedSynchronizationGuard(links);
-    return Object.freeze({
-      operations: actualPlan.operations,
-      status: "applied" as const,
-      targetVersion: this.stateVersion(results, stateStatements),
+    const plan = configurationSyncWritePlan(input, report, {
+      storedStateJson: json,
+      linkDirtyToken: crypto.randomUUID(),
+      nextEventId: () => this.nextId(),
+      rewrites,
     });
+    const receipt = await executeWritePlan(
+      this.database,
+      plan,
+      input.appliedAt,
+      this.options.beforeMutation,
+    ).catch((error: unknown) => {
+      if (error instanceof D1WritePlanBudgetError && error.limit === "statements")
+        failure("D1 mutation exceeds its statement budget.");
+      sqliteWriteError(error, true, "D1");
+    });
+    if (receipt.kind === "rejected")
+      return failedSynchronizationGuard({ valid: plan.linkChecks, first: this.first.bind(this) });
+    const result = configurationSyncApplyResult(report, receipt);
+    if (receipt.committedOutboxWork) this.options.onOutboxWork?.();
+    return result;
   }
 
   /** Reads model state once, returning both values and the SQL-rendered guard text. */

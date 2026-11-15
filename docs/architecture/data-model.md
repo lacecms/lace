@@ -27,7 +27,8 @@ the content tables ([ADR 0026](../adr/0026-code-defined-models-two-snapshots.md)
   `public_projection_source_hash` the full `projection_hash` it was computed
   for. A mismatched source invalidates the public baseline, including after an
   older binary changes the full projection during a rollback. Sync writes both
-  in its guarded final mutation
+  alongside the structure baseline in the shared final configuration-sync
+  plan, which also defines model creation, updates, renames and safe removal
   ([collection-query-options](../../openspec/specs/collection-query-options/spec.md)).
 
 ### 9.2 Content entries
@@ -39,6 +40,8 @@ published snapshot pointers, creator and timestamps.
   the first snapshot. Entry creation inserts the entry and its draft snapshot
   and assigns the pointer atomically; a committed entry without a draft is
   invalid. `published_snapshot_id` stays `NULL` until the first publication.
+  The final configuration-sync plan creates the initial draft and pointer
+  atomically with a new page or global model. New collections start empty.
 - The API sets `singleton_key = 1` for pages and globals and `NULL` for
   collection entries. Because SQLite allows many `NULL`s in a unique index, the
   partial unique index `content_entries_singleton_idx` on `model_key`
@@ -65,8 +68,9 @@ fields used for identity, routing, concurrency or common queries (`revision`,
 The draft is mutable. Editors cannot change a published snapshot: only the
 publish use case replaces it and only the unpublish use case removes it (§10).
 Configuration synchronization may rewrite its stored fields and blocks for a
-classified schema change (§8), advancing the published version atomically for
-field rewrites and after resumable block migrations (§4.7,
+classified schema change (§8). A shared final plan commits field and reference
+rewrites, baselines and any public version increment and build request together.
+Resumable block migration units commit before this final plan (§4.7,
 [ADR 0007](../adr/0007-schema-evolution-during-sync.md)). Reverting a draft
 sets the published snapshot's `revision` to the new draft revision without
 changing its content, so a draft equal to its publication is derived as

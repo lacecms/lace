@@ -1,7 +1,8 @@
 import type { CreateContentEntryInput, SaveCompleteDraftInput } from "@lacecms/application";
 import { DomainError, isSingletonKind } from "@lacecms/domain";
-import type { ContentBlock, DraftMediaReference } from "@lacecms/domain";
+import type { DraftMediaReference } from "@lacecms/domain";
 import { replaceInternalLinkStatements } from "../links/statements.js";
+import { blockStatements, draftInserts, values } from "./draft-insert.js";
 import { seoJson } from "./snapshots.js";
 import type { WritePlan, WritePlanGuard, WritePlanStatement } from "../write-plan/plan.js";
 
@@ -24,50 +25,6 @@ type GuardRow = {
 const mediaCheck = `not exists (select 1 from json_each(?) r left join media m on m.id = r.value and m.status = 'active' where m.id is null)`;
 const mediaIds = (references: readonly DraftMediaReference[]) =>
   JSON.stringify(references.map((r) => r.mediaId));
-
-function values(rows: number, width: number, offset: number): string {
-  return Array.from(
-    { length: rows },
-    (_, row) =>
-      `(${Array.from({ length: width }, (_, col) => `?${offset + row * width + col + 1}`).join(", ")})`,
-  ).join(", ");
-}
-
-function blockStatements(
-  snapshotId: string,
-  timestamp: number,
-  blocks: readonly ContentBlock[],
-  guard: WritePlanGuard,
-): WritePlanStatement[] {
-  const statements: WritePlanStatement[] = [];
-  const shared = [snapshotId, timestamp, ...guard.params];
-  const size = Math.floor((100 - shared.length) / 6);
-  for (let offset = 0; offset < blocks.length; offset += size) {
-    const group = blocks.slice(offset, offset + size);
-    statements.push({
-      sql: `insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, anchor, class_name, hidden, settings_json, created_at, updated_at)
-      select ?1, v.column1, v.column2, v.column3, v.column4, v.column5, v.column6 ->> '$.anchor', v.column6 ->> '$.className', coalesce(v.column6 ->> '$.hidden', 0), coalesce(v.column6 -> '$.settings', '{}'), ?2, ?2
-      from (values ${values(group.length, 6, shared.length)}) v where ${guard.params.length ? guard.sql.replace("?", "?3") : guard.sql}`,
-      params: [
-        ...shared,
-        ...group.flatMap((block) => [
-          block.key,
-          block.type,
-          block.position,
-          block.schemaVersion,
-          JSON.stringify(block.data),
-          JSON.stringify({
-            ...(block.anchor === undefined ? {} : { anchor: block.anchor }),
-            ...(block.className === undefined ? {} : { className: block.className }),
-            hidden: block.hidden ? 1 : 0,
-            settings: block.settings,
-          }),
-        ]),
-      ],
-    });
-  }
-  return statements;
-}
 
 function referenceStatements(
   snapshotId: string,
@@ -103,7 +60,7 @@ function linkStatements(
 
 /** Creation and duplication share admission and all draft projection writes. */
 export function createDraftWritePlan(input: CreateContentEntryInput): WritePlan<DraftGuardMiss> {
-  const { id, model, draft } = input.entry;
+  const { model, draft } = input.entry;
   const source = input.duplicateOf;
   const stateSql = `select exists(select 1 from content_models where key=?) as model_ok,
     (?=0 or not exists(select 1 from content_entries where model_key=? and singleton_key=1)) as singleton_ok,
@@ -135,48 +92,17 @@ export function createDraftWritePlan(input: CreateContentEntryInput): WritePlan<
       if (!row.singleton_ok) return "singleton";
       return "media";
     },
-    statements: (g) => [
-      {
-        sql: `insert into content_entries (id,model_key,singleton_key,created_by,created_at,updated_at) select ?,?,?,?,?,? where ${g.sql}`,
-        params: [
-          id,
-          model.key,
-          isSingletonKind(model.kind) ? 1 : null,
-          draft.updatedBy.id,
-          draft.createdAt,
-          draft.updatedAt,
-          ...g.params,
-        ],
-        expectedChanges: 1,
-      },
-      {
-        sql: `insert into content_snapshots (id,entry_id,revision,slug,title,fields_json,seo_json,schema_version,created_at,updated_at,updated_by) select ?,?,?,?,?,?,?,config_version,?,?,? from content_models where key=? and ${g.sql}`,
-        params: [
-          draft.id,
-          id,
-          draft.revision,
-          draft.slug ?? null,
-          draft.title,
-          JSON.stringify(draft.fields),
-          seoJson(draft.seo),
-          draft.createdAt,
-          draft.updatedAt,
-          draft.updatedBy.id,
-          model.key,
-          ...g.params,
-        ],
-        expectedChanges: 1,
-      },
-      ...blockStatements(draft.id, draft.updatedAt, draft.blocks, g),
-      ...referenceStatements(draft.id, draft.updatedAt, input.mediaReferences, g),
-      ...linkStatements(draft.id, input.internalLinks ?? [], g),
-      {
-        checkpoint: "draft.internal-links.complete",
-        sql: `update content_entries set draft_snapshot_id=? where id=? and ${g.sql}`,
-        params: [draft.id, id, ...g.params],
-        expectedChanges: 1,
-      },
-    ],
+    statements: (g) => {
+      const inserts = draftInserts(input.entry, g);
+      return [
+        { ...inserts.entry, expectedChanges: 1 },
+        { ...inserts.snapshot, expectedChanges: 1 },
+        ...inserts.blocks,
+        ...referenceStatements(draft.id, draft.updatedAt, input.mediaReferences, g),
+        ...linkStatements(draft.id, input.internalLinks ?? [], g),
+        { ...inserts.pointer, checkpoint: "draft.internal-links.complete", expectedChanges: 1 },
+      ];
+    },
   };
 }
 

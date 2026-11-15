@@ -20,7 +20,6 @@
   "packages/platform-cloudflare/src/cache.test.ts",
   "packages/platform-cloudflare/src/d1-content-repository.test.ts",
   "packages/platform-cloudflare/src/d1-migration.test.ts",
-  "packages/platform-cloudflare/src/d1-sync-batch.test.ts",
   "packages/platform-cloudflare/src/deploy-hook.test.ts",
   "packages/platform-cloudflare/src/email.test.ts",
   "packages/platform-cloudflare/src/image-inspector.test.ts",

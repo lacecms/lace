@@ -155,6 +155,8 @@ contract(
       },
     });
     const v2 = await evolvingPosts({
+      key: "articles",
+      renamedFrom: "posts",
       version: 2,
       blocks: ["image"],
       removedFields: ["/cards/*/legacy"],
@@ -176,7 +178,7 @@ contract(
     });
     let fail = false;
     const { repository, sql } = await runtime.open({
-      resolveModel: syncResolver([v1]),
+      resolveModel: syncResolver([v1, v2]),
       beforeMutation(checkpoint) {
         if (fail && checkpoint === "sync.model.rewrite-fields.1")
           throw new Error("nested injected failure");
@@ -238,6 +240,7 @@ contract(
       targetVersion: version + 1,
     });
     const loaded = (await repository.load({ entryId: contentEntryId("nested") }))!;
+    expect(loaded.model.key).toBe("articles");
     for (const snapshot of [loaded.draft, loaded.published!]) {
       expect(snapshot.fields).toEqual({
         cards: [

@@ -16,8 +16,6 @@ export interface Condition {
 /** Builds one atomic `batch()` and records named checkpoint positions. */
 export class MutationBatch {
   public readonly statements: D1PreparedStatement[] = [];
-  /** Indexes of statements that insert or coalesce an outbox event. */
-  public readonly outbox: number[] = [];
 
   public constructor(
     private readonly database: D1Database,
@@ -27,13 +25,6 @@ export class MutationBatch {
   public add(sql: string, ...params: unknown[]): number {
     this.statements.push(bind(this.database.prepare(sql), params));
     return this.statements.length - 1;
-  }
-
-  /** Adds a statement that enqueues outbox work; its committed row changes report that work. */
-  public addOutbox(sql: string, ...params: unknown[]): number {
-    const index = this.add(sql, ...params);
-    this.outbox.push(index);
-    return index;
   }
 
   public checkpoint(name: string): void {

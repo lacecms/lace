@@ -1,12 +1,3 @@
-import type { FieldVisibility } from "@lacecms/content";
-import {
-  configurationSyncSnapshotRewrites,
-  configurationSyncAdvancesPublicState,
-  configurationSyncContentWrites,
-  configurationSyncBaseline,
-  planConfigurationSynchronization,
-  renderConfigurationSyncPlanJson,
-} from "@lacecms/application";
 import type {
   ApplyConfigurationSynchronizationInput,
   ApplyConfigurationSynchronizationResult,
@@ -22,7 +13,10 @@ import type {
   StoredContentModelState,
 } from "@lacecms/application";
 import {
-  syncInternalLinkStatements,
+  configurationSyncApplyResult,
+  configurationSyncRecursiveScans,
+  configurationSyncWritePlan,
+  prepareConfigurationSync,
   COMMIT_SYNC_LINK_GRAPH_SQL,
   STORED_MODEL_STATE_SQL,
   SYNC_BLOCKS_SQL,
@@ -33,11 +27,8 @@ import {
   SYNC_SNAPSHOTS_SQL,
   assertMigrationPageSize,
   configurationSyncMigrationStatements,
-  configurationSyncWriteStatements,
-  configurationSyncSnapshotRewriteStatements,
   SYNC_FIELD_REWRITE_ROWS_SQL,
   staleBlockMigration,
-  staleSynchronizationPlan,
   syncMigrationPage,
   syncMigrationSnapshotIds,
   syncMigrationTargetsJson,
@@ -45,12 +36,11 @@ import {
   assertPageSize,
   chunks,
   failure,
-  parseObject,
-  sameStoredModelStates,
   storedModelStates,
 } from "@lacecms/db";
 import type {
   SyncBlockRow,
+  SyncFieldRewriteRow,
   SyncMigrationBlockRow,
   SyncMigrationEntryRow,
   SyncMigrationReferenceRow,
@@ -58,10 +48,10 @@ import type {
   SyncSnapshotRow,
   StoredModelStateRow,
 } from "@lacecms/db";
-import { isSingletonKind } from "@lacecms/domain";
 import { randomUUID } from "node:crypto";
 import { SQLITE_BIND_CHUNK } from "./sql.js";
 import { NodeRepositoryBase } from "./base.js";
+import { executeWritePlan } from "./write-plan.js";
 
 /** Bound values per block-migration write; well below SQLite's compiled limit. */
 const SQLITE_MIGRATION_PARAMETERS = 999;
@@ -182,211 +172,35 @@ export class NodeConfigurationSync
     input: ApplyConfigurationSynchronizationInput,
   ): Promise<ApplyConfigurationSynchronizationResult> {
     try {
-      return this.connection.transaction(() => {
-        const current = this.readConfigurationSyncStateNow();
-        const actualPlan = planConfigurationSynchronization({
-          evidence: input.evidence,
-          models: input.models,
-          storedModels: current,
-        });
-        if (
-          !input.plan.isValid ||
-          !sameStoredModelStates(input.expectedStoredModels, current) ||
-          renderConfigurationSyncPlanJson(input.plan) !==
-            renderConfigurationSyncPlanJson(actualPlan)
-        )
-          staleSynchronizationPlan();
-        if (!actualPlan.requiresApply) {
-          return Object.freeze({ operations: Object.freeze([]), status: "noop" as const });
-        }
-
-        const expectedByKey = new Map(
-          input.expectedStoredModels.map((model) => [model.key, model]),
-        );
-        const configurationByKey = new Map(input.models.map((model) => [model.key, model]));
-        const singletonEntries = new Map(
-          input.singletonEntries.map((page) => [page.modelKey, page]),
-        );
-        const linkDirtyToken = randomUUID();
-        const linkStatements = syncInternalLinkStatements(input.linkRewrites ?? [], linkDirtyToken);
-        for (const valid of linkStatements.valid) {
-          const row = this.connection.prepare(`select ${valid.sql} as ok`).get(...valid.params) as {
-            readonly ok: number;
-          };
-          if (row.ok !== 1)
-            failure("Schema synchronization would introduce an unavailable internal link.");
-        }
-        for (const operation of actualPlan.operations) {
-          if (operation.action === "create") {
-            const configuration = configurationByKey.get(operation.model.key);
-            if (configuration === undefined) failure("Synchronization model is unavailable.");
-            this.checkpoint("sync.model.create");
-            const baseline = configurationSyncBaseline(configuration);
-            this.connection
-              .prepare(
-                "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, public_projection_hash, public_projection_source_hash, structure_json, structure_json_hash, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-              )
-              .run(
-                operation.model.key,
-                operation.model.kind,
-                configuration.label ?? configuration.key,
-                operation.model.version,
-                operation.model.structureHash,
-                operation.model.projectionHash,
-                configuration.publicProjectionHash ?? null,
-                operation.model.projectionHash,
-                baseline.json,
-                baseline.hash,
-                input.appliedAt,
-                input.appliedAt,
-              );
-            if (isSingletonKind(configuration.kind)) {
-              const page = singletonEntries.get(operation.model.key);
-              if (page === undefined || page.entry.model.key !== operation.model.key) {
-                failure("Singleton synchronization entry is missing or invalid.");
-              }
-              this.checkpoint("sync.page.entry");
-              this.connection
-                .prepare(
-                  "insert into content_entries (id, model_key, singleton_key, created_by, created_at, updated_at) values (?, ?, 1, ?, ?, ?)",
-                )
-                .run(
-                  page.entry.id,
-                  operation.model.key,
-                  page.entry.draft.updatedBy.id,
-                  page.entry.draft.createdAt,
-                  page.entry.draft.updatedAt,
-                );
-              this.checkpoint("sync.page.snapshot");
-              this.insertSnapshot(page.entry.draft, operation.model.version);
-              this.insertBlocks(page.entry.draft);
-              this.connection
-                .prepare("update content_entries set draft_snapshot_id = ? where id = ?")
-                .run(page.entry.draft.id, page.entry.id);
-            }
-            continue;
-          }
-          if (operation.action === "remove") {
-            const expected = expectedByKey.get(operation.model.key);
-            if (expected === undefined) failure("Synchronization removal guard is missing.");
-            this.checkpoint("sync.model.remove");
-            const removed = this.connection
-              .prepare(
-                "delete from content_models where key = ? and kind = ? and config_version = ? and structure_hash = ? and projection_hash = ?",
-              )
-              .run(
-                expected.key,
-                expected.kind,
-                expected.version,
-                expected.structureHash,
-                expected.projectionHash,
-              );
-            if (removed.changes !== 1) staleSynchronizationPlan();
-            continue;
-          }
-          if (
-            operation.action === "blocked-removal" ||
-            operation.action === "incompatible-change"
-          ) {
-            failure("Configuration synchronization plan contains an unsafe operation.");
-          }
-          const configuration = configurationByKey.get(operation.model.key);
-          if (configuration === undefined) failure("Synchronization model is unavailable.");
-          const previousKey =
-            operation.action === "rename" ? operation.renamedFrom : operation.model.key;
-          const expected = expectedByKey.get(previousKey);
-          if (expected === undefined) failure("Synchronization update guard is missing.");
-          this.checkpoint(`sync.model.${operation.action}`);
-          const baseline = configurationSyncBaseline(configuration);
-          const updated = this.connection
-            .prepare(
-              "update content_models set key = ?, kind = ?, label = ?, config_version = ?, structure_hash = ?, projection_hash = ?, public_projection_hash = ?, public_projection_source_hash = ?, structure_json = ?, structure_json_hash = ?, updated_at = ? where key = ? and kind = ? and config_version = ? and structure_hash = ? and projection_hash = ?",
-            )
-            .run(
-              operation.model.key,
-              operation.model.kind,
-              configuration.label ?? configuration.key,
-              operation.model.version,
-              operation.model.structureHash,
-              operation.model.projectionHash,
-              configuration.publicProjectionHash ?? null,
-              operation.model.projectionHash,
-              baseline.json,
-              baseline.hash,
-              input.appliedAt,
-              expected.key,
-              expected.kind,
-              expected.version,
-              expected.structureHash,
-              expected.projectionHash,
-            );
-          if (updated.changes !== 1) staleSynchronizationPlan();
-          if (
-            (operation.action === "version-update" || operation.action === "rename") &&
-            operation.evolution?.recursiveFields
-          ) {
+      let report = input.plan;
+      const receipt = executeWritePlan(
+        this.connection,
+        () => {
+          report = prepareConfigurationSync(input, this.readConfigurationSyncStateNow());
+          const rewrites = new Map<string, ConfigurationSyncSnapshotRewrite[]>();
+          for (const scan of configurationSyncRecursiveScans(input.models, report)) {
+            const readPage = this.connection.prepare(SYNC_FIELD_REWRITE_ROWS_SQL);
             const replacements: ConfigurationSyncSnapshotRewrite[] = [];
             let after = "";
             while (true) {
-              const rows = this.connection
-                .prepare(SYNC_FIELD_REWRITE_ROWS_SQL)
-                .all(
-                  operation.model.key,
-                  after,
-                ) as readonly import("@lacecms/db").SyncFieldRewriteRow[];
-              replacements.push(
-                ...configurationSyncSnapshotRewrites(
-                  configuration.fields,
-                  operation.evolution.changes,
-                  rows.map((row) => ({
-                    id: row.id,
-                    fields: parseObject(row.fields_json, "Snapshot fields"),
-                    state: row.state,
-                  })),
-                  configuration.visibility as FieldVisibility | undefined,
-                ),
-              );
+              const rows = readPage.all(scan.readKey, after) as SyncFieldRewriteRow[];
+              replacements.push(...scan.rewritePage(rows));
               if (rows.length < 100) break;
               after = rows.at(-1)!.id;
             }
-            const statements = configurationSyncSnapshotRewriteStatements(
-              replacements,
-              operation.model.key,
-            );
-            for (const [index, statement] of statements.entries()) {
-              this.checkpoint(`sync.model.rewrite-fields.${index}`);
-              this.connection.prepare(statement.sql).run(...statement.params);
-            }
+            rewrites.set(scan.writeKey, replacements);
           }
-          for (const write of configurationSyncContentWrites(operation, configuration)) {
-            this.checkpoint(`sync.model.${write.action}`);
-            for (const statement of configurationSyncWriteStatements(write, operation.model.key)) {
-              this.connection.prepare(statement.sql).run(...statement.params);
-            }
-          }
-        }
-        for (const write of linkStatements.writes)
-          this.connection.prepare(write.sql).run(...write.params);
-        if (linkStatements.writes.length) {
-          this.connection.prepare(COMMIT_SYNC_LINK_GRAPH_SQL).run(linkDirtyToken);
-          // In-transaction dirty token of the shared sync link statements (§16 runtime deltas).
-          this.connection.prepare("delete from mutation_guards where token=?").run(linkDirtyToken);
-        }
-        if (!configurationSyncAdvancesPublicState(actualPlan)) {
-          return Object.freeze({ operations: actualPlan.operations, status: "applied" as const });
-        }
-        const targetVersion = this.bumpPublicState(
-          input.appliedAt,
-          "system:content-sync",
-          null,
-          "configuration_sync",
-        );
-        return Object.freeze({
-          operations: actualPlan.operations,
-          status: "applied" as const,
-          targetVersion,
-        });
-      })();
+          return configurationSyncWritePlan(input, report, {
+            rewrites,
+            linkDirtyToken: randomUUID(),
+            nextEventId: () => this.nextId(),
+          });
+        },
+        (name) => this.checkpoint(name),
+      );
+      if (receipt.kind === "rejected")
+        failure("Schema synchronization would introduce an unavailable internal link.");
+      return configurationSyncApplyResult(report, receipt);
     } catch (error) {
       this.throwWriteError(error, true);
     }

@@ -1,12 +1,10 @@
 import {
-  buildEnqueueStatements,
   LINK_IMPACT_EVIDENCE_SQL,
   linkRemovalCondition,
   SqlContentReader,
   replaceInternalLinkStatements,
   BUMP_INTERNAL_LINK_GRAPH_SQL,
   BLOCK_COLUMNS_SQL,
-  seoJson,
   ENTRY_COLUMNS_SQL,
   SNAPSHOT_COLUMNS_SQL,
   chunks,
@@ -23,7 +21,7 @@ import type {
   SnapshotRow,
   StoredSnapshot,
 } from "@lacecms/db";
-import type { ContentEntry, DraftSnapshot, MediaMetadata } from "@lacecms/domain";
+import type { ContentEntry, MediaMetadata } from "@lacecms/domain";
 import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 import { SQLITE_BIND_CHUNK } from "./sql.js";
@@ -88,48 +86,6 @@ export abstract class NodeRepositoryBase {
     return storedSnapshots(snapshotRows, blockRows);
   }
 
-  protected insertSnapshot(snapshot: DraftSnapshot, schemaVersion: number): void {
-    this.connection
-      .prepare(
-        "insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, seo_json, schema_version, created_at, updated_at, updated_by) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      )
-      .run(
-        snapshot.id,
-        snapshot.entryId,
-        snapshot.revision,
-        snapshot.slug ?? null,
-        snapshot.title,
-        JSON.stringify(snapshot.fields),
-        seoJson(snapshot.seo),
-        schemaVersion,
-        snapshot.createdAt,
-        snapshot.updatedAt,
-        snapshot.updatedBy.id,
-      );
-  }
-
-  protected insertBlocks(snapshot: Pick<DraftSnapshot, "blocks" | "id" | "updatedAt">): void {
-    const statement = this.connection.prepare(
-      "insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json, anchor, class_name, hidden, settings_json, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    );
-    for (const block of snapshot.blocks) {
-      statement.run(
-        snapshot.id,
-        block.key,
-        block.type,
-        block.position,
-        block.schemaVersion,
-        JSON.stringify(block.data),
-        block.anchor ?? null,
-        block.className ?? null,
-        block.hidden ? 1 : 0,
-        JSON.stringify(block.settings),
-        snapshot.updatedAt,
-        snapshot.updatedAt,
-      );
-    }
-  }
-
   protected checkLinkRemoval(
     targetId: string,
     action: import("@lacecms/application").LinkImpactAction,
@@ -189,43 +145,6 @@ export abstract class NodeRepositoryBase {
   protected nextId(): string {
     if (this.options.nextId !== undefined) return this.options.nextId();
     return randomUUID();
-  }
-
-  protected bumpPublicState(
-    timestamp: number,
-    requestedBy: string,
-    snapshotId: string | null,
-    reason: "configuration_sync" | "media_metadata" | "publication",
-  ): number {
-    this.checkpoint("public-state");
-    this.connection
-      .prepare(
-        "insert into published_state (singleton_key, version, updated_at) values (1, 1, ?) on conflict(singleton_key) do update set version = version + 1, updated_at = excluded.updated_at",
-      )
-      .run(timestamp);
-    const statements = buildEnqueueStatements(
-      { sql: "1", params: [] },
-      {
-        eventId: this.nextId(),
-        requestedAt: timestamp,
-        requestedBy,
-        snapshotId,
-        reason,
-      },
-    );
-    let version = 0;
-    for (const statement of statements) {
-      if (statement.checkpoint !== undefined) this.checkpoint(statement.checkpoint);
-      const prepared = this.connection.prepare(statement.sql);
-      if (statement.slot === "queue") {
-        const row = prepared.get(...statement.params) as
-          | { pending_id: string | null; version: number }
-          | undefined;
-        if (row?.pending_id == null) failure("Build request could not be queued.");
-        version = row.version;
-      } else prepared.run(...statement.params);
-    }
-    return version;
   }
 
   protected throwWriteError(error: unknown, pageCreation: boolean): never {

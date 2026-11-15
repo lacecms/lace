@@ -1,7 +1,4 @@
-import { dispatcherEventId } from "@lacecms/application";
-import type { BuildQueueReceipt } from "@lacecms/application";
 import {
-  buildEnqueueStatements,
   LINK_IMPACT_EVIDENCE_SQL,
   linkRemovalCondition,
   SqlContentReader,
@@ -9,20 +6,16 @@ import {
   ENTRY_COLUMNS_SQL,
   chunks,
   failure,
-  seoJson,
   sqliteWriteError,
 } from "@lacecms/db";
 import type { ContentModelResolver, EntryRow } from "@lacecms/db";
-import type { ContentBlock, DraftSnapshot, MediaMetadata } from "@lacecms/domain";
+import type { MediaMetadata } from "@lacecms/domain";
 import { D1_MAX_BATCH_STATEMENTS, type D1Database, type D1Result } from "../d1/database.js";
 import { bind } from "./sql.js";
 import { GUARD_SQL, MutationBatch, numberedValues, rowsPerStatement } from "./batch.js";
 import type { Condition } from "./batch.js";
 
 declare const crypto: { randomUUID(): string };
-
-// Key, type, position, version, data and one envelope JSON value per block row.
-const BLOCK_VALUES_PER_ROW = 6;
 
 const REFERENCE_VALUES_PER_ROW = 3;
 
@@ -112,10 +105,6 @@ export abstract class D1RepositoryBase {
     } catch (error) {
       sqliteWriteError(error, pageCreation, "D1");
     }
-    // A failed guard leaves every outbox statement unchanged although the batch commits.
-    if (batch.outbox.some((index) => (results[index]?.meta.changes ?? 0) > 0)) {
-      this.options.onOutboxWork?.();
-    }
     return results;
   }
 
@@ -148,66 +137,6 @@ export abstract class D1RepositoryBase {
 
   protected async entryRow(id: string): Promise<EntryRow | undefined> {
     return this.first<EntryRow>(`${ENTRY_COLUMNS_SQL} where id = ?`, id);
-  }
-
-  protected addSnapshotInsert(
-    batch: MutationBatch,
-    snapshot: DraftSnapshot,
-    schemaVersion: number,
-    token?: string,
-  ): void {
-    batch.add(
-      `insert into content_snapshots (id, entry_id, revision, slug, title, fields_json, seo_json, schema_version, created_at, updated_at, updated_by) select ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? ${token === undefined ? "" : `where ${GUARD_SQL}`}`,
-      snapshot.id,
-      snapshot.entryId,
-      snapshot.revision,
-      snapshot.slug ?? null,
-      snapshot.title,
-      JSON.stringify(snapshot.fields),
-      seoJson(snapshot.seo),
-      schemaVersion,
-      snapshot.createdAt,
-      snapshot.updatedAt,
-      snapshot.updatedBy.id,
-      ...(token === undefined ? [] : [token]),
-    );
-  }
-
-  /** Multi-row block inserts; `?1` snapshot, `?2` timestamp, `?3` guard token. */
-  protected addBlockInserts(
-    batch: MutationBatch,
-    snapshotId: string,
-    timestamp: number,
-    blocks: readonly ContentBlock[],
-    token?: string,
-  ): void {
-    const shared = token === undefined ? [snapshotId, timestamp] : [snapshotId, timestamp, token];
-    for (const group of chunks(blocks, rowsPerStatement(shared.length, BLOCK_VALUES_PER_ROW))) {
-      batch.add(
-        `insert into content_blocks (snapshot_id, block_key, block_type, position, schema_version, data_json,
-                                     anchor, class_name, hidden, settings_json, created_at, updated_at)
-         select ?1, v.column1, v.column2, v.column3, v.column4, v.column5,
-                v.column6 ->> '$.anchor', v.column6 ->> '$.className',
-                coalesce(v.column6 ->> '$.hidden', 0), coalesce(v.column6 -> '$.settings', '{}'), ?2, ?2
-           from (values ${numberedValues(group.length, BLOCK_VALUES_PER_ROW, shared.length)}) v
-          ${token === undefined ? "" : "where exists (select 1 from mutation_guards where token = ?3)"}`,
-        ...shared,
-        ...group.flatMap((block) => [
-          block.key,
-          block.type,
-          block.position,
-          block.schemaVersion,
-          JSON.stringify(block.data),
-          // One bound envelope keeps a 200-block save within the D1 statement budget.
-          JSON.stringify({
-            ...(block.anchor === undefined ? {} : { anchor: block.anchor }),
-            ...(block.className === undefined ? {} : { className: block.className }),
-            hidden: block.hidden ? 1 : 0,
-            settings: block.settings,
-          }),
-        ]),
-      );
-    }
   }
 
   /**
@@ -244,56 +173,5 @@ export abstract class D1RepositoryBase {
         ]),
       );
     }
-  }
-
-  /** Increments the public version and enqueues build work under one condition. */
-  protected addPublicStateBump(
-    batch: MutationBatch,
-    condition: Condition,
-    input: {
-      readonly reason: "configuration_sync" | "media_metadata" | "publication";
-      readonly requestedAt: number;
-      readonly requestedBy: string;
-      readonly snapshotId: string | null;
-    },
-  ): number {
-    batch.checkpoint("public-state");
-    batch.add(
-      `insert into published_state (singleton_key, version, updated_at) select 1, 1, ? where ${condition.sql}
-       on conflict(singleton_key) do update set version = version + 1, updated_at = excluded.updated_at`,
-      input.requestedAt,
-      ...condition.params,
-    );
-    let resultIndex = -1;
-    for (const statement of buildEnqueueStatements(condition, {
-      reason: input.reason,
-      requestedAt: input.requestedAt,
-      requestedBy: input.requestedBy,
-      snapshotId: input.snapshotId,
-      eventId: this.nextId(),
-    })) {
-      if (statement.checkpoint !== undefined) batch.checkpoint(statement.checkpoint);
-      const index = statement.outbox
-        ? batch.addOutbox(statement.sql, ...statement.params)
-        : batch.add(statement.sql, ...statement.params);
-      if (statement.slot === "queue") resultIndex = index;
-    }
-    return resultIndex;
-  }
-
-  protected queueReceipt(results: readonly D1Result[], index: number): BuildQueueReceipt {
-    const row = results[index]!.results[0] as
-      | { readonly event_id: string; readonly pending_id: string | null; readonly version: number }
-      | undefined;
-    if (row?.pending_id == null) failure("Build request could not be queued.");
-    return {
-      coalesced: row.pending_id !== row.event_id,
-      eventId: dispatcherEventId(row.pending_id),
-      targetVersion: row.version,
-    };
-  }
-
-  protected stateVersion(results: readonly D1Result[], index: number): number {
-    return this.queueReceipt(results, index).targetVersion;
   }
 }

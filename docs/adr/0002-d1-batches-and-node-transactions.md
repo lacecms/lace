@@ -72,3 +72,14 @@ Node reads candidates inside its write transaction; D1 reads bounded candidates
 before one atomic batch. A losing candidate does not prevent another claim,
 and lease changes do not produce enqueue receipts. The runtime claim caps and
 post-commit dispatch behavior remain as recorded in architecture §16.
+
+## Amendment (EX2C)
+
+Both runtimes execute one final configuration-sync plan from `db`. Node
+revalidates the report and reads recursive rewrite inputs inside its immediate
+transaction. D1 prepares those reads before the batch and admits the plan
+against the stored model summary and link availability inside the batch.
+Model identities, both baselines, singleton drafts, field and reference
+rewrites and any version increment and build request commit together.
+Block migrations run beforehand in resumable guarded units, followed by
+replanning. Only the final plan queues the configuration-sync build.

@@ -5,6 +5,19 @@ import { bind } from "./sql.js";
 
 declare const crypto: { randomUUID(): string };
 
+export class D1WritePlanBudgetError extends Error {
+  public constructor(public readonly limit: "statements" | "parameters") {
+    super("Write plan exceeds D1 statement or parameter budget.");
+    this.name = "D1WritePlanBudgetError";
+  }
+}
+
+function assertWritePlanBudget(queries: readonly { readonly params: readonly unknown[] }[]): void {
+  if (queries.length > D1_MAX_BATCH_STATEMENTS) throw new D1WritePlanBudgetError("statements");
+  if (queries.some((query) => query.params.length > D1_MAX_BOUND_PARAMETERS))
+    throw new D1WritePlanBudgetError("parameters");
+}
+
 /** Executes the plan in one D1 batch, including admission and diagnostics. */
 export async function executeWritePlan<Miss>(
   database: D1Database,
@@ -56,11 +69,7 @@ export async function executeWritePlan<Miss>(
     }
   }
   queries.push({ sql: "delete from mutation_guards where token = ?", params: [token] });
-  if (
-    queries.length > D1_MAX_BATCH_STATEMENTS ||
-    queries.some((query) => query.params.length > D1_MAX_BOUND_PARAMETERS)
-  )
-    throw new Error("Write plan exceeds D1 statement or parameter budget.");
+  assertWritePlanBudget(queries);
   const results = await database.batch(
     queries.map((query) => bind(database.prepare(query.sql), query.params)),
   );
@@ -118,11 +127,7 @@ export async function executeWritePlanGroup(
       });
     }
   }
-  if (
-    queries.length > D1_MAX_BATCH_STATEMENTS ||
-    queries.some((q) => q.params.length > D1_MAX_BOUND_PARAMETERS)
-  )
-    throw new Error("Write plan exceeds D1 statement or parameter budget.");
+  assertWritePlanBudget(queries);
   if (queries.length === 0)
     return { kind: "committed", changes: [], slots: {}, committedOutboxWork: false };
   const results = await database.batch(
