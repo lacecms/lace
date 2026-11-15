@@ -29,7 +29,7 @@ test("shared SQL column lists match the migrated schema", async () => {
       {
         name: "SNAPSHOT_COLUMNS_SQL",
         statement: SNAPSHOT_COLUMNS_SQL,
-        tables: { s: "content_snapshots", u: "user" },
+        tables: { s: "content_snapshots", profile: "content_actor_profiles" },
       },
       { name: "BLOCK_COLUMNS_SQL", statement: BLOCK_COLUMNS_SQL, tables: { "": "content_blocks" } },
       {

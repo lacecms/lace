@@ -158,11 +158,11 @@ export class SqlContentReader implements ContentLinkReadPort {
   public async describeActors(ids: readonly ActorId[]): Promise<readonly ActorSummary[]> {
     const names = new Map<string, string>();
     for (const group of chunks([...new Set(ids)], this.sql.bindChunk)) {
-      const rows = await this.sql.all<{ readonly id: string; readonly name: string }>(
-        `select id, name from user where id in (${group.map(() => "?").join(", ")})`,
+      const rows = await this.sql.all<{ readonly actor_id: string; readonly display_name: string }>(
+        `select actor_id, display_name from content_actor_profiles where actor_id in (${group.map(() => "?").join(", ")})`,
         ...group,
       );
-      for (const row of rows) names.set(row.id, row.name);
+      for (const row of rows) names.set(row.actor_id, row.display_name);
     }
     return Object.freeze(
       ids.map((id) => Object.freeze({ displayName: actorDisplayName(id, names.get(id)), id })),
@@ -308,7 +308,7 @@ export class SqlContentReader implements ContentLinkReadPort {
     const rows = await this.sql.all<Record<string, unknown>>(
       `${MEDIA_CATALOG_SQL}, ${sort.value} as sort_value
          from media m
-         left join user u on u.id = m.created_by
+         left join content_actor_profiles profile on profile.actor_id = m.created_by
         ${conditions.length === 0 ? "" : `where ${conditions.join(" and ")}`}
         order by ${sort.order} ${direction}, m.id ${direction} limit ?`,
       ...bindings,
@@ -345,7 +345,7 @@ export class SqlContentReader implements ContentLinkReadPort {
     const row = await this.first<Record<string, unknown>>(
       `${MEDIA_CATALOG_SQL}
          from media m
-         left join user u on u.id = m.created_by
+         left join content_actor_profiles profile on profile.actor_id = m.created_by
         where m.id = ? limit 1`,
       id,
     );

@@ -17,7 +17,12 @@ import { countingD1, openLocalD1 } from "./test-support/d1-test-harness.js";
 
 const editor = { id: actorId("editor"), role: "editor" };
 const posts = { key: contentModelKey("posts"), kind: "collection", route: "/blog/:slug" };
-const resolveModel = (key) => (key === "posts" ? posts : undefined);
+const settings = { key: contentModelKey("settings"), kind: "global" };
+const models = new Map([
+  [posts.key, posts],
+  [settings.key, settings],
+]);
+const resolveModel = (key) => models.get(key);
 const disposals = [];
 
 afterEach(async () => {
@@ -59,7 +64,10 @@ async function seedMedia(database, count) {
   }
 }
 
-function draft(id, { blocks = [], slug = id, title = id, updatedAt = 1 } = {}) {
+function draft(
+  id,
+  { blocks = [], model = posts, slug = id, title = id, updatedAt = 1, updatedBy = editor } = {},
+) {
   const entryId = contentEntryId(id);
   return createContentEntry({
     draft: {
@@ -69,14 +77,14 @@ function draft(id, { blocks = [], slug = id, title = id, updatedAt = 1 } = {}) {
       fields: {},
       id: contentSnapshotId(`${id}-draft`),
       revision: 1,
-      slug,
+      ...(model.kind === "collection" ? { slug } : {}),
       state: "draft",
       title,
       updatedAt: unixMilliseconds(updatedAt),
-      updatedBy: editor,
+      updatedBy,
     },
     id: entryId,
-    model: posts,
+    model,
   });
 }
 
@@ -325,7 +333,7 @@ test("the D1 adapter source imports no Node-only runtime module", async () => {
   );
   expect(sources.length).toBeGreaterThan(0);
   const forbidden =
-    /(?:from\s+|import\s+)"(node:[^"]+|fs|path|crypto|better-sqlite3|@aws-sdk\/[^"]+|sharp|@lacecms\/platform-node)"/u;
+    /(?:from\s+|import\s+)"(node:[^"]+|fs|path|crypto|better-sqlite3|@aws-sdk\/[^"]+|sharp|@lacecms\/platform-node|@lacecms\/db\/node)"/u;
   for (const file of sources) {
     expect(await readFile(new URL(file, directory), "utf8"), file).not.toMatch(forbidden);
   }
@@ -333,8 +341,9 @@ test("the D1 adapter source imports no Node-only runtime module", async () => {
     const entries = await readdir(directory, { withFileTypes: true });
     const files = [];
     for (const entry of entries) {
+      if (["node.ts", "node-repository", "test-support"].includes(entry.name)) continue;
       const url = new URL(entry.name + (entry.isDirectory() ? "/" : ""), directory);
-      if (entry.isDirectory() && entry.name !== "test-support") {
+      if (entry.isDirectory()) {
         files.push(...(await productionFiles(url)));
       } else if (entry.isFile() && entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
         files.push(url);
@@ -347,6 +356,7 @@ test("the D1 adapter source imports no Node-only runtime module", async () => {
   for (const file of sharedFiles) {
     const shared = await readFile(file, "utf8");
     expect(shared, file.pathname).not.toMatch(forbidden);
+    expect(shared, file.pathname).not.toMatch(/from "[^"]+\/(?:node\.js|node-repository\/)/u);
     expect(shared, file.pathname).not.toMatch(/\bBuffer\.from\b/u);
   }
 });
@@ -354,14 +364,36 @@ test("the D1 adapter source imports no Node-only runtime module", async () => {
 test("reads a full build-export page with two bounded batches", async () => {
   const { counting, database, repository } = await open();
   await seedMedia(database, 200);
+  await database.batch([
+    database.prepare(
+      "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values ('settings', 'global', 'Settings', 1, 's', 'p', 1, 1)",
+    ),
+    database
+      .prepare(
+        "insert into content_actor_profiles select 'author-' || value, 'Author ' || value, 'editor' from json_each(?)",
+      )
+      .bind(JSON.stringify(Array.from({ length: 101 }, (_, index) => index))),
+    database.prepare(
+      "update media set created_at = cast(substr(id, 7) as integer) + 1, created_by = 'author-' || (cast(substr(id, 7) as integer) % 101)",
+    ),
+  ]);
+  const reset = () =>
+    Object.assign(counting.stats, {
+      batches: 0,
+      queries: 0,
+      maxParameters: 0,
+      maxBatchStatements: 0,
+    });
   // Two maximal entries (200 blocks and 200 references each) among 101 routed entries.
   for (let index = 0; index < 101; index += 1) {
     const id = `post-${String(index).padStart(3, "0")}`;
     const maximal = index < 2 ? maximalDraft(id) : maximalDraft(id, 1);
+    const publisher = { ...editor, id: actorId(`author-${index}`) };
     await repository.create({
       entry: draft(id, {
         blocks: maximal.blocks,
         fields: { links: Array(200).fill(`entry:${id}`) },
+        updatedBy: publisher,
       }),
       mediaReferences: maximal.references,
       internalLinks: Array.from({ length: 200 }, (_, index) => ({
@@ -372,11 +404,66 @@ test("reads a full build-export page with two bounded batches", async () => {
         delivered: true,
       })),
     });
-    await repository.publish(publishInput(id, 1, 2, `${id}-published`));
+    reset();
+    const published = await repository.publish({
+      ...publishInput(id, 1, 2, `${id}-published`),
+      publishedBy: publisher,
+    });
+    expect(published.entry.published.updatedBy).toEqual(publisher);
+    expect(counting.stats.batches).toBe(1);
+    expect(counting.stats.queries).toBeLessThanOrEqual(D1_QUERY_BUDGET);
+    expect(counting.stats.maxParameters).toBeLessThanOrEqual(D1_MAX_BOUND_PARAMETERS);
+    expect(counting.stats.maxBatchStatements).toBeLessThanOrEqual(40);
   }
-  counting.stats.queries = 0;
-  counting.stats.batches = 0;
-  counting.stats.maxParameters = 0;
+  const globalAuthor = { ...editor, id: actorId("author-0") };
+  await repository.create({
+    entry: draft("settings", { model: settings, updatedBy: globalAuthor }),
+    mediaReferences: [],
+  });
+  await repository.publish({
+    ...publishInput("settings", 1, 2, "settings-published"),
+    publishedBy: globalAuthor,
+  });
+
+  const list = { modelKey: posts.key, listFields: [], sort: "title", limit: 100 };
+  reset();
+  const collectionPage = await repository.list(list);
+  expect(new Set(collectionPage.items.map(({ updatedBy }) => updatedBy.displayName)).size).toBe(
+    100,
+  );
+  expect(counting.stats.queries).toBe(2);
+  expect(counting.stats.maxParameters).toBeLessThanOrEqual(D1_MAX_BOUND_PARAMETERS);
+  reset();
+  const next = await repository.list({ ...list, after: collectionPage.nextCursor });
+  expect(next.items.map(({ updatedBy }) => updatedBy.displayName)).toEqual(["Author 100"]);
+  expect(counting.stats.queries).toBeLessThanOrEqual(3);
+  expect(counting.stats.maxParameters).toBeLessThanOrEqual(D1_MAX_BOUND_PARAMETERS);
+
+  reset();
+  const media = await repository.listMedia({ sort: "createdAt", limit: 100 });
+  expect(media.items).toHaveLength(100);
+  expect(new Set(media.items.map(({ createdBy }) => createdBy.displayName)).size).toBe(100);
+  expect(counting.stats.queries).toBe(1);
+  expect(counting.stats.maxParameters).toBe(1);
+  reset();
+  const moreMedia = await repository.listMedia({
+    sort: "createdAt",
+    limit: 100,
+    after: media.nextCursor,
+  });
+  expect(new Set(moreMedia.items.map(({ createdBy }) => createdBy.displayName)).size).toBe(100);
+  expect(counting.stats.queries).toBe(1);
+  expect(counting.stats.maxParameters).toBe(4);
+  const indexPlan = await database
+    .prepare(`explain query plan
+    select profile.display_name from media m left join content_actor_profiles profile
+    on profile.actor_id = m.created_by order by m.created_at, m.id limit 100`)
+    .all();
+  expect(indexPlan.results.map(({ detail }) => detail).join("\n")).toMatch(
+    /SEARCH profile USING INDEX .*\(actor_id=\?\)/u,
+  );
+
+  reset();
   const first = await repository.exportBuildContentPage({ limit: 100 });
   expect(counting.stats.batches).toBe(2);
   expect(counting.stats.queries).toBeLessThanOrEqual(10);
@@ -386,7 +473,8 @@ test("reads a full build-export page with two bounded batches", async () => {
   expect(first.entries[0].media).toHaveLength(200);
   expect(first.entries.every((item) => item.internalLinks.length === 200)).toBe(true);
   expect(first.entries[0].internalLinks.every((item) => item.targetId === "post-000")).toBe(true);
-  expect(first.globals).toEqual([]);
+  expect(new Set(first.entries.map(({ entry }) => entry.published.updatedBy.id)).size).toBe(100);
+  expect(first.globals.map(({ entry }) => entry.published.updatedBy)).toEqual([globalAuthor]);
 
   counting.stats.queries = 0;
   counting.stats.batches = 0;

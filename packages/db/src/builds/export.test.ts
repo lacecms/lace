@@ -57,7 +57,7 @@ test("build-export SQL measures stored bytes and reads a page by path range", ()
     create table content_entries (id text primary key, model_key text, draft_snapshot_id text, published_snapshot_id text);
     create table content_snapshots (id text primary key, entry_id text, revision integer, slug text, title text,
       fields_json text, seo_json text, schema_version integer, created_at integer, updated_at integer, updated_by text);
-    create table user (id text primary key, role text);
+    create table content_actor_profiles (actor_id text primary key, role text);
     create table content_blocks (snapshot_id text, block_key text, block_type text, position integer,
       schema_version integer, data_json text, anchor text, class_name text, hidden integer, settings_json text,
       created_at integer, updated_at integer);

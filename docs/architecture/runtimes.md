@@ -43,6 +43,11 @@ cannot override this policy; a missing policy fails construction.
 Route modules receive actor resolution and the capabilities they call, never
 the raw application input, and depend on the narrow security ports.
 
+Node composition imports and exposes the repository from `@lacecms/db/node`
+and owns the connection lifecycle. D1 composition imports the portable
+`@lacecms/db` entry for shared SQL and uses its own guarded batch executor.
+These are the two production content repository implementations.
+
 ```mermaid
 flowchart TB
   subgraph entries["Process entries"]
@@ -51,12 +56,14 @@ flowchart TB
   end
   subgraph nodePkg["@lacecms/platform-node"]
     nodeRuntime["createNodeRuntime"]
-    nodeRepo["NodeContentRepository<br/>(better-sqlite3 transactions)"]
     nodeSecurity["NodeSecurityService<br/>NodeFixedWindowRateLimiter"]
     minio["NodeMinioObjectStorage"]
     builder["NodeBuilderSiteBuildTrigger"]
     nodeDispatch["site-build and media-deletion dispatchers"]
     smtp["SMTP or Resend email"]
+  end
+  subgraph nodeDbPkg["@lacecms/db/node"]
+    nodeRepo["NodeContentRepository<br/>(better-sqlite3 transactions)"]
   end
   subgraph cfPkg["@lacecms/platform-cloudflare"]
     cfRuntime["createCloudflareRuntime"]
@@ -83,6 +90,7 @@ flowchart TB
   end
   nodeEntry --> nodeRuntime
   workerEntry --> cfRuntime
+  nodeRuntime --> nodeRepo
   nodeRuntime --> compose
   cfRuntime --> compose
   compose --> useCases
@@ -189,6 +197,13 @@ String-sort continuations add at most one constant indexed anchor lookup,
 independent of page size; anchors are never resolved by per-entry reads or
 full JSON loads, and query counts distinguish first pages from anchored
 continuations.
+
+Collection summaries, media catalog reads, snapshot hydration and publication
+role reads resolve attribution with indexed access to the security-owned
+projection. Explicit editor descriptions use the same profile under the
+existing authorized read. The number of actors on a page adds no statements
+or binds to list and export queries, and publication keeps its existing
+transaction and D1 batch boundaries.
 
 Media tag filtering adds at most five indexed EXISTS lookups per candidate in
 the single list-page query. Tags are read with a bounded correlated projection,

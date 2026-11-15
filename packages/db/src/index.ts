@@ -2,6 +2,8 @@
 // write-plan ← content, media, builds, publication, outbox, sync; content ← sync;
 // content ← media ← delivery ← builds; builds, content, links ← publication;
 // shared ← outbox; builds, links ← reads.
+// builds, content, links, media, outbox, publication, reads, shared, sync,
+// write-plan ← node-repository.
 export * from "./security/oauth.js";
 export * from "./security/api-tokens.js";
 export * from "./security/rows.js";

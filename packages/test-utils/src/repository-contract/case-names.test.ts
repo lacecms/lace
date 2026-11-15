@@ -4,18 +4,23 @@ import { contentRepositoryContractCases } from "./registry.js";
 test("preserves every repository contract case in order", () => {
   expect(contentRepositoryContractCases.map((value) => value.name)).toEqual([
     "coalesces manual build requests until claim and queues later work separately",
+    "retains the claimed target across both enqueue and claim orders",
     "build outcome transitions are lease guarded and reuse one history row",
+    "rolls back a build outcome when the event update fails late",
     "provider acceptance, tracked outcomes and retry sources never overstate publication",
     "tracking checks are leased, provider guarded and record stages without touching other builds",
     "tracked completions store only their outcome's closed reasons",
     "a stray event for a terminal build is finished without dispatch",
     "marks malformed build events invalid without creating history",
     "claims media deletion work exclusively and finalizes or exposes terminal failure",
+    "preserves recovered media and lease when stale or late finalization fails",
     "retires the outbox lease after a completed or failed dispatcher attempt",
     "applies guarded configuration sync atomically, coalesces build work, and rejects stale plans",
     "rolls back a failed synchronized page singleton",
     "renames a populated model through the key cascade without inferring a replacement",
     "allows only one independently prepared sync apply to commit",
+    "rolls back model and singleton writes when sync fails after the public-state bump",
+    "a draft save and media deletion cannot both win",
     "creates and saves a maximum draft atomically",
     "persists bounded draft reads and writes without exposing drafts publicly",
     "keeps the previous publication until a later publish replaces it",
@@ -101,6 +106,7 @@ test("preserves every repository contract case in order", () => {
     "runtime LIKE policies count UTF-8 escapes before SQL while equality keeps 200 units",
     "snapshot deletion and published media lookups search through indexes",
     "stores, filters, counts and deletes media tags atomically without public build effects",
+    "creates media, hash and up to twenty tags atomically",
     "rolls back tag replacement after an injected tag checkpoint failure",
     "enforces the ASCII media tag schema on every SQL runtime",
     "stores content hashes and filters active media by hash for import lookups",
@@ -122,5 +128,6 @@ test("preserves every repository contract case in order", () => {
     "an expired unpublication key with stale input changes nothing and a current one unpublishes anew",
     "purges expired idempotency records in bounded batches",
     "republication keeps only the draft and the new publication and a refused one deletes nothing",
+    "reads current audit names and roles without mutating content",
   ]);
 });

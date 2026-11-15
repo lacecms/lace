@@ -3,6 +3,19 @@ import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-o
 import { timestamp } from "./columns.js";
 import { authUsers } from "./auth.js";
 
+/** Attribution for content reads. Account and permission checks use authUsers. */
+export const contentActorProfiles = sqliteTable(
+  "content_actor_profiles",
+  {
+    actorId: text("actor_id").primaryKey().notNull(),
+    displayName: text("display_name").notNull(),
+    role: text("role", { enum: ["admin", "editor", "viewer"] }).notNull(),
+  },
+  (table) => [
+    check("content_actor_profiles_role_check", sql`${table.role} in ('admin', 'editor', 'viewer')`),
+  ],
+);
+
 export const installationState = sqliteTable(
   "installation_state",
   {

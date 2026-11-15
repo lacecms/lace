@@ -90,7 +90,7 @@ from committed outbox work, and `401 AUTHENTICATION_REQUIRED`.
 | Step | Topic | Size | Sessions | Status |
 | --- | --- | :---: | --- | --- |
 | EX1 | Test foundation (from RF9C–RF9F) | L | EX1A → EX1B → EX1D; EX1C after EX2D | planned |
-| EX2 | Shared write plans | L | EX2A → EX2B → EX2C → EX2D | in progress |
+| EX2 | Shared write plans | L | EX2A → EX2B → EX2C → EX2D | done |
 | EX3 | Typed outbox events | M | EX3A → EX3B | planned |
 | EX4 | Route policies and security use cases | L | EX4A → EX4B → EX4C → EX4D | planned |
 | EX5 | Model kind descriptor | S | EX5A | planned |
@@ -247,11 +247,16 @@ and batch boundaries. Resumable block migrations still precede the final plan.
 
 ### Session EX2D — One test store
 
-The `test-utils` in-memory store is replaced by Node SQLite (in memory) for
-`server`, `mcp` and application tests, so the repository contract suite
-covers every implementation that tests use. Content queries stop joining
-Better Auth's `user` table; open question: whether author display data comes
-from a Lace-owned profile row or from a security port lookup.
+The production `@lacecms/db/node` repository runs on fresh migrated in-memory
+SQLite for `server`, `mcp` and downstream application persistence tests. The
+source-only `@lacecms/test-utils/sqlite` fixture also serves the in-memory Node
+contract target. The shared suite covers both production repositories on
+file-backed SQLite, in-memory SQLite and local D1.
+
+Security owns the indexed Lace `content_actor_profiles` projection and
+maintains it in the same writes as provider accounts. Content reads use it
+for current display names and audit roles within existing query budgets.
+Security state remains authoritative for authorization.
 
 ## Step EX3 — Typed outbox events
 
@@ -392,6 +397,7 @@ are preserved in the linked archives. Dates refer to the final recorded event.
 
 | Date | Session | Change | Status |
 | --- | --- | --- | --- |
+| 2026-11-16 | EX2D | [One test store](../openspec/changes/archive/2026-11-16-ex02d-one-test-store/) | done. Content repositories fell from three to two, with the same contract suite on file-backed SQLite, in-memory SQLite and local D1. Removed 1,671 lines of the JavaScript content store and reduced direct content-to-provider SQL reads from seven to zero. Verified actor attribution and existing D1 statement, bind and batch limits. |
 | 2026-11-15 | EX2C | [Shared configuration synchronization write plan](../openspec/changes/archive/2026-11-15-ex02c-shared-write-plans-configuration-sync/) | done. Node/D1 write SQL counts 48/58 → 39/50 and shared `db` count 111 → 116 using the §3 counting pattern. Repository modules remain 9/11. The Node and D1 sync modules shrink from 400/498 to 214/333 lines. Local D1 applies 34 model creates in one 40-statement batch, with 13 binds at most and 42 queries including revalidation. The migration test confirms whole-unit packing, published-before-draft splitting and one final build request after resume. |
 | 2026-11-15 | EX2B | [Shared media, build and outbox write plans](../openspec/changes/archive/2026-11-15-ex02b-shared-write-plans-media-builds-outbox/) | done: Node/D1 write SQL counts 79/84 → 48/58; shared `db` count 88 → 111 using the same §3 counting pattern. Runtime repository modules remain 9/11; five shared plan modules cover media creation and edits, deletion, generic outbox, build claims and build transitions. Mixed scheduled dispatch of five media deletions, five provider checks and one build stays within 50 D1 queries. |
 | 2026-11-15 | EX2A | [Shared entry write plans](../openspec/changes/archive/2026-11-15-ex02a-shared-write-plans-entries/) | done: Node/D1 write SQL counts 97/99 → 79/84; shared `db` count 88 (the §3 baseline records 60; the same current counting pattern finds 63 at that commit). Runtime repository modules 8/10 → 9/11 with the two executors; entry-command modules 488/659 → 241/262 lines. Five entry commands now share plans, and application compositions require explicit list limits. |

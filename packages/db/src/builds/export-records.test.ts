@@ -24,7 +24,7 @@ function database() {
       schema_version integer, data_json text, anchor text, class_name text, hidden integer, settings_json text,
       created_at integer, updated_at integer);
     create table published_routes (path text primary key, entry_id text, snapshot_id text);
-    create table user (id text primary key, role text);
+    create table content_actor_profiles (actor_id text primary key, role text);
     create table media (id text primary key, storage_key text, filename text, mime_type text, size integer,
       width integer, height integer, alt text, caption text, focal_x real, focal_y real, status text,
       created_by text, created_at integer, updated_at integer);

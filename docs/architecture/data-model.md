@@ -79,6 +79,14 @@ published ([ADR 0008](../adr/0008-entry-lifecycle-commands.md)).
 Holding both snapshots duplicates text intentionally; it fits the D1 free-plan
 limit because binaries are excluded, and pages are split into block rows.
 
+Content and media retain their original actor IDs without a foreign key to an
+account or profile. The security-owned `content_actor_profiles` table is keyed
+by actor ID and contains only the current display name and validated Lace role
+(§14). Reads use it for attribution. Missing or blank names resolve to
+`System` for `system:` IDs and `Unknown user` otherwise; missing roles resolve
+to `viewer`. Profile changes leave snapshots, public versions and build work
+unchanged.
+
 ### 9.4 Content blocks
 
 `content_blocks` holds a snapshot's blocks, keyed by `(snapshot_id, block_key)`
@@ -394,6 +402,11 @@ erDiagram
     text user_id FK
   }
   %% auth.ts
+  content_actor_profiles {
+    text actor_id PK
+    text display_name
+    text role
+  }
   user {
     text id PK
   }

@@ -18,6 +18,11 @@
       "@lacecms/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./node": {
+      "@lacecms/source": "./src/node.ts",
+      "types": "./dist/node.d.ts",
+      "import": "./dist/node.js"
     }
   },
   "publishConfig": {
@@ -37,10 +42,12 @@
     "@lacecms/application": "workspace:*",
     "@lacecms/content": "workspace:*",
     "@lacecms/domain": "workspace:*",
+    "@types/better-sqlite3": "catalog:",
     "drizzle-orm": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "better-sqlite3": "catalog:",
     "oxlint": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

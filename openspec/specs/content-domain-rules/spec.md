@@ -353,9 +353,9 @@ never accepted.
 
 #### Scenario: A changed limit changes every consumer
 - **WHEN** a maintainer changes the declared media usage limit
-- **THEN** the application read bound, both runtime repositories, the
-  in-memory test store and the media detail DTO schema use the new value
-  without another edit
+- **THEN** the application read bound, both runtime repositories
+  including the Node SQLite test fixture, and the media detail DTO schema
+  use the new value without another edit
 
 #### Scenario: One field key grammar everywhere
 - **WHEN** the field key `2col`, `col-2` or `col_2` is used in a configured

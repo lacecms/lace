@@ -59,7 +59,19 @@
     "delivery": ["content", "media", "shared"],
     "builds": ["content", "delivery", "media", "shared", "write-plan"],
     "outbox": ["shared", "write-plan"],
-    "reads": ["builds", "content", "delivery", "links", "media", "shared"]
+    "reads": ["builds", "content", "delivery", "links", "media", "shared"],
+    "node-repository": [
+      "builds",
+      "content",
+      "links",
+      "media",
+      "outbox",
+      "publication",
+      "reads",
+      "shared",
+      "sync",
+      "write-plan"
+    ]
   },
   "packages/server": {
     "shared": [],
@@ -77,7 +89,6 @@
     "errors": [],
     "visibility": [],
     "filters": [],
-    "store": ["fixtures", "shared"],
     "repository-contract": ["delivery", "fixtures", "visibility"],
     "security-contract": ["repository-contract"]
   },
@@ -105,8 +116,7 @@
     "security": [],
     "media": [],
     "builds": [],
-    "repository": ["database"],
-    "runtime": ["builds", "database", "media", "repository", "security"]
+    "runtime": ["builds", "database", "media", "security"]
   },
   "packages/platform-cloudflare": {
     "d1": [],

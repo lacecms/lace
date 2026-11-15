@@ -6,7 +6,6 @@ test("packaged entry point keeps its public exports", async () => {
     "DeterministicIdGenerator",
     "DeterministicTokenHasher",
     "InMemoryCache",
-    "InMemoryContentStore",
     "InMemoryDispatcherLeasePort",
     "InMemoryObjectStorage",
     "InMemorySiteBuildTrigger",
@@ -49,4 +48,5 @@ test("packaged entry point keeps its public exports", async () => {
     "filterParityOptions",
     "filterParityUnlistedField",
   ]);
+  expect(() => import.meta.resolve("@lacecms/test-utils/sqlite")).toThrow();
 });

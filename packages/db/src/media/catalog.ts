@@ -68,7 +68,7 @@ export const MEDIA_TAGS_JSON_SQL = `(select coalesce(json_group_array(tag), '[]'
 /** Admin-only media columns: like tags, the content hash never reaches public projections. */
 const ADMIN_MEDIA_COLUMNS_SQL = `${MEDIA_COLUMNS_SQL}, m.sha256, ${MEDIA_TAGS_JSON_SQL} as tags_json`;
 
-export const MEDIA_CATALOG_SQL = `select ${ADMIN_MEDIA_COLUMNS_SQL}, u.name as created_by_name,
+export const MEDIA_CATALOG_SQL = `select ${ADMIN_MEDIA_COLUMNS_SQL}, profile.display_name as created_by_name,
   ${MEDIA_USAGE_COUNT_SQL} as usage_count`;
 
 export const MEDIA_SORT_SQL: Readonly<Record<string, SortSql>> = {

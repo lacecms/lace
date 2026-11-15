@@ -86,7 +86,7 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
     const entry = await this.reader.loadEntry(input.entryId);
     if (entry === null) failure("Content entry does not exist.");
     const role = await this.first<{ readonly role: string }>(
-      "select role from user where id = ?",
+      "select role from content_actor_profiles where actor_id = ?",
       input.publishedBy.id,
     );
     const committed = publicationResultEntry(entry, input, role?.role);

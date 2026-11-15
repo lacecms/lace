@@ -19,6 +19,9 @@
       "@lacecms/source": "./src/filter-parity.ts",
       "types": "./dist/filter-parity.d.ts",
       "import": "./dist/filter-parity.js"
+    },
+    "./sqlite": {
+      "@lacecms/source": "./src/test-support/sqlite.ts"
     }
   },
   "scripts": {
@@ -38,7 +41,11 @@
     "valibot": "catalog:"
   },
   "devDependencies": {
+    "@lacecms/db": "workspace:*",
+    "@types/better-sqlite3": "catalog:",
     "@types/node": "catalog:",
+    "better-sqlite3": "catalog:",
+    "drizzle-orm": "catalog:",
     "oxlint": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

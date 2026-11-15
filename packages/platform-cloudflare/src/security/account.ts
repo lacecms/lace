@@ -267,7 +267,8 @@ export class D1AccountSecurity implements UserProfileReader, AccountSecurityPort
       throw error;
     }
     const created = results[3]?.results[0];
-    if (results[0]?.meta.changes !== 1 || created === undefined)
+    // D1 includes profile-trigger writes in the user insert's change count.
+    if (results[2]?.meta.changes !== 1 || created === undefined)
       return Object.freeze({ status: "invalid" });
     return Object.freeze({ status: "accepted", user: managedUser(created) });
   }
@@ -452,12 +453,12 @@ export class D1AccountSecurity implements UserProfileReader, AccountSecurityPort
   }): Promise<boolean> {
     const result = await bindStatement(
       this.database,
-      "update user set name = ?, updated_at = ? where id = ?",
+      "update user set name = ?, updated_at = ? where id = ? returning id",
       input.displayName,
       Number(input.now),
       input.userId,
-    ).run();
-    return result.meta.changes === 1;
+    ).first();
+    return result !== null;
   }
 
   public async changePassword(input: {
@@ -591,7 +592,7 @@ export class D1AccountSecurity implements UserProfileReader, AccountSecurityPort
     const [changed, , , , row] = await this.database.batch([
       bindStatement(
         this.database,
-        "update user set role = coalesce(?1, role), disabled = coalesce(?2, disabled), updated_at = ?3 where id = ?4 and not (role = 'admin' and disabled = 0 and (coalesce(?2, 0) = 1 or coalesce(?1, 'admin') <> 'admin') and (select count(*) from user where role = 'admin' and disabled = 0) <= 1)",
+        "update user set role = coalesce(?1, role), disabled = coalesce(?2, disabled), updated_at = ?3 where id = ?4 and not (role = 'admin' and disabled = 0 and (coalesce(?2, 0) = 1 or coalesce(?1, 'admin') <> 'admin') and (select count(*) from user where role = 'admin' and disabled = 0) <= 1) returning id",
         nextRole === undefined ? null : securityRole(nextRole),
         disabled === undefined ? null : Number(disabled),
         Number(this.now()),
@@ -622,7 +623,7 @@ export class D1AccountSecurity implements UserProfileReader, AccountSecurityPort
     ]);
     const value = row?.results[0];
     if (value === undefined) return null;
-    if (changed?.meta.changes !== 1)
+    if (changed?.results.length !== 1)
       throw new DomainError("LAST_ADMIN_PROTECTED", "Last administrator cannot be changed.");
     return managedUser(value);
   }

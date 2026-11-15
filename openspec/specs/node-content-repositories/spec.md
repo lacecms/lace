@@ -242,9 +242,9 @@ comparing the current published snapshot's revision with the draft revision,
 SHALL report the published snapshot's creation time as `publishedAt`, and SHALL
 read `listValues` only from the requested list fields in the draft's stored
 field values. It SHALL omit absent keys and non-scalar values. It SHALL resolve
-the draft's last editor display name from the stored user name in the same
-read, falling back to `System` for `system:` actors and `Unknown user` for
-missing users. It SHALL compute per-status totals for the model and search term
+the draft's current last editor display name from the Lace content actor
+profile in the same read, falling back to `System` for `system:` actors and
+`Unknown user` for missing users or blank names. It SHALL compute per-status totals for the model and search term
 in one aggregate read, independent of the status filter and cursor. The search
 SHALL bind the term as a query parameter and match it as a literal substring,
 not as a pattern.
@@ -274,8 +274,9 @@ requested direction and then by media ID in the same direction. A media cursor
 SHALL be base64url-encoded versioned JSON whose kind binds the search term,
 type, and sort. The adapter SHALL reject a malformed, unsupported, wrong-kind,
 or wrong-typed media cursor before using any of its values as a query
-parameter. The same read SHALL resolve each uploader's display name from the
-stored user name, with the `System` and `Unknown user` fallbacks, and SHALL
+parameter. The same read SHALL resolve each uploader's current display name
+from the Lace content actor profile with the `System` and `Unknown user`
+fallbacks, and SHALL
 count each item's distinct using entries through the reference projection
 joined to entry snapshots. A single-item usage read SHALL return the bounded
 entry list with draft title, draft slug, derived entry status, and each

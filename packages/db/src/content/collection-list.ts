@@ -252,7 +252,7 @@ export async function collectionListPlan(
       : `(select json_group_object(value, json(d.fields_json -> ('$.' || value))) from json_each(${bind.add(JSON.stringify(input.listFields))}))`;
   const fields = `e.id, e.model_key, e.published_snapshot_id, e.updated_at, d.id as draft_snapshot_id,
     d.revision as draft_revision, d.title, d.slug, ${listJson} as fields_json, d.updated_by,
-    u.name as updated_by_name, p.created_at as published_at, ${ENTRY_STATUS_SQL} as status`;
+    profile.display_name as updated_by_name, p.created_at as published_at, ${ENTRY_STATUS_SQL} as status`;
   let anchor = "",
     anchorRank = "",
     anchorValue = "",
@@ -282,7 +282,7 @@ export async function collectionListPlan(
   }
   const stringSort = field !== undefined && sortFamily(field) === "string";
   const select = `select ${fields}, ${stringSort && !anchored ? "null" : value} as sort_value, ${rank} as sort_missing
-    from ${ENTRY_SOURCE_SQL} left join user u on u.id=d.updated_by where ${where.join(" and ")}
+    from ${ENTRY_SOURCE_SQL} left join content_actor_profiles profile on profile.actor_id=d.updated_by where ${where.join(" and ")}
     order by ${custom ? `${rank} asc, ` : ""}${order} ${direction}, e.id ${direction} limit ${bind.add(limit + 1)}`;
   const columnNames = [
     "id",

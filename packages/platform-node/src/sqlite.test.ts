@@ -158,6 +158,7 @@ test("migrates an empty file, reopens with SQLite invariants, and enforces const
           "content_models",
           "content_entries",
           "content_snapshots",
+          "content_actor_profiles",
           "outbox_events",
           "installation_state",
           "mutation_guards",

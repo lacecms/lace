@@ -111,7 +111,8 @@ test("a version change observed by the second group fails the page", async () =>
 test("identifier lists are chunked by the runtime bind chunk", async () => {
   const fake = fakeSql({
     bindChunk: 2,
-    rows: (_sql, params) => params.map((id) => ({ id, name: `Name ${String(id)}` })),
+    rows: (_sql, params) =>
+      params.map((id) => ({ actor_id: id, display_name: `Name ${String(id)}` })),
   });
   const reader = new SqlContentReader(fake.sql, noModels);
   const actors = await reader.describeActors(["a", "b", "c", "a", "d", "e"].map(actorId));

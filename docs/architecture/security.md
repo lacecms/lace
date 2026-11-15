@@ -11,6 +11,13 @@ over the same tables. Domain and application code receive an `Actor` value
 from the auth adapter and never import Better Auth session types. The security
 tables appear in the [data model](data-model.md) table diagram (§9.10).
 
+Security persistence owns `content_actor_profiles`. A forward migration
+backfills existing accounts and installs triggers that maintain the projection
+atomically when an account is created, its ID, name or role changes, or it is
+deleted. Disabling an account retains its attribution. Authorization and actor
+resolution continue to use current security state and permissions. The
+projection supplies only display names and audit roles to content and media.
+
 ### Roles and permissions
 
 Roles are global to the installation. The role is a validated field on the

@@ -1,5 +1,12 @@
 import { expect, test } from "vitest";
 
+test("the compiled Node subpath exposes the native repository separately", async () => {
+  const native = await import("@lacecms/db/node");
+  expect(Object.keys(native)).toEqual(["NodeContentRepository"]);
+  expect(native.NodeContentRepository).toBeTypeOf("function");
+  expect(await import("@lacecms/db")).not.toHaveProperty("NodeContentRepository");
+});
+
 test("packaged entry point keeps its public exports", async () => {
   expect(Object.keys(await import("../dist/index.js")).sort()).toEqual([
     "ACTIVE_INVITATION_SQL",
@@ -111,6 +118,7 @@ test("packaged entry point keeps its public exports", async () => {
     "configurationSyncSnapshotRewriteStatements",
     "configurationSyncWritePlan",
     "configurationSyncWriteStatements",
+    "contentActorProfiles",
     "contentBlocks",
     "contentEntries",
     "contentEntryLinkReferences",

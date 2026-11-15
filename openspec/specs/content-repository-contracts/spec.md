@@ -15,7 +15,10 @@ synchronization, media catalog and usage, and cursor ordering. A runtime
 adapter SHALL participate only by supplying a factory for a freshly migrated
 database, its repository, a second independent repository over the same
 database, and parameterized SQL seeding/inspection; the cases themselves SHALL
-be identical for every runtime.
+be identical for every runtime. Every full content repository implementation
+used by persistence-backed tests SHALL run the shared suite. The in-memory
+SQLite variant SHALL exercise the same repository implementation and
+migration chain used by the REST, MCP and application persistence fixtures.
 
 #### Scenario: SQLite modes conform
 - **WHEN** contracts run against migrated file-backed and in-memory SQLite
@@ -105,31 +108,9 @@ over-long text.
 - **THEN** every case passes without a runtime-specific variant or skipped
   assertion
 
-### Requirement: Public repository reads include referenced media
-The public content read port SHALL return, with each public entry and path,
-the active media items referenced by that entry's current published snapshot,
-read from the content reference projection, for page, path and collection reads
-and for the build export. The Node and D1 repositories and the in-memory
-repository fake SHALL satisfy the same repository contract fixtures: media
-referenced only by a draft SHALL be absent, media of every returned entry SHALL
-be present with its descriptive metadata and dimensions, and no public read SHALL
-expose the entry's independently mutable draft snapshot. Reading media SHALL use
-bounded, chunked statements and SHALL NOT read media per entry.
-
-#### Scenario: A published entry references media
-- **WHEN** the repository contract publishes an entry referencing two media
-  items, then saves a draft referencing a third
-- **THEN** public reads and the build export return the entry with exactly the
-  two published media items on both runtimes and in the fake
-
-#### Scenario: The fake hides the draft
-- **WHEN** an entry is published and its draft changes
-- **THEN** the in-memory fake's public reads expose only published values, like
-  the Node and D1 repositories
-
 ### Requirement: Repository contract fixtures cover global models
 The shared repository contract SHALL configure a global model and SHALL verify
-on Node SQLite and D1 that: synchronization creates its singleton draft with
+on both SQLite modes and local D1 that: synchronization creates its singleton draft with
 the page-singleton rules; a second entry for it is refused with
 `CONTENT_MODEL_CARDINALITY_CONFLICT`; publishing it creates a published
 snapshot and no published route, advances the published-state version and
@@ -142,9 +123,8 @@ active media its published snapshot references, and nothing for an unpublished
 global, an unknown key or a page or collection key. Public path reads,
 collection lists and the export `entries` SHALL never contain a global, the
 export SHALL list published globals ordered by model key, and the public media
-read SHALL serve media referenced only by a published global. The in-memory
-repository fake SHALL satisfy the same global rules, and its public media read
-SHALL accept media referenced by any current published snapshot.
+read SHALL apply the same delivery rules to every model kind and serve media
+referenced only by a published global.
 
 #### Scenario: A global is published and read
 - **WHEN** the contract synchronizes the `settings` global, saves a draft that
@@ -166,11 +146,11 @@ SHALL accept media referenced by any current published snapshot.
 
 #### Scenario: Media used only by a global is public
 - **WHEN** a media item is referenced only by a published global
-- **THEN** the public media read returns it on both runtimes and in the fake
+- **THEN** the public media read returns it on every contract target
 
 ### Requirement: Repository contract fixtures cover the SEO group
 The shared repository contract suite SHALL include an SEO-enabled model and
-SHALL prove the following on the in-memory fake, Node SQLite and D1:
+SHALL prove the following on both SQLite modes and local D1:
 
 - create, save, publish, revert and duplicate persist and copy the SEO group
   exactly;
@@ -214,8 +194,7 @@ SHALL prove the following on the in-memory fake, Node SQLite and D1:
 
 ### Requirement: Repository contract fixtures cover the block envelope
 The shared repository contract suite SHALL include a block type that declares
-settings and SHALL prove the following on the in-memory fake, Node SQLite and
-D1:
+settings and SHALL prove the following on both SQLite modes and local D1:
 
 - create, save, publish, revert and duplicate persist and copy each block's
   anchor, class name, hidden flag and settings exactly;
@@ -250,7 +229,7 @@ D1:
 
 ### Requirement: Composite lifecycle and media behavior have cross-runtime parity
 Shared contracts SHALL prove composite model fields and block data behavior on
-the in-memory fake, Node SQLite and D1 for save/load, publish, revert, duplicate,
+both SQLite modes and local D1 for save/load, publish, revert, duplicate,
 and versioned block migration. Reorder/removal SHALL atomically replace media
 locations. Usage counts, deletion guards, metadata-triggered builds, published
 media dictionaries and hidden-block filtering SHALL agree with scalar rules.
@@ -280,8 +259,8 @@ D1 SHALL retain single guarded batches, ≤100 binds per statement and the exist
 - **THEN** it commits atomically within the existing query and bind budgets and reloads with the exact nested data
 
 ### Requirement: Repository contract fixtures cover the paged build export
-Shared repository contract fixtures SHALL run against the Node and D1
-repositories and the in-memory double, and SHALL verify the following.
+Shared repository contract fixtures SHALL run against both SQLite modes and
+local D1 and SHALL verify the following.
 
 **Paging:**
 
@@ -365,7 +344,7 @@ security events.
 
 ### Requirement: Repository contract fixtures cover conditional publication
 The shared repository contract suite SHALL prove, with identical cases on the
-in-memory fake, Node SQLite and local D1, that a publication supplied with a
+file-backed SQLite, in-memory SQLite and local D1, that a publication supplied with a
 published projection writes exactly the projected fields, block data and
 media and internal-link references while copying the draft's title, slug,
 SEO, block envelopes, settings, keys and positions, and leaves the draft
@@ -598,3 +577,56 @@ Internal failure reasons SHALL NOT expose SQLite or D1 error messages.
   permission attempts to publish, unpublish or delete a published entry
 - **THEN** the application rejects the command before persistence, and the
   entry, public state and outbox remain unchanged
+
+### Requirement: Content repositories resolve audit actors through Lace profiles
+
+Content entry lists, explicit editor descriptions and media list and detail
+reads SHALL resolve the current display name by the stored actor ID through
+the Lace-owned content actor projection. Snapshot hydration and publication
+results SHALL resolve the actor's current role through the same projection.
+Content repositories SHALL preserve the stored actor IDs and the existing
+fallbacks. Missing or blank names SHALL resolve to `System` for a `system:`
+ID or `Unknown user` otherwise. A missing role SHALL resolve to `viewer`.
+Both SQLite modes and local D1 SHALL exercise the same cases. Actor resolution
+SHALL preserve existing read and mutation budgets and the visibility and
+authorization boundaries of each operation.
+
+#### Scenario: A name or role changes after content was saved
+- **WHEN** a security account changes its display name or role after uploading
+  media or creating a draft or publication
+- **THEN** the next authorized editor and media reads show the new display name
+  and the next hydrated snapshot carries the current role, with the stored
+  actor IDs, content revisions, public-state version and build queue intact
+
+#### Scenario: Attribution survives account deletion or system writes
+- **WHEN** reads encounter an actor with a deleted account, a blank display
+  name or a system actor with no profile
+- **THEN** the reads return the original actor IDs with the corresponding
+  fallback values and the entries and media remain available
+
+#### Scenario: A page contains many different actors
+- **WHEN** a maximum-size collection or media page includes different actors
+  on its rows, or the build export hydrates a full page with globals
+- **THEN** the reads retain their existing statement and bind bounds
+  independent of actor count and require no per-actor queries
+
+### Requirement: Public repository reads preserve published snapshots and media
+The public content read port SHALL return, with each public entry and path,
+the active media items referenced by that entry's current published snapshot,
+read from the content reference projection, for page, path and collection reads
+and for the build export. Both SQLite modes and local D1 SHALL satisfy the
+same repository contract fixtures: media
+referenced only by a draft SHALL be absent, media of every returned entry SHALL
+be present with its descriptive metadata and dimensions, and no public read SHALL
+expose the entry's independently mutable draft snapshot. Reading media SHALL use
+bounded, chunked statements and SHALL NOT read media per entry.
+
+#### Scenario: A published entry references media
+- **WHEN** the repository contract publishes an entry referencing two media
+  items, then saves a draft referencing a third
+- **THEN** public reads and the build export return the entry with exactly the
+  two published media items on every contract target
+
+#### Scenario: The public snapshot remains detached from later draft edits
+- **WHEN** an entry is published and its draft changes
+- **THEN** every contract target exposes only the published values

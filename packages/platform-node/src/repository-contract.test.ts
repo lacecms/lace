@@ -5,12 +5,10 @@ import { NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { contentRepositoryContractCases } from "@lacecms/test-utils";
+import { openSqliteFixture } from "@lacecms/test-utils/sqlite";
 import { NodeContentRepository, migrateNodeDatabase, openNodeDatabase } from "./index.js";
 
-const migrationsFolder = fileURLToPath(new URL("../../db/drizzle", import.meta.url));
 const cleanups = [];
 
 afterEach(async () => {
@@ -102,20 +100,19 @@ const runtimes = {
     listQueryLimits: NODE_LIST_QUERY_LIMITS,
     recordEvidence: (value) => console.log("Collection query SQLite memory", JSON.stringify(value)),
     async open(options) {
-      const database = openNodeDatabase(":memory:");
-      migrate(database.drizzle, { migrationsFolder });
-      cleanups.push(async () => database.connection.close());
-      trackGuards(database.connection);
-      const observed = observedConnection(database.connection);
+      const { connection, close } = openSqliteFixture(options.resolveModel, options);
+      cleanups.push(close);
+      trackGuards(connection);
+      const observed = observedConnection(connection);
       return {
         reads: observed.reads,
         reopen: (overrides = {}) =>
-          new NodeContentRepository(database.connection, options.resolveModel, {
+          new NodeContentRepository(connection, options.resolveModel, {
             ...options,
             ...overrides,
           }),
         repository: new NodeContentRepository(observed.connection, options.resolveModel, options),
-        sql: sqlOver(database.connection),
+        sql: sqlOver(connection),
       };
     },
   },
