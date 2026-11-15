@@ -89,7 +89,7 @@ from committed outbox work, and `401 AUTHENTICATION_REQUIRED`.
 
 | Step | Topic | Size | Sessions | Status |
 | --- | --- | :---: | --- | --- |
-| EX1 | Test foundation (from RF9C–RF9F) | L | EX1A → EX1B → EX1C; EX1D independent | planned |
+| EX1 | Test foundation (from RF9C–RF9F) | L | EX1A → EX1B → EX1D; EX1C after EX2D | planned |
 | EX2 | Shared write plans | L | EX2A → EX2B → EX2C → EX2D | planned |
 | EX3 | Typed outbox events | M | EX3A → EX3B | planned |
 | EX4 | Route policies and security use cases | L | EX4A → EX4B → EX4C → EX4D | planned |
@@ -121,8 +121,9 @@ Dependencies:
 | EX7A | RC5 publication | EX1–EX5 when validation can use a separate checkout |
 
 **Order rationale:** EX1A first, because `worker.test.ts` and the
-`platform-node` tests that EX2 rewrites must already be split. EX2 precedes
-EX3 because typed events are enqueued by write plans; doing EX3 first would
+`platform-node` tests that EX2 rewrites must already be split. The selected
+order after EX1B is EX1D → EX2A–EX2D → EX1C. EX2 precedes EX3 because typed
+events are enqueued by write plans; doing EX3 first would
 write the enqueue path twice. EX4 touches the HTTP layer only and runs beside
 EX2. EX1C types platform and `db` tests after EX2 has moved them, as RF9E
 waited for RF5. EX5 follows EX2C because configuration synchronization is the
@@ -202,11 +203,12 @@ them.
 ### Session EX1C — Type `db` and platform tests (was RF9E)
 
 After EX2D: `db` (18), `platform-node` (12) and `platform-cloudflare` (12).
+Remove the typecheck baseline file when its last entries are retired.
 
 ### Session EX1D — Type CLI, generator and app tests (was RF9F)
 
-`cli` (21), `create-lace` (2), `apps/api` (4) and `apps/builder` (2). The
-typecheck baseline file is deleted when it is empty.
+`cli` (21), `create-lace` (2), `apps/api` (4) and `apps/builder` (2). Retire
+those entries before EX2 and keep the `db` and platform entries for EX1C.
 
 ## Step EX2 — Shared write plans
 
