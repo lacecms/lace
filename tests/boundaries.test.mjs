@@ -356,7 +356,7 @@ test.each([1_001, 1_002])(
 test.each([
   { lines: 1_000, missing: false, message: "has 1000 lines (limit 1000)" },
   { lines: 999, missing: false, message: "has 999 lines (limit 1000)" },
-  { lines: 1_001, missing: true, message: "is missing from production source" },
+  { lines: 1_001, missing: true, message: "is missing from covered source" },
 ])("rejects a stale source size baseline: $message", ({ lines, missing, message }) => {
   const result = checkSourceSize({ lines, missing, baseline: 1_002 });
   expect(result.status).not.toBe(0);
@@ -366,14 +366,58 @@ test.each([
   expect(result.stderr).toContain(message);
 });
 
-test.each(["large.test.ts", "test-support/large.ts"])(
-  "excludes oversized %s from source size checks",
+test.each([
+  "large.test.ts",
+  "large.test.tsx",
+  "large.type-test.ts",
+  "large.type-test.tsx",
+  "large.packaged.test.mjs",
+  "test-support/large.test.ts",
+])("checks test size for %s", (file) => {
+  expect(checkSourceSize({ file, lines: 1_000 }).status).toBe(0);
+  const result = checkSourceSize({ file });
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain(`${file} has 1001 lines; limit is 1000`);
+  expect(checkSourceSize({ file, lines: 1_002, baseline: 1_001 }).stderr).toContain(
+    "recorded 1001",
+  );
+  expect(checkSourceSize({ file, lines: 1_000, baseline: 1_001 }).stderr).toContain(
+    "stale source size baseline entry",
+  );
+});
+
+test.each(["large.test.js", "large.test.cjs", "large.test.mjs"])(
+  "checks JavaScript test size before allowlist validation for %s",
   (file) => {
     const result = checkSourceSize({ file });
-    expect(result.status).toBe(0);
-    expect(result.stderr).toBe("");
+    expect(result.stderr).toContain(`${file} has 1001 lines; limit is 1000`);
   },
 );
+
+test("excludes tests outside workspace source roots", () => {
+  const root = mkdtempSync(join(tmpdir(), "lace-size-outside-"));
+  try {
+    mkdirSync(join(root, "packages/content/src"), { recursive: true });
+    mkdirSync(join(root, "tests"), { recursive: true });
+    writeFileSync(
+      join(root, "packages/content/package.json"),
+      JSON.stringify({ name: "@lacecms/content" }),
+    );
+    writeFileSync(join(root, "tests/large.test.mjs"), "// line\n".repeat(1_001));
+    const result = spawnSync(process.execPath, [checker, root], { encoding: "utf8" });
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("excludes oversized non-test helpers", () => {
+  expect(checkSourceSize({ file: "test-support/large.ts" }).status).toBe(0);
+  expect(checkSourceSize({ file: "test-support/large.ts", baseline: 1_001 }).stderr).toContain(
+    "stale source size baseline entry",
+  );
+});
 
 test("scans a regex containing a hash before a forbidden import without hanging", () => {
   const root = mkdtempSync(join(tmpdir(), "lace-regex-boundary-"));
@@ -425,6 +469,19 @@ function checkScratch(files, baselines = {}) {
     rmSync(root, { recursive: true, force: true });
   }
 }
+
+test("keeps existing import checks for type tests while excluding ordinary tests", () => {
+  const typeTest = checkScratch({
+    "packages/content/src/example.type-test.ts": 'import "node:fs";\n',
+  });
+  expect(typeTest.stderr).toContain(
+    "Node builtin import in portable package @lacecms/content: node:fs",
+  );
+  const ordinaryTest = checkScratch({
+    "packages/content/src/example.test.ts": 'import "node:fs";\n',
+  });
+  expect(ordinaryTest.status).toBe(0);
+});
 
 const nocheck = "// @ts-nocheck\n// TODO(rf2): Legacy fixture.\nexport {};\n";
 

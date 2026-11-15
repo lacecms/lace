@@ -134,7 +134,7 @@ layer/slice structure with the same size limit and no-cycle rule
 | `scripts/source-layout.json` | Lists packages that adopted the layout with their directory directions; rejects imports against them, subdirectory `index` modules, root modules that are neither manifest entries nor listed process entries, and entry headers naming other directories. |
 | `scripts/source-root-entries.json` | Modules that Node, a container command or a Compose service starts directly stay at an application's `src/` root, each listed with a reason, so operator command paths survive a layout change. |
 | `scripts/source-layout-exemptions.json` | A single-concern package stays flat, listed with its reason, and may not gain a directory other than `test-support/` without declaring a layout. |
-| `scripts/oversized-source-baseline.json` | Enforces the 1,000-line ceiling: listed legacy files may shrink but not grow; deleted or within-limit files must leave it. |
+| `scripts/oversized-source-baseline.json` | Enforces the 1,000-physical-line ceiling for production source and test files under workspace members' `src/`, including type tests and JavaScript tests: listed legacy files may shrink but not grow; absent, excluded or within-limit files must leave it. |
 | `scripts/source-cycle-baseline.json` | Rejects module cycles in every member's production graph except frozen legacy strongly connected components. |
 | `scripts/test-typecheck-baseline.json` | Test files may disable type checking only while listed; it only shrinks, and test-support modules never may. |
 | `scripts/javascript-source-allowlist.json` | A non-test `.mjs` or `.js` module under `src/`, or a JavaScript test other than a `*.packaged.test.mjs` packaged-output test, needs a reasoned entry. |
@@ -205,6 +205,8 @@ may consume built output
   four copied component subpaths). Process, packed-consumer, Worker-bundle,
   bundled-asset and Astro fixture-build checks run only under `test:packaged`;
   `apps/site test` succeeds with no source test files.
+
+The size guard covers workspace `src/` tests, including tests under `test-support/`, but excludes non-test helpers there and tests outside workspace source roots. The standalone OAuth/MCP compatibility fixture remains outside this guard and keeps its existing compatibility commands.
 
 ### Test levels
 

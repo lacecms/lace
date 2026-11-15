@@ -185,10 +185,12 @@ Carried over from the refactoring roadmap, not a session:
 
 ### Session EX1A — Test size ceiling (was RF9C)
 
-The boundary checker applies a 1,000-line ceiling with a shrinking baseline
-to test files. The eight package tests in §3 split beside their modules.
-Open question: whether `scripts/fixtures/oauth-mcp/compat.test.mjs` falls
-under the same ceiling or is listed as a fixture exemption.
+The boundary checker applies the shared 1,000-physical-line shrinking baseline
+to workspace `src/` production sources and tests, including type and JavaScript
+tests. Non-test `src/test-support/` helpers and tests outside workspace source
+roots are excluded. The eight package tests in §3 split beside their modules.
+The standalone `scripts/fixtures/oauth-mcp/compat.test.mjs` stays outside the
+guard and retains its existing compatibility commands.
 
 ### Session EX1B — Type core package tests (was RF9D)
 
@@ -387,5 +389,6 @@ are preserved in the linked archives. Dates refer to the final recorded event.
 
 | Date | Session | Change | Status |
 | --- | --- | --- | --- |
+| 2026-11-15 | EX1A | [Test size ceiling](../openspec/changes/archive/2026-11-15-ex01a-test-size-ceiling/) | done: workspace test files above 1,000 lines fell from 8 to 0; standalone OAuth/MCP fixture remains outside the guard |
 | 2026-11-15 | EX6A | [Preserve trusted client identity](../openspec/changes/archive/2026-11-15-ex06a-preserve-trusted-client-identity/) | done: request identity survives body replacement on Node and Worker |
 | 2026-11-15 | EX6B | [Restrict production Compose ingress](../openspec/changes/archive/2026-11-15-ex06b-restrict-production-compose-ingress/) | done: production reaches the private API through loopback Nginx; development retains a separate loopback API port |

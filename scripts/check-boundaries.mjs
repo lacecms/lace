@@ -104,12 +104,17 @@ const externalImportAllowlist = new Map([
 const adapterFrameworks = new Map([["@lacecms/astro", "astro"]]);
 const reExportPattern =
   /\bexport\s+(?:type\s+)?(?:\*(?:\s+as\s+\w+)?|\{[^}]*\})\s*from\s*["']@lacecms\//u;
-function collectFiles(directory) {
+function collectFiles(directory, includeJavaScriptTests = false) {
   const files = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const entryPath = join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...collectFiles(entryPath));
-    if (entry.isFile() && sourceExtensions.has(extname(entry.name))) files.push(entryPath);
+    if (entry.isDirectory()) files.push(...collectFiles(entryPath, includeJavaScriptTests));
+    if (
+      entry.isFile() &&
+      (sourceExtensions.has(extname(entry.name)) ||
+        (includeJavaScriptTests && /\.test\.(?:js|cjs|mjs)$/u.test(entry.name)))
+    )
+      files.push(entryPath);
   }
   return files;
 }
@@ -889,10 +894,13 @@ export function checkBoundaries(rootDirectory = defaultRoot) {
   const graph = new Map(members.map((member) => [member.name, new Set()]));
 
   for (const member of members) {
-    for (const filePath of collectFiles(member.sourceDirectory)) {
+    for (const filePath of collectFiles(member.sourceDirectory, true)) {
       const sourcePath = toPosix(relative(member.sourceDirectory, filePath));
-      // Test setup is not part of the runtime dependency graph.
-      if (testFilePattern.test(sourcePath) || sourcePath.startsWith("test-support/")) continue;
+      const isTest =
+        testFilePattern.test(sourcePath) ||
+        typeTestFilePattern.test(sourcePath) ||
+        /\.test\.(?:js|cjs|mjs)$/u.test(sourcePath);
+      if (!isTest && sourcePath.startsWith("test-support/")) continue;
       const fileName = toPosix(relative(rootDirectory, filePath));
       const text = readFileSync(filePath, "utf8");
       const lineCount = text === "" ? 0 : text.split("\n").length - (text.endsWith("\n") ? 1 : 0);
@@ -908,6 +916,14 @@ export function checkBoundaries(rootDirectory = defaultRoot) {
           );
         }
       }
+      // Preserve the pre-existing import scan: ordinary and JavaScript tests and
+      // test-support stay outside it; type tests retain their existing checks.
+      if (
+        testFilePattern.test(sourcePath) ||
+        sourcePath.startsWith("test-support/") ||
+        /\.test\.(?:js|cjs|mjs)$/u.test(sourcePath)
+      )
+        continue;
       for (const specifier of importsIn(filePath)) {
         if (specifier.startsWith(".")) {
           if (isOutside(member.sourceDirectory, filePath, specifier)) {
@@ -959,7 +975,7 @@ export function checkBoundaries(rootDirectory = defaultRoot) {
     const lineCount = sourceLineCounts.get(fileName);
     if (lineCount === undefined || lineCount <= 1_000) {
       throw new Error(
-        `stale source size baseline entry: ${fileName} ${lineCount === undefined ? "is missing from production source" : `has ${lineCount} lines (limit 1000)`}; remove it from scripts/oversized-source-baseline.json`,
+        `stale source size baseline entry: ${fileName} ${lineCount === undefined ? "is missing from covered source" : `has ${lineCount} lines (limit 1000)`}; remove it from scripts/oversized-source-baseline.json`,
       );
     }
   }

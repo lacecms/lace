@@ -329,3 +329,137 @@ test("saving a slugless collection entry sends no slug and ends clean", async ()
     expect(screen.getAllByRole("status")[0]).toHaveTextContent("Saved revision 3"),
   );
 });
+
+test("entry editor shows separate draft and publication facts without offering publish to editors", async () => {
+  renderRoute(
+    "/content/posts/entry-1",
+    staticSessionSource({ id: "editor-1", role: "editor" }),
+    client({
+      loadEntry: async () => ({
+        ...draftEntry,
+        draft: { ...draftEntry.draft, revision: 4, slug: "draft-post" },
+        published: {
+          ...draftEntry.draft,
+          id: "published-1",
+          revision: 3,
+          slug: "published-post",
+          state: "published" as const,
+        },
+      }),
+    }),
+  );
+  await screen.findByRole("heading", { name: "Edit posts" });
+  const publication = screen.getByRole("region", { name: "Publication status" });
+  expect(publication).toHaveTextContent("LiveRevision 3");
+  expect(publication).toHaveTextContent("DraftRevision 4");
+  expect(publication).toHaveTextContent("Last editededitor@lace.test");
+  expect(publication).toHaveTextContent("/posts/published-post");
+  expect(publication).toHaveTextContent("No build requested from this editor.");
+  expect(publication).not.toHaveTextContent("editor-1");
+  expect(publication).not.toHaveTextContent("2026-09-20T00:00:00.000Z");
+  expect(screen.queryByRole("button", { name: "Publish" })).not.toBeInTheDocument();
+});
+
+test("admin confirms publication and sees an independent pending-build outcome", async () => {
+  const user = userEvent.setup();
+  const publishEntry = vi.fn(async () => ({
+    build: { status: "queued" as const, targetVersion: 1 },
+    entry: {
+      ...draftEntry,
+      published: { ...draftEntry.draft, id: "published-1", state: "published" as const },
+    },
+    publication: "published" as const,
+  }));
+  renderRoute(
+    "/content/posts/entry-1",
+    staticSessionSource({ id: "admin-1", role: "admin" }),
+    client({ publishEntry }),
+  );
+  await screen.findByRole("heading", { name: "Edit posts" });
+  await user.click(screen.getByRole("button", { name: "Publish" }));
+  const dialog = screen.getByRole("dialog", { name: "Publish this entry?" });
+  await user.click(within(dialog).getByRole("button", { name: "Confirm publication" }));
+  await waitFor(() => expect(publishEntry).toHaveBeenCalledTimes(1));
+  expect(publishEntry).toHaveBeenCalledWith(
+    "entry-1",
+    expect.objectContaining({ expectedRevision: 2, idempotencyKey: expect.any(String) }),
+  );
+  expect(
+    await screen.findByText("Published. Build for version 1 is queued and not yet recorded."),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("region", { name: "Publication status" })).toHaveTextContent("Published");
+});
+
+test("publish retries an uncertain network outcome with the same attempt key", async () => {
+  const user = userEvent.setup();
+  const publishEntry = vi
+    .fn()
+    .mockRejectedValueOnce(new AdminClientError({ message: "The Lace API could not be reached." }))
+    .mockResolvedValueOnce({
+      build: { status: "queued" as const, targetVersion: 1 },
+      entry: draftEntry,
+      publication: "published" as const,
+    });
+  renderRoute(
+    "/content/posts/entry-1",
+    staticSessionSource({ id: "admin-1", role: "admin" }),
+    client({ publishEntry }),
+  );
+  await screen.findByRole("heading", { name: "Edit posts" });
+  await user.click(screen.getByRole("button", { name: "Publish" }));
+  await user.click(
+    within(screen.getByRole("dialog", { name: "Publish this entry?" })).getByRole("button", {
+      name: "Confirm publication",
+    }),
+  );
+  await screen.findByRole("button", { name: "Retry publish" });
+  await user.click(screen.getByRole("button", { name: "Retry publish" }));
+  await waitFor(() => expect(publishEntry).toHaveBeenCalledTimes(2));
+  expect(publishEntry.mock.calls[1]![1]).toEqual(publishEntry.mock.calls[0]![1]);
+  expect(
+    await screen.findByText("Published. Build for version 1 is queued and not yet recorded."),
+  ).toBeInTheDocument();
+});
+
+test("a publish revision conflict leaves the loaded form available for explicit recovery", async () => {
+  const user = userEvent.setup();
+  renderRoute(
+    "/content/posts/entry-1",
+    staticSessionSource({ id: "admin-1", role: "admin" }),
+    client({
+      publishEntry: async () => {
+        throw new AdminClientError({
+          code: "CONTENT_REVISION_CONFLICT",
+          message: "The draft was modified by another request.",
+          status: 409,
+        });
+      },
+    }),
+  );
+  await screen.findByRole("heading", { name: "Edit posts" });
+  await user.click(screen.getByRole("button", { name: "Publish" }));
+  await user.click(
+    within(screen.getByRole("dialog", { name: "Publish this entry?" })).getByRole("button", {
+      name: "Confirm publication",
+    }),
+  );
+  expect(await screen.findByRole("alert")).toHaveTextContent("Draft changed elsewhere");
+  expect(screen.getByLabelText("Title")).toHaveValue("First post");
+});
+
+test("an admin can cancel the publish confirmation without publishing", async () => {
+  const user = userEvent.setup();
+  const publishEntry = vi.fn();
+  renderRoute(
+    "/content/posts/entry-1",
+    staticSessionSource({ id: "admin-1", role: "admin" }),
+    client({ publishEntry }),
+  );
+  await screen.findByRole("heading", { name: "Edit posts" });
+  await user.click(within(screen.getByRole("banner")).getByRole("button", { name: "Publish" }));
+  const dialog = screen.getByRole("dialog", { name: "Publish this entry?" });
+  expect(dialog).toHaveTextContent("Draft revision 2 becomes the public version");
+  await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(publishEntry).not.toHaveBeenCalled();
+});
