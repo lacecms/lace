@@ -148,7 +148,8 @@ test.each(VARIANTS)(
       "pnpm dev:api",
     ]);
     expectOrder(`${name}: production`, production, [
-      ...setup,
+      ...setup.slice(0, -1),
+      "docker compose up -d web",
       "pnpm prod:start",
       "docker compose ps",
       "docker compose stop api dispatcher",

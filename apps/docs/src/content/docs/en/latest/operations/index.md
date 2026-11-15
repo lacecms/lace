@@ -51,6 +51,8 @@ Upgrades are supported from **rc2** (`0.1.0-rc2`) onward. An rc2 database alread
 5. **Synchronize configuration** with `pnpm content:sync` or the selected Cloudflare target.
 6. **Restart or redeploy and rebuild.** Run `pnpm prod:start`, or deploy the Worker, then rebuild the site and check it on the selected runtime: CMS version, sign-in, media and a successful build.
 
+For the production ingress update, review managed-file conflicts and all user-owned Compose overrides before applying. Preserve `.env` and data; point the TLS proxy to Nginx on `127.0.0.1:8080` by default, and move host HTTP clients and manual builds to the HTTPS origin (`LACE_API_BASE_URL`). Recreate the services with the production Compose definition, then inspect `docker compose config` and `docker compose ps` to confirm the API has no host port and Nginx has the intended binding. For rollback, restore matching proxy settings along with the prior Compose files and restrict the host ports they publish.
+
 Rollback means restoring the backed-up packages, images, configuration, source, database and media together. `lace upgrade --rollback` restores only the managed project files of the latest upgrade; it does not undo database migrations, uploaded media or content. Migrations are forward-only and a newer engine may store shapes an older one cannot read, so a package-only downgrade is not supported. Builder and Pages caches are disposable and never part of a backup.
 
 Custom code that reads the REST build export directly must follow its pagination and accept build-export format 2; sites using the SDK need the matching SDK version.

@@ -66,6 +66,14 @@ function cli(options, args, json = true) {
   );
 }
 
+it("removes an unchanged retired managed file during a synthetic upgrade", async () => {
+  const options = await pair({ retired: "old", kept: "old" }, { kept: "new" });
+  const result = cli(options, ["--template", options.template, "--apply"]);
+  expect(result.status, result.stdout + result.stderr).toBe(0);
+  expect(Object.keys(await snapshot(options.project, false))).not.toContain("retired");
+  expect(await readFile(join(options.project, "kept"), "utf8")).toBe("new");
+});
+
 it.each([
   ["before-journal", ""],
   ["temporary-file", "a"],

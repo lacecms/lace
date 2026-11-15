@@ -75,8 +75,6 @@ services:
     volumes:
       - ./.lace/data:/data
       - ./lace.config.ts:/opt/lace/workspace/lace.config.ts:ro
-    ports:
-      - "${LACE_API_PORT:-3000}:3000"
     depends_on:
       migrate: { condition: service_completed_successfully }
       minio-init: { condition: service_completed_successfully }
@@ -185,7 +183,7 @@ services:
   web:
     image: nginx:1.27.5-alpine
     ports:
-      - "${LACE_HTTP_PORT:-8080}:8080"
+      - "${LACE_HTTP_BIND_ADDRESS:-127.0.0.1}:${LACE_HTTP_PORT:-8080}:8080"
     volumes:
       - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - static-output:/output:ro

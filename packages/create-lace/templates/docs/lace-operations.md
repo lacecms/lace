@@ -73,13 +73,14 @@ MinIO is built once from the pinned source in `deploy/minio.Dockerfile`, requiri
 
 Keep `LACE_BUILD_TOKEN` empty until setup finishes. Local API startup does not need it; starting the full builder requires a real read-only build token. Keep these settings aligned:
 
-| Setting                | Local host value           | Purpose                                                |
-| ---------------------- | -------------------------- | ------------------------------------------------------ |
-| `LACE_DATABASE_PATH`   | `./.lace/data/lace.sqlite` | CLI database shared with API `/data/lace.sqlite` mount |
-| `LACE_API_PORT`        | `3000`                     | Host API/admin port                                    |
-| `LACE_PUBLIC_BASE_URL` | `http://127.0.0.1:3000/`   | Browser API/admin origin and public media URLs         |
-| `LACE_API_BASE_URL`    | `http://127.0.0.1:3000/`   | Host Astro authenticated export transport              |
-| `LACE_HTTP_PORT`       | `8080`                     | Full Compose static-site/web port                      |
+| Setting                  | Local host value           | Purpose                                                |
+| ------------------------ | -------------------------- | ------------------------------------------------------ |
+| `LACE_DATABASE_PATH`     | `./.lace/data/lace.sqlite` | CLI database shared with API `/data/lace.sqlite` mount |
+| `LACE_API_PORT`          | `3000`                     | Development loopback API/admin port                    |
+| `LACE_PUBLIC_BASE_URL`   | `http://127.0.0.1:3000/`   | Browser API/admin origin and public media URLs         |
+| `LACE_API_BASE_URL`      | `http://127.0.0.1:3000/`   | Host Astro authenticated export transport              |
+| `LACE_HTTP_BIND_ADDRESS` | `127.0.0.1`                | Production Nginx host interface                        |
+| `LACE_HTTP_PORT`         | `8080`                     | Full Compose static-site/web port                      |
 
 If you change the API port, change both host URLs. Log in using the exact `LACE_PUBLIC_BASE_URL` origin; `localhost` and `127.0.0.1` differ. Compose overrides the builder export transport to `http://api:3000/`, while media retains the browser-facing URL. Intentional public base-path prefixes are preserved; your reverse proxy must route them.
 

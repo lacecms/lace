@@ -207,6 +207,20 @@ test("native settings track runtime parser and Compose validates host mapping an
   expect(
     await invalidSettings(
       options,
+      { ...compose, LACE_API_PORT: "3301", LACE_HTTP_BIND_ADDRESS: "127.0.0.1" },
+      root,
+    ),
+  ).toEqual([]);
+  expect(
+    await invalidSettings(
+      options,
+      { ...compose, LACE_API_PORT: "bad", LACE_HTTP_BIND_ADDRESS: "bad" },
+      root,
+    ),
+  ).toEqual(["LACE_API_PORT", "LACE_HTTP_BIND_ADDRESS"]);
+  expect(
+    await invalidSettings(
+      options,
       { ...compose, LACE_DATABASE_PATH: "other.sqlite", LACE_HTTP_PORT: "bad" },
       root,
     ),

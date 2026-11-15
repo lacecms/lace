@@ -94,7 +94,7 @@ from committed outbox work, and `401 AUTHENTICATION_REQUIRED`.
 | EX3 | Typed outbox events | M | EX3A → EX3B | planned |
 | EX4 | Route policies and security use cases | L | EX4A → EX4B → EX4C → EX4D | planned |
 | EX5 | Model kind descriptor | S | EX5A | planned |
-| EX6 | Trusted client identity and production Compose ingress | M | EX6A and EX6B independent | planned |
+| EX6 | Trusted client identity and production Compose ingress | M | EX6A and EX6B independent | done |
 
 Dependencies:
 
@@ -126,9 +126,8 @@ EX2. EX1C types platform and `db` tests after EX2 has moved them, as RF9E
 waited for RF5. EX5 follows EX2C because configuration synchronization is the
 largest consumer of model kinds.
 
-EX6 can start immediately. Prefer EX6A before EX4A so the route-policy
-refactor can reuse the corrected client identity handling and its regression
-tests. EX6B can proceed independently.
+EX6A and EX6B are complete. EX4A can reuse the corrected client identity
+handling and its regression tests.
 
 **If the next feature is already known:** webhooks move EX3 before EX2
 (accepting a second enqueue path for one step); CE12 revision history adds a
@@ -368,3 +367,4 @@ are preserved in the linked archives. Dates refer to the final recorded event.
 | Date | Session | Change | Status |
 | --- | --- | --- | --- |
 | 2026-11-15 | EX6A | [Preserve trusted client identity](../openspec/changes/archive/2026-11-15-ex06a-preserve-trusted-client-identity/) | done: request identity survives body replacement on Node and Worker |
+| 2026-11-15 | EX6B | [Restrict production Compose ingress](../openspec/changes/archive/2026-11-15-ex06b-restrict-production-compose-ingress/) | done: production reaches the private API through loopback Nginx; development retains a separate loopback API port |

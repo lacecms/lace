@@ -41,7 +41,7 @@ This guide does not depend on the development guide; it repeats the one-time ini
 
 - A server with Docker, Compose and a running daemon, plus Node `>=24.12.0` and pnpm `>=12` for the host operator commands (tested baseline: Node `24.12.0`, pnpm `12.3.4`).
 - Compatible API and builder images for your Lace release (`0.1.0-rc4` or a later compatible release). Pin exact tags or digests; the packages in `package.json` must come from the same release.
-- A public HTTPS origin and a TLS-terminating reverse proxy that forwards to `LACE_HTTP_PORT`. The web proxy routes `/admin`, `/api/` and `/health/` to the API and everything else to the static site, so one origin can serve both.
+- A public HTTPS origin and a TLS-terminating reverse proxy that forwards to `127.0.0.1:8080` by default (or the configured Nginx binding). The web proxy routes `/admin`, `/api/` and `/health/` to the API and everything else to the static site, so one origin can serve both.
 
 <!-- lace-site: starter -->
 
@@ -68,9 +68,11 @@ Preparation creates a protected `.env` with fresh random `LACE_AUTH_SECRET`, Min
 Review `.env`:
 
 - `LACE_PUBLIC_BASE_URL`: the public HTTPS origin users and browsers reach, with a trailing slash, for example `https://cms.example.com/`. Admin login, authentication and rendered media URLs use it.
-- `LACE_API_BASE_URL`: the origin host commands and manual Astro builds use for the authenticated export. The Compose builder always uses the internal `http://api:3000/`.
+- `LACE_API_BASE_URL`: set this to the public HTTPS origin for host commands and manual Astro builds. The Compose builder always uses the internal `http://api:3000/`.
 - `LACE_API_IMAGE` and `LACE_BUILDER_IMAGE`: the exact compatible images.
-- `LACE_API_PORT` and `LACE_HTTP_PORT`: host ports. Expose only your reverse proxy publicly and restrict direct access to these ports.
+- `LACE_HTTP_BIND_ADDRESS` and `LACE_HTTP_PORT`: Nginx host binding, default `127.0.0.1:8080`. `LACE_API_PORT` is only for local development. The production API has no host port.
+
+Configure your host TLS proxy before setup and forward HTTPS traffic to the loopback Nginx upstream. For a proxy on another machine or Docker host interface, explicitly set `LACE_HTTP_BIND_ADDRESS` to the controlled interface and restrict access with a firewall. Alternatively, attach a containerized proxy to the frontend network with operator-owned Compose configuration and target `web:8080`; restrict that network to trusted services. Terminate TLS at the proxy in either topology. Review the resolved model with `docker compose config`.
 
 <!-- lace-site: starter existing -->
 
@@ -90,12 +92,18 @@ pnpm exec lace doctor --target node --mode compose --stage setup
 pnpm db:migrate
 pnpm content:sync
 pnpm auth:bootstrap
-pnpm dev:api
+docker compose up -d web
 ```
 
-`pnpm dev:api` starts only MinIO, the migration service and the API/admin, so you can create the administrator before the builder needs a token. Bootstrap prints one setup token that expires after one hour.
+`docker compose up -d web` starts Nginx and its API, MinIO, migration and output initialization dependencies, without starting the builder or dispatcher. Bootstrap prints one setup token that expires after one hour.
 
-Open `<LACE_PUBLIC_BASE_URL>admin/`, create the first administrator on the setup screen with the bootstrap token and sign in. To avoid putting credentials in shell history, use the browser or the [private-input setup script](lace-operations.md#migrate-sync-and-create-the-first-administrator). In Settings create a read-only build token and put its one-time value into `LACE_BUILD_TOKEN` in `.env`; never expose it to browsers.
+Open `<LACE_PUBLIC_BASE_URL>admin/`, create the first administrator on the setup screen with the bootstrap token and sign in. To avoid putting credentials in shell history, use the browser or the [private-input setup script](lace-operations.md#migrate-sync-and-create-the-first-administrator).
+
+<!-- lace-site: starter existing -->
+
+In Settings create a read-only build token and put its one-time value into `LACE_BUILD_TOKEN` in `.env`; never expose it to browsers.
+
+<!-- lace-site: end -->
 
 ## Start the full stack
 
@@ -148,7 +156,7 @@ Backups: with `api` and `dispatcher` stopped, copy `.lace/data/` (the SQLite dat
 
 <!-- lace-site: end -->
 
-- **Setup token expired.** Stop `api` and `dispatcher`, run `pnpm auth:bootstrap` again, start with `pnpm dev:api` and retry. After setup completes, bootstrap refuses; sign in instead.
+- **Setup token expired.** Stop `api` and `dispatcher`, run `pnpm auth:bootstrap` again, start with `docker compose up -d web` and retry. After setup completes, bootstrap refuses; sign in instead.
 - **Login or media URLs use the wrong host.** Correct `LACE_PUBLIC_BASE_URL` and the reverse proxy, then recreate the services.
 - **Publications stop triggering builds after a host command.** Restart `api` and `dispatcher`.
 

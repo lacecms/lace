@@ -12,7 +12,7 @@ The generated Docker Compose topology runs the packaged API and Admin, SQLite, a
 - A generated project that works locally; see [Start with Lace](../../getting-started/). Keep its generated `docs/lace-compose-production.md`: it names your site mode and storage mappings.
 - A server with Docker, Compose and a running daemon, plus Node **>=24.12.0** and pnpm **>=12** for the host operator commands.
 - Lace packages, API image and builder image from the same release, pinned by exact tag or digest. Deploying the Lace engine repository is not the installation path.
-- A public HTTPS origin and a TLS-terminating reverse proxy that forwards to the web service's `LACE_HTTP_PORT`.
+- A public HTTPS origin and a TLS-terminating reverse proxy that forwards to Nginx at `127.0.0.1:8080` by default.
 - A committed `pnpm-lock.yaml` for the site, because the builder installs it with a frozen lockfile.
 
 ## Prepare the server environment
@@ -22,9 +22,12 @@ Copy the project to the server and run `pnpm install` and `pnpm env:prepare` the
 Review `.env`:
 
 - `LACE_PUBLIC_BASE_URL`: the public HTTPS origin with any intended path prefix and a trailing slash, for example `https://cms.example.com/`. Admin sessions, sign-in links and media URLs use it; it must match your reverse proxy.
-- `LACE_API_BASE_URL`: the origin that host commands and manual Astro builds use for the export. The Compose builder always uses the internal `http://api:3000/`.
+- `LACE_API_BASE_URL`: set this to the public HTTPS origin for host commands and manual Astro builds. The Compose builder always uses the internal `http://api:3000/`.
 - `LACE_API_IMAGE` and `LACE_BUILDER_IMAGE`: the exact compatible images.
-- `LACE_API_PORT` and `LACE_HTTP_PORT`: host ports. Expose only your reverse proxy and restrict direct access to these ports.
+- `LACE_HTTP_BIND_ADDRESS` and `LACE_HTTP_PORT`: Nginx binding, default `127.0.0.1:8080`. `LACE_API_PORT` is only for local development; production does not publish the API.
+
+Configure the host TLS proxy before setup. For a remote proxy, explicitly bind Nginx to a controlled host interface and restrict it with a firewall. A container proxy can instead join the frontend network using operator-owned Compose configuration and target `web:8080`; restrict access to that network. Terminate TLS at the proxy and review `docker compose config`.
+
 - `LACE_BUILD_SITE_URL` and `LACE_SITE_INDEXING`: the public site URL for canonical URLs and `sitemap.xml`, and `off` on a staging installation.
 
 Keep SQLite data (`.lace/data/`) and the MinIO volume persistent. Do not publish MinIO or the builder's private endpoint to browsers.
@@ -38,10 +41,10 @@ pnpm exec lace doctor --target node --mode compose --stage setup
 pnpm db:migrate
 pnpm content:sync
 pnpm auth:bootstrap
-pnpm dev:api
+docker compose up -d web
 ```
 
-`pnpm dev:api` starts only MinIO, the migration service and the API, so you can create the first administrator before the builder needs a token. Open `<LACE_PUBLIC_BASE_URL>admin/`, create the administrator with the one-time setup token and sign in. Bootstrap only an uninitialized installation. Copying project files to a server does not move a local database or media: a new server starts with empty content.
+`docker compose up -d web` starts Nginx and its API, MinIO and initialization dependencies without the builder or dispatcher, so you can create the first administrator before the builder needs a token. Open `<LACE_PUBLIC_BASE_URL>admin/`, create the administrator with the one-time setup token and sign in. Bootstrap only an uninitialized installation. Copying project files to a server does not move a local database or media: a new server starts with empty content.
 
 In **Settings**, create a read-only build token and put its value into `LACE_BUILD_TOKEN` in `.env`. It never belongs in browser-visible variables.
 

@@ -71,6 +71,13 @@ Docker Compose
 └── static web server/reverse proxy: Astro build output
 ```
 
+Production publishes only Nginx, on IPv4 loopback port 8080 by default,
+for a host TLS proxy; `LACE_HTTP_BIND_ADDRESS` and `LACE_HTTP_PORT` select
+an explicitly controlled alternative. The API has no host port: Nginx and
+the builder reach it over Compose networks at `http://api:3000/`. The public
+HTTPS ingress serves the admin, API and site. Bootstrap starts `web` and its
+dependencies before a build token is available.
+
 Production builds go through `SiteBuildTrigger`; the VPS implementation calls
 the first-party builder's private authenticated endpoint, and a later adapter
 may call an external CI webhook. The API never accepts an arbitrary shell
