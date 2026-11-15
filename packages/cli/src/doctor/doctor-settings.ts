@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { isIP } from "node:net";
 import type { DoctorOptions } from "./doctor-report.js";
 
 export type Values = Readonly<Record<string, string | undefined>>;
@@ -82,7 +83,7 @@ export async function invalidSettings(
     const mapped = {
       ...values,
       LACE_DATABASE_PATH: "/data/lace.sqlite",
-      LACE_PORT: values.LACE_API_PORT ?? "3000",
+      LACE_PORT: "3000",
       LACE_HOST: "0.0.0.0",
       LACE_MINIO_ACCESS_KEY: values.LACE_MINIO_ROOT_ACCESS_KEY,
       LACE_MINIO_SECRET_KEY: values.LACE_MINIO_ROOT_SECRET,
@@ -99,7 +100,6 @@ export async function invalidSettings(
     } catch (error) {
       if (!(error instanceof NodeEnvironmentError)) throw error;
       const names: Record<string, string> = {
-        LACE_PORT: "LACE_API_PORT",
         LACE_MINIO_ACCESS_KEY: "LACE_MINIO_ROOT_ACCESS_KEY",
         LACE_MINIO_SECRET_KEY: "LACE_MINIO_ROOT_SECRET",
       };
@@ -108,6 +108,10 @@ export async function invalidSettings(
     const httpPort = Number(values.LACE_HTTP_PORT ?? "8080");
     if (!Number.isInteger(httpPort) || httpPort < 1 || httpPort > 65535)
       invalid.add("LACE_HTTP_PORT");
+    const apiPort = Number(values.LACE_API_PORT ?? "3000");
+    if (!Number.isInteger(apiPort) || apiPort < 1 || apiPort > 65535) invalid.add("LACE_API_PORT");
+    if (values.LACE_HTTP_BIND_ADDRESS && !isIP(values.LACE_HTTP_BIND_ADDRESS))
+      invalid.add("LACE_HTTP_BIND_ADDRESS");
     if (
       !values.LACE_DATABASE_PATH ||
       resolve(cwd, values.LACE_DATABASE_PATH) !== resolve(cwd, ".lace/data/lace.sqlite")

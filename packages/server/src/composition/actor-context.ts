@@ -1,5 +1,7 @@
 import { requireSettingsManager, requireUsersManager } from "@lacecms/application";
+import { AuthenticationRequiredError } from "@lacecms/contracts";
 import { AuthorizationError } from "../shared/http.js";
+import { isImportRoute } from "../security/import-routes.js";
 import type { Actor, ActorResolver } from "./input.js";
 
 /** The Hono context members actor resolution reads and caches per request. */
@@ -15,7 +17,16 @@ export function createActorContext(actors: ActorResolver) {
     const cached = context.get("lace.actor") as Actor | undefined;
     if (cached !== undefined) return cached;
     const resolved = await actors.resolve(context.req.raw);
-    if (resolved === null) throw new AuthorizationError();
+    // Origin and Fetch Metadata refusals are authorization denials.
+    if (resolved === "request-denied") throw new AuthorizationError();
+    if (resolved === null) {
+      const request = context.req.raw;
+      throw new AuthenticationRequiredError(
+        isImportRoute(request.method, new URL(request.url).pathname)
+          ? "session-or-bearer"
+          : "session",
+      );
+    }
     context.set("lace.actor", resolved);
     return resolved;
   }

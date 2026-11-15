@@ -61,6 +61,8 @@ export const contentEntries = sqliteTable(
   (table) => [
     index("content_entries_model_idx").on(table.modelKey),
     index("content_entries_list_idx").on(table.modelKey, table.updatedAt, table.id),
+    index("content_entries_draft_snapshot_idx").on(table.draftSnapshotId),
+    index("content_entries_published_snapshot_idx").on(table.publishedSnapshotId),
     uniqueIndex("content_entries_singleton_idx")
       .on(table.modelKey)
       .where(sql`${table.singletonKey} = 1`),

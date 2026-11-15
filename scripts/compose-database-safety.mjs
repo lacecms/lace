@@ -97,7 +97,7 @@ export async function composeDatabaseSafety() {
         `LACE_AUTH_SECRET=${secret}`,
         "LACE_DATABASE_PATH=./.lace/data/lace.sqlite",
         `LACE_PUBLIC_BASE_URL=${base}/`,
-        `LACE_API_PORT=127.0.0.1:${port}`,
+        `LACE_HTTP_PORT=${port}`,
         `LACE_MINIO_ROOT_ACCESS_KEY=${randomBytes(12).toString("hex")}`,
         `LACE_MINIO_ROOT_SECRET=${randomBytes(32).toString("hex")}`,
         `LACE_BUILDER_SECRET=${randomBytes(32).toString("hex")}`,
@@ -110,7 +110,7 @@ export async function composeDatabaseSafety() {
     } else await compose("build", "minio");
     await host(["db", "migrate"]);
     await host(["content", "sync"]);
-    await compose("up", "-d", "--wait", "api", "dispatcher");
+    await compose("up", "-d", "--wait", "web", "dispatcher");
     const before = await snapshot();
     for (const args of [
       ["db", "migrate"],

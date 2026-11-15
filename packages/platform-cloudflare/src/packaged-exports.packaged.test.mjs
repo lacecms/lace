@@ -38,6 +38,5 @@ test("packaged entry point keeps its public exports", async () => {
     "packageName",
     "pagesDeploymentObservation",
     "parseCloudflareSettings",
-    "producesDispatchWork",
   ]);
 });

@@ -98,6 +98,7 @@ test("preserves every repository contract case in order", () => {
     "bounded string anchors cover long text/select, replacement, foreign models and empty races",
     "query performance is model-scoped with constant first/scalar/string statement counts at 1000 entries",
     "runtime LIKE policies count UTF-8 escapes before SQL while equality keeps 200 units",
+    "snapshot deletion and published media lookups search through indexes",
     "stores, filters, counts and deletes media tags atomically without public build effects",
     "rolls back tag replacement after an injected tag checkpoint failure",
     "enforces the ASCII media tag schema on every SQL runtime",
@@ -116,5 +117,9 @@ test("preserves every repository contract case in order", () => {
     "exports records after the routed entries across pages",
     "route-less entries are not routable link targets",
     "synchronization guards removing a collection route",
+    "an expired publication key is processed as a new request and replaces its record",
+    "an expired unpublication key with stale input changes nothing and a current one unpublishes anew",
+    "purges expired idempotency records in bounded batches",
+    "republication keeps only the draft and the new publication and a refused one deletes nothing",
   ]);
 });

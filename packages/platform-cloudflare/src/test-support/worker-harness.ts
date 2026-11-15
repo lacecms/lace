@@ -27,6 +27,8 @@ export type WorkerFixtureOptions = {
 
 export interface WorkerCallInit {
   readonly body?: BodyInit;
+  /** A request-specific execution context; the fixture context by default. */
+  readonly ctx?: WorkerExecutionContext;
   readonly headers?: HeadersInit;
   readonly json?: unknown;
   readonly method?: string;
@@ -107,7 +109,7 @@ export async function createWorkerFixture(
         method: init.method ?? "GET",
       }),
       env,
-      ctx,
+      init.ctx ?? ctx,
     );
     const text = await response.text();
     return { body: text.length === 0 ? undefined : safeJson(text), response };
@@ -140,6 +142,8 @@ export async function createWorkerFixture(
     advance: (milliseconds: number) => {
       offset += milliseconds;
     },
+    /** The fixture clock's current time, including every `advance`. */
+    now: () => Date.now() + offset,
     call,
     ctx,
     env,

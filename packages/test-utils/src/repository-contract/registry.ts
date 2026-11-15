@@ -24,6 +24,7 @@ import { cases as conditional } from "./entries/conditional.js";
 import { cases as resultParity } from "./entries/result-parity.js";
 import { cases as claimCap } from "./builds/claim-cap.js";
 import { cases as routeLess } from "./entries/route-less.js";
+import { cases as retention } from "./entries/retention.js";
 import type { RepositoryContractCase } from "./shared.js";
 
 export const contentRepositoryContractCases: readonly RepositoryContractCase[] = Object.freeze([
@@ -53,4 +54,5 @@ export const contentRepositoryContractCases: readonly RepositoryContractCase[] =
   ...resultParity,
   ...claimCap,
   ...routeLess,
+  ...retention,
 ]);

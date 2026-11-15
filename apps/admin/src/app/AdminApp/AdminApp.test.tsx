@@ -113,7 +113,7 @@ test("an expired-session response removes protected content during recovery", as
     source,
     client({
       listModels: async () => {
-        throw new AdminClientError({ message: "Session expired", status: 403 });
+        throw new AdminClientError({ message: "Session expired", status: 401 });
       },
     }),
   );
@@ -139,4 +139,24 @@ test("OAuth sign-in alias preserves only an opaque transaction handle", async ()
   expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
   expect(router.state.location.pathname).toBe("/login");
   expect(router.state.location.search).toEqual({ mcpTransaction: handle });
+});
+
+test("a permission denial keeps the screen without session recovery", async () => {
+  const source = {
+    get: vi.fn(async () => sessionFor({ id: "editor-1", role: "editor" })),
+    invalidate: vi.fn(),
+  };
+  renderRoute(
+    "/content",
+    source,
+    client({
+      listModels: async () => {
+        throw new AdminClientError({ message: "Permission denied", status: 403 });
+      },
+    }),
+  );
+  expect(await screen.findByText(/Permission denied/u)).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Sign in" })).not.toBeInTheDocument();
+  expect(source.get).toHaveBeenCalledTimes(1);
+  expect(source.invalidate).not.toHaveBeenCalled();
 });

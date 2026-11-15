@@ -124,7 +124,7 @@ test("disabled and anonymous MCP account routes do not disclose connections", as
     ).toBe(404);
   }
   const anonymous = await fixture({ resolveActor: async () => null });
-  expect((await anonymous.app.request("/api/v1/account/capabilities")).status).toBe(403);
+  expect((await anonymous.app.request("/api/v1/account/capabilities")).status).toBe(401);
 });
 
 test("MCP routing preserves protocol responses, actor rate context and one safe completion log", async () => {
@@ -360,7 +360,7 @@ test("enabled MCP connection routes describe their existing contracts in OpenAPI
   const list = doc.paths["/api/v1/account/mcp-connections"].get;
   const revoke = doc.paths["/api/v1/account/mcp-connections/{connectionId}/revoke"].post;
   expect(list.parameters.map(({ name }) => name).sort()).toEqual(["after", "limit"]);
-  expect(Object.keys(list.responses).sort()).toEqual(["200", "401", "422"]);
+  expect(Object.keys(list.responses).sort()).toEqual(["200", "401", "403", "422"]);
   expect(revoke.parameters).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ name: "connectionId", in: "path", required: true }),

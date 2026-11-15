@@ -42,6 +42,7 @@ import type {
   MediaDeletionDispatchPort,
   MediaListPort,
   MediaReadPort,
+  OperationsMaintenancePort,
   MediaUsageEntry,
   PublicContentEntry,
   PublicRecordContent,
@@ -64,7 +65,7 @@ import type {
   TrackedSiteBuildCheck,
   StoredContentModelState,
 } from "@lacecms/application";
-import { SqlContentReader } from "@lacecms/db";
+import { purgeExpiredIdempotencyRecordsStatement, SqlContentReader } from "@lacecms/db";
 import type { ContentModelResolver } from "@lacecms/db";
 import type {
   ActorId,
@@ -79,7 +80,7 @@ import type {
   UnixMilliseconds,
 } from "@lacecms/domain";
 import { type D1Database } from "../d1/database.js";
-import { d1ContentReadSql } from "./sql.js";
+import { bind, d1ContentReadSql } from "./sql.js";
 import type { D1RepositoryOptions } from "./base.js";
 import { D1CollectionList } from "./collection-list.js";
 import { D1ConfigurationSync } from "./configuration-sync.js";
@@ -108,6 +109,7 @@ export class D1ContentRepository
     MediaDeletionDispatchPort,
     MediaListPort,
     MediaReadPort,
+    OperationsMaintenancePort,
     PublicContentReadPort,
     SiteBuildCommandPort,
     SiteBuildReadPort,
@@ -123,7 +125,7 @@ export class D1ContentRepository
   private readonly reader: SqlContentReader;
 
   public constructor(
-    database: D1Database,
+    private readonly database: D1Database,
     resolveModel: ContentModelResolver,
     options: D1RepositoryOptions = {},
   ) {
@@ -431,6 +433,10 @@ export class D1ContentRepository
     input: UpdateMediaMetadataInput,
   ): Promise<UpdateMediaMetadataResult> {
     return this.media.updateMediaMetadata(input);
+  }
+  public async purgeExpiredIdempotencyRecords(now: number, limit: number): Promise<number> {
+    const statement = purgeExpiredIdempotencyRecordsStatement(now, limit);
+    return (await bind(this.database.prepare(statement.sql), statement.params).run()).meta.changes;
   }
 }
 

@@ -874,7 +874,7 @@ test("identifies only authentication-status client errors as recovery candidates
     true,
   );
   expect(isSessionExpiredError(new AdminClientError({ message: "Denied", status: 403 }))).toBe(
-    true,
+    false,
   );
   expect(isSessionExpiredError(new AdminClientError({ message: "Conflict", status: 409 }))).toBe(
     false,

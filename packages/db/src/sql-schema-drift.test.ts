@@ -7,6 +7,8 @@ import {
   checkedInMigrations,
   ENTRY_COLUMNS_SQL,
   MEDIA_COLUMNS_SQL,
+  MEDIA_PUBLISHED_REFERENCE_SQL,
+  PUBLIC_MEDIA_SQL,
   SNAPSHOT_COLUMNS_SQL,
 } from "./index.js";
 
@@ -58,6 +60,33 @@ test("shared SQL column lists match the migrated schema", async () => {
         ).toBe(true);
       }
       expect(() => database.prepare(statement), `${name} must prepare`).not.toThrow();
+    }
+  } finally {
+    database.close();
+  }
+});
+
+test("published media lookups never scan content entries", async () => {
+  const database = new DatabaseSync(":memory:");
+  try {
+    for (const migration of checkedInMigrations) {
+      database.exec(
+        await readFile(new URL(`../drizzle/${migration.name}`, import.meta.url), "utf8"),
+      );
+    }
+    for (const [name, statement] of [
+      ["PUBLIC_MEDIA_SQL", PUBLIC_MEDIA_SQL],
+      ["MEDIA_PUBLISHED_REFERENCE_SQL", `select ${MEDIA_PUBLISHED_REFERENCE_SQL}`],
+    ] as const) {
+      const details = (
+        database.prepare(`explain query plan ${statement}`).all("media-1") as {
+          detail: string;
+        }[]
+      )
+        .map((row) => row.detail)
+        .join("\n");
+      expect(details, name).not.toMatch(/\bSCAN (e|content_entries)\b|AUTOMATIC/u);
+      expect(details, name).toContain("content_entries_published_snapshot_idx");
     }
   } finally {
     database.close();

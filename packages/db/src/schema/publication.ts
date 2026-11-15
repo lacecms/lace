@@ -15,7 +15,10 @@ export const publishedRoutes = sqliteTable(
       .references(() => contentSnapshots.id, { onDelete: "cascade" }),
     updatedAt: timestamp("updated_at"),
   },
-  (table) => [index("published_routes_entry_idx").on(table.entryId)],
+  (table) => [
+    index("published_routes_entry_idx").on(table.entryId),
+    index("published_routes_snapshot_idx").on(table.snapshotId),
+  ],
 );
 
 export const publishedState = sqliteTable(

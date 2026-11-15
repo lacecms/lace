@@ -1,4 +1,4 @@
-import { primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { timestamp } from "./columns.js";
 
 export const idempotencyRecords = sqliteTable(
@@ -11,7 +11,10 @@ export const idempotencyRecords = sqliteTable(
     createdAt: timestamp("created_at"),
     expiresAt: timestamp("expires_at"),
   },
-  (table) => [primaryKey({ columns: [table.scope, table.key] })],
+  (table) => [
+    primaryKey({ columns: [table.scope, table.key] }),
+    index("idempotency_records_expiry_idx").on(table.expiresAt),
+  ],
 );
 
 /**

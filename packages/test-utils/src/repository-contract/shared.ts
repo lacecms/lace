@@ -17,6 +17,7 @@ import type {
   MediaDeletionDispatchPort,
   MediaListPort,
   ContentMediaReadPort,
+  OperationsMaintenancePort,
   PublicContentReadPort,
   SaveCompleteDraftInput,
   SiteBuildCommandPort,
@@ -51,6 +52,7 @@ export type ContractRepository = ContentLinkReadPort &
   MediaDeletionDispatchPort &
   MediaListPort &
   ContentMediaReadPort &
+  OperationsMaintenancePort &
   PublicContentReadPort &
   SiteBuildCommandPort &
   SiteBuildDispatchPort &

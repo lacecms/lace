@@ -1697,6 +1697,7 @@ The documented status and code pairs SHALL be exactly:
 | Status | Codes |
 |---|---|
 | `422` | `VALIDATION_FAILED`, `CONTENT_INVALID_STATE` |
+| `401` | `AUTHENTICATION_REQUIRED` |
 | `403` | `AUTHORIZATION_DENIED` |
 | `400` | `INVALID_CREDENTIALS` |
 | `404` | `NOT_FOUND` |
@@ -1713,6 +1714,8 @@ The documented status and code pairs SHALL be exactly:
   the request rate-limit middleware.
 - A stale build export SHALL keep its documented version details.
 - A block order failure SHALL keep its bounded ordering message.
+- An authentication failure SHALL keep its `WWW-Authenticate` challenge
+  header.
 - No envelope SHALL expose the internal message of a failure the table does
   not mark safe.
 
@@ -1728,7 +1731,9 @@ The documented status and code pairs SHALL be exactly:
 **Pinned matrix.** The status, code, message, details and headers the REST API
 returns for each failure SHALL equal those it returned before this
 requirement, except that an unexpected failure while submitting browser setup
-is reported as `500 INTERNAL_ERROR` instead of `404`. A repository test SHALL
+is reported as `500 INTERNAL_ERROR` instead of `404`, and a request without
+a credential that resolves to an actor is reported as `401
+AUTHENTICATION_REQUIRED` instead of `403 AUTHORIZATION_DENIED`. A repository test SHALL
 pin that matrix for every portable error class the shared and runtime packages
 export.
 
@@ -1776,6 +1781,15 @@ export.
 - **WHEN** a shared or runtime package exports a new error class that the
   status matrix does not list
 - **THEN** the repository test fails and names that class
+
+#### Scenario: A missing credential is classified as authentication
+- **WHEN** an admin route is requested without a session
+- **THEN** the API returns status `401` with code `AUTHENTICATION_REQUIRED`,
+  the sanitized authentication message and a `WWW-Authenticate` header
+
+#### Scenario: A missing permission stays an authorization denial
+- **WHEN** a viewer requests an operation that needs `content:publish`
+- **THEN** the API returns status `403` with code `AUTHORIZATION_DENIED`
 
 ### Requirement: Admin list page limits have one bound
 The admin entry-list and media-list query contracts, the server's page

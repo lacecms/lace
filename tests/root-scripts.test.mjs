@@ -222,7 +222,7 @@ async function inspectTestPaths(root) {
       (path) =>
         path.endsWith(".md") &&
         !path.startsWith("docs/archive/") &&
-        path !== "docs/refactoring-roadmap.md",
+        path !== "docs/extensibility-roadmap.md",
     ),
   ];
   for (const document of documents) {

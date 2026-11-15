@@ -194,11 +194,13 @@ describe("upgrade CLI", () => {
       const outcome = JSON.parse(result.stdout);
       expect(outcome.data.instructions.templateVersion).toBe(TEMPLATE_VERSION);
       // Only the step from the latest published template is described.
-      expect(outcome.guidance).toContain("Template 0.49.0");
+      expect(outcome.guidance).toContain(`Template ${TEMPLATE_VERSION}`);
       expect(outcome.guidance).toContain("baseline migration");
-      expect(outcome.guidance).toContain("SCHEMA_UNSUPPORTED");
-      expect(outcome.guidance).toContain("--target cloudflare-remote --operator-env");
-      expect(outcome.guidance).not.toMatch(/Template 0\.(?:[0-3]\d|4[0-7])\.0/u);
+      expect(outcome.guidance).toContain("pnpm db:migrate");
+      expect(outcome.guidance).toMatch(/before rc2.*unsupported/u);
+      expect(outcome.guidance).toContain("Nginx defaults to 127.0.0.1:8080");
+      expect(outcome.guidance).toContain("LACE_API_BASE_URL");
+      expect(outcome.guidance).not.toMatch(/Template 0\.(?:[0-3]\d|4\d)\.0/u);
       expect(outcome.guidance).not.toMatch(/\b00(?:0\d|1[0-5])_[a-z_]+/u);
       for (const path of managed)
         expect(await readFile(join(project, path), "utf8")).toBe(

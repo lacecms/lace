@@ -47,7 +47,7 @@ test("packaged entry point keeps its public exports", async () => {
     "uncheckedD1Migrations",
     "uncheckedNodeMigrations",
   ]);
-});
+}, 15_000);
 
 test("the test subpath is not exported outside the source condition", () => {
   const result = spawnSync(

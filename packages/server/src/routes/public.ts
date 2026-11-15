@@ -1,12 +1,6 @@
+import { AuthenticationRequiredError } from "@lacecms/contracts";
 import { readBuildExportPage, readBuildExportQuery } from "./build-export.js";
-import {
-  AuthorizationError,
-  notFound,
-  parse,
-  response,
-  validationHook,
-  validationResponse,
-} from "../shared/http.js";
+import { notFound, parse, response, validationHook, validationResponse } from "../shared/http.js";
 import { collectionItemParams, modelKeyParams, pagination, publicPath } from "../shared/request.js";
 import {
   collectionModel,
@@ -14,11 +8,15 @@ import {
   pageModel,
   routeLessCollectionModel,
 } from "../shared/content-config.js";
+import { authenticationFailure, security, validationFailure } from "../shared/openapi.js";
 import { collectionPathFailure } from "@lacecms/contracts";
 import {
   buildExportContinuationPageSchema,
   buildExportFirstPageSchema,
+  DEFAULT_PAGE_SIZE,
   MAX_BUILD_EXPORT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+  opaqueCursorSchema,
   entityTagForVersion,
   entityTagSchema,
   errorEnvelopeSchema,
@@ -34,10 +32,34 @@ import {
   toPublicRecordListDto,
   versionFromEntityTag,
 } from "@lacecms/contracts";
+import { toJsonSchema } from "@valibot/to-json-schema";
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import * as v from "valibot";
 import type { RouteContext } from "../composition/route-context.js";
+
+/** Documents what `pagination()` parses by hand; parsing stays there. */
+const paginationParameters = [
+  {
+    description: "Opaque `nextCursor` of the previous page; omit for the first page.",
+    in: "query" as const,
+    name: "after",
+    required: false,
+    schema: toJsonSchema(opaqueCursorSchema) as never,
+  },
+  {
+    description: "Entries per page.",
+    in: "query" as const,
+    name: "limit",
+    required: false,
+    schema: {
+      default: DEFAULT_PAGE_SIZE,
+      maximum: MAX_PAGE_SIZE,
+      minimum: 1,
+      type: "integer" as const,
+    },
+  },
+];
 
 export function registerPublicRoutes(app: Hono, routeContext: RouteContext): void {
   const { capabilities } = routeContext;
@@ -50,7 +72,9 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
           content: { "application/json": { schema: resolver(publicGlobalContentSchema) } },
           description: "Published global",
         },
+        ...validationFailure(),
       },
+      security: security.none,
       summary: "Read a published global",
       tags: ["public"],
     }),
@@ -73,7 +97,9 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
           content: { "application/json": { schema: resolver(publicContentEntrySchema) } },
           description: "Published page",
         },
+        ...validationFailure(),
       },
+      security: security.none,
       summary: "Read a published page",
       tags: ["public"],
     }),
@@ -99,7 +125,10 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
           content: { "application/json": { schema: resolver(publicRecordListSchema) } },
           description: "Published records of a route-less collection",
         },
+        ...validationFailure(),
       },
+      parameters: paginationParameters,
+      security: security.none,
       summary: "List published records of a route-less collection",
       tags: ["public"],
     }),
@@ -123,7 +152,10 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
           content: { "application/json": { schema: resolver(publicContentListSchema) } },
           description: "Published collection page",
         },
+        ...validationFailure(),
       },
+      parameters: paginationParameters,
+      security: security.none,
       summary: "List published collection entries",
       tags: ["public"],
     }),
@@ -150,7 +182,9 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
           content: { "application/json": { schema: resolver(publicContentEntrySchema) } },
           description: "Published collection entry",
         },
+        ...validationFailure(),
       },
+      security: security.none,
       summary: "Read a published collection entry",
       tags: ["public"],
     }),
@@ -182,7 +216,18 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
           content: { "application/json": { schema: resolver(publicContentEntrySchema) } },
           description: "Published entry",
         },
+        ...validationFailure(),
       },
+      parameters: [
+        {
+          description: "The published route path, starting with `/`.",
+          in: "query",
+          name: "path",
+          required: true,
+          schema: { type: "string" },
+        },
+      ],
+      security: security.none,
       summary: "Read published content by path",
       tags: ["public"],
     }),
@@ -252,7 +297,10 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
           description:
             "Published content changed since the first page (BUILD_EXPORT_VERSION_CHANGED)",
         },
+        ...authenticationFailure(),
+        ...validationFailure(),
       },
+      security: security.build,
       summary: "Read a page of the published build export",
       tags: ["public"],
     }),
@@ -267,7 +315,7 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
             token: authorization.slice(7) as never,
           }))
         )
-          throw new AuthorizationError();
+          throw new AuthenticationRequiredError("bearer");
       }
       const query = readBuildExportQuery(new URL(context.req.url));
       const suppliedTag = context.req.header("if-none-match") ?? undefined;

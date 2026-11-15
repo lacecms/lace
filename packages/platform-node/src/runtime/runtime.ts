@@ -22,7 +22,12 @@ import {
 // Load the auth graph before the SDK: their shared Zod ESM initialization
 // otherwise runs after SDK schemas in a combined esbuild bundle.
 import { createMcpContentHandler } from "@lacecms/mcp";
-import { appliedMigrationQuery, betterAuthSchema, checkedInMigrations } from "@lacecms/db";
+import {
+  appliedMigrationQuery,
+  betterAuthSchema,
+  checkedInMigrations,
+  IDEMPOTENCY_PURGE_LIMIT,
+} from "@lacecms/db";
 import { unixMilliseconds } from "@lacecms/domain";
 import {
   composeLaceServices,
@@ -406,6 +411,8 @@ export function createNodeEmailSender(settings: EmailSettings = { provider: "non
 
 export interface NodeRuntime {
   readonly maintainOAuth: () => Promise<void>;
+  /** Purges one bounded batch of expired idempotency records. */
+  readonly maintainOperations: () => Promise<void>;
   readonly setRequestPeer: (request: Request, peer: string | undefined) => void;
   readonly app: ReturnType<typeof createLaceApp>;
   readonly cache: Cache;
@@ -555,6 +562,9 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     security,
     storage,
     maintainOAuth: () => oauth.cleanup(Number(clock.now()), 20),
+    maintainOperations: async () => {
+      await repository.purgeExpiredIdempotencyRecords(Number(clock.now()), IDEMPOTENCY_PURGE_LIMIT);
+    },
     verifyStorage: () =>
       hasStartupStorageCheck(storage) ? storage.assertReady() : Promise.resolve(),
   });

@@ -20,6 +20,8 @@ export function registerProtocolRoutes(app: Hono, routeContext: RouteContext): v
   );
   if (capabilities.auth !== undefined) {
     const auth = capabilities.auth;
-    app.all("/api/auth/*", (context) => auth.fetch(context.req.raw));
+    app.all("/api/auth/*", (context) =>
+      auth.fetch(context.req.raw, context.get("lace.clientAddress")),
+    );
   }
 }

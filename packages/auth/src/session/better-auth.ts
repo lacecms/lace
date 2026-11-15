@@ -12,7 +12,7 @@ export interface AuthRouteHandler {
 }
 
 export interface SessionActorResolver {
-  resolve(request: Request): Promise<Actor | null>;
+  resolve(request: Request): Promise<Actor | "request-denied" | null>;
   /** The opaque identifier of the session authenticating the request; never its token. */
   sessionId(request: Request): Promise<string | null>;
 }
@@ -192,6 +192,7 @@ export function createBetterAuthBoundary(input: CreateBetterAuthBoundaryInput): 
     ...(mcp ? { mcp } : {}),
     actors: Object.freeze({
       resolve: async (request: Request) => {
+        if (!trustedRequestOrigin(request)) return "request-denied" as const;
         const active = await activeSession(request);
         return active === null
           ? null
@@ -202,11 +203,14 @@ export function createBetterAuthBoundary(input: CreateBetterAuthBoundaryInput): 
         return active === null ? null : active.session.session.id;
       },
     }),
-    fetch: async (request: Request) => {
+    fetch: async (request: Request, clientAddress?: string) => {
       if (!allowedProviderRoute(request))
         return mcp ? mcp.fetch(request) : new Response(null, { status: 404 });
       const headers = new Headers(request.headers);
-      headers.set("x-lace-client-address", input.clientAddress?.(request) ?? "0.0.0.0");
+      headers.set(
+        "x-lace-client-address",
+        clientAddress ?? input.clientAddress?.(request) ?? "0.0.0.0",
+      );
       // The Node transport may supply a Request-compatible facade; clone materializes
       // its native Request before the platform constructor performs brand checks.
       return auth.handler(new Request(request.clone(), { headers }));

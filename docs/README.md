@@ -40,7 +40,7 @@ the two indexes describe themselves and are excluded from the row count.
 | [documentation-maintenance.md](documentation-maintenance.md) | internal note | §6/§19/§20; public-documentation ownership, page rules and publication | — |
 | [internal-url-links.md](internal-url-links.md) | internal note | §8/§9.6/§13; link identities, guards, persistence and rollback | [Internal links](../apps/docs/src/content/docs/en/latest/content-modeling/links.md) |
 | [node-api.md](node-api.md) | internal note | §5/§12/§18; Node runtime boundaries and the engine-checkout stack | [Node deployment](../apps/docs/src/content/docs/en/latest/deployment/node.md), [CLI and environment](../apps/docs/src/content/docs/en/latest/reference/cli-environment.md) |
-| [refactoring-roadmap.md](refactoring-roadmap.md) | authoritative | Active RF1–RF8 delivery order, session boundaries and owner decisions | — |
+| [extensibility-roadmap.md](extensibility-roadmap.md) | authoritative | Active EX1–EX6 delivery order, session boundaries and owner decisions | — |
 | [verification.md](verification.md) | internal note | §3/§14/§20/§21; commands, limits, coverage, D1 budgets and owner checks | — |
 
 ### Promoted and deleted
@@ -120,4 +120,5 @@ Git history keeps the originals.
 | [content-editor-roadmap.md](archive/content-editor-roadmap.md) | historical | §8/§17; completed CE content/editor delivery order |
 | [mvp-implementation-roadmap-summary.md](archive/mvp-implementation-roadmap-summary.md) | historical | §23; completed MVP roadmap summary |
 | [mvp-implementation-roadmap.md](archive/mvp-implementation-roadmap.md) | historical | §23; completed MVP delivery order and sessions |
+| [refactoring-roadmap.md](archive/refactoring-roadmap.md) | historical | §6/§16; completed RF refactoring delivery order and audit follow-up |
 | [site-migration-roadmap.md](archive/site-migration-roadmap.md) | historical | §7/§13; completed SM site-migration delivery order |

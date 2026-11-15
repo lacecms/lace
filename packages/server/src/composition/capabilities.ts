@@ -1,3 +1,4 @@
+import { AuthenticationRequiredError } from "@lacecms/contracts";
 import { actorPermissions, unconfiguredEmailSender } from "@lacecms/application";
 import type {
   AccountSecurityPort,
@@ -32,6 +33,7 @@ export function createCapabilities(input: LaceAppInput) {
   const security = input.security;
 
   function requireSecurity<Port>(port: Port | undefined): Port {
+    // This composition lacks the security capability.
     if (port === undefined) throw new AuthorizationError();
     return port;
   }
@@ -43,6 +45,7 @@ export function createCapabilities(input: LaceAppInput) {
   /** Without security the account routes are unauthorized, as every security route is. */
   function accounts(): AccountUseCases {
     if (input.accounts !== undefined) return input.accounts;
+    // Account operations cannot run without the configured security capability.
     if (input.publicBaseUrl !== undefined && security === undefined) throw new AuthorizationError();
     throw new InvariantError("Account flows are unavailable.");
   }
@@ -77,7 +80,7 @@ export function createCapabilities(input: LaceAppInput) {
 
   async function sessionSummary(resolvedActor: Actor): Promise<Response> {
     const profile = await profiles().readUserProfile(resolvedActor.id);
-    if (profile === null || profile.disabled) throw new AuthorizationError();
+    if (profile === null || profile.disabled) throw new AuthenticationRequiredError("session");
     return response(
       adminSessionSchema,
       {

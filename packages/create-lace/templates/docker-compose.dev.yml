@@ -1,0 +1,4 @@
+services:
+  api:
+    ports:
+      - "127.0.0.1:${LACE_API_PORT:-3000}:3000"

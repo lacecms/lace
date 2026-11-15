@@ -1,15 +1,27 @@
 # Lace backlog
 
-- **Refactoring roadmap (selected 2026-11-01):** planned in
-  [`docs/refactoring-roadmap.md`](docs/refactoring-roadmap.md) from the
-  workspace architecture audit. Order: RF1 workspace hygiene → RF2 tests
-  against source → RF3 shared vocabulary (types, constants, rules) → RF4
-  module splits → RF5 runtime deduplication → RF6 admin editor structure →
-  RF7 CLI and scripts → RF8 documentation. Behavior-preserving sessions carry
-  no delta specs. Each session gets its own just-in-time OpenSpec change;
-  RF1–RF3 and RF4A–RF4E are archived, and RF4X (workspace guards) was inserted
-  before RF4F after an audit of the completed sessions. Progress is tracked in
-  the roadmap's progress log.
+- **Extensibility roadmap (selected 2026-11-14):** planned in
+  [`docs/extensibility-roadmap.md`](docs/extensibility-roadmap.md) from the
+  unfinished RF9C–RF9F sessions and the open findings of the API, backend and
+  database audit of 2026-11-14. Order: EX1 test foundation → EX2 shared write
+  plans → EX3 typed outbox events → EX4 route policies and security use cases
+  → EX5 model kind descriptor, with the dependencies in its §4. EX6 covers
+  trusted client identity and production Compose ingress and can start
+  independently. Each session gets its own just-in-time OpenSpec change.
+  Progress is tracked in the roadmap's progress log.
+
+- **Refactoring roadmap (implemented, archived 2026-11-14):** RF1–RF8 and
+  RF9A–RF9B plus four audit changes; kept in
+  [`docs/archive/refactoring-roadmap.md`](docs/archive/refactoring-roadmap.md).
+
+- **Audit deferrals (2026-11-14, outside the extensibility roadmap):**
+  compacting idempotency `response_json` (only rows near the 2 MB D1 limit);
+  keeping `site_builds.published_snapshot_id` after the next publication
+  instead of `SET NULL`; ETag, `Cache-Control` and CORS on public reads (when
+  SSR, preview or mobile clients arrive); one public endpoint family per
+  content kind; a generated admin API client. Postgres, JSON field storage,
+  revision history, locales, multiple sites and model-key cascades need an
+  ADR first (extensibility roadmap §5).
 
 - **Site migration roadmap (implemented, archived 2026-11-01):** SM1–SM5
   (twelve sessions) delivered and merged in lacecms/lace#63; every change is

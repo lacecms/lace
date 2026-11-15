@@ -1,12 +1,19 @@
 # Lace Refactoring Roadmap
 
+> **Archived 2026-11-14.** RF1–RF8 and RF9A–RF9B are implemented, synchronized
+> and archived under `openspec/changes/archive/`, together with the four
+> changes of the API, backend and database audit of 2026-11-14. The unfinished
+> sessions RF9C–RF9F moved to the
+> [extensibility roadmap](../extensibility-roadmap.md) as EX1A–EX1D, together
+> with the open audit findings. Kept for delivery history.
+
 > Selected 2026-11-01 after the site migration roadmap was merged
 > ([lacecms/lace#63](https://github.com/lacecms/lace/pull/63)). Motivated by
 > an architecture and maintainability audit of the whole workspace. Every
 > step preserves product behavior; the goal is a codebase that stays cheap to
 > change before the first non-alpha release.
 
-Future work outside this roadmap stays in the root [backlog](../backlog.md).
+Future work outside this roadmap stays in the root [backlog](../../backlog.md).
 
 ## 1. Purpose and source of truth
 
@@ -17,21 +24,21 @@ session.
 
 Authority follows `AGENTS.md`:
 
-1. [architecture](architecture/README.md) owns product scope and
+1. [architecture](../architecture/README.md) owns product scope and
    invariants.
-2. [`openspec/specs/**`](../openspec/specs) owns accepted capability behavior.
+2. [`openspec/specs/**`](../../openspec/specs) owns accepted capability behavior.
 3. The selected active OpenSpec change owns the proposed delta.
 4. This document owns delivery order, session boundaries and recorded
    decisions for this roadmap.
 
 Steps that change an architecture invariant list the sections to update. The
 architecture is updated in the same OpenSpec change, before code, with a short
-ADR under [`docs/adr/`](adr).
+ADR under [`docs/adr/`](../adr).
 
 ## 2. How to use this roadmap
 
 The conventions of the archived
-[site migration roadmap](archive/site-migration-roadmap.md) apply, with the
+[site migration roadmap](site-migration-roadmap.md) apply, with the
 additions below:
 
 - A **session unit** is one cohesive change set that can be implemented,
@@ -199,7 +206,7 @@ What the roadmap changes, with the numbers to beat:
 | RF6 | Admin editor structure | L | RF6A → RF6B → RF6C → RF6D | done |
 | RF7 | CLI and developer scripts | L | RF7A → RF7B → RF7C → RF7D | done |
 | RF8 | Documentation | L | RF8A → RF8X → RF8Y → RF8B → RF8C | done |
-| RF9 | Test foundation | L | RF9A → RF9B → RF9C → RF9D → RF9E → RF9F | planned |
+| RF9 | Test foundation | L | RF9A → RF9B → RF9C → RF9D → RF9E → RF9F | RF9A–RF9B done; RF9C–RF9F moved to EX1 |
 
 **Order rationale:** RF1 first because deleting obsolete scripts and tests
 shrinks everything that follows (fewer `.test.mjs` files to convert, fewer
@@ -355,7 +362,7 @@ RF1A; they stay).
   `docs/archive/` retains the three completed roadmaps and implementation
   roadmap summary. Their former records remain accessible through Git history
   identified in the internal documentation index.
-- [Verification](verification.md) consolidates the five former verification
+- [Verification](../verification.md) consolidates the five former verification
   documents into commands and prerequisites, limits, §3/§14 coverage, recorded
   D1 budgets, and real-infrastructure owner checks with dated status. Individual
   run results stay in their result directories; release readiness stays in
@@ -1308,6 +1315,9 @@ Corrections from the 2026-11-07 inventory:
   export of the Node runtime harness and leaves the packed manifest.
 - The three CLI fixture `.mjs` modules move in RF7C.
 
+> RF9C–RF9F were not started here; they continue as EX1A–EX1D in the
+> [extensibility roadmap](../extensibility-roadmap.md).
+
 ### Session RF9C — Test size ceiling
 
 The boundary checker applies a 1,000-line ceiling with a shrinking baseline
@@ -1340,53 +1350,60 @@ preserved in the linked archives. Dates refer to the final recorded event.
 
 | Date | Session | Change | Status |
 | --- | --- | --- | --- |
-| 2026-11-01 | RF1A | [rf01a-workspace-scripts-hygiene](../openspec/changes/archive/2026-11-01-rf01a-workspace-scripts-hygiene/) | Archived |
-| 2026-11-01 | RF1B | [rf01b-docs-pruning-index](../openspec/changes/archive/2026-11-01-rf01b-docs-pruning-index/) | Archived |
-| 2026-11-02 | RF2A | [rf02a-source-tests-pure-packages](../openspec/changes/archive/2026-11-02-rf02a-source-tests-pure-packages/) | Archived |
-| 2026-11-02 | RF2B | [rf02b-source-tests-application-server](../openspec/changes/archive/2026-11-02-rf02b-source-tests-application-server/) | Archived |
-| 2026-11-02 | RF2C | [rf02c-source-tests-delivery-and-test-utils](../openspec/changes/archive/2026-11-02-rf02c-source-tests-delivery-and-test-utils/) | Archived |
-| 2026-11-02 | RF3A | [rf03a-field-type-capabilities](../openspec/changes/archive/2026-11-02-rf03a-field-type-capabilities/) | Archived |
-| 2026-11-02 | RF3B | [rf03b-shared-identifiers-limits](../openspec/changes/archive/2026-11-02-rf03b-shared-identifiers-limits/) | Archived |
-| 2026-11-02 | RF3C | [rf03c-conditional-visibility-evaluator](../openspec/changes/archive/2026-11-02-rf03c-conditional-visibility-evaluator/) | Archived |
-| 2026-11-03 | RF3D | [rf03d-error-model-mapper](../openspec/changes/archive/2026-11-03-rf03d-error-model-mapper/) | Archived |
-| 2026-11-03 | RF4A | [rf04a-content-module-split](../openspec/changes/archive/2026-11-03-rf04a-content-module-split/) | Archived |
-| 2026-11-03 | RF4B | [rf04b-application-module-split](../openspec/changes/archive/2026-11-03-rf04b-application-module-split/) | Archived |
-| 2026-11-03 | RF4C | [rf04c-contracts-module-split](../openspec/changes/archive/2026-11-03-rf04c-contracts-module-split/) | Archived |
-| 2026-11-04 | RF4D | [rf04d-server-module-split](../openspec/changes/archive/2026-11-04-rf04d-server-module-split/) | Archived |
-| 2026-11-04 | RF4E | [rf04e-db-config-module-split](../openspec/changes/archive/2026-11-04-rf04e-db-config-module-split/) | Archived |
-| 2026-11-04 | RF4X | [rf04x-workspace-guards](../openspec/changes/archive/2026-11-04-rf04x-workspace-guards/) | Archived |
-| 2026-11-04 | RF4F | [rf04f-test-utils-split](../openspec/changes/archive/2026-11-04-rf04f-test-utils-split/) | Archived |
-| 2026-11-05 | RF4G | [rf04g-domain-auth-layout](../openspec/changes/archive/2026-11-05-rf04g-domain-auth-layout/) | Archived |
-| 2026-11-05 | RF3E | [rf03e-shared-grammars-limits](../openspec/changes/archive/2026-11-05-rf03e-shared-grammars-limits/) | Archived |
-| 2026-11-05 | RF3F | [rf03f-error-codes-follow-up](../openspec/changes/archive/2026-11-05-rf03f-error-codes-follow-up/) | Archived |
-| 2026-11-07 | RF3G | [rf03g-json-validator-parity](../openspec/changes/archive/2026-11-07-rf03g-json-validator-parity/) | Archived |
-| 2026-11-07 | RF9A | [rf09a-source-export-condition](../openspec/changes/archive/2026-11-07-rf09a-source-export-condition/) | Archived |
-| 2026-11-07 | RF9B | [rf09b-typed-test-fixtures](../openspec/changes/archive/2026-11-07-rf09b-typed-test-fixtures/) | Archived |
-| 2026-11-08 | RF4I | [rf04i-drizzle-schema-by-domain](../openspec/changes/archive/2026-11-08-rf04i-drizzle-schema-by-domain/) | Archived |
-| 2026-11-08 | RF4H | [rf04h-near-ceiling-module-splits](../openspec/changes/archive/2026-11-08-rf04h-near-ceiling-module-splits/) | Archived |
-| 2026-11-08 | RF4J | [rf04j-remaining-flat-packages](../openspec/changes/archive/2026-11-08-rf04j-remaining-flat-packages/) | Archived |
-| 2026-11-08 | RF5A | [rf05a-shared-security-rows](../openspec/changes/archive/2026-11-08-rf05a-shared-security-rows/) | Archived |
-| 2026-11-08 | RF5B | [rf05b-shared-content-reader](../openspec/changes/archive/2026-11-08-rf05b-shared-content-reader/) | Archived |
-| 2026-11-08 | RF5C | [rf05c-runtime-deltas-composition](../openspec/changes/archive/2026-11-08-rf05c-runtime-deltas-composition/) | Archived |
-| 2026-11-08 | RF8A | [rf08a-architecture-document](../openspec/changes/archive/2026-11-08-rf08a-architecture-document/) | Archived |
-| 2026-11-08 | RF8X | [rf08x-rc1-baseline](../openspec/changes/archive/2026-11-08-rf08x-rc1-baseline/) | Archived |
-| 2026-11-08 | — | [prepare-rc1-release](../openspec/changes/archive/2026-11-08-prepare-rc1-release/) | Archived |
-| 2026-11-08 | RF8Y | [rf08y-release-history-out-of-specs](../openspec/changes/archive/2026-11-08-rf08y-release-history-out-of-specs/) | Archived |
-| 2026-11-08 | RF8B | [rf08b-specification-ownership](../openspec/changes/archive/2026-11-08-rf08b-specification-ownership/) | Archived |
-| 2026-11-09 | — | [fix-remote-d1-fresh-migrate](../openspec/changes/archive/2026-11-09-fix-remote-d1-fresh-migrate/) | Archived |
-| 2026-11-09 | — | [prepare-rc2-release](../openspec/changes/archive/2026-11-09-prepare-rc2-release/) | Archived |
-| 2026-11-10 | RF6A | [rf06a-admin-slice-split](../openspec/changes/archive/2026-11-10-rf06a-admin-slice-split/) | Archived |
-| 2026-11-10 | RF6B | [rf06b-admin-api-client](../openspec/changes/archive/2026-11-10-rf06b-admin-api-client/) | Archived |
-| 2026-11-10 | RF6C | [rf06c-draft-editor-state](../openspec/changes/archive/2026-11-10-rf06c-draft-editor-state/) | Archived |
-| 2026-11-10 | RF6D | [rf06d-list-field-block-card](../openspec/changes/archive/2026-11-10-rf06d-list-field-block-card/) | Archived |
-| 2026-11-10 | — | [rc2-oldest-supported](../openspec/changes/archive/2026-11-10-rc2-oldest-supported/) | Archived |
-| 2026-11-10 | — | [gallery-item-placement-size](../openspec/changes/archive/2026-11-10-gallery-item-placement-size/) | Archived |
-| 2026-11-10 | — | [collection-default-sort](../openspec/changes/archive/2026-11-10-collection-default-sort/) | Archived |
-| 2026-11-10 | — | [admin-editor-ui-polish](../openspec/changes/archive/2026-11-10-admin-editor-ui-polish/) | Archived |
-| 2026-11-10 | — | [admin-editor-left-aligned](../openspec/changes/archive/2026-11-10-admin-editor-left-aligned/) | Archived |
-| 2026-11-11 | — | [route-less-collections](../openspec/changes/archive/2026-11-11-route-less-collections/) | Archived |
-| 2026-11-11 | RF7A | [rf07a-lazy-cloudflare-path](../openspec/changes/archive/2026-11-11-rf07a-lazy-cloudflare-path/) | Archived |
-| 2026-11-11 | RF7B | [rf07b-one-command-table](../openspec/changes/archive/2026-11-11-rf07b-one-command-table/) | Archived |
-| 2026-11-12 | RF7C | [rf07c-cli-source-layout](../openspec/changes/archive/2026-11-12-rf07c-cli-source-layout/) | Archived |
-| 2026-11-12 | RF8C | [rf08c-user-documentation](../openspec/changes/archive/2026-11-12-rf08c-user-documentation/) | Archived |
-| 2026-11-14 | RF7D | [rf07d-naming-hygiene](../openspec/changes/archive/2026-11-14-rf07d-naming-hygiene/) | Archived; 113 D1 contract cases, 227 Node contract tests and 19 affected browser tests passed; build, export comparison and root quality gates passed. Specs synchronized. |
+| 2026-11-01 | RF1A | [rf01a-workspace-scripts-hygiene](../../openspec/changes/archive/2026-11-01-rf01a-workspace-scripts-hygiene/) | Archived |
+| 2026-11-01 | RF1B | [rf01b-docs-pruning-index](../../openspec/changes/archive/2026-11-01-rf01b-docs-pruning-index/) | Archived |
+| 2026-11-02 | RF2A | [rf02a-source-tests-pure-packages](../../openspec/changes/archive/2026-11-02-rf02a-source-tests-pure-packages/) | Archived |
+| 2026-11-02 | RF2B | [rf02b-source-tests-application-server](../../openspec/changes/archive/2026-11-02-rf02b-source-tests-application-server/) | Archived |
+| 2026-11-02 | RF2C | [rf02c-source-tests-delivery-and-test-utils](../../openspec/changes/archive/2026-11-02-rf02c-source-tests-delivery-and-test-utils/) | Archived |
+| 2026-11-02 | RF3A | [rf03a-field-type-capabilities](../../openspec/changes/archive/2026-11-02-rf03a-field-type-capabilities/) | Archived |
+| 2026-11-02 | RF3B | [rf03b-shared-identifiers-limits](../../openspec/changes/archive/2026-11-02-rf03b-shared-identifiers-limits/) | Archived |
+| 2026-11-02 | RF3C | [rf03c-conditional-visibility-evaluator](../../openspec/changes/archive/2026-11-02-rf03c-conditional-visibility-evaluator/) | Archived |
+| 2026-11-03 | RF3D | [rf03d-error-model-mapper](../../openspec/changes/archive/2026-11-03-rf03d-error-model-mapper/) | Archived |
+| 2026-11-03 | RF4A | [rf04a-content-module-split](../../openspec/changes/archive/2026-11-03-rf04a-content-module-split/) | Archived |
+| 2026-11-03 | RF4B | [rf04b-application-module-split](../../openspec/changes/archive/2026-11-03-rf04b-application-module-split/) | Archived |
+| 2026-11-03 | RF4C | [rf04c-contracts-module-split](../../openspec/changes/archive/2026-11-03-rf04c-contracts-module-split/) | Archived |
+| 2026-11-04 | RF4D | [rf04d-server-module-split](../../openspec/changes/archive/2026-11-04-rf04d-server-module-split/) | Archived |
+| 2026-11-04 | RF4E | [rf04e-db-config-module-split](../../openspec/changes/archive/2026-11-04-rf04e-db-config-module-split/) | Archived |
+| 2026-11-04 | RF4X | [rf04x-workspace-guards](../../openspec/changes/archive/2026-11-04-rf04x-workspace-guards/) | Archived |
+| 2026-11-04 | RF4F | [rf04f-test-utils-split](../../openspec/changes/archive/2026-11-04-rf04f-test-utils-split/) | Archived |
+| 2026-11-05 | RF4G | [rf04g-domain-auth-layout](../../openspec/changes/archive/2026-11-05-rf04g-domain-auth-layout/) | Archived |
+| 2026-11-05 | RF3E | [rf03e-shared-grammars-limits](../../openspec/changes/archive/2026-11-05-rf03e-shared-grammars-limits/) | Archived |
+| 2026-11-05 | RF3F | [rf03f-error-codes-follow-up](../../openspec/changes/archive/2026-11-05-rf03f-error-codes-follow-up/) | Archived |
+| 2026-11-07 | RF3G | [rf03g-json-validator-parity](../../openspec/changes/archive/2026-11-07-rf03g-json-validator-parity/) | Archived |
+| 2026-11-07 | RF9A | [rf09a-source-export-condition](../../openspec/changes/archive/2026-11-07-rf09a-source-export-condition/) | Archived |
+| 2026-11-07 | RF9B | [rf09b-typed-test-fixtures](../../openspec/changes/archive/2026-11-07-rf09b-typed-test-fixtures/) | Archived |
+| 2026-11-08 | RF4I | [rf04i-drizzle-schema-by-domain](../../openspec/changes/archive/2026-11-08-rf04i-drizzle-schema-by-domain/) | Archived |
+| 2026-11-08 | RF4H | [rf04h-near-ceiling-module-splits](../../openspec/changes/archive/2026-11-08-rf04h-near-ceiling-module-splits/) | Archived |
+| 2026-11-08 | RF4J | [rf04j-remaining-flat-packages](../../openspec/changes/archive/2026-11-08-rf04j-remaining-flat-packages/) | Archived |
+| 2026-11-08 | RF5A | [rf05a-shared-security-rows](../../openspec/changes/archive/2026-11-08-rf05a-shared-security-rows/) | Archived |
+| 2026-11-08 | RF5B | [rf05b-shared-content-reader](../../openspec/changes/archive/2026-11-08-rf05b-shared-content-reader/) | Archived |
+| 2026-11-08 | RF5C | [rf05c-runtime-deltas-composition](../../openspec/changes/archive/2026-11-08-rf05c-runtime-deltas-composition/) | Archived |
+| 2026-11-08 | RF8A | [rf08a-architecture-document](../../openspec/changes/archive/2026-11-08-rf08a-architecture-document/) | Archived |
+| 2026-11-08 | RF8X | [rf08x-rc1-baseline](../../openspec/changes/archive/2026-11-08-rf08x-rc1-baseline/) | Archived |
+| 2026-11-08 | — | [prepare-rc1-release](../../openspec/changes/archive/2026-11-08-prepare-rc1-release/) | Archived |
+| 2026-11-08 | RF8Y | [rf08y-release-history-out-of-specs](../../openspec/changes/archive/2026-11-08-rf08y-release-history-out-of-specs/) | Archived |
+| 2026-11-08 | RF8B | [rf08b-specification-ownership](../../openspec/changes/archive/2026-11-08-rf08b-specification-ownership/) | Archived |
+| 2026-11-09 | — | [fix-remote-d1-fresh-migrate](../../openspec/changes/archive/2026-11-09-fix-remote-d1-fresh-migrate/) | Archived |
+| 2026-11-09 | — | [prepare-rc2-release](../../openspec/changes/archive/2026-11-09-prepare-rc2-release/) | Archived |
+| 2026-11-10 | RF6A | [rf06a-admin-slice-split](../../openspec/changes/archive/2026-11-10-rf06a-admin-slice-split/) | Archived |
+| 2026-11-10 | RF6B | [rf06b-admin-api-client](../../openspec/changes/archive/2026-11-10-rf06b-admin-api-client/) | Archived |
+| 2026-11-10 | RF6C | [rf06c-draft-editor-state](../../openspec/changes/archive/2026-11-10-rf06c-draft-editor-state/) | Archived |
+| 2026-11-10 | RF6D | [rf06d-list-field-block-card](../../openspec/changes/archive/2026-11-10-rf06d-list-field-block-card/) | Archived |
+| 2026-11-10 | — | [rc2-oldest-supported](../../openspec/changes/archive/2026-11-10-rc2-oldest-supported/) | Archived |
+| 2026-11-10 | — | [gallery-item-placement-size](../../openspec/changes/archive/2026-11-10-gallery-item-placement-size/) | Archived |
+| 2026-11-10 | — | [collection-default-sort](../../openspec/changes/archive/2026-11-10-collection-default-sort/) | Archived |
+| 2026-11-10 | — | [admin-editor-ui-polish](../../openspec/changes/archive/2026-11-10-admin-editor-ui-polish/) | Archived |
+| 2026-11-10 | — | [admin-editor-left-aligned](../../openspec/changes/archive/2026-11-10-admin-editor-left-aligned/) | Archived |
+| 2026-11-11 | — | [route-less-collections](../../openspec/changes/archive/2026-11-11-route-less-collections/) | Archived |
+| 2026-11-11 | RF7A | [rf07a-lazy-cloudflare-path](../../openspec/changes/archive/2026-11-11-rf07a-lazy-cloudflare-path/) | Archived |
+| 2026-11-11 | RF7B | [rf07b-one-command-table](../../openspec/changes/archive/2026-11-11-rf07b-one-command-table/) | Archived |
+| 2026-11-12 | RF7C | [rf07c-cli-source-layout](../../openspec/changes/archive/2026-11-12-rf07c-cli-source-layout/) | Archived |
+| 2026-11-12 | RF8C | [rf08c-user-documentation](../../openspec/changes/archive/2026-11-12-rf08c-user-documentation/) | Archived |
+| 2026-11-14 | RF7D | [rf07d-naming-hygiene](../../openspec/changes/archive/2026-11-14-rf07d-naming-hygiene/) | Archived; 113 D1 contract cases, 227 Node contract tests and 19 affected browser tests passed; build, export comparison and root quality gates passed. Specs synchronized. |
+| 2026-11-14 | — | [update-node-pnpm-toolchain](../../openspec/changes/archive/2026-11-14-update-node-pnpm-toolchain/) | Archived |
+| 2026-11-14 | — | [revise-architecture-size-policy](../../openspec/changes/archive/2026-11-14-revise-architecture-size-policy/) | Archived |
+| 2026-11-14 | Audit | [harden-persistence-hygiene](../../openspec/changes/archive/2026-11-14-harden-persistence-hygiene/) | Archived |
+| 2026-11-14 | Audit | [align-openapi-contract](../../openspec/changes/archive/2026-11-14-align-openapi-contract/) | Archived |
+| 2026-11-14 | Audit | [dispatch-on-committed-outbox-work](../../openspec/changes/archive/2026-11-14-dispatch-on-committed-outbox-work/) | Archived |
+| 2026-11-14 | Audit | [report-missing-authentication-as-401](../../openspec/changes/archive/2026-11-14-report-missing-authentication-as-401/) | Archived |
+| 2026-11-14 | RF9C–RF9F | — | Moved to the [extensibility roadmap](../extensibility-roadmap.md) as EX1A–EX1D |

@@ -151,6 +151,7 @@ export async function startNodeServer(input: {
   readonly settings: NodeRuntimeSettings;
 }): Promise<NodeServer> {
   await input.runtime.maintainOAuth();
+  await input.runtime.maintainOperations();
   await input.runtime.verifyStorage();
   const fetch = input.developmentGateway
     ? createNodeDevelopmentGateway(input.runtime.app.fetch, input.settings)
@@ -158,8 +159,17 @@ export async function startNodeServer(input: {
   const server = createServer(
     getRequestListener(
       (request, bindings) => {
-        input.runtime.setRequestPeer(request, bindings.incoming.socket.remoteAddress);
-        return fetch(request);
+        // Materialize the Node adapter's lazy Request before body-limit can
+        // consume and replace it using the native Request constructor.
+        const body = request.body;
+        const nativeRequest = new Request(request.url, {
+          method: request.method,
+          headers: request.headers,
+          signal: request.signal,
+          ...(body === null ? {} : { body, duplex: "half" }),
+        } as RequestInit);
+        input.runtime.setRequestPeer(nativeRequest, bindings.incoming.socket.remoteAddress);
+        return fetch(nativeRequest);
       },
       { overrideGlobalObjects: false },
     ),

@@ -14,8 +14,9 @@ Read these before planning or implementing product work:
    [`docs/README.md`](docs/README.md) indexes internal documents and their status.
 2. `openspec/specs/**` — accepted detailed capability behavior.
 3. The selected active OpenSpec change — the proposed implementation delta.
-4. `docs/refactoring-roadmap.md` — the active roadmap: delivery order, session
+4. `docs/extensibility-roadmap.md` — the active roadmap: delivery order, session
    boundaries and recorded decisions. `backlog.md` — future work.
+   `docs/archive/refactoring-roadmap.md`,
    `docs/archive/site-migration-roadmap.md`,
    `docs/archive/content-editor-roadmap.md` and
    `docs/archive/mvp-implementation-roadmap.md` preserve completed delivery

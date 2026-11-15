@@ -26,6 +26,8 @@ the limits that shape design.
 | `/api/v1/invitations/*`, `/api/v1/password-reset/*` | token in body | Completed without a session. |
 | `/mcp` (optional) | authenticated actor | Closed tool set, per-call authorization. |
 
+Protected REST routes answer `401 AUTHENTICATION_REQUIRED` for missing or rejected credentials, with a no-store response and a challenge for the accepted credential types. Permission denials, unsupported credential kinds, and origin or CSRF refusals answer `403 AUTHORIZATION_DENIED`.
+
 Build tokens are random opaque credentials stored only as hashes, carry only
 `content:build:read`, and cannot be exchanged for a browser session. Import
 tokens reach only the allowlist in

@@ -23,6 +23,7 @@ my-site/                        # starter site mode
 ├── lace.config.ts              # public, typed Lace configuration
 ├── package.json, pnpm-workspace.yaml, .env.example
 ├── docker-compose.yml          # managed infrastructure file
+├── docker-compose.dev.yml      # managed, explicitly selected local API port
 ├── .lace/manifest.json         # generator version, site mode, managed hashes
 ├── worker/                     # optional (--cloudflare): managed index.ts and
 │                               # .dev.vars.example, user-owned wrangler.jsonc
@@ -40,6 +41,10 @@ guide); **none** (`--no-site`, path `null`) generates the CMS only, and its
 Compose has no builder, so build dispatch reports that no build trigger or site
 is configured. `--cloudflare` combines with every mode (no static-site workflow
 without a site).
+
+Production uses only `docker-compose.yml` and reaches the private API through
+Nginx. `pnpm dev:api` explicitly adds `docker-compose.dev.yml`, publishing the
+API on loopback for local development; it is not a production ingress.
 
 Managed files that reference the site are rendered from the recorded mode and
 path through the build-site selection configuration, never a second selection

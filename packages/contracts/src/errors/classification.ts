@@ -7,10 +7,12 @@ import {
   BuildExportVersionChangedError,
 } from "@lacecms/domain";
 import type { AccountErrorCode, DomainErrorCode, InternalDomainErrorCode } from "@lacecms/domain";
+import { AuthenticationRequiredError } from "./authentication.js";
 import { ContractValidationError, toContentValidationIssues, validationError } from "./envelope.js";
 import type { ClassifiedError, LaceErrorCode } from "./envelope.js";
 
 export type TransportErrorCode =
+  | "AUTHENTICATION_REQUIRED"
   | "AUTHORIZATION_DENIED"
   | "CONFLICT"
   | "INVALID_CREDENTIALS"
@@ -44,6 +46,24 @@ const errorMappings: Readonly<
     ErrorMapping
   >
 > = {
+  AUTHENTICATION_REQUIRED: {
+    status: 401,
+    message: "Authentication is required.",
+    expose: (error) =>
+      error instanceof AuthenticationRequiredError
+        ? {
+            headers: {
+              "cache-control": "no-store",
+              "www-authenticate":
+                error.challenge === "session-or-bearer"
+                  ? 'Session realm="lace", Bearer realm="lace"'
+                  : error.challenge === "session"
+                    ? 'Session realm="lace"'
+                    : 'Bearer realm="lace"',
+            },
+          }
+        : {},
+  },
   AUTHORIZATION_DENIED: {
     status: 403,
     message: "The actor is not permitted to perform this operation.",

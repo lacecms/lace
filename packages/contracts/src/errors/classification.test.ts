@@ -3,6 +3,7 @@
 import { DomainError, BlockOrderError } from "@lacecms/domain";
 import * as v from "valibot";
 import { describe, expect, test } from "vitest";
+import { AuthenticationRequiredError } from "./authentication.js";
 import { classifyError, transportError } from "./classification.js";
 import { errorEnvelopeSchema, validationError } from "./envelope.js";
 
@@ -127,5 +128,18 @@ test("content and query errors share value-free stable codes and escaped pointer
   expect(classifyError(error)).toMatchObject({
     status: 422,
     body: { error: { code: "VALIDATION_FAILED" } },
+  });
+});
+
+test.each([
+  ["session", 'Session realm="lace"'],
+  ["bearer", 'Bearer realm="lace"'],
+  ["session-or-bearer", 'Session realm="lace", Bearer realm="lace"'],
+])("authentication challenge %s", (challenge, header) => {
+  const result = classifyError(new AuthenticationRequiredError(challenge));
+  expect(result).toEqual({
+    status: 401,
+    body: { error: { code: "AUTHENTICATION_REQUIRED", message: "Authentication is required." } },
+    headers: { "cache-control": "no-store", "www-authenticate": header },
   });
 });

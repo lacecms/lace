@@ -182,8 +182,8 @@ test("expired status session removes the protected version and returns to sign-i
       loadSettingsStatus: async () => {
         if (expired)
           throw new AdminClientError({
-            code: "AUTHORIZATION_DENIED",
-            status: 403,
+            code: "AUTHENTICATION_REQUIRED",
+            status: 401,
             message: "Session expired",
           });
         return {

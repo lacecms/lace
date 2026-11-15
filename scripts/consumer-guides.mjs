@@ -56,7 +56,7 @@ export const scenarioGuides = Object.freeze({
       "pnpm db:migrate",
       "pnpm content:sync",
       "pnpm auth:bootstrap",
-      "pnpm dev:api",
+      "docker compose up -d web",
       "pnpm prod:start",
       "docker compose ps",
       "docker compose stop api dispatcher",

@@ -91,12 +91,12 @@ test("serves the seeded lifecycle through an actual Node listener", async () => 
     const models = await json(value.server, "/api/v1/admin/content-models?config=ignored.ts");
     expect(models.response.status).toBe(200);
     expect(models.body.items.map((model) => model.key)).toEqual([
-      "about",
       "home",
-      "navigation",
-      "notes",
+      "about",
       "posts",
+      "notes",
       "settings",
+      "navigation",
     ]);
     const created = await json(value.server, "/api/v1/admin/models/posts/entries", {
       body: JSON.stringify({
@@ -187,7 +187,7 @@ test("serves the seeded lifecycle through an actual Node listener", async () => 
           headers: { "if-none-match": weakTag },
         })
       ).response.status,
-    ).toBe(403);
+    ).toBe(401);
     for (const tag of ["*", 'W/"bad"', '"1", "2"', '"9007199254740992"'])
       expect(
         (
@@ -318,8 +318,8 @@ test("keeps production composition anonymous even when a request asks for a test
         headers: { "x-lace-test-actor": "admin" },
       }),
     ).toMatchObject({
-      body: { error: { code: "AUTHORIZATION_DENIED" } },
-      response: { status: 403 },
+      body: { error: { code: "AUTHENTICATION_REQUIRED" } },
+      response: { status: 401 },
     });
   } finally {
     await value.close();
@@ -532,7 +532,7 @@ test("anonymous browser setup state survives bootstrap and stale clients stay cl
     expect(stale.map((result) => result.response.status)).toEqual([404, 404]);
     expect((await json(value.server, "/api/v1/setup/state")).body).toEqual({ setupComplete: true });
     expect(await value.runtime.security.listUsers()).toHaveLength(1);
-    expect((await json(value.server, "/api/v1/admin/users")).response.status).toBe(403);
+    expect((await json(value.server, "/api/v1/admin/users")).response.status).toBe(401);
   } finally {
     await value.close();
   }
@@ -580,5 +580,38 @@ test("development gateway keeps MCP discovery and child paths local without fron
       settings,
     );
     expect(destroyed).toBe(true);
+  }
+});
+
+test("Node server start runs operations maintenance and purges expired idempotency records", async () => {
+  const harness = await openNodeTestRuntime(platform, {
+    config: await loadProjectConfig(),
+    runtimeDefaults: true,
+    settings: runtimeEnvironment,
+    storage: {
+      createReadUrl: async () => "memory-object://media",
+      delete: async () => {},
+      get: async () => null,
+      put: async (input) => ({ contentType: input.contentType, key: input.key, size: 0 }),
+    },
+  });
+  const { runtime } = harness;
+  const now = Date.now();
+  const insert = runtime.database.connection.prepare(
+    "insert into idempotency_records (scope,key,request_hash,response_json,created_at,expires_at) values ('publication:e:a',?,'h','{}',1,?)",
+  );
+  insert.run("old", now - 1);
+  insert.run("live", now + 86_400_000);
+  const server = await startNodeServer({ runtime, settings: { ...harness.settings, port: 0 } });
+  try {
+    expect(
+      runtime.database.connection
+        .prepare("select key from idempotency_records")
+        .all()
+        .map((row) => row.key),
+    ).toEqual(["live"]);
+  } finally {
+    await server.close();
+    await harness.close();
   }
 });

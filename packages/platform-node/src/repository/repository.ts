@@ -1,5 +1,5 @@
 import type { ListMediaTagsInput, MediaTagCount } from "@lacecms/application";
-import { collectionListPlan } from "@lacecms/db";
+import { collectionListPlan, purgeExpiredIdempotencyRecordsStatement } from "@lacecms/db";
 import { NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import type { CollectionListRow } from "@lacecms/db";
 import type {
@@ -41,6 +41,7 @@ import type {
   MediaDeletionDispatchPort,
   MediaListPort,
   MediaReadPort,
+  OperationsMaintenancePort,
   MediaUsageEntry,
   PublishContentEntryCommand,
   PublishContentEntryResult,
@@ -105,6 +106,7 @@ export class NodeContentRepository
     MediaDeletionDispatchPort,
     MediaListPort,
     MediaReadPort,
+    OperationsMaintenancePort,
     PublicContentReadPort,
     SiteBuildCommandPort,
     SiteBuildReadPort,
@@ -433,6 +435,10 @@ export class NodeContentRepository
     readonly stage?: import("@lacecms/domain").SiteBuildProviderStage;
   }): Promise<boolean> {
     return this.siteBuilds.recordTrackedSiteBuildCheck(input);
+  }
+  public async purgeExpiredIdempotencyRecords(now: number, limit: number): Promise<number> {
+    const statement = purgeExpiredIdempotencyRecordsStatement(now, limit);
+    return Number(this.connection.prepare(statement.sql).run(...statement.params).changes);
   }
 }
 

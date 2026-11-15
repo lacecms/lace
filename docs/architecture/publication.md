@@ -47,6 +47,10 @@ The outbox dispatcher runs after commit and invokes `SiteBuildTrigger`. Failed
 dispatches stay recoverable with bounded exponential backoff, and a scheduled
 recovery process handles events left pending after a Worker or container
 terminates ([outbox-dispatch](../../openspec/specs/outbox-dispatch/spec.md)).
+On the Worker, a request whose committed D1 batch inserted or coalesced an
+outbox event registers one best-effort `waitUntil` pass, whatever its route
+or transport (REST or MCP); scheduled dispatch remains the recovery path
+([cloudflare-scheduled-dispatch](../../openspec/specs/cloudflare-scheduled-dispatch/spec.md)).
 Publication success and deployment success are distinct states; the admin can
 show "published, build pending" or "published, build failed".
 

@@ -103,6 +103,9 @@
           },
           "fields": {
             "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
             "additionalProperties": {}
           },
           "blocks": {
@@ -122,10 +125,16 @@
                 },
                 "data": {
                   "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
                   "additionalProperties": {}
                 },
                 "settings": {
                   "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
                   "additionalProperties": {}
                 },
                 "anchor": {
@@ -145,6 +154,9 @@
           },
           "seo": {
             "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
             "additionalProperties": {}
           },
           "publish": {

@@ -11,8 +11,7 @@ must guarantee
 Primary IDs are application-generated sortable string IDs such as ULIDs.
 Timestamps are UTC Unix milliseconds in the database and ISO 8601 strings in
 REST responses. Binary media never live in the database. Every model shares
-the content tables ([ADR 0026](../adr/0026-code-defined-models-two-snapshots.md)); a block type never receives a dedicated table or
-columns.
+the content tables ([ADR 0026](../adr/0026-code-defined-models-two-snapshots.md)); a block type never gets its own table or columns.
 
 ### 9.1 Content models
 
@@ -189,9 +188,8 @@ published reference nor an SQL/object-storage half-delete can remain.
 The `detach=drafts` option removes the item from every using draft through
 ordinary guarded draft saves, then requests deletion through the unchanged
 guard. It refuses before any change when a current published snapshot uses the
-item or when more entries use it than the usage read returns. Each draft save
-is atomic on its own, and published snapshots are never rewritten, so detaching
-requests no build.
+item or when more entries use it than the usage read returns. Draft saves are
+atomic and never touch published snapshots, so detaching requests no build.
 
 The default limit is 10 MiB and the initial allowlist is JPEG, PNG, WebP, GIF
 and AVIF. Deployment configuration may narrow both but cannot expand them
@@ -247,16 +245,17 @@ The singleton `published_state` row (`singleton_key = 1`) holds the global
 `version`, which every public-output change increments in the same atomic
 mutation and which supplies the build-export ETag and build target versions
 without hashing the export. Aligning a published `revision` during a draft
-revert is not a public-output change: no renderer, SDK helper or build step
-reads it.
+revert is not a public-output change: no renderer, SDK or build reads it.
 
 `idempotency_records`, keyed by `(scope, key)`, stores the request hash and
-recorded response until expiry. For publication, `scope` includes the actor
-and entry ID; reusing a key with the same request hash returns the recorded
-result, and with different input an idempotency conflict. Keys are 8–128
-printable ASCII characters, publication records expire after 24 hours and
-maintenance removes expired rows. The key is optional for direct API clients;
-the admin UI always sends one and reuses it when retrying the same action.
+recorded response until `expires_at`, 24 hours after the request. For
+publication and unpublication, `scope` includes the actor and entry ID. A live
+record replays for the same request hash and is an idempotency conflict for
+different input; an expired record is absent, and a committed retry replaces
+it atomically. Keys are 8–128 printable ASCII characters. Maintenance deletes
+at most 20 expired rows per call with one shared statement (Worker: every
+third scheduled run, within 50 D1 queries). The key is optional for direct API
+clients; the admin UI always sends one and reuses it when retrying.
 
 Site builds are coalesced, with a 5-second debounce from the most recent
 request. At most one unprocessed, unlocked `site.build.requested` event exists,

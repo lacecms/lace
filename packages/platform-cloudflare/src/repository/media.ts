@@ -224,7 +224,7 @@ export class D1MediaCommands
       token,
     );
     batch.checkpoint("media.outbox");
-    batch.add(
+    batch.addOutbox(
       `insert into outbox_events (id, type, payload_json, attempts, available_at, created_at) select ?, 'media.delete.requested', ?, 0, ?, ? where ${GUARD_SQL}`,
       this.nextId(),
       JSON.stringify({ mediaId: input.mediaId, requestedBy: input.requestedBy.id }),

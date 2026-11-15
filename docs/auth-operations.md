@@ -111,6 +111,12 @@ operations use fixed windows; the public account page lists the user-visible
 limits. Persistence records HMAC bucket identities, never raw emails or client
 IPs. A `429` includes `Retry-After`.
 
+Node uses the socket peer unless a configured trusted proxy supplies a valid
+chain; malformed chains fall back to the peer. The Worker uses its validated
+ingress address. Lace retains that identity through body handling for both
+its own and Better Auth's sign-in limits. Direct calls or missing trusted
+identity use the shared `0.0.0.0` fallback, never caller forwarding headers.
+
 ## Admin introduction storage
 
 Tour status is local to the browser, installation origin and admin base path,

@@ -801,3 +801,33 @@ contract(
 );
 
 declare function atob(data: string): string;
+
+contract(
+  "snapshot deletion and published media lookups search through indexes",
+  async (runtime, expect) => {
+    const { sql } = await runtime.open({ resolveModel: resolveRoute });
+    const plan = async (statement: string) =>
+      (await sql.all<{ detail: string }>(`explain query plan ${statement}`, "snapshot")).map(
+        (row) => row.detail,
+      );
+    // SQLite checks each foreign key that references a deleted snapshot with
+    // this child-key lookup; an index makes every check a search.
+    for (const [table, column, index] of [
+      ["content_entries", "draft_snapshot_id", "content_entries_draft_snapshot_idx"],
+      ["content_entries", "published_snapshot_id", "content_entries_published_snapshot_idx"],
+      ["published_routes", "snapshot_id", "published_routes_snapshot_idx"],
+      ["site_builds", "published_snapshot_id", "site_builds_published_snapshot_idx"],
+    ] as const) {
+      const details = await plan(`select 1 from ${table} where ${column} = ?`);
+      expect(details.join("\n"), `${table}.${column}`).toMatch(
+        new RegExp(`^SEARCH ${table} USING (COVERING )?INDEX ${index} `, "mu"),
+      );
+    }
+    // The public media dictionary and published-usage lookups share this join.
+    const media = await plan(
+      "select 1 from content_media_references r join content_entries e on e.published_snapshot_id = r.snapshot_id where r.media_id = ?",
+    );
+    expect(media.join("\n")).not.toMatch(/\bSCAN (e|content_entries)\b|AUTOMATIC/u);
+    expect(media.join("\n")).toContain("content_entries_published_snapshot_idx");
+  },
+);

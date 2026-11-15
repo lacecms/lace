@@ -18,13 +18,13 @@ import type { ServerConfig } from "../shared/content-config.js";
 export type Actor = Parameters<ContentUseCases["create"]>[0]["actor"];
 
 export interface ActorResolver {
-  resolve(request: Request): Promise<Actor | null>;
+  resolve(request: Request): Promise<Actor | "request-denied" | null>;
   /** The opaque id of the provider session authenticating the request, when there is one. */
   sessionId?(request: Request): Promise<string | null>;
 }
 
 export interface AuthRouteHandler {
-  fetch(request: Request): Promise<Response>;
+  fetch(request: Request, clientAddress?: string): Promise<Response>;
 }
 
 export interface RequestIdGenerator {
@@ -35,6 +35,7 @@ export interface RequestRateLimiter {
   check(input: {
     readonly request: Request;
     readonly requestId: string;
+    readonly clientAddress?: string;
     readonly actor?: Actor;
   }): Promise<boolean | RateLimitDecision>;
 }
@@ -66,6 +67,8 @@ export interface BuiltAdminResponder {
 }
 
 export interface LaceAppInput {
+  /** Reads trusted ingress metadata from the original request. */
+  readonly clientAddress?: (request: Request) => string;
   /** Invitation, recovery and self-service flows; absent disables the account routes. */
   readonly accounts?: AccountUseCases;
   /** Opt-in browser reference; machine-readable OpenAPI remains available. */
@@ -96,7 +99,9 @@ export interface LaceAppInput {
   readonly importActors?: {
     resolve(
       request: Request,
-    ): Promise<{ readonly actor: Actor; readonly token: ImportTokenMetadata } | null>;
+    ): Promise<
+      { readonly actor: Actor; readonly token: ImportTokenMetadata } | "request-denied" | null
+    >;
   };
   readonly adminAssets?: BuiltAdminResponder;
   readonly config: ServerConfig;

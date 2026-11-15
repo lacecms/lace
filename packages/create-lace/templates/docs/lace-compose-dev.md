@@ -42,7 +42,7 @@ Preparation creates a protected, ignored `.env` with random auth, MinIO and buil
 Review `.env` before any command that loads it. Change only what your machine needs:
 
 - `LACE_API_IMAGE` and `LACE_BUILDER_IMAGE`: compatible image references for your Lace release.
-- `LACE_API_PORT` and `LACE_HTTP_PORT`: host ports for the API/admin and the static web proxy.
+- `LACE_API_PORT`: loopback API/admin port for development. `LACE_HTTP_PORT` and `LACE_HTTP_BIND_ADDRESS` configure the production web proxy.
 - `LACE_PUBLIC_BASE_URL` and `LACE_API_BASE_URL`: both default to `http://127.0.0.1:3000/`. Change both when you change the API port. Use the exact public origin for admin login (`localhost` and `127.0.0.1` differ). Keep path prefixes and the trailing slash.
 
 Keep every generated credential.

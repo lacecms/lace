@@ -38,8 +38,8 @@ export async function builderDiagnosticsJourney(parent, operations) {
   );
   // Exact-artifact acceptance supplies the loaded release images instead of local builds.
   const context = await prepareCompose(project, parent, releaseArtifacts);
-  const base = `http://127.0.0.1:${context.apiPort}/`;
   const publicBase = `http://127.0.0.1:${context.httpPort}/`;
+  const base = publicBase;
   const envFile = join(project, ".env");
   const reviewed = reviewEnvironment(await readFile(envFile, "utf8"), {
     LACE_API_IMAGE: context.images.api,
@@ -66,8 +66,19 @@ export async function builderDiagnosticsJourney(parent, operations) {
   const password = randomBytes(24).toString("hex");
   secretValues.add(token);
   secretValues.add(password);
-  await compose("diagnostics-api", ["up", "-d", "--wait", "api"], { timeoutMs: 20 * 60_000 });
+  await compose("diagnostics-api", ["up", "-d", "--wait", "web"], { timeoutMs: 20 * 60_000 });
   await waitApiReady(base);
+  const bootstrapServices = (
+    await compose("diagnostics-bootstrap-services", ["ps", "--format", "json"])
+  )
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line).Service);
+  if (bootstrapServices.includes("builder") || bootstrapServices.includes("dispatcher"))
+    throw new Error("diagnostics: builder or dispatcher started before token issuance");
+  const admin = await fetch(new URL("/admin/", base));
+  if (!admin.ok) throw new Error(`diagnostics: admin returned ${admin.status}`);
   await request(base, "/api/v1/setup/admin", { method: "POST", json: { email, password, token } });
   const login = await request(base, "/api/auth/sign-in/email", {
     method: "POST",

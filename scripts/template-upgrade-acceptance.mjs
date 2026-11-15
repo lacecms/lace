@@ -244,6 +244,12 @@ export async function templateUpgradeJourney(temporary, operations) {
     const changed = plan.report.data.decisions.filter((decision) =>
       ["add", "replace", "remove"].includes(decision.action),
     );
+    if (
+      !changed.some(
+        (decision) => decision.path === "docker-compose.dev.yml" && decision.action === "add",
+      )
+    )
+      throw new Error(`upgrade-${version}-${variant.name}: development Compose file was not added`);
     for (const decision of changed) {
       if (decision.action === "remove") {
         if (decision.path in after)

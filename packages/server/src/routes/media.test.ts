@@ -250,7 +250,7 @@ test("media binaries carry immutable validators and answer 304 only after eligib
   expect(reads).toEqual([]);
   current = null;
   const anonymous = await request(previewPath, { "if-none-match": tag });
-  expect(anonymous.status).toBe(403);
+  expect(anonymous.status).toBe(401);
   expect(anonymous.headers.get("etag")).toBeNull();
   current = admin;
 
@@ -769,7 +769,7 @@ test("media tag REST supports upload, replacement, filtering, catalog and precis
     build: { status: "not-dispatched" },
   });
   current = null;
-  expect((await json(app, "/api/v1/admin/media/tags")).response.status).toBe(403);
+  expect((await json(app, "/api/v1/admin/media/tags")).response.status).toBe(401);
   // Existing actor resolution must not let an arbitrary build/MCP bearer authenticate admin reads.
   for (const token of ["build-token", "mcp-token"]) {
     const result = await app.fetch(

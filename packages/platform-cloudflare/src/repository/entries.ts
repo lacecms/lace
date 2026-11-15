@@ -31,6 +31,11 @@ import {
   DUPLICATE_SOURCE_REVISION_SQL,
   notPublished,
   revertDraftSnapshotSql,
+  deleteExpiredIdempotencyRecordStatement,
+  deleteSupersededSnapshotsStatement,
+  LIVE_IDEMPOTENCY_RECORD_SQL,
+  NO_LIVE_IDEMPOTENCY_RECORD_SQL,
+  publicationScope,
   unpublicationScope,
   seoJson,
   revisionConflict,
@@ -154,11 +159,11 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
     const path = contentPublicPath(entry.model, entry.draft.slug);
     const idempotency = input.idempotency;
     const scope =
-      idempotency === undefined ? undefined : `publication:${input.entryId}:${idempotency.actorId}`;
+      idempotency === undefined ? undefined : publicationScope(input.entryId, idempotency.actorId);
     if (idempotency !== undefined) {
       if (idempotency.actorId !== input.publishedBy.id)
         failure("Publication idempotency actor must match publisher.");
-      const replay = await this.replayPublication(scope!, idempotency);
+      const replay = await this.replayPublication(scope!, idempotency, input.publishedAt);
       if (replay !== null) return replay;
     }
     if (entry.draft.revision !== input.expectedRevision) {
@@ -205,7 +210,7 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
          from content_snapshots s join content_entries e on e.draft_snapshot_id = s.id
         where e.id = ? and s.id = ? and s.revision = ?
           and not exists (${linkGuard.sql})
-          ${idempotency === undefined ? "" : "and not exists (select 1 from idempotency_records where scope = ? and key = ?)"}`,
+          ${idempotency === undefined ? "" : `and ${NO_LIVE_IDEMPOTENCY_RECORD_SQL}`}`,
       newId,
       ...(projected === undefined ? [] : [projected.fieldsJson]),
       input.publishedAt,
@@ -215,7 +220,7 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
       draftId,
       input.expectedRevision,
       ...linkGuard.params,
-      ...(idempotency === undefined ? [] : [scope, idempotency.key]),
+      ...(idempotency === undefined ? [] : [scope, idempotency.key, input.publishedAt]),
     );
     batch.checkpoint("publish.blocks");
     if (projected === undefined)
@@ -298,6 +303,13 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
       snapshotId: newId,
     });
     if (idempotency !== undefined) {
+      const expired = deleteExpiredIdempotencyRecordStatement(
+        scope!,
+        idempotency.key,
+        input.publishedAt,
+        exists.sql,
+      );
+      batch.add(expired.sql, ...expired.params, ...exists.params);
       batch.add(
         `insert into idempotency_records (scope, key, request_hash, response_json, created_at, expires_at) select ?, ?, ?, ?, ?, ? where ${exists.sql}`,
         scope,
@@ -309,17 +321,17 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
         ...exists.params,
       );
     }
-    batch.add(
-      `delete from content_snapshots where entry_id = ? and id <> ? and id <> ? and ${exists.sql}`,
+    const superseded = deleteSupersededSnapshotsStatement(
       input.entryId,
       draftId,
       newId,
-      ...exists.params,
+      exists.sql,
     );
+    batch.add(superseded.sql, ...superseded.params, ...exists.params);
     const results = await this.execute(batch, false);
     if (results[snapshotIndex]!.meta.changes !== 1) {
       if (idempotency !== undefined) {
-        const replay = await this.replayPublication(scope!, idempotency);
+        const replay = await this.replayPublication(scope!, idempotency, input.publishedAt);
         if (replay !== null) return replay;
       }
       assertPublishedInternalLinkTargets(
@@ -350,7 +362,7 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
     if (idempotency !== undefined) {
       if (idempotency.actorId !== input.unpublishedBy.id)
         failure("Unpublication idempotency actor must match the unpublishing actor.");
-      const replay = await this.replayUnpublication(scope!, idempotency);
+      const replay = await this.replayUnpublication(scope!, idempotency, input.unpublishedAt);
       if (replay !== null) return replay;
     }
     const entry = await this.reader.loadEntry(input.entryId);
@@ -375,13 +387,11 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
       params: [
         input.entryId,
         input.expectedPublishedSnapshotId,
-        ...(idempotency === undefined ? [] : [scope, idempotency.key]),
+        ...(idempotency === undefined ? [] : [scope, idempotency.key, input.unpublishedAt]),
         ...impact.params,
       ],
       sql: `exists (select 1 from content_entries where id = ? and published_snapshot_id = ?)${
-        idempotency === undefined
-          ? ""
-          : " and not exists (select 1 from idempotency_records where scope = ? and key = ?)"
+        idempotency === undefined ? "" : ` and ${NO_LIVE_IDEMPOTENCY_RECORD_SQL}`
       } and (${impact.sql})`,
     });
     const guarded: Condition = { params: [token], sql: GUARD_SQL };
@@ -409,6 +419,13 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
       snapshotId: input.expectedPublishedSnapshotId,
     });
     if (idempotency !== undefined) {
+      const expired = deleteExpiredIdempotencyRecordStatement(
+        scope!,
+        idempotency.key,
+        input.unpublishedAt,
+        GUARD_SQL,
+      );
+      batch.add(expired.sql, ...expired.params, token);
       batch.add(
         `insert into idempotency_records (scope, key, request_hash, response_json, created_at, expires_at) select ?, ?, ?, ?, ?, ? where ${GUARD_SQL}`,
         scope,
@@ -430,7 +447,7 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
     const results = await this.execute(batch, false);
     if (results[0]!.meta.changes !== 1) {
       if (idempotency !== undefined) {
-        const replay = await this.replayUnpublication(scope!, idempotency);
+        const replay = await this.replayUnpublication(scope!, idempotency, input.unpublishedAt);
         if (replay !== null) return replay;
       }
       const current = await this.entryRow(input.entryId);
@@ -605,15 +622,12 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
   private async replayPublication(
     scope: string,
     idempotency: NonNullable<PublishContentEntryCommand["idempotency"]>,
+    now: number,
   ): Promise<PublishContentEntryResult | null> {
     const prior = await this.first<{
       readonly request_hash: string;
       readonly response_json: string;
-    }>(
-      "select request_hash, response_json from idempotency_records where scope = ? and key = ?",
-      scope,
-      idempotency.key,
-    );
+    }>(LIVE_IDEMPOTENCY_RECORD_SQL, scope, idempotency.key, now);
     if (prior === undefined) return null;
     if (prior.request_hash !== idempotency.fingerprint)
       failure("Publication idempotency key was reused with different input.");
@@ -627,15 +641,12 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
   private async replayUnpublication(
     scope: string,
     idempotency: NonNullable<UnpublishContentEntryCommand["idempotency"]>,
+    now: number,
   ): Promise<UnpublishContentEntryResult | null> {
     const prior = await this.first<{
       readonly request_hash: string;
       readonly response_json: string;
-    }>(
-      "select request_hash, response_json from idempotency_records where scope = ? and key = ?",
-      scope,
-      idempotency.key,
-    );
+    }>(LIVE_IDEMPOTENCY_RECORD_SQL, scope, idempotency.key, now);
     if (prior === undefined) return null;
     if (prior.request_hash !== idempotency.fingerprint)
       failure("Unpublication idempotency key was reused with different input.");

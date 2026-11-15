@@ -25,7 +25,7 @@ import {
 // otherwise runs after SDK schemas in a combined esbuild bundle.
 import { createMcpContentHandler } from "@lacecms/mcp";
 import type { ContentModelDefinition, NormalizedConfig } from "@lacecms/config";
-import { betterAuthSchema, checkedInMigrations } from "@lacecms/db";
+import { betterAuthSchema, checkedInMigrations, IDEMPOTENCY_PURGE_LIMIT } from "@lacecms/db";
 import { unixMilliseconds } from "@lacecms/domain";
 import {
   composeLaceServices,
@@ -40,6 +40,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { ulid } from "ulid";
 import { createCloudflareAdminAssets } from "./admin-assets.js";
 import { CloudflareKvCache, NoopCloudflareCache } from "./cache.js";
+import * as postCommitScope from "./post-commit-scope.js";
 import { D1ContentRepository } from "../repository/repository.js";
 import { DeployHookSiteBuildTrigger } from "../deploy/deploy-hook.js";
 import { PagesDeploymentStatusReader } from "../deploy/pages-deployments.js";
@@ -66,26 +67,6 @@ export const SCHEDULED_MEDIA_DELETION_CLAIMS = 5;
 export const SCHEDULED_TRACKING_CHECKS = 5;
 const POST_COMMIT_BUILD_DELAY_MS = SITE_BUILD_DEBOUNCE_MS + 250;
 
-/** Admin mutations that enqueue outbox work and deserve a best-effort post-commit pass. */
-const DISPATCH_PRODUCING_REQUESTS: readonly (readonly [string, RegExp])[] = [
-  ["POST", /^\/api\/v1\/admin\/entries\/[^/]+\/publish$/u],
-  ["POST", /^\/api\/v1\/admin\/entries\/[^/]+\/unpublish$/u],
-  ["DELETE", /^\/api\/v1\/admin\/entries\/[^/]+$/u],
-  ["PATCH", /^\/api\/v1\/admin\/media\/[^/]+$/u],
-  ["DELETE", /^\/api\/v1\/admin\/media\/[^/]+$/u],
-  ["POST", /^\/api\/v1\/admin\/media\/[^/]+\/retry-deletion$/u],
-  ["POST", /^\/api\/v1\/admin\/builds$/u],
-  ["POST", /^\/api\/v1\/admin\/builds\/[^/]+\/retry$/u],
-];
-
-export function producesDispatchWork(request: Request, status: number): boolean {
-  if (status < 200 || status > 299) return false;
-  const pathname = new URL(request.url).pathname;
-  return DISPATCH_PRODUCING_REQUESTS.some(
-    ([method, pattern]) => request.method === method && pattern.test(pathname),
-  );
-}
-
 export interface WorkerOperationalLogger {
   error(entry: Record<string, string>): void;
 }
@@ -105,6 +86,8 @@ export interface CreateCloudflareWorkerInput {
 export interface CloudflareRuntime {
   readonly clients: TrustedClientAddresses;
   readonly maintainOAuth: () => Promise<void>;
+  /** Purges one bounded batch of expired idempotency records, on OAuth phase-2 minutes only. */
+  readonly maintainOperations: () => Promise<void>;
   readonly app: ReturnType<typeof createLaceApp>;
   readonly buildDispatcher: SiteBuildDispatcher;
   readonly buildTracker: SiteBuildTracker;
@@ -211,7 +194,7 @@ export function createCloudflareRuntime(
   const repository = new D1ContentRepository(
     settings.database,
     contentModelResolver(input.config),
-    { nextId: () => ids.next() },
+    { nextId: () => ids.next(), onOutboxWork: postCommitScope.markOutboxWork },
   );
   const clients = new TrustedClientAddresses();
   const security = new D1SecurityService(settings.database, () => clock.now());
@@ -309,9 +292,13 @@ export function createCloudflareRuntime(
     maintainOAuth: () => {
       const now = Number(clock.now());
       // Rotate bounded maintenance phases; authorization expiry is checked eagerly.
-      const minute = Math.floor(now / 60_000) % 3;
-      const phase = minute === 0 ? 0 : minute === 1 ? 1 : 2;
-      return oauth.cleanup(now, 20, phase);
+      return oauth.cleanup(now, 20, maintenancePhase(now));
+    },
+    maintainOperations: async () => {
+      const now = Number(clock.now());
+      // Only OAuth phase 2 has two statements; the purge keeps a run within 50 D1 queries.
+      if (maintenancePhase(now) !== 2) return;
+      await repository.purgeExpiredIdempotencyRecords(now, IDEMPOTENCY_PURGE_LIMIT);
     },
     app,
     buildDispatcher,
@@ -322,6 +309,12 @@ export function createCloudflareRuntime(
     security,
     settings,
   });
+}
+
+/** The scheduled maintenance phase of a minute: OAuth cleanup rotates through 0, 1 and 2. */
+function maintenancePhase(now: number): 0 | 1 | 2 {
+  const minute = Math.floor(now / 60_000) % 3;
+  return minute === 0 ? 0 : minute === 1 ? 1 : 2;
 }
 
 /**
@@ -362,7 +355,12 @@ export function createCloudflareWorker(input: CreateCloudflareWorkerInput): Clou
 
   /** One dispatcher's failure is logged and never prevents the next from running. */
   async function dispatch(
-    name: "media-deletion" | "site-build" | "site-build-tracking" | "oauth-cleanup",
+    name:
+      | "media-deletion"
+      | "site-build"
+      | "site-build-tracking"
+      | "oauth-cleanup"
+      | "operations-cleanup",
     run: () => Promise<void>,
   ): Promise<void> {
     try {
@@ -389,14 +387,18 @@ export function createCloudflareWorker(input: CreateCloudflareWorkerInput): Clou
       // Only the Worker ingress accepts Cloudflare's edge-supplied header.
       // Direct runtime.app calls have no trusted client identity.
       runtime.clients.set(request, request.headers.get("cf-connecting-ip"));
-      // Hono reads only `waitUntil`; the account flows defer email delivery through it.
-      const response = await runtime.app.fetch(request, env, {
-        passThroughOnException: () => undefined,
-        props: undefined,
-        waitUntil: (promise: Promise<unknown>) => ctx.waitUntil(promise),
-      });
-      if (producesDispatchWork(request, response.status)) ctx.waitUntil(postCommit(runtime));
-      return response;
+      // The first committed outbox work registers one best-effort pass, whatever
+      // the route or response status; a streamed MCP response may end first.
+      return postCommitScope.run(
+        () => ctx.waitUntil(postCommit(runtime)),
+        () =>
+          // Hono reads only `waitUntil`; the account flows defer email delivery through it.
+          runtime.app.fetch(request, env, {
+            passThroughOnException: () => undefined,
+            props: undefined,
+            waitUntil: (promise: Promise<unknown>) => ctx.waitUntil(promise),
+          }),
+      );
     },
     runtime(env: CloudflareWorkerEnv): CloudflareRuntime {
       const value = resolve(env);
@@ -407,6 +409,7 @@ export function createCloudflareWorker(input: CreateCloudflareWorkerInput): Clou
       const runtime = configured(env);
       if (runtime === undefined) return;
       await dispatch("oauth-cleanup", () => runtime.maintainOAuth());
+      await dispatch("operations-cleanup", () => runtime.maintainOperations());
       await dispatch("site-build", () =>
         runtime.buildDispatcher.runOnce(SCHEDULED_SITE_BUILD_CLAIMS),
       );

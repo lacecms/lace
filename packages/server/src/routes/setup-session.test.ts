@@ -64,7 +64,8 @@ test("session summary returns identity and the exact permissions for each role",
   for (const actor of [null, { id: actorId("disabled"), role: "admin" }]) {
     const { app } = await fixture({ actor, security: profileSecurity });
     const result = await json(app, "/api/v1/admin/session");
-    expect(result.response.status).toBe(403);
+    expect(result.response.status).toBe(401);
+    expect(result.response.headers.get("www-authenticate")).toBe('Session realm="lace"');
     expect(result.body).not.toHaveProperty("user");
   }
 });
@@ -170,8 +171,8 @@ test("anonymous setup state exposes only durable completion with no cache or mut
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(await response.json()).toEqual({ setupComplete: value });
   }
-  expect((await app.request("/api/v1/admin/users")).status).toBe(403);
-  expect((await app.request("/api/v1/admin/content-models")).status).toBe(403);
+  expect((await app.request("/api/v1/admin/users")).status).toBe(401);
+  expect((await app.request("/api/v1/admin/content-models")).status).toBe(401);
   expect(logs.every((entry) => entry.actorId === undefined)).toBe(true);
 });
 

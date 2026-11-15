@@ -18,13 +18,14 @@ export class SensitiveRequestRateLimiter {
   public async check(input: {
     readonly request: Request;
     readonly actor?: { readonly id: string };
+    readonly clientAddress?: string;
   }): Promise<boolean | RateLimitDecision> {
     const limit = sensitiveRequestLimit(input.request.method, new URL(input.request.url).pathname);
     if (limit === undefined) return true;
     const subject = await sensitiveRequestSubject(
       limit,
       input.request,
-      this.clientAddress(input.request),
+      input.clientAddress ?? this.clientAddress(input.request),
       input.actor?.id,
     );
     if (subject === undefined) return true;

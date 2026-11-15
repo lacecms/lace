@@ -13,35 +13,51 @@ export const installationState = sqliteTable(
   (table) => [check("installation_state_singleton_key_check", sql`${table.singletonKey} = 1`)],
 );
 
-export const setupTokens = sqliteTable("setup_tokens", {
-  tokenHash: text("token_hash").primaryKey(),
-  expiresAt: timestamp("expires_at"),
-  createdAt: timestamp("created_at"),
-  claimedEmailHash: text("claimed_email_hash"),
-  claimedAt: integer("claimed_at"),
-  consumedAt: integer("consumed_at"),
-});
+export const setupTokens = sqliteTable(
+  "setup_tokens",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    expiresAt: timestamp("expires_at"),
+    createdAt: timestamp("created_at"),
+    claimedEmailHash: text("claimed_email_hash"),
+    claimedAt: integer("claimed_at"),
+    consumedAt: integer("consumed_at"),
+  },
+  (table) => [index("setup_tokens_expiry_idx").on(table.expiresAt)],
+);
 
-export const apiTokens = sqliteTable("api_tokens", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  tokenPrefix: text("token_prefix").notNull(),
-  tokenHash: text("token_hash").notNull().unique(),
-  capabilitiesJson: text("capabilities_json").notNull(),
-  createdAt: timestamp("created_at"),
-  lastUsedAt: integer("last_used_at"),
-  revokedAt: integer("revoked_at"),
-  /** Import tokens only: required expiry and the creating user (ADR 0016). */
-  expiresAt: integer("expires_at"),
-  createdBy: text("created_by"),
-});
+export const apiTokens = sqliteTable(
+  "api_tokens",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    tokenPrefix: text("token_prefix").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    capabilitiesJson: text("capabilities_json").notNull(),
+    createdAt: timestamp("created_at"),
+    lastUsedAt: integer("last_used_at"),
+    revokedAt: integer("revoked_at"),
+    /** Import tokens only: required expiry and the creating user (ADR 0016). */
+    expiresAt: integer("expires_at"),
+    createdBy: text("created_by"),
+  },
+  (table) => [
+    index("api_tokens_active_lookup_idx")
+      .on(table.tokenHash)
+      .where(sql`${table.revokedAt} is null`),
+  ],
+);
 
-export const rateLimitBuckets = sqliteTable("rate_limit_buckets", {
-  bucketKey: text("bucket_key").primaryKey(),
-  windowStartedAt: timestamp("window_started_at"),
-  requestCount: integer("request_count").notNull(),
-  expiresAt: timestamp("expires_at"),
-});
+export const rateLimitBuckets = sqliteTable(
+  "rate_limit_buckets",
+  {
+    bucketKey: text("bucket_key").primaryKey(),
+    windowStartedAt: timestamp("window_started_at"),
+    requestCount: integer("request_count").notNull(),
+    expiresAt: timestamp("expires_at"),
+  },
+  (table) => [index("rate_limit_buckets_expiry_idx").on(table.expiresAt)],
+);
 
 /**
  * Lace-owned invitations. Only SHA-256 token digests are stored; at most one

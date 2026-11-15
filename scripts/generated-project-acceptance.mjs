@@ -747,6 +747,9 @@ async function verifyRenderedMedia(html, base, bytes) {
 
 async function productionSmoke(context, session) {
   await guideContract(context.project, "production");
+  const publicBase = `http://127.0.0.1:${context.httpPort}/`;
+  context.values.LACE_PUBLIC_BASE_URL = publicBase;
+  context.values.LACE_API_BASE_URL = publicBase;
   await writeEnvironment(context);
   // The production guide's "Start the full stack" command, under this run's Compose project.
   await run("compose-production", "pnpm", ["prod:start"], {
@@ -755,8 +758,33 @@ async function productionSmoke(context, session) {
     timeoutMs: 10 * 60_000,
   });
   await compose("compose-production-ps", ["ps"]);
-  const publicBase = `http://127.0.0.1:${context.httpPort}/`;
   await waitHealthy(publicBase, "compose-production");
+  const running = JSON.parse(
+    await compose("production-api-ports", ["ps", "--format", "json", "api"], {
+      intentionalReveal: true,
+    }),
+  );
+  if (running.Publishers?.some((port) => port.PublishedPort))
+    throw new Error("compose-production: API still publishes a host port");
+  try {
+    await fetch(`http://127.0.0.1:${context.apiPort}/health/ready`, {
+      signal: AbortSignal.timeout(2000),
+    });
+    throw new Error("compose-production: old API endpoint still responds");
+  } catch (error) {
+    if (error.message === "compose-production: old API endpoint still responds") throw error;
+  }
+  const login = await request(publicBase, "/api/auth/sign-in/email", {
+    method: "POST",
+    headers: { origin: publicBase.slice(0, -1) },
+    json: { email: session.email, password: session.password },
+  });
+  const cookie = login.response.headers.getSetCookie()[0]?.split(";")[0];
+  if (!cookie) throw new Error("compose-production: sign-in returned no session");
+  secretValues.add(cookie);
+  session.base = publicBase;
+  session.cookie = cookie;
+  await readExport(publicBase, session.buildToken);
   const admin = await fetch(new URL("/admin/", publicBase), {
     signal: AbortSignal.timeout(20_000),
   });
@@ -848,8 +876,8 @@ async function cloudflarePagesSmoke(context, tarballs) {
     cwd: cloudProject,
     env: {
       ASTRO_TELEMETRY_DISABLED: "1",
-      LACE_API_BASE_URL: `http://127.0.0.1:${context.apiPort}/`,
-      LACE_PUBLIC_BASE_URL: `http://127.0.0.1:${context.apiPort}/`,
+      LACE_API_BASE_URL: `http://127.0.0.1:${context.httpPort}/`,
+      LACE_PUBLIC_BASE_URL: `http://127.0.0.1:${context.httpPort}/`,
       LACE_BUILD_TOKEN: context.values.LACE_BUILD_TOKEN,
     },
   });
@@ -1012,7 +1040,21 @@ async function installPackedConsumer(project, tarballs) {
   ]
     .map(([name, file]) => `  '${name}': '${file}'`)
     .join("\n");
-  await writeFile(workspaceFile, `${workspaceYaml}\noverrides:\n${overrides}\n`);
+  // pnpm verifies the workspace lockfile before resolving the packed consumer.
+  // Carry its approved release-age exceptions into the disposable project.
+  const minimumReleaseAgeExclude = JSON.parse(
+    await run("install-release-age-exclusions", "pnpm", [
+      "config",
+      "get",
+      "minimumReleaseAgeExclude",
+      "--location=project",
+      "--json",
+    ]),
+  );
+  const releaseAgePolicy = minimumReleaseAgeExclude?.length
+    ? `\nminimumReleaseAgeExclude: ${JSON.stringify(minimumReleaseAgeExclude)}\n`
+    : "";
+  await writeFile(workspaceFile, `${workspaceYaml}\noverrides:\n${overrides}\n${releaseAgePolicy}`);
   await copyFile(join(workspace, "pnpm-lock.yaml"), join(project, "pnpm-lock.yaml"));
   await run("install", "pnpm", ["install", "--no-frozen-lockfile"], {
     cwd: project,

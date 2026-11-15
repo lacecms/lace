@@ -41,9 +41,16 @@ generated from the declared Drizzle schema (owner decision 11,
 [ADR 0029](adr/0029-rc1-baseline.md)). It replaced the 16 migrations that
 existed up to rc1 and creates the same tables, columns, checks, indexes and
 seed row; three hand-written security indexes and the `content_link_state`
-seed row are appended to the generated SQL because the declared schema does
-not express them. Later schema changes are ordinary forward migrations after
-the baseline.
+seed row are appended to the generated SQL. Later schema changes are ordinary
+forward migrations after the baseline.
+
+`0001_persistence_hygiene.sql` is the first forward migration. It only creates
+indexes: one for each column that references `content_snapshots` and one for
+`idempotency_records.expires_at`. It also declares the three security indexes
+in the schema, so the drizzle-kit snapshot knows them; their statements use
+`CREATE INDEX IF NOT EXISTS` because the baseline already created them. Every
+index a migration creates is now declared in the schema, and `pnpm db:check`
+fails on any drift.
 
 A database migrated by an engine before the baseline records migrations that
 are no longer checked in. It is refused, not upgraded:
