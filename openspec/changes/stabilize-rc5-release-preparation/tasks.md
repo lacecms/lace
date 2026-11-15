@@ -6,5 +6,5 @@
 
 ## 2. Verify the candidate artifacts
 
-- [ ] 2.1 Prepare a fresh full release from the reviewed clean RC5 revision using the pinned toolchain and an initially empty pnpm metadata cache. Run `release:verify` and confirm all sixteen tarballs and four image archives, successful AMD64 and ARM64 smoke checks and both builder pnpm versions.
+- [x] 2.1 Prepare a fresh full release from the reviewed clean RC5 revision using the pinned toolchain and an initially empty pnpm metadata cache. Run `release:verify` and confirm all sixteen tarballs and four image archives, successful AMD64 and ARM64 smoke checks and both builder pnpm versions.
 - [ ] 2.2 Run `acceptance:release` on that inventory with an initially empty pnpm metadata cache. Verify the acceptance receipt covers the saved package and image identities and report the exact inventory and receipt for the owner's publication steps.

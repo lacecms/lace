@@ -4,6 +4,7 @@ import {
   verifyListSettingsStarter,
   tlsEdgeProxy,
 } from "./journeys/list-settings-mcp-proxy.mjs";
+import { pinAcceptancePnpm } from "./acceptance-pnpm.mjs";
 import { acquireArtifactLock } from "./release-lock.mjs";
 import { persistAcceptance } from "./release-evidence.mjs";
 import {
@@ -2225,6 +2226,7 @@ async function main() {
     ]);
     return;
   }
+  await pinAcceptancePnpm(workspace, parent, run);
   if (phase === "snapshots") {
     await run("build-generator", "pnpm", ["--filter", "create-lace", "build"]);
     await verifySnapshots(parent, process.argv.includes("--update"));

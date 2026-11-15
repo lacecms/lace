@@ -7,7 +7,8 @@
   plans → EX3 typed outbox events → EX4 route policies and security use cases
   → EX5 model kind descriptor, with the dependencies in its §4. EX6 covers
   trusted client identity and production Compose ingress and can start
-  independently. Each session gets its own just-in-time OpenSpec change.
+  independently. EX7 updates the pnpm toolchain after RC5 publication.
+  Each session gets its own just-in-time OpenSpec change.
   Progress is tracked in the roadmap's progress log.
 
 - **Refactoring roadmap (implemented, archived 2026-11-14):** RF1–RF8 and

@@ -19,7 +19,7 @@ The owner confirmed the npm organization `lacecms` and GitHub organization `lace
 | Generator | `create-lace@0.1.0-rc5` | Executable, declarations, templates, ownership inventory, MIT license |
 | Runtime graph | `@lacecms/*@0.1.0-rc5` | Compiled ESM/declarations and complete registry dependency metadata; `platform-cloudflare` also ships the packaged admin |
 | API/admin | `ghcr.io/lacecms/api:0.1.0-rc5` | Compiled API/admin, dispatcher, explicit migrations, bucket initializer and native runtime |
-| Builder | `ghcr.io/lacecms/builder:0.1.0-rc5` | Fixed-command service, non-root work/output mounts and Node 24.22.3 with pnpm 12 |
+| Builder | `ghcr.io/lacecms/builder:0.1.0-rc5` | Fixed-command service, non-root work/output mounts and Node 24.22.3 with pnpm 12.3.4 |
 
 Recheck npm and GHCR publishing rights with authenticated accounts before live
 publication. Local artifact preparation does not need publishing credentials.
@@ -55,7 +55,7 @@ pnpm release:verify --output .release-artifacts/rc5
 
 `release:plan` is the mutation-free dry-run plan; it does not build or need Docker. `release:prepare` builds the public graph in an isolated source snapshot, packs inspected archives in a disposable workspace, tests an isolated package consumer with test-only overrides, builds/loads both image platforms locally, exercises migrations/configuration/admin/native runtime and builder health, and saves the tested image archives. It does not build the reference Astro site against a live CMS during package compilation.
 
-The frozen installs for disposable consumers use the versions recorded in their lockfiles. pnpm can fetch missing npm registry metadata to verify those versions. If a run fails, check the failing stage and retry in a new output directory after correcting the cause.
+The acceptance harness selects the exact workspace pnpm version for disposable consumers and the commands they spawn. The frozen installs use the dependency versions recorded in the consumer lockfiles. pnpm can fetch missing npm registry metadata to verify those versions. If a preparation run fails, check the failing stage and retry in a new output directory after correcting the cause.
 
 The output contains `inventory.json`, `status.json`, `packages/*.tgz`, `images/*.tar`, a source snapshot and temporary inspection/build trees. `inventory.json` records definition, source commit/fingerprint, versions, archive SHA-256, image platforms/IDs and checks. Only a successful full set from clean source has both `complete: true` and `publicationEligible: true`. This source-integrity flag does not mean that exact-artifact acceptance has passed or that anything is published. Verification recomputes every artifact checksum without rebuilding.
 

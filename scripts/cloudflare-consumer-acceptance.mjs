@@ -519,9 +519,8 @@ export async function cloudflareConsumerJourney(parent, operations) {
     await visible(tab.getByText("CMS version", { exact: true }), "cloudflare-cms-version");
     await visible(tab.getByText("0.1.0-rc5", { exact: true }), "cloudflare-cms-release");
     console.info("Acceptance: cloudflare-browser-complete");
-    // Keep both publications together for build coalescing. Browser assertions
-    // are complete: drain requests, then stop polling before the API journey.
-    await tab.waitForLoadState("networkidle");
+    // Both publications and the Settings assertions are complete. Close the
+    // browser context before the API journey to stop background polling.
     await context.close();
 
     console.info("Acceptance: cloudflare-hook-unavailable");

@@ -277,16 +277,24 @@ export async function listSettingsMcpProxyJourney({
     assert.ok(queried.items.some((item) => item.id === created.id));
     for (const name of ["publish_entry", "unpublish_entry", "delete_entry"])
       await assert.rejects(writer.client.callTool({ name, arguments: { entryId: created.id } }));
-    for (const path of [
-      `api/v1/admin/entries/${created.id}/publish`,
-      `api/v1/admin/entries/${created.id}`,
+    // Publish accepts import credentials. Delete refuses Bearer credentials at the route boundary.
+    const entryPath = `api/v1/admin/entries/${created.id}`;
+    for (const { path, method, status, code } of [
+      {
+        path: `${entryPath}/publish`,
+        method: "POST",
+        status: 401,
+        code: "AUTHENTICATION_REQUIRED",
+      },
+      { path: entryPath, method: "DELETE", status: 403, code: "AUTHORIZATION_DENIED" },
     ]) {
       const denied = await invoke(path, {
-        method: path.endsWith("publish") ? "POST" : "DELETE",
+        method,
         json: { expectedRevision: saved.draft.revision },
         headers: { cookie: "", authorization: `Bearer ${writer.token}` },
       });
-      assert.equal(denied.response.status, 403);
+      assert.equal(denied.response.status, status, `${method} ${path}`);
+      assert.equal(denied.body?.error?.code, code, `${method} ${path}`);
     }
     assert.deepEqual(await published(), before, "MCP draft changes altered the published export");
     const publisher = await authorize(true, true);

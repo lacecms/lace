@@ -95,6 +95,7 @@ from committed outbox work, and `401 AUTHENTICATION_REQUIRED`.
 | EX4 | Route policies and security use cases | L | EX4A → EX4B → EX4C → EX4D | planned |
 | EX5 | Model kind descriptor | S | EX5A | planned |
 | EX6 | Trusted client identity and production Compose ingress | M | EX6A and EX6B independent | done |
+| EX7 | pnpm 12.21.0 toolchain | S | EX7A | planned |
 
 Dependencies:
 
@@ -117,6 +118,7 @@ Dependencies:
 | EX5A | EX2C | EX3, EX4 |
 | EX6A | — | EX6B and sessions outside EX4 |
 | EX6B | — | EX1–EX5, EX6A |
+| EX7A | RC5 publication | EX1–EX5 when validation can use a separate checkout |
 
 **Order rationale:** EX1A first, because `worker.test.ts` and the
 `platform-node` tests that EX2 rewrites must already be split. EX2 precedes
@@ -128,6 +130,8 @@ largest consumer of model kinds.
 
 EX6A and EX6B are complete. EX4A can reuse the corrected client identity
 handling and its regression tests.
+
+RC5 uses pnpm `12.3.4`. EX7A updates the release toolchain after RC5 publication.
 
 **If the next feature is already known:** webhooks move EX3 before EX2
 (accepting a second enqueue path for one step); CE12 revision history adds a
@@ -358,6 +362,23 @@ check that Nginx can still reach the API and serve the admin through the
 documented ingress path. Update [deployment architecture](architecture/deployment.md)
 and the affected Compose, project generator and generated acceptance specs in
 the OpenSpec change.
+
+## Step EX7 — pnpm 12.21.0 toolchain
+
+**Size:** S (one session). **Depends on:** RC5 publication.
+
+### Session EX7A — Upgrade the pinned release toolchain to pnpm 12.21.0
+
+Update the workspace `packageManager`, CI pins and cache keys, and the API and
+builder Docker pins in one change. Regenerate the lockfile with `12.21.0` and
+review the changed dependency and peer resolutions, including Vite's catalog
+and override handling. Disposable acceptance projects use the workspace pin.
+Generated projects continue to declare the minimum `engines.pnpm: ">=12"`.
+
+Verify a frozen workspace installation, native SQLite, the packed starter and
+local Worker, and the API and builder images on `linux/amd64` and `linux/arm64`.
+Complete exact-artifact acceptance for the new build set before recording
+`12.21.0` as the tested baseline. See [the runtime tooling policy](../openspec/specs/runtime-tooling-minimum-policy/spec.md).
 
 ## 6. Progress log
 
