@@ -1,3 +1,4 @@
+import { NODE_LIST_QUERY_LIMITS as TEST_LIST_QUERY_LIMITS } from "@lacecms/content";
 import { admin, editor } from "../fixtures/actors.js";
 import type { ContentBlock, ContentBlockInput, ContentModelRoute } from "@lacecms/domain";
 import type { JsonObject } from "@lacecms/content";
@@ -160,6 +161,7 @@ export async function lifecycleFixture() {
     });
   }
   const useCases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     clock: new DeterministicClock(unixMilliseconds(10)),
     config: config.runtime,
     content: store,
@@ -323,6 +325,7 @@ export async function seoFixture(prefix = "seo") {
     });
   }
   const useCases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     clock: new DeterministicClock(unixMilliseconds(10)),
     config: config.runtime,
     content: store,
@@ -385,6 +388,7 @@ export async function envelopeFixture(prefix = "envelope") {
     });
   }
   const useCases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     clock: new DeterministicClock(unixMilliseconds(10)),
     config: config.runtime,
     content: store,
@@ -472,6 +476,7 @@ export async function detachFixture() {
     });
   }
   const content = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     clock: new DeterministicClock(unixMilliseconds(10)),
     config: config.runtime,
     content: store,

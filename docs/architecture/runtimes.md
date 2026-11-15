@@ -29,6 +29,10 @@ authentication boundaries, optional MCP and OAuth adapters, HTTP settings) and
 returns the content, media, link, build, account and OAuth-connection use cases
 plus the complete `createLaceApp` input. `createNodeRuntime` and
 `createCloudflareRuntime` build adapters, dispatchers and process wiring only.
+Every content application composition supplies trusted list-query limits
+explicitly: Node uses 200 characters with no LIKE byte cap, and Cloudflare uses
+48 characters and a 50-byte escaped-pattern cap. Request and model configuration
+cannot override this policy; a missing policy fails construction.
 `LACE_API_DOCS_ENABLED` and `LACE_MCP_ENABLED` are parsed by one shared rule.
 Route modules receive actor resolution and the capabilities they call, never
 the raw application input, and depend on the narrow security ports.
@@ -211,21 +215,23 @@ connections always keep foreign keys on.
 ### Runtime deltas
 
 Node SQLite and D1 share every row mapper, every identical read
-(`SqlContentReader`) and the configuration-sync and link statement builders.
-The write paths stay runtime-specific (interactive transactions versus guarded
-batches, [ADR 0002](../adr/0002-d1-batches-and-node-transactions.md)). Every
+(`SqlContentReader`), configuration-sync and link statement builders, and
+ordered plans for entry creation, duplication, save, publication, unpublication
+and deletion. Typed admission, ordered statements, result slots, exact counts
+and outbox markers belong to the plan; executors retain their runtime-specific
+transaction boundaries ([ADR 0002](../adr/0002-d1-batches-and-node-transactions.md)). Every
 remaining intentional difference is listed here; where it could be observable,
 a shared repository contract case pins the result.
 
 | Area | Node SQLite | D1 | Observable result pinned by |
 | --- | --- | --- | --- |
 | Build and dispatcher claims | select and lease update in one transaction | select, then one guarded batch | aligned: at most 10 site-build leases (`MAX_SITE_BUILD_CLAIMS_PER_CALL`, four D1 batch statements each) and 20 dispatcher leases (`MAX_DISPATCHER_CLAIMS_PER_CALL`) per call; site-build lease update guarded by the read `payload_json` on both; contract "caps site-build and dispatcher claims per call" |
-| Revision conflicts | `changes !== 1` on the guarded write | pre-check after replay, guarded batch, post-batch disambiguation | aligned precedence: replay → stale revision → link targets; contract cases for concurrent saves and stale publication |
-| Publication result | committed entry reloaded inside the transaction | pre-batch prediction, stored in the same batch as the idempotency record | returned entry, its replay and the unpublication result equal a later `load` |
-| `mutation_guards` | only an in-transaction dirty token for the shared sync link statements; inserted and deleted before commit | batch guard tokens for every guarded mutation | not observable |
+| Entry plan admission | predicate and diagnostics inside the write transaction | first guarded write and diagnostics inside one atomic batch | typed outcomes; replay → stale revision → link targets → route conflict; contract cases for concurrent saves and stale publication |
+| Publication result | materialized from the state read inside the transaction | pre-batch prediction, stored in the same batch as the idempotency record | returned entry, its replay and the unpublication result equal a later `load` |
+| `mutation_guards` | in-transaction dirty token for shared sync link statements | batch-unique guard tokens, removed inside the batch | no persistent plan token |
 | Build export page | both read groups in one read transaction | two `batch()` calls with a version re-read | contract build-export cases; Node one extra in-transaction version read |
 | Collection `list` and configuration-sync scans | numbered parameters, `NODE_LIST_QUERY_LIMITS` | positional parameters, `CLOUDFLARE_LIST_QUERY_LIMITS` | collection-query contract cases (§12 limits differ by design) |
 | Bind chunk for identifier lists | 200 | 100 (`D1_MAX_BOUND_PARAMETERS`) | not observable |
 | Superseded snapshots and idempotency expiry | one transaction | guarded batch | aligned: shared `deleteSupersededSnapshotsStatement`, live-record read and expired-record replacement, purge statement; contract retention cases |
-| Entry reload inside writes | synchronous loader inside publication transactions | awaited shared reader | covered by the publication result row |
-| Outbox wake-up | the dispatcher loop polls the outbox | the first committed outbox statement of a request registers one post-commit `waitUntil` pass | Worker tests count registered passes; scheduled dispatch recovers either way |
+| Entry reads for writes | synchronous loader inside publication transactions | awaited shared reader before the batch | covered by the publication result row |
+| Outbox wake-up | the dispatcher loop polls the outbox | a committed plan receipt reporting inserted or coalesced work registers one post-commit `waitUntil` pass per request | Worker tests count registered passes; scheduled dispatch recovers either way |

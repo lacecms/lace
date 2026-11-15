@@ -12,7 +12,6 @@ import {
   fieldTypeCapabilities,
   filterInstant,
   fitsListQueryLimits,
-  NODE_LIST_QUERY_LIMITS,
 } from "@lacecms/content";
 import type { FieldFilterKind, ListQueryLimits } from "@lacecms/content";
 export { NODE_LIST_QUERY_LIMITS, CLOUDFLARE_LIST_QUERY_LIMITS } from "@lacecms/content";
@@ -22,7 +21,7 @@ export type { ListQueryLimits } from "@lacecms/content";
 export function validateListQueryBudget(
   q: string | undefined,
   filters: readonly CollectionFieldFilter[],
-  limits: ListQueryLimits = NODE_LIST_QUERY_LIMITS,
+  limits: ListQueryLimits,
 ): void {
   if (q !== undefined && !fitsListQueryLimits(q, limits)) invalid("/q");
   for (const [index, filter] of filters.entries())
@@ -65,7 +64,7 @@ export function resolveCollectionQuery(
   model: NormalizedContentModel,
   sort: string | undefined,
   input: unknown,
-  limits: ListQueryLimits = NODE_LIST_QUERY_LIMITS,
+  limits: ListQueryLimits,
 ): ResolvedCollectionQuery | undefined {
   const options = model.kind === "collection" ? model.listOptions : undefined;
   const targets = (keys: readonly string[] | undefined): CollectionQueryField[] =>

@@ -16,6 +16,7 @@ test("preserves every repository contract case in order", () => {
     "rolls back a failed synchronized page singleton",
     "renames a populated model through the key cascade without inferring a replacement",
     "allows only one independently prepared sync apply to commit",
+    "creates and saves a maximum draft atomically",
     "persists bounded draft reads and writes without exposing drafts publicly",
     "keeps the previous publication until a later publish replaces it",
     "removing a media block from a draft leaves published-only usage until republication",

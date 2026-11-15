@@ -327,6 +327,7 @@ contract(
     await seedModels(sql, "posts", "home", "settings");
     for (const id of ["visible", "hidden", "draft-only"]) await seedMedia(sql, id);
     const useCases = new ContentUseCases({
+      listQueryLimits: runtime.listQueryLimits,
       clock: { now: () => unixMilliseconds(10) },
       config: config.runtime,
       content: repository,

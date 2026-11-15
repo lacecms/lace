@@ -1,3 +1,4 @@
+import { NODE_LIST_QUERY_LIMITS as TEST_LIST_QUERY_LIMITS } from "@lacecms/content";
 import type { Actor } from "@lacecms/domain";
 
 import { present } from "../test-support/fixtures.js";
@@ -32,6 +33,7 @@ test("lists entries with derived status, totals, search, sort, and list values",
   store.setActorDisplayNames({ editor: "editor@example.test" });
   const clock = new DeterministicClock(unixMilliseconds(100));
   const useCases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     clock,
     config: config.runtime,
     content: store,
@@ -156,6 +158,7 @@ test("validates list queries before reads and describes editors with fallbacks",
     return list(input);
   };
   const useCases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     clock: new DeterministicClock(unixMilliseconds(1)),
     config: config.runtime,
     content: store,
@@ -222,6 +225,7 @@ test("the in-memory store writes a supplied conditional-field projection", async
   });
   const store = new InMemoryContentStore();
   const cases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     config: config.runtime,
     content: store,
     media: { loadMedia: async () => null, loadMediaMany: async () => [] },

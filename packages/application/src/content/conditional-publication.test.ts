@@ -1,3 +1,4 @@
+import { NODE_LIST_QUERY_LIMITS as TEST_LIST_QUERY_LIMITS } from "@lacecms/content";
 import { describe, expect, it } from "vitest";
 import { defineCollection, defineConfig } from "@lacecms/config";
 import { defineBlock, encodeEntryLink, field } from "@lacecms/content";
@@ -111,6 +112,7 @@ function harness(
     draft,
   };
   const cases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     config: config.runtime,
     clock: { now: () => unixMilliseconds(10) },
     idGenerator: { next: () => "snapshot-2" },
@@ -368,6 +370,7 @@ describe("conditional drafts", () => {
   it("create keeps hidden values and validates them as drafts", async () => {
     const stored: ContentEntry[] = [];
     const cases = new ContentUseCases({
+      listQueryLimits: TEST_LIST_QUERY_LIMITS,
       config: config.runtime,
       clock: { now: () => unixMilliseconds(1) },
       idGenerator: { next: () => `id-${stored.length}` },

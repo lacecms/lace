@@ -1,3 +1,4 @@
+import { NODE_LIST_QUERY_LIMITS as TEST_LIST_QUERY_LIMITS } from "@lacecms/content";
 import type { Actor, ContentModelRoute, MediaMetadata } from "@lacecms/domain";
 import type { CreateContentEntryInput } from "@lacecms/application";
 import { present } from "../test-support/fixtures.js";
@@ -214,6 +215,7 @@ test("runs the authorized in-memory content lifecycle with validation and isolat
   };
   const trigger = new InMemorySiteBuildTrigger({ status: "succeeded" });
   const useCases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     clock: new DeterministicClock(unixMilliseconds(10)),
     config: config.runtime,
     content: store,

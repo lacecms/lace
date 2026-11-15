@@ -1,3 +1,4 @@
+import { NODE_LIST_QUERY_LIMITS as TEST_LIST_QUERY_LIMITS } from "@lacecms/content";
 import { expect, test } from "vitest";
 import { defineCollection, defineConfig } from "@lacecms/config";
 import { CollectionQueryValidationError, ContentUseCases } from "@lacecms/application";
@@ -26,6 +27,7 @@ async function applicationAccepts(): Promise<(filter: unknown) => Promise<boolea
   });
   const store = new InMemoryContentStore();
   const useCases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     clock: new DeterministicClock(unixMilliseconds(1)),
     config: config.runtime,
     content: store,

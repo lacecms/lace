@@ -111,6 +111,11 @@ never change while the revision does not; optimistic concurrency and the D1
 publication batch depend on this
 ([ADR 0002](../adr/0002-d1-batches-and-node-transactions.md)).
 
+Entry creation, guarded duplication and complete-draft save use shared ordered
+SQLite write plans. Their admission checks the relevant model, source and draft
+revision and active media in the same atomic unit as the writes. A typed guard
+miss leaves the entry and its block, media and link projections unchanged.
+
 ### 9.6 Published routes
 
 `published_routes` maps each public `path` (primary key) to its entry and

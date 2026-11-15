@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import { contentModelKey } from "@lacecms/domain";
+import { NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import type { CollectionQueryField, CollectionFieldFilter } from "@lacecms/application";
 import { collectionListPlan } from "./collection-list.js";
 
@@ -35,6 +36,7 @@ test("list statements and bindings preserve every sort family", async () => {
   const statements = [];
   for (const { field, filter } of cases) {
     const { items, totals } = await collectionListPlan({
+      listQueryLimits: NODE_LIST_QUERY_LIMITS,
       modelKey: contentModelKey("posts"),
       limit: 10,
       sort: "field:target",

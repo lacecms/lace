@@ -84,7 +84,7 @@ export interface RepositoryContractHarness {
 
 /** Opens a freshly migrated database for each call. */
 export interface RepositoryContractRuntime {
-  readonly listQueryLimits?: ListQueryLimits;
+  readonly listQueryLimits: ListQueryLimits;
   recordEvidence?(value: unknown): void;
   open(options: ContractRepositoryOptions): Promise<RepositoryContractHarness>;
 }

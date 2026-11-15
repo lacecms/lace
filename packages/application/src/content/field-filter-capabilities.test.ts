@@ -1,3 +1,4 @@
+import { NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import { expect, test } from "vitest";
 import { defineCollection, defineConfig } from "@lacecms/config";
 import {
@@ -29,7 +30,12 @@ test("each queryable kind rejects unsupported operators at the operator pointer"
     for (const op of ["contains", "eq", "range", "in", "unknown"]) {
       if (allowed.includes(op)) continue;
       expect(() =>
-        resolveCollectionQuery(config.runtime.content[0]!, undefined, [{ field: "target", op }]),
+        resolveCollectionQuery(
+          config.runtime.content[0]!,
+          undefined,
+          [{ field: "target", op }],
+          NODE_LIST_QUERY_LIMITS,
+        ),
       ).toThrow(expect.objectContaining({ pointer: "/filters/0/op" }));
     }
   }

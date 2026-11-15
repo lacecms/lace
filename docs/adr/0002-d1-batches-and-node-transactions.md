@@ -14,11 +14,11 @@ SQLite supports interactive callbacks; D1 provides atomic SQL batches.
 
 Application ports model known atomic content operations rather than a generic
 transaction callback. Node implements them with interactive SQLite transactions.
-D1 implements them as explicit guarded atomic SQL batches. Publication first
-conditionally creates its snapshot only when the draft pointer and expected
-revision match; all later copy, route, state, idempotency, outbox, and cleanup
-statements are conditional on that guard. A zero-row guard returns
-`CONTENT_REVISION_CONFLICT` and makes all following statements no-ops.
+D1 implements them as explicit guarded atomic SQL batches. Publication admits
+the validated draft, revision, links, route and idempotency state in that unit;
+the snapshot and dependent copy, route, state, idempotency, outbox and cleanup
+statements are conditional on admission. Typed guard outcomes classify expected
+misses without leaving persistent mutations.
 
 ## Consequences
 
@@ -40,7 +40,7 @@ statements are conditional on that guard. A zero-row guard returns
 
 - **Publication result.** D1 returns the committed entry it predicts before
   the batch, because the idempotency record that stores the response is part
-  of that batch; Node reloads the entry inside its transaction. Both SHALL
+  of that batch; Node materializes it from state read inside its transaction. Both SHALL
   equal a subsequent `load` (including the SEO group), and the shared
   repository contract asserts that for publication, its replay and
   unpublication.
@@ -50,3 +50,15 @@ statements are conditional on that guard. A zero-row guard returns
   The guarded statement remains the race guard on both.
 - The full list of intentional runtime differences is the "Runtime deltas"
   table in architecture §16.
+
+## Amendment (EX2A)
+
+The `db` package defines ordered entry write plans with typed admission and
+diagnostics, result slots, exact affected-row expectations and outbox markers.
+Node evaluates and executes a plan inside its SQLite write transaction; D1
+uses one atomic batch, beginning with admission and a batch-unique guard token
+removed within the batch. Dependent publication writes also require the inserted
+snapshot. Exact-count violations must abort before commit on either runtime.
+Only a successfully committed unit returns a receipt reporting affected outbox
+work. D1 uses that receipt for request-local dispatch registration; Node keeps
+polling. The publication result materialization distinction above remains.

@@ -1,3 +1,4 @@
+import { NODE_LIST_QUERY_LIMITS as TEST_LIST_QUERY_LIMITS } from "@lacecms/content";
 import type { Actor } from "@lacecms/domain";
 
 import { present } from "../test-support/fixtures.js";
@@ -195,6 +196,7 @@ test("content rejects 201 reference locations before bulk metadata reads or writ
     return create(input);
   };
   const useCases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     clock: new DeterministicClock(unixMilliseconds(1)),
     config: config.runtime,
     content: store,
@@ -244,6 +246,7 @@ test("the SEO image counts toward the media-reference limit", async () => {
   });
   let reads = 0;
   const useCases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     clock: new DeterministicClock(unixMilliseconds(1)),
     config: config.runtime,
     content: new InMemoryContentStore(),
@@ -291,6 +294,7 @@ test("hidden-block media counts toward the media-reference limit", async () => {
   });
   let reads = 0;
   const useCases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     clock: new DeterministicClock(unixMilliseconds(1)),
     config: config.runtime,
     content: new InMemoryContentStore(),
@@ -350,6 +354,7 @@ test("nested media traversal enforces location limits, batches IDs and preserves
   });
   const reads: (readonly string[])[] = [];
   const useCases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     config: config.runtime,
     content: store,
     media: {

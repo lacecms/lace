@@ -19,7 +19,7 @@ import {
 
 import { ContentUseCases } from "@lacecms/application";
 import { defineCollection, defineConfig } from "@lacecms/config";
-import { defineBlock, field } from "@lacecms/content";
+import { defineBlock, field, NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import { admin, editor, entry, savedMutation } from "../test-support/fixtures.js";
 
 test("reports rejected and unavailable builds without undoing a publication", async () => {
@@ -37,6 +37,7 @@ test("reports rejected and unavailable builds without undoing a publication", as
   });
   const store = new InMemoryContentStore();
   const dependencies = {
+    listQueryLimits: NODE_LIST_QUERY_LIMITS,
     clock: new DeterministicClock(unixMilliseconds(10)),
     config: config.runtime,
     content: store,

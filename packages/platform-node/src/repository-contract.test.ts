@@ -1,6 +1,7 @@
 // @ts-nocheck
 // TODO(rf2): Type legacy SQLite/product harnesses, branded values and partial runtime adapters.
 import { afterEach, expect, test } from "vitest";
+import { NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -69,6 +70,7 @@ function observedConnection(connection) {
 
 const runtimes = {
   "file-backed SQLite": {
+    listQueryLimits: NODE_LIST_QUERY_LIMITS,
     recordEvidence: (value) => console.log("Collection query SQLite file", JSON.stringify(value)),
     async open(options) {
       const directory = await mkdtemp(join(tmpdir(), "lace-contract-"));
@@ -97,6 +99,7 @@ const runtimes = {
     },
   },
   "in-memory SQLite": {
+    listQueryLimits: NODE_LIST_QUERY_LIMITS,
     recordEvidence: (value) => console.log("Collection query SQLite memory", JSON.stringify(value)),
     async open(options) {
       const database = openNodeDatabase(":memory:");

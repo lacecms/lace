@@ -9,7 +9,7 @@ import {
   unconfiguredEmailSender,
 } from "@lacecms/application";
 import { defineCollection, defineConfig, definePage } from "@lacecms/config";
-import { defineBlock, field } from "@lacecms/content";
+import { defineBlock, field, NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import { unixMilliseconds } from "@lacecms/domain";
 import {
   DeterministicClock,
@@ -119,7 +119,7 @@ export async function fixture({
   const store = new InMemoryContentStore();
   const storage = new InMemoryObjectStorage();
   const content = new ContentUseCases({
-    ...(listQueryLimits === undefined ? {} : { listQueryLimits }),
+    listQueryLimits: listQueryLimits ?? NODE_LIST_QUERY_LIMITS,
     clock: new DeterministicClock(unixMilliseconds(1)),
     config: config.runtime,
     content: store,

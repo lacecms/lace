@@ -150,6 +150,8 @@ test("saves a maximal draft in one batch within parameter and query budgets", as
   });
   expect(counting.stats.queries).toBeLessThanOrEqual(D1_QUERY_BUDGET);
   expect(counting.stats.batches).toBe(1);
+  expect(counting.stats.maxParameters).toBeLessThanOrEqual(D1_MAX_BOUND_PARAMETERS);
+  expect(counting.stats.maxBatchStatements).toBeLessThanOrEqual(40);
   const saved = maximalDraft("saved");
   counting.stats.queries = 0;
   counting.stats.batches = 0;

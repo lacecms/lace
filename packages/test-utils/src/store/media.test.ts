@@ -1,3 +1,4 @@
+import { NODE_LIST_QUERY_LIMITS as TEST_LIST_QUERY_LIMITS } from "@lacecms/content";
 import type { Actor } from "@lacecms/domain";
 
 import { present } from "../test-support/fixtures.js";
@@ -398,6 +399,7 @@ test("rebuilds complete-draft media projections instead of retaining stale refer
     updatedAt: unixMilliseconds(1),
   });
   const useCases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     clock: new DeterministicClock(unixMilliseconds(2)),
     config: config.runtime,
     content: store,

@@ -29,11 +29,41 @@ import {
 export const cases: RepositoryContractCase[] = [];
 const contract = registerContract(cases);
 
+contract("creates and saves a maximum draft atomically", async (runtime, expect) => {
+  const { repository, sql } = await runtime.open({ resolveModel: resolveRoute });
+  await seedModels(sql, "posts");
+  await seedMedia(sql, "media-1");
+  const blocks = Array.from({ length: 200 }, (_, index) =>
+    heroBlock(`block-${index}`, "media-1", "Block", "hero", (index + 1) * 1000),
+  );
+  const mediaReferences = blocks.map((block) => ({
+    fieldPath: "image",
+    mediaId: mediaId("media-1"),
+    sourceKey: block.key,
+  }));
+  await repository.create({
+    entry: entry("maximum", "posts", { blocks, updatedAt: 1 }),
+    mediaReferences,
+  });
+  const result = await repository.saveCompleteDraft(
+    save("maximum", 1, 2, { blocks, mediaReferences }),
+  );
+  expect(result.entry?.draft.blocks).toHaveLength(200);
+  expect(result.entry?.draft.revision).toBe(2);
+  expect(
+    await count(
+      sql,
+      "select count(*) as count from content_media_references where snapshot_id=?",
+      "maximum-draft",
+    ),
+  ).toBe(200);
+});
+
 contract(
   "persists bounded draft reads and writes without exposing drafts publicly",
   async (runtime, expect) => {
     const { repository, sql } = await runtime.open({ resolveModel: resolveRoute });
-    await seedModels(sql, "posts", "home");
+    await seedModels(sql, "posts", "home", "settings");
     await seedMedia(sql, "media-1");
     const first = heroEntry("post-a", "posts", 20, "First");
     const second = heroEntry("post-b", "posts", 20, "Second");
@@ -124,6 +154,27 @@ contract(
       }),
     ).rejects.toMatchObject({ code: "CONTENT_MODEL_CARDINALITY_CONFLICT" });
     expect(await repository.load({ entryId: contentEntryId("home-b") })).toBeNull();
+    const singletons = await Promise.allSettled([
+      repository.create({
+        entry: entry("settings-a", "settings", { updatedAt: 22 }),
+        mediaReferences: [],
+      }),
+      repository.create({
+        entry: entry("settings-b", "settings", { updatedAt: 22 }),
+        mediaReferences: [],
+      }),
+    ]);
+    expect(singletons.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(singletons.find((result) => result.status === "rejected")).toMatchObject({
+      reason: { code: "CONTENT_MODEL_CARDINALITY_CONFLICT" },
+    });
+    expect(
+      await count(
+        sql,
+        "select count(*) as count from content_entries where model_key = ?",
+        "settings",
+      ),
+    ).toBe(1);
     await expect(
       repository.create({
         entry: entry("broken", "posts", { updatedAt: 23 }),

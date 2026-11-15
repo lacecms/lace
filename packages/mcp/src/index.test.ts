@@ -1,3 +1,4 @@
+import { NODE_LIST_QUERY_LIMITS as TEST_LIST_QUERY_LIMITS } from "@lacecms/content";
 import * as v from "valibot";
 import {
   adminContentEntrySchema,
@@ -49,6 +50,7 @@ async function fixture() {
   });
   const store = new InMemoryContentStore();
   const content = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     config: config.runtime,
     content: store,
     media: store,
@@ -301,6 +303,7 @@ test("tools describe conditional fields and publish their projection", async () 
   });
   const store = new InMemoryContentStore();
   const content = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     config: config.runtime,
     content: store,
     media: store,

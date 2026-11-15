@@ -149,6 +149,7 @@ contract(
     const after = config;
 
     const useCases = new ContentUseCases({
+      listQueryLimits: runtime.listQueryLimits,
       clock: { now: () => unixMilliseconds(35) },
       config: after.runtime,
       content: repository,
@@ -309,6 +310,7 @@ contract(
     const afterSync = await state();
     const config = await make(["a"]);
     const useCases = new ContentUseCases({
+      listQueryLimits: runtime.listQueryLimits,
       clock: { now: () => unixMilliseconds(40) },
       config: config.runtime,
       content: repository,

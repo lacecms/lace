@@ -197,7 +197,11 @@ function decodeFieldCursor(
 }
 
 /** Shared, prepared list statements. String anchors are resolved and guarded in the item read itself. */
-export async function collectionListPlan(input: ListContentEntriesInput): Promise<{
+export async function collectionListPlan(
+  input: ListContentEntriesInput & {
+    readonly listQueryLimits: import("@lacecms/content").ListQueryLimits;
+  },
+): Promise<{
   readonly items: Statement;
   readonly totals: Statement;
   page(rows: readonly CollectionListRow[], totals: TotalsRow): ContentEntryListPage;

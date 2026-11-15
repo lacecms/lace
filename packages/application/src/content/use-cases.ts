@@ -1,9 +1,5 @@
 import { authorizeContentOperation } from "./authority.js";
-import {
-  resolveCollectionQuery,
-  validateListQueryBudget,
-  NODE_LIST_QUERY_LIMITS,
-} from "./collection-queries.js";
+import { resolveCollectionQuery, validateListQueryBudget } from "./collection-queries.js";
 import type { ListQueryLimits } from "./collection-queries.js";
 import type { NormalizedContentModel } from "@lacecms/config";
 import {
@@ -103,9 +99,9 @@ export class ContentUseCases {
   /** Memoized `declaresFieldVisibility` per model key and block type; config is fixed. */
   private readonly visibilityOwners = new Map<string, boolean>();
   public constructor(private readonly dependencies: ContentUseCaseDependencies) {
-    this.listQueryLimits = Object.freeze({
-      ...(dependencies.listQueryLimits ?? NODE_LIST_QUERY_LIMITS),
-    });
+    if (dependencies.listQueryLimits == null)
+      throw new TypeError("Content list-query limits are required.");
+    this.listQueryLimits = Object.freeze({ ...dependencies.listQueryLimits });
   }
 
   public discoverModels(input: { readonly actor: Actor }): ContentModelDiscovery {

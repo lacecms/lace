@@ -1,3 +1,4 @@
+import { NODE_LIST_QUERY_LIMITS as TEST_LIST_QUERY_LIMITS } from "@lacecms/content";
 import { expect, test } from "vitest";
 import { defineCollection, defineConfig, defineGlobal, definePage } from "@lacecms/config";
 import { field } from "@lacecms/content";
@@ -15,6 +16,15 @@ const dependencies = {
   idGenerator: { next: unused },
   media: { loadMedia: unused, loadMediaMany: unused },
 };
+
+test("construction rejects a missing trusted list policy", async () => {
+  const { ContentUseCases } = await import("../index.js");
+  const config = await defineConfig({ content: [] });
+  const input = { ...dependencies, config: config.runtime, content: contentPort({}) };
+  expect(
+    () => new ContentUseCases(input as unknown as ConstructorParameters<typeof ContentUseCases>[0]),
+  ).toThrow("Content list-query limits are required.");
+});
 
 test("configured list queries resolve before reads with role parity and detached canonical operands", async () => {
   const { defineConfig, defineCollection } = await import("@lacecms/config");
@@ -44,6 +54,7 @@ test("configured list queries resolve before reads with role parity and detached
   const calls: ListContentEntriesInput[] = [];
   const page = { items: [], totals: { all: 0, changed: 0, draft: 0, published: 0 } };
   const useCases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     ...dependencies,
     config: config.runtime,
     content: contentPort({
@@ -241,6 +252,7 @@ test("entry lists pass an exact collection slug and refuse it for singleton mode
   const calls: ListContentEntriesInput[] = [];
   const page = { items: [], totals: { all: 0, changed: 0, draft: 0, published: 0 } };
   const useCases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     ...dependencies,
     config: config.runtime,
     content: contentPort({
@@ -288,6 +300,7 @@ test("a request without sort uses the collection's configured default", async ()
   const calls: ListContentEntriesInput[] = [];
   const page = { items: [], totals: { all: 0, changed: 0, draft: 0, published: 0 } };
   const useCases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     ...dependencies,
     config: config.runtime,
     content: contentPort({

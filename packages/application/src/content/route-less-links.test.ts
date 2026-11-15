@@ -1,3 +1,4 @@
+import { NODE_LIST_QUERY_LIMITS as TEST_LIST_QUERY_LIMITS } from "@lacecms/content";
 import { expect, test } from "vitest";
 import { defineCollection, defineConfig, definePage } from "@lacecms/config";
 import { builtInBlocks, field } from "@lacecms/content";
@@ -41,6 +42,7 @@ function useCases(
   const created: ContentEntry[] = [];
   let next = 0;
   const cases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     config: config.runtime,
     clock: { now: () => 1 },
     idGenerator: { next: () => `id-${(next += 1)}` },

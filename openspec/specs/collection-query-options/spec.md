@@ -125,7 +125,9 @@ unchanged. Search-input limits SHALL NOT restrict stored field lengths or the
 bounded string-sort anchor protocol.
 
 The platform SHALL supply trusted listQueryLimits {maxSearchLength,
-maxLikePatternBytes}: 200/null on Node and 48/50 on Cloudflare. Application
+maxLikePatternBytes}: 200/null on Node and 48/50 on Cloudflare. Every
+application composition SHALL supply the policy explicitly. A missing policy
+SHALL fail construction instead of selecting the Node policy. Application
 validation SHALL reject excess input before invoking the list read port, and
 adapters SHALL reject it before SQL when called directly. Excess q SHALL produce
 a value-free 422 VALIDATION_FAILED issue at /q; excess contains SHALL name
@@ -161,6 +163,12 @@ different-policy continuations expire safely.
 #### Scenario: Equality does not inherit the LIKE pattern budget
 - **WHEN** a permitted textual eq operand exceeds 50 UTF-8 bytes but stays within 200 code units
 - **THEN** Node and Cloudflare accept it with ASCII-insensitive/non-ASCII-sensitive equality, independent of substring limits
+
+#### Scenario: Application construction requires a policy
+- **WHEN** a composition constructs the content application without trusted
+  list-query limits
+- **THEN** construction fails before any list is served, while Node and
+  Cloudflare compositions supplying their policy advertise and enforce it
 
 ### Requirement: Query configuration does not change editorial content
 List queries SHALL require content:read and expose the same results to viewers, editors and administrators. They SHALL use draft field values and derived publication status, never search published values in place of draft values. Enabling/disabling operations SHALL NOT rewrite snapshots, advance revisions or alter public API/SDK/export ordering. Query-only synchronization SHALL NOT advance published state or request builds when a trusted baseline or legacy hash proof establishes unchanged public identity, following the synchronization requirement below. Missing or stale legacy identity without such proof SHALL use the explicitly conservative fallback. Unsupported field operations SHALL be rejected by the server even when a caller bypasses admin controls. Reads SHALL preserve existing authorization and bounded response limits.

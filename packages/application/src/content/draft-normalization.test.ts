@@ -1,3 +1,4 @@
+import { NODE_LIST_QUERY_LIMITS as TEST_LIST_QUERY_LIMITS } from "@lacecms/content";
 import { expect, test } from "vitest";
 import { defineCollection, defineConfig, defineGlobal } from "@lacecms/config";
 import { builtInBlocks, field } from "@lacecms/content";
@@ -82,6 +83,7 @@ function projection(value: NormalizedDraftCandidate) {
 test("client prediction matches the draft a save stores", async () => {
   let stored: ContentEntry | undefined;
   const cases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     config: config.runtime,
     clock: { now: () => unixMilliseconds(1) },
     idGenerator: { next: () => "entry-1" },
