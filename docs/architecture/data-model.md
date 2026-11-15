@@ -165,6 +165,10 @@ held in validated JSON
 - Media referenced only by hidden values stay protected but are excluded from
   public delivery. Only `active` media may be selected.
 
+Shared `db` write plans define media creation, edits, deletion requests and
+lease-guarded deletion outcomes for both runtimes. Metadata, hashes and tags
+commit together; object upload and idempotent deletion remain external effects.
+
 The projection is the only source of media usage: an entry uses an item when
 its current draft or current published snapshot references it in an entry
 field, a block field or its SEO image. Only current snapshots keep references,
@@ -270,6 +274,10 @@ event or extends its deadline, through `INSERT OR IGNORE` and a guarded update
 of the unlocked row. A claimed event is never modified; later publications
 create the next event, allowing at most one redundant build around a claim race
 and never skipping published state. Media-deletion events are never coalesced.
+Shared `db` plans define build and outbox transitions and the enqueue group.
+The request payload is constructed in JavaScript; the atomic SQL write fills
+the current target version and any inherited retry source. An explicit retry
+source takes precedence, and a claimed payload remains unchanged.
 
 ### 9.9 Referential actions
 

@@ -216,8 +216,9 @@ connections always keep foreign keys on.
 
 Node SQLite and D1 share every row mapper, every identical read
 (`SqlContentReader`), configuration-sync and link statement builders, and
-ordered plans for entry creation, duplication, save, publication, unpublication
-and deletion. Typed admission, ordered statements, result slots, exact counts
+ordered plans for entry, media, build and outbox mutations. Shared enqueue
+statements derive the target version and inherited retry lineage inside the
+atomic write, after any public-state bump. Typed admission, ordered statements, result slots, exact counts
 and outbox markers belong to the plan; executors retain their runtime-specific
 transaction boundaries ([ADR 0002](../adr/0002-d1-batches-and-node-transactions.md)). Every
 remaining intentional difference is listed here; where it could be observable,
@@ -225,7 +226,7 @@ a shared repository contract case pins the result.
 
 | Area | Node SQLite | D1 | Observable result pinned by |
 | --- | --- | --- | --- |
-| Build and dispatcher claims | select and lease update in one transaction | select, then one guarded batch | aligned: at most 10 site-build leases (`MAX_SITE_BUILD_CLAIMS_PER_CALL`, four D1 batch statements each) and 20 dispatcher leases (`MAX_DISPATCHER_CLAIMS_PER_CALL`) per call; site-build lease update guarded by the read `payload_json` on both; contract "caps site-build and dispatcher claims per call" |
+| Build and dispatcher claims | candidate read and lease updates in one transaction | bounded candidate read, then one guarded batch with independent candidate admissions | aligned: at most 10 site-build leases (`MAX_SITE_BUILD_CLAIMS_PER_CALL`, four D1 batch statements each) and 20 dispatcher leases (`MAX_DISPATCHER_CLAIMS_PER_CALL`) per call; site-build lease update guarded by the read `payload_json` on both; contract "caps site-build and dispatcher claims per call" |
 | Entry plan admission | predicate and diagnostics inside the write transaction | first guarded write and diagnostics inside one atomic batch | typed outcomes; replay → stale revision → link targets → route conflict; contract cases for concurrent saves and stale publication |
 | Publication result | materialized from the state read inside the transaction | pre-batch prediction, stored in the same batch as the idempotency record | returned entry, its replay and the unpublication result equal a later `load` |
 | `mutation_guards` | in-transaction dirty token for shared sync link statements | batch-unique guard tokens, removed inside the batch | no persistent plan token |

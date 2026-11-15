@@ -1,6 +1,5 @@
-import { SITE_BUILD_DEBOUNCE_MS, dispatcherEventId } from "@lacecms/application";
-import type { BuildQueueReceipt } from "@lacecms/application";
 import {
+  buildEnqueueStatements,
   LINK_IMPACT_EVIDENCE_SQL,
   linkRemovalCondition,
   SqlContentReader,
@@ -13,7 +12,6 @@ import {
   chunks,
   failure,
   hydrateEntries,
-  parseObject,
   snapshotIdsOf,
   sqliteWriteError,
   storedSnapshots,
@@ -205,74 +203,29 @@ export abstract class NodeRepositoryBase {
         "insert into published_state (singleton_key, version, updated_at) values (1, 1, ?) on conflict(singleton_key) do update set version = version + 1, updated_at = excluded.updated_at",
       )
       .run(timestamp);
-    const state = this.connection
-      .prepare("select version from published_state where singleton_key = 1")
-      .get() as { readonly version: number };
-    this.checkpoint("build-outbox");
-    this.enqueueSiteBuild({
-      reason,
-      requestedAt: timestamp,
-      requestedBy,
-      snapshotId,
-      targetVersion: state.version,
-    });
-    return state.version;
-  }
-
-  protected enqueueSiteBuild(input: {
-    readonly reason: string;
-    readonly requestedAt: number;
-    readonly requestedBy: string;
-    readonly retryOfBuildId?: string;
-    readonly snapshotId: string | null;
-    readonly targetVersion: number;
-  }): BuildQueueReceipt {
-    const pending = this.connection
-      .prepare(
-        "select id, payload_json from outbox_events where type = 'site.build.requested' and processed_at is null and locked_at is null",
-      )
-      .get() as { id: string; payload_json: string } | undefined;
-    const oldPayload =
-      pending === undefined ? {} : parseObject(pending.payload_json, "Outbox payload");
-    const retryOfBuildId =
-      input.retryOfBuildId ??
-      (typeof oldPayload.retryOfBuildId === "string" ? oldPayload.retryOfBuildId : undefined);
-    const payload = JSON.stringify({
-      publishedSnapshotId: input.snapshotId,
-      reason: input.reason,
-      requestedAt: input.requestedAt,
-      requestedBy: input.requestedBy,
-      ...(retryOfBuildId === undefined ? {} : { retryOfBuildId }),
-      targetVersion: input.targetVersion,
-    });
-    const eventId = this.nextId();
-    const inserted = this.connection
-      .prepare(
-        "insert or ignore into outbox_events (id, type, payload_json, attempts, available_at, created_at) values (?, 'site.build.requested', ?, 0, ?, ?)",
-      )
-      .run(eventId, payload, input.requestedAt + SITE_BUILD_DEBOUNCE_MS, input.requestedAt);
-    if (inserted.changes === 1)
-      return {
-        coalesced: false,
-        eventId: dispatcherEventId(eventId),
-        targetVersion: input.targetVersion,
-      };
-    this.connection
-      .prepare(
-        "update outbox_events set payload_json = ?, available_at = ? where type = 'site.build.requested' and processed_at is null and locked_at is null",
-      )
-      .run(payload, input.requestedAt + SITE_BUILD_DEBOUNCE_MS);
-    const existing = this.connection
-      .prepare(
-        "select id from outbox_events where type = 'site.build.requested' and processed_at is null and locked_at is null",
-      )
-      .get() as { id: string } | undefined;
-    if (existing === undefined) failure("Build request could not be queued.");
-    return {
-      coalesced: true,
-      eventId: dispatcherEventId(existing.id),
-      targetVersion: input.targetVersion,
-    };
+    const statements = buildEnqueueStatements(
+      { sql: "1", params: [] },
+      {
+        eventId: this.nextId(),
+        requestedAt: timestamp,
+        requestedBy,
+        snapshotId,
+        reason,
+      },
+    );
+    let version = 0;
+    for (const statement of statements) {
+      if (statement.checkpoint !== undefined) this.checkpoint(statement.checkpoint);
+      const prepared = this.connection.prepare(statement.sql);
+      if (statement.slot === "queue") {
+        const row = prepared.get(...statement.params) as
+          | { pending_id: string | null; version: number }
+          | undefined;
+        if (row?.pending_id == null) failure("Build request could not be queued.");
+        version = row.version;
+      } else prepared.run(...statement.params);
+    }
+    return version;
   }
 
   protected throwWriteError(error: unknown, pageCreation: boolean): never {

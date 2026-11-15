@@ -55,10 +55,10 @@
     "publication": ["builds", "content", "links", "shared", "write-plan"],
     "sync": ["links", "shared"],
     "content": ["links", "shared", "write-plan"],
-    "media": ["content", "shared"],
+    "media": ["content", "shared", "write-plan"],
     "delivery": ["content", "media", "shared"],
     "builds": ["content", "delivery", "media", "shared", "write-plan"],
-    "outbox": [],
+    "outbox": ["shared", "write-plan"],
     "reads": ["builds", "content", "delivery", "links", "media", "shared"]
   },
   "packages/server": {

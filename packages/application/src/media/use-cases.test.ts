@@ -187,3 +187,28 @@ test("resolves media binary eligibility without reading object storage", async (
   ).resolves.toBeNull();
   expect(storageReads).toEqual(["media/media-1"]);
 });
+
+test("deletes the uploaded object if metadata persistence fails", async () => {
+  const deleted: string[] = [];
+  const media = mediaUseCases(
+    {
+      async createMedia() {
+        throw new Error("metadata failed");
+      },
+    },
+    {
+      storage: {
+        async put(input) {
+          return { contentType: input.contentType, key: input.key, size: pngBytes.byteLength };
+        },
+        async delete(key) {
+          deleted.push(key);
+        },
+      },
+    },
+  );
+  await expect(
+    media.create({ actor: mediaEditor, body: bytes(pngBytes), filename: "cover.png" }),
+  ).rejects.toThrow("metadata failed");
+  expect(deleted).toEqual(["media/media-1"]);
+});

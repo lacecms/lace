@@ -29,6 +29,42 @@ import {
 export const cases: RepositoryContractCase[] = [];
 const contract = registerContract(cases);
 
+contract("a draft save and media deletion cannot both win", async (runtime, expect) => {
+  const harness = await runtime.open({ resolveModel: resolveRoute });
+  const { repository, sql } = harness;
+  await seedModels(sql, "posts");
+  await seedMedia(sql, "race-media");
+  await repository.create({
+    entry: entry("race-post", "posts", { updatedAt: 1 }),
+    mediaReferences: [],
+  });
+  const [saved, deleted] = await Promise.allSettled([
+    repository.saveCompleteDraft(
+      save("race-post", 1, 2, {
+        fields: { image: "race-media" },
+        mediaReferences: [
+          { fieldPath: "image", mediaId: mediaId("race-media"), sourceKey: "$fields" },
+        ],
+      }),
+    ),
+    harness.reopen().markForDeletion({
+      mediaId: mediaId("race-media"),
+      requestedAt: unixMilliseconds(2),
+      requestedBy: editor,
+    }),
+  ]);
+  expect([saved, deleted].filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+  const media = await repository.loadMedia("race-media");
+  const refs = await count(
+    sql,
+    "select count(*) as count from content_media_references where media_id = ?",
+    "race-media",
+  );
+  expect(media!.status === "deleting" ? refs : media!.status).toEqual(
+    media!.status === "deleting" ? 0 : "active",
+  );
+});
+
 contract("creates and saves a maximum draft atomically", async (runtime, expect) => {
   const { repository, sql } = await runtime.open({ resolveModel: resolveRoute });
   await seedModels(sql, "posts");

@@ -1,6 +1,7 @@
 // Directory dependencies: shared ← schema, security, links; links ← content, sync;
-// write-plan ← content, builds, publication; content ← media ← delivery ← builds;
-// builds, content, links ← publication; outbox; builds, links ← reads.
+// write-plan ← content, media, builds, publication, outbox;
+// content ← media ← delivery ← builds; builds, content, links ← publication;
+// shared ← outbox; builds, links ← reads.
 export * from "./security/oauth.js";
 export * from "./security/api-tokens.js";
 export * from "./security/rows.js";
@@ -41,9 +42,16 @@ export type { PublicRow, PublicGlobalRow } from "./delivery/public.js";
 export * from "./builds/site-builds.js";
 export * from "./builds/requests.js";
 export * from "./builds/write-plan.js";
-export * from "./outbox/rows.js";
+export * from "./write-plan/build-enqueue.js";
+export * from "./builds/claim-write-plan.js";
+export * from "./builds/transition-write-plan.js";
+export type { OutboxRow } from "./shared/outbox-row.js";
+export { sanitizeDispatchError } from "./shared/dispatch-error.js";
+export * from "./outbox/write-plan.js";
 export * from "./builds/export.js";
 export * from "./media/tags.js";
+export * from "./media/write-plan.js";
+export * from "./media/deletion-write-plan.js";
 export {
   MEDIA_COLUMNS_SQL,
   MEDIA_TAGS_JSON_SQL,
@@ -88,6 +96,7 @@ export type { DecodedCursor, DecodedSortCursor } from "./shared/cursors.js";
 export type {
   WritePlan,
   WritePlanGuard,
+  WritePlanGroup,
   WritePlanResult,
   WritePlanSql,
   WritePlanStatement,

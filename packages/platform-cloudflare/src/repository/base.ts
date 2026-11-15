@@ -1,12 +1,12 @@
-import { dispatcherEventId, SITE_BUILD_DEBOUNCE_MS } from "@lacecms/application";
+import { dispatcherEventId } from "@lacecms/application";
 import type { BuildQueueReceipt } from "@lacecms/application";
 import {
+  buildEnqueueStatements,
   LINK_IMPACT_EVIDENCE_SQL,
   linkRemovalCondition,
   SqlContentReader,
   replaceInternalLinkStatements,
   ENTRY_COLUMNS_SQL,
-  PENDING_SITE_BUILD_SQL,
   chunks,
   failure,
   seoJson,
@@ -264,64 +264,21 @@ export abstract class D1RepositoryBase {
       input.requestedAt,
       ...condition.params,
     );
-    batch.checkpoint("build-outbox");
-    return this.addSiteBuildEnqueue(batch, condition, {
+    let resultIndex = -1;
+    for (const statement of buildEnqueueStatements(condition, {
       reason: input.reason,
       requestedAt: input.requestedAt,
       requestedBy: input.requestedBy,
-      retryOfBuildId: null,
       snapshotId: input.snapshotId,
-    });
-  }
-
-  /**
-   * Creates a new pending build event or coalesces into the unclaimed one,
-   * returning the index of a trailing `select` reporting the pending event and
-   * version.
-   */
-  protected addSiteBuildEnqueue(
-    batch: MutationBatch,
-    condition: Condition,
-    input: {
-      readonly reason: string;
-      readonly requestedAt: number;
-      readonly requestedBy: string;
-      readonly retryOfBuildId: string | null;
-      readonly snapshotId: string | null;
-    },
-  ): number {
-    const eventId = this.nextId();
-    const payload = (retry: string) =>
-      `json_patch(json_object('publishedSnapshotId', ?, 'reason', ?, 'requestedAt', ?, 'requestedBy', ?, 'targetVersion', coalesce((select version from published_state where singleton_key = 1), 0)), json_object('retryOfBuildId', ${retry}))`;
-    const payloadParams = [input.snapshotId, input.reason, input.requestedAt, input.requestedBy];
-    const availableAt = input.requestedAt + SITE_BUILD_DEBOUNCE_MS;
-    batch.addOutbox(
-      `insert or ignore into outbox_events (id, type, payload_json, attempts, available_at, created_at)
-       select ?, 'site.build.requested', ${payload("?")}, 0, ?, ? where ${condition.sql}`,
-      eventId,
-      ...payloadParams,
-      input.retryOfBuildId,
-      availableAt,
-      input.requestedAt,
-      ...condition.params,
-    );
-    batch.addOutbox(
-      `update outbox_events
-          set payload_json = ${payload("coalesce(?, json_extract(payload_json, '$.retryOfBuildId'))")},
-              available_at = ?
-        where ${PENDING_SITE_BUILD_SQL} and id <> ? and ${condition.sql}`,
-      ...payloadParams,
-      input.retryOfBuildId,
-      availableAt,
-      eventId,
-      ...condition.params,
-    );
-    return batch.add(
-      `select ? as event_id,
-              (select id from outbox_events where ${PENDING_SITE_BUILD_SQL}) as pending_id,
-              coalesce((select version from published_state where singleton_key = 1), 0) as version`,
-      eventId,
-    );
+      eventId: this.nextId(),
+    })) {
+      if (statement.checkpoint !== undefined) batch.checkpoint(statement.checkpoint);
+      const index = statement.outbox
+        ? batch.addOutbox(statement.sql, ...statement.params)
+        : batch.add(statement.sql, ...statement.params);
+      if (statement.slot === "queue") resultIndex = index;
+    }
+    return resultIndex;
   }
 
   protected queueReceipt(results: readonly D1Result[], index: number): BuildQueueReceipt {

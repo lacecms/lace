@@ -7,7 +7,7 @@ import type {
 } from "@lacecms/application";
 import { DomainError } from "@lacecms/domain";
 import type { ContentEntry } from "@lacecms/domain";
-import { publicBuildStatements } from "../builds/write-plan.js";
+import { publicBuildStatements } from "../write-plan/build-enqueue.js";
 import { unpublicationScope } from "../content/snapshots.js";
 import { LINK_IMPACT_EVIDENCE_SQL, linkRemovalCondition } from "../links/reader.js";
 import type { ImpactEvidenceRow } from "../links/reader.js";

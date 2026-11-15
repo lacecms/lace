@@ -2,7 +2,7 @@ import { withPublishedProjection } from "@lacecms/application";
 import type { PublishContentEntryCommand } from "@lacecms/application";
 import { contentPublicPath, DomainError } from "@lacecms/domain";
 import type { ContentEntry } from "@lacecms/domain";
-import { publicBuildStatements } from "../builds/write-plan.js";
+import { publicBuildStatements } from "../write-plan/build-enqueue.js";
 import { BLOCK_COPY_COLUMNS_SQL } from "../content/blocks.js";
 import {
   deleteSupersededSnapshotsStatement,

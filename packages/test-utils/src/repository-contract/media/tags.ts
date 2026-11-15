@@ -150,6 +150,42 @@ contract(
   },
 );
 
+contract("creates media, hash and up to twenty tags atomically", async (runtime, expect) => {
+  const { repository, sql } = await runtime.open({ resolveModel: noModels });
+  const input = {
+    id: mediaId("create-atomic"),
+    storageKey: "create-atomic",
+    filename: "image.png",
+    mimeType: "image/png" as const,
+    size: 2,
+    width: 1,
+    height: 1,
+    createdAt: unixMilliseconds(2),
+    createdBy: editor.id,
+    sha256: "a".repeat(64),
+    tags: Array.from({ length: 20 }, (_, index) => `tag-${index}`),
+  };
+  await sql.run(
+    "create trigger reject_tag before insert on media_tags begin select raise(abort, 'injected tag failure'); end",
+  );
+  await expect(repository.createMedia(input)).rejects.toThrow();
+  expect(await sql.get("select id from media where id = ?", input.id)).toBeUndefined();
+  expect(await sql.all("select * from media_tags where media_id = ?", input.id)).toEqual([]);
+  await sql.run("drop trigger reject_tag");
+  const media = await repository.createMedia(input);
+  expect(media.sha256).toBe(input.sha256);
+  expect(media.tags).toHaveLength(20);
+  await expect(
+    repository.createMedia({
+      ...input,
+      id: mediaId("too-many"),
+      storageKey: "too-many",
+      tags: [...input.tags, "extra"],
+    }),
+  ).rejects.toThrow();
+  expect(await sql.get("select id from media where id = 'too-many'")).toBeUndefined();
+});
+
 contract(
   "rolls back tag replacement after an injected tag checkpoint failure",
   async (runtime, expect) => {

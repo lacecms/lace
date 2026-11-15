@@ -21,6 +21,9 @@ export interface WritePlanStatement extends WritePlanSql {
  */
 export interface WritePlan<Miss> {
   readonly admission: WritePlanSql;
+  /** Optional atomic classification: 1 admits, other integer values identify misses. */
+  readonly admissionOutcome?: WritePlanSql;
+  readonly diagnoseOutcome?: (outcome: number) => Miss;
   readonly diagnostics: Readonly<Record<string, WritePlanSql>>;
   readonly diagnose: (rows: Readonly<Record<string, readonly unknown[]>>) => Miss;
   readonly statements: (guard: WritePlanGuard) => readonly WritePlanStatement[];
@@ -34,3 +37,8 @@ export type WritePlanResult<Miss> =
       readonly changes: readonly number[];
       readonly slots: Readonly<Record<string, readonly unknown[]>>;
     };
+
+/** An atomic group whose statements carry their own independent guards. */
+export interface WritePlanGroup {
+  readonly statements: readonly WritePlanStatement[];
+}

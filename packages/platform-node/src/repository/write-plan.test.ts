@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import { expect, test } from "vitest";
 import type { WritePlan } from "@lacecms/db";
-import { executeWritePlan } from "./write-plan.js";
+import { executeWritePlan, executeWritePlanGroup } from "./write-plan.js";
 
 function plan(admitted: boolean, expectedChanges = 1): WritePlan<string> {
   return {
@@ -60,6 +60,33 @@ test("write plans admit atomically and report only committed outbox changes", ()
       kind: "committed",
       committedOutboxWork: false,
     });
+  } finally {
+    db.close();
+  }
+});
+
+test("independent guarded writes commit together and roll back on a late failure", () => {
+  const db = new Database(":memory:");
+  try {
+    db.exec("create table items (id integer primary key, lease text)");
+    db.exec("insert into items values (1, 'old'), (2, null)");
+    const statements = [1, 2].map((id) => ({
+      sql: "update items set lease = ? where id = ? and lease is null",
+      params: [`lease-${id}`, id],
+    }));
+    expect(executeWritePlanGroup(db, { statements })).toMatchObject({
+      changes: [0, 1],
+      committedOutboxWork: false,
+    });
+    expect(() =>
+      executeWritePlanGroup(db, {
+        statements: [
+          { sql: "update items set lease = null", params: [] },
+          { sql: "insert into items values (1, null)", params: [] },
+        ],
+      }),
+    ).toThrow();
+    expect(db.prepare("select lease from items where id = 2").get()).toEqual({ lease: "lease-2" });
   } finally {
     db.close();
   }

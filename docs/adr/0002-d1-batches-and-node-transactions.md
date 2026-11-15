@@ -62,3 +62,13 @@ snapshot. Exact-count violations must abort before commit on either runtime.
 Only a successfully committed unit returns a receipt reporting affected outbox
 work. D1 uses that receipt for request-local dispatch registration; Node keeps
 polling. The publication result materialization distinction above remains.
+
+## Amendment (EX2B)
+
+Shared ordered plans also define media, build and outbox writes. Build enqueue
+constructs request JSON in JavaScript and fills the target version and inherited
+retry source in the atomic write. Claims use independent candidate guards:
+Node reads candidates inside its write transaction; D1 reads bounded candidates
+before one atomic batch. A losing candidate does not prevent another claim,
+and lease changes do not produce enqueue receipts. The runtime claim caps and
+post-commit dispatch behavior remain as recorded in architecture §16.
