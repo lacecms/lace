@@ -62,6 +62,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Verify MCP compatibility
+        run: pnpm compat:mcp
+
       - name: Build the packed generated starter
         run: pnpm acceptance:starter
 

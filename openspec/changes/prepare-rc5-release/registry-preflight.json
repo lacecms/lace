@@ -1,0 +1,207 @@
+{
+  "checkedAt": "2026-11-15T01:47:28.830250+00:00",
+  "npm": {
+    "create-lace@0.1.0-rc4": {
+      "status": 200,
+      "integrity": "sha512-bwzCeFVye2mWOY7vroZT+NRKCUav144iIX8Ok6Dt2Gx28ZhRDIRj5a8qbXjYdZY9Y4+XX2UDStVRHnGo9JaRFA==",
+      "tarball": "https://registry.npmjs.org/create-lace/-/create-lace-0.1.0-rc4.tgz"
+    },
+    "create-lace@0.1.0-rc5": {
+      "status": 404
+    },
+    "@lacecms/application@0.1.0-rc4": {
+      "status": 200,
+      "integrity": "sha512-rFoSpVyVc1UAwCWLbZRw/+htcaYQ7D+BQw3E8aE/ztZO9xenSODveJ9ALJCE/fgtOM3vvXBZ8pOfvEBiZwhYzw==",
+      "tarball": "https://registry.npmjs.org/@lacecms/application/-/application-0.1.0-rc4.tgz"
+    },
+    "@lacecms/application@0.1.0-rc5": {
+      "status": 404
+    },
+    "@lacecms/astro@0.1.0-rc4": {
+      "status": 200,
+      "integrity": "sha512-8kMVbsU0UnhB4uhyZAUzoy5R4734oxerZtm5uMTmZvT6SkuRMDpv7O3PmxO7m2y9ZbTUfPNYKw5IOUPapL1+Pw==",
+      "tarball": "https://registry.npmjs.org/@lacecms/astro/-/astro-0.1.0-rc4.tgz"
+    },
+    "@lacecms/astro@0.1.0-rc5": {
+      "status": 404
+    },
+    "@lacecms/auth@0.1.0-rc4": {
+      "status": 200,
+      "integrity": "sha512-6CnTdHP4Jllio+tuR08aQM7UDrZyNACZecd0Gz+V0fGN+P2yzMDgnCu4wOSg+w1mhYokZUxB8Bx8e9mF3H8uNQ==",
+      "tarball": "https://registry.npmjs.org/@lacecms/auth/-/auth-0.1.0-rc4.tgz"
+    },
+    "@lacecms/auth@0.1.0-rc5": {
+      "status": 404
+    },
+    "@lacecms/cli@0.1.0-rc4": {
+      "status": 200,
+      "integrity": "sha512-X22JzK7GwOD9tEcA/prZATkj3413N0aN2MfBmjcy78IoBJ+Opyz9YSYhpBDTfAfmKV/K5uy+y/MA3Gb/0XKrVA==",
+      "tarball": "https://registry.npmjs.org/@lacecms/cli/-/cli-0.1.0-rc4.tgz"
+    },
+    "@lacecms/cli@0.1.0-rc5": {
+      "status": 404
+    },
+    "@lacecms/config@0.1.0-rc4": {
+      "status": 200,
+      "integrity": "sha512-5FiJlpoaziB4ghkPoJG4gTmgP1nt+JwM3bZGlW80PPeGqpYwtACRYhdTcbloNkThEASumfPZRu6qGKBvjTabVA==",
+      "tarball": "https://registry.npmjs.org/@lacecms/config/-/config-0.1.0-rc4.tgz"
+    },
+    "@lacecms/config@0.1.0-rc5": {
+      "status": 404
+    },
+    "@lacecms/content@0.1.0-rc4": {
+      "status": 200,
+      "integrity": "sha512-30cMyLcMSNyMYjsF4fKOKP1FgQDi5HMoabziFhXbW26vz5nTEmfpSya3cpw6w/vwuey1l/wNYL9n5zbij3eLFw==",
+      "tarball": "https://registry.npmjs.org/@lacecms/content/-/content-0.1.0-rc4.tgz"
+    },
+    "@lacecms/content@0.1.0-rc5": {
+      "status": 404
+    },
+    "@lacecms/contracts@0.1.0-rc4": {
+      "status": 200,
+      "integrity": "sha512-TBKrtIzUpT5+1Uc67NL2akFZsjwKnOmLfPVsv9HtZNwY52Jk/PfUSiChyc3LZZIX0OwmGUdOmRDODyUToDV5/w==",
+      "tarball": "https://registry.npmjs.org/@lacecms/contracts/-/contracts-0.1.0-rc4.tgz"
+    },
+    "@lacecms/contracts@0.1.0-rc5": {
+      "status": 404
+    },
+    "@lacecms/db@0.1.0-rc4": {
+      "status": 200,
+      "integrity": "sha512-pnPmI76wqhV29V1R/xxqyW8749pRgQCYLRtUfdOWyEx7PhXbm9/sCnpjUMAgGGwk2WvIeHMD6OLULfDUwqmnFQ==",
+      "tarball": "https://registry.npmjs.org/@lacecms/db/-/db-0.1.0-rc4.tgz"
+    },
+    "@lacecms/db@0.1.0-rc5": {
+      "status": 404
+    },
+    "@lacecms/domain@0.1.0-rc4": {
+      "status": 200,
+      "integrity": "sha512-98wn8VvwwFPJU8Us4bttla6EXmupMTyleMDM2Gs4gAsQFWhEL+Z7AohSP2PGRjxQQY3NWDIm4VdSdEUaxFcHvA==",
+      "tarball": "https://registry.npmjs.org/@lacecms/domain/-/domain-0.1.0-rc4.tgz"
+    },
+    "@lacecms/domain@0.1.0-rc5": {
+      "status": 404
+    },
+    "@lacecms/mcp@0.1.0-rc4": {
+      "status": 200,
+      "integrity": "sha512-dm9HDdtcsr2F/PS+YvmCTVyGFKfOoVxnsRrtPaG4nU2ZGiXZcXeIVj9VLrdyiwqmHVK3OzuhE4Q8Vbx5c8fB4w==",
+      "tarball": "https://registry.npmjs.org/@lacecms/mcp/-/mcp-0.1.0-rc4.tgz"
+    },
+    "@lacecms/mcp@0.1.0-rc5": {
+      "status": 404
+    },
+    "@lacecms/platform-cloudflare@0.1.0-rc4": {
+      "status": 200,
+      "integrity": "sha512-ik7m3tJm9yhpH7tsPxu0qylaHJF6D2E056xpCKun3boHKPXtDTiJ9d4YAihtJIjGZitoakxS+o7JdPBNPacTWg==",
+      "tarball": "https://registry.npmjs.org/@lacecms/platform-cloudflare/-/platform-cloudflare-0.1.0-rc4.tgz"
+    },
+    "@lacecms/platform-cloudflare@0.1.0-rc5": {
+      "status": 404
+    },
+    "@lacecms/platform-node@0.1.0-rc4": {
+      "status": 200,
+      "integrity": "sha512-JNvfYQ0E2BhTjLdzMyUgyPT/6ky0Se8t57hM1CsO9WCusn+bt9mx9ls73jfCyd5OZmTLT56kEJ/DWfcCrZ7TFA==",
+      "tarball": "https://registry.npmjs.org/@lacecms/platform-node/-/platform-node-0.1.0-rc4.tgz"
+    },
+    "@lacecms/platform-node@0.1.0-rc5": {
+      "status": 404
+    },
+    "@lacecms/render@0.1.0-rc4": {
+      "status": 200,
+      "integrity": "sha512-Pd2AVYHzmPUeNMkJlWqHhIJ6Zj8GQptpL5tel8X+BkiKvW2DqJXk0z39PKVI9veLFwL8m0PAIvBLp2CASToE1A==",
+      "tarball": "https://registry.npmjs.org/@lacecms/render/-/render-0.1.0-rc4.tgz"
+    },
+    "@lacecms/render@0.1.0-rc5": {
+      "status": 404
+    },
+    "@lacecms/sdk@0.1.0-rc4": {
+      "status": 200,
+      "integrity": "sha512-5PfWbg8EPtASXnIQDhbRV09V8UnKsvfqaTAKlLsJD9nFf2WyoI/Dn769imJSpkvxgilyNFZOOy5351pwSU4IbA==",
+      "tarball": "https://registry.npmjs.org/@lacecms/sdk/-/sdk-0.1.0-rc4.tgz"
+    },
+    "@lacecms/sdk@0.1.0-rc5": {
+      "status": 404
+    },
+    "@lacecms/server@0.1.0-rc4": {
+      "status": 200,
+      "integrity": "sha512-6vNoWraaoGHJIAwAwOkYb9X2+WPDivkoqV4x6I04INnO9XbzIrPjxNDmk8IARhoZDSz5E8JcfSi/QDv9y5ZGpA==",
+      "tarball": "https://registry.npmjs.org/@lacecms/server/-/server-0.1.0-rc4.tgz"
+    },
+    "@lacecms/server@0.1.0-rc5": {
+      "status": 404
+    }
+  },
+  "images": {
+    "api:0.1.0-rc4": {
+      "status": 200,
+      "platforms": [
+        {
+          "architecture": "amd64",
+          "os": "linux"
+        },
+        {
+          "architecture": "unknown",
+          "os": "unknown"
+        },
+        {
+          "architecture": "arm64",
+          "os": "linux"
+        },
+        {
+          "architecture": "unknown",
+          "os": "unknown"
+        }
+      ]
+    },
+    "api:0.1.0-rc5": {
+      "status": 404
+    },
+    "builder:0.1.0-rc4": {
+      "status": 200,
+      "platforms": [
+        {
+          "architecture": "amd64",
+          "os": "linux"
+        },
+        {
+          "architecture": "unknown",
+          "os": "unknown"
+        },
+        {
+          "architecture": "arm64",
+          "os": "linux"
+        },
+        {
+          "architecture": "unknown",
+          "os": "unknown"
+        }
+      ]
+    },
+    "builder:0.1.0-rc5": {
+      "status": 404
+    }
+  },
+  "github": {
+    "rc4-release": {
+      "status": 200,
+      "tag_name": "v0.1.0-rc4",
+      "target_commitish": "1988e36d7a9793a58c8cd106fec5178865c65b4b",
+      "draft": false,
+      "prerelease": true,
+      "html_url": "https://github.com/lacecms/lace/releases/tag/v0.1.0-rc4"
+    },
+    "rc4-tag": {
+      "status": 200,
+      "object": {
+        "sha": "1988e36d7a9793a58c8cd106fec5178865c65b4b",
+        "type": "commit",
+        "url": "https://api.github.com/repos/lacecms/lace/git/commits/1988e36d7a9793a58c8cd106fec5178865c65b4b"
+      }
+    },
+    "rc5-release": {
+      "status": 404
+    },
+    "rc5-tag": {
+      "status": 404
+    }
+  }
+}

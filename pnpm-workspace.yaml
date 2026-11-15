@@ -3,7 +3,7 @@ packages:
   - packages/*
 
 catalog:
-  "@better-auth/oauth-provider": 1.7.7
+  "@better-auth/oauth-provider": 1.7.25
   "@modelcontextprotocol/server": 2.4.0
   "@modelcontextprotocol/client": 2.4.0
   "@astrojs/starlight": 0.42.6
@@ -126,3 +126,4 @@ minimumReleaseAgeExclude:
   - better-auth@1.7.25
   - better-sqlite3@13.2.0
   - lucide-react@1.73.0
+  - "@better-auth/oauth-provider@1.7.25"

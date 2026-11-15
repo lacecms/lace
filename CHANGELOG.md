@@ -3,11 +3,20 @@
 Important changes and required upgrade actions; preparation alone does not
 announce publication. See [release status and evidence](docs/alpha-release.md).
 
+## 0.1.0-rc5
+
+- Production Compose removes the API host port and binds Nginx to loopback by default; update your TLS proxy and host clients before restarting ([upgrade guide](docs/compatibility.md#upgrading-from-rc2)).
+- Protected REST requests with missing or invalid credentials now return `401 AUTHENTICATION_REQUIRED`; permission and request-origin denials remain `403`, and OpenAPI reflects the contract.
+- Cloudflare dispatch now follows committed outbox work, including MCP publication; the exported `producesDispatchWork` helper is removed.
+- MCP OAuth rejects an incorrect PKCE verifier with `400 invalid_grant`, reflecting the updated OAuth provider.
+- Rate limits retain the trusted client identity while processing request bodies, and expired idempotency records and superseded snapshots are maintained consistently.
+- Upgrade all packages, both images and template `0.50.0` together; back up first, apply the forward database migration, synchronize configuration and rebuild the site ([upgrade guide](docs/compatibility.md#upgrading-from-rc2)).
+
 ## 0.1.0-rc4
 
 - Collection lists have refined search, filtering and sorting controls, and admin navigation handles overflow more clearly.
 - Content import now uses the media response version for conditional updates, preventing incorrect concurrency failures.
-- Upgrade all Lace packages, both images and the project template (`0.50.0`) together. Back up first, run migrations and synchronization, and rebuild the site; existing rc2 gallery upgrade guidance still applies ([upgrade guide](docs/compatibility.md#upgrading-from-rc2)).
+- Upgrade all Lace packages, both images and the project template (`0.49.0`) together. Back up first, run migrations and synchronization, and rebuild the site; existing rc2 gallery upgrade guidance still applies ([upgrade guide](docs/compatibility.md#upgrading-from-rc2)).
 
 ## 0.1.0-rc3
 

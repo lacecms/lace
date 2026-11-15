@@ -369,9 +369,10 @@ async function verifyCodeExchange(fetch, adapter, competing = false, exchangeOve
         body,
       }),
     );
-    expect(response.status).toBe(exchangeOverride.code_verifier ? 401 : 400);
+    expect(response.status).toBe(400);
     const error = await response.json();
     expect(error.error).toBeTypeOf("string");
+    if (exchangeOverride.code_verifier) expect(error.error).toBe("invalid_grant");
     expect(error.access_token).toBeUndefined();
     return;
   }
@@ -1125,7 +1126,7 @@ for (const runtime of ["SQLite", "D1"]) {
     { client_id: "wrong-client" },
     { resource: "https://other.test/mcp" },
     { redirect_uri: "https://other.test/callback" },
-    { code_verifier: "wrong-verifier" },
+    { code_verifier: "incorrect-code-verifier-0123456789-abcdefghijklmnopqrstuvwxyz" },
   ]) {
     test(`${runtime}: S256 code exchange rejects ${Object.keys(override)[0]} substitution`, async () => {
       const { auth, adapter } = await fixture(runtime);

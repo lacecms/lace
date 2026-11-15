@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "templateVersion": "0.50.0",
   "database": [
-    "An rc4 database already starts from the baseline migration and is upgraded in place with forward migrations using pnpm db:migrate, without recreation. Stop api and dispatcher and back up .lace/data and the object store first. A database created before rc2 predates the baseline and is unsupported."
+    "An rc4 database already starts from the baseline migration and is upgraded in place with forward migrations using pnpm db:migrate, without recreation. Stop api and dispatcher and back up .lace/data and the object store first. On Cloudflare use the documented remote migration command. A database created before rc2 predates the baseline and is unsupported."
   ],
   "configuration": [
-    "Template 0.50.0 requires pnpm 12 or later. Upgrade packages and images together. Production no longer publishes the API port; Nginx defaults to 127.0.0.1:8080. Review managed-file conflicts and user-owned Compose overrides, preserve .env and data, move the TLS proxy and host HTTP/manual-build clients to the HTTPS Nginx ingress, and set LACE_API_BASE_URL accordingly. Recreate services with the production Compose definition and inspect docker compose config and docker compose ps to confirm effective bindings. For rollback restore matching managed files and proxy settings, and restrict the former host ports."
+    "Template 0.50.0 requires pnpm 12 or later. Upgrade packages and images together. Production no longer publishes the API port; Nginx defaults to 127.0.0.1:8080. Review managed-file conflicts and user-owned Compose overrides, preserve .env and data, move the TLS proxy and host HTTP/manual-build clients to the HTTPS Nginx ingress, and set LACE_API_BASE_URL accordingly. Recreate services with the production Compose definition and inspect docker compose config and docker compose ps to confirm effective bindings. Run content synchronization and rebuild the site. For rollback restore matching managed files, proxy settings, database and object-store backups, and restrict the former host ports."
   ]
 }
