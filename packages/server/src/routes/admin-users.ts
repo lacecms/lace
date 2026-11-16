@@ -31,8 +31,8 @@ import { v1Routes } from "../routing/v1-routes.js";
 const routes = v1Routes.adminUsers;
 
 export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): void {
-  const { actor, usersActor } = routeContext.actors;
-  const { accounts, accountSecurity } = routeContext.capabilities;
+  const { actor } = routeContext.actors;
+  const { accounts, installedAccounts } = routeContext.capabilities;
   app.on(
     routes.users.method,
     routes.users.path,
@@ -49,8 +49,10 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
       },
     }),
     async (context) => {
-      await usersActor(context);
-      return response(managedUserListSchema, { items: await accountSecurity().listUsers() });
+      const resolvedActor = await actor(context);
+      return response(managedUserListSchema, {
+        items: await installedAccounts().listUsers(resolvedActor),
+      });
     },
   );
   app.on(
@@ -243,9 +245,9 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
     }),
     validator("json", userUpdateRequestSchema, validationHook),
     async (context) => {
-      await usersActor(context);
+      const resolvedActor = await actor(context);
       const body = context.req.valid("json") as v.InferOutput<typeof userUpdateRequestSchema>;
-      const updated = await accountSecurity().updateUser({
+      const updated = await installedAccounts().updateUser(resolvedActor, {
         ...(body.disabled === undefined ? {} : { disabled: body.disabled }),
         ...(body.role === undefined ? {} : { role: body.role }),
         userId: context.req.param("userId"),

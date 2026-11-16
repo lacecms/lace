@@ -6,7 +6,6 @@ import {
   describePolicy,
   validationFailure,
 } from "../shared/openapi.js";
-import { requireContentReader } from "@lacecms/application";
 import {
   buildSiteSelectionSchema,
   buildRequestSchema,
@@ -15,7 +14,6 @@ import {
   siteBuildListSchema,
   identifierSchemaPublic,
   toSiteBuildRecordDto,
-  InvariantError,
   errorEnvelopeSchema,
 } from "@lacecms/contracts";
 import { Hono } from "hono";
@@ -26,8 +24,8 @@ import { v1Routes } from "../routing/v1-routes.js";
 const routes = v1Routes.builds;
 
 export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void {
-  const { actor, settingsActor } = routeContext.actors;
-  const { capabilities } = routeContext;
+  const { actor } = routeContext.actors;
+  const { builds, buildSite } = routeContext.capabilities;
   app.on(
     routes.buildSite.method,
     routes.buildSite.path,
@@ -44,9 +42,7 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
       },
     }),
     async (context) => {
-      const resolvedActor = await actor(context);
-      requireContentReader(resolvedActor);
-      return response(buildSiteSelectionSchema, { site: capabilities.buildSite ?? null });
+      return response(buildSiteSelectionSchema, { site: buildSite(await actor(context)) });
     },
   );
   app.on(
@@ -66,9 +62,7 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
     }),
     async (context) => {
       const resolvedActor = await actor(context);
-      if (capabilities.builds === undefined)
-        throw new InvariantError("Build reads are unavailable.");
-      const items = await capabilities.builds.list(resolvedActor);
+      const items = await builds.list(resolvedActor);
       return response(siteBuildListSchema, { items: items.map(toSiteBuildRecordDto) });
     },
   );
@@ -95,9 +89,7 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
     async (context) => {
       const resolvedActor = await actor(context);
       const buildId = parse(identifierSchemaPublic, context.req.param("buildId"));
-      if (capabilities.builds === undefined)
-        throw new InvariantError("Build reads are unavailable.");
-      const build = await capabilities.builds.get(resolvedActor, buildId);
+      const build = await builds.get(resolvedActor, buildId);
       return build === null
         ? notFound()
         : response(siteBuildRecordSchema, toSiteBuildRecordDto(build));
@@ -121,13 +113,12 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
       tags: ["admin"],
     }),
     async (context) => {
-      const resolvedActor = await settingsActor(context);
-      parse(buildRequestSchema, await optionalJsonBody(context.req.raw));
-      if (capabilities.builds === undefined)
-        throw new InvariantError("Build commands are unavailable.");
+      const resolvedActor = await actor(context);
       return response(
         buildQueueReceiptSchema,
-        await capabilities.builds.request(resolvedActor),
+        await builds.request(resolvedActor, async () => {
+          parse(buildRequestSchema, await optionalJsonBody(context.req.raw));
+        }),
         202,
       );
     },
@@ -150,14 +141,13 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
       tags: ["admin"],
     }),
     async (context) => {
-      const resolvedActor = await settingsActor(context);
-      parse(buildRequestSchema, await optionalJsonBody(context.req.raw));
-      const buildId = parse(identifierSchemaPublic, context.req.param("buildId"));
-      if (capabilities.builds === undefined)
-        throw new InvariantError("Build commands are unavailable.");
+      const resolvedActor = await actor(context);
       return response(
         buildQueueReceiptSchema,
-        await capabilities.builds.retry(resolvedActor, buildId),
+        await builds.retry(resolvedActor, async () => {
+          parse(buildRequestSchema, await optionalJsonBody(context.req.raw));
+          return parse(identifierSchemaPublic, context.req.param("buildId"));
+        }),
         202,
       );
     },

@@ -10,7 +10,7 @@ import {
   MAX_DISPLAY_NAME_LENGTH,
   normalizeDisplayName,
 } from "@lacecms/domain";
-import { requirePermission, type Actor, type UnixMilliseconds } from "@lacecms/domain";
+import type { Actor, UnixMilliseconds } from "@lacecms/domain";
 import {
   renderEmail,
   type EmailDeliveryOutcome,
@@ -20,6 +20,8 @@ import {
 import type { Clock } from "../ports/infrastructure.js";
 import type { SecurityRole, SensitiveRateLimiter } from "../ports/security.js";
 import type { OpaqueTokenSecret } from "../shared/brands.js";
+import { opaqueTokenSecret } from "../shared/brands.js";
+import { actorPermissions, requireSessionActor } from "../shared/permissions.js";
 
 /** Invitations stay valid for 72 hours after issuance or resend. */
 export const INVITATION_TTL_MS = 72 * 60 * 60 * 1000;
@@ -190,13 +192,51 @@ export interface AccountUseCasesInput {
   readonly security: UserProfileReader & AccountSecurityPort & SessionSecurityPort;
 }
 
-function requireUsersManagerActor(actor: Actor): void {
-  requirePermission(actor, "users:manage");
-}
-
-/** Invitation, password-recovery and self-service flows shared by both runtimes. */
+/** Setup, user administration and self-service flows shared by both runtimes. */
 export class AccountUseCases {
   public constructor(private readonly input: AccountUseCasesInput) {}
+
+  public isSetupComplete() {
+    return this.input.security.isSetupComplete();
+  }
+
+  public bootstrap(input: {
+    readonly email: string;
+    readonly password: string;
+    readonly token: string;
+  }) {
+    return this.input.security.bootstrap({ ...input, token: opaqueTokenSecret(input.token) });
+  }
+
+  public async listUsers(actor: Actor) {
+    requireSessionActor(actor, "users:manage");
+    return this.input.security.listUsers();
+  }
+
+  public async updateUser(actor: Actor, input: Parameters<AccountSecurityPort["updateUser"]>[0]) {
+    requireSessionActor(actor, "users:manage");
+    return this.input.security.updateUser(input);
+  }
+
+  public async sessionSummary(actor: Actor) {
+    requireSessionActor(actor);
+    const profile = await this.input.security.readUserProfile(actor.id);
+    if (profile === null || profile.disabled) return null;
+    return {
+      permissions: actorPermissions(actor),
+      user: {
+        ...(profile.name === undefined ? {} : { displayName: profile.name }),
+        email: profile.email,
+        id: actor.id,
+        role: actor.role,
+      },
+    };
+  }
+
+  public static accountCapabilities(actor: Actor, mcpEnabled: boolean) {
+    requireSessionActor(actor);
+    return { mcpEnabled };
+  }
 
   private now(): UnixMilliseconds {
     return this.input.clock.now();
@@ -248,7 +288,7 @@ export class AccountUseCases {
     actor: Actor,
     request: { readonly email: string; readonly role: SecurityRole },
   ): Promise<InvitationIssueResult> {
-    requireUsersManagerActor(actor);
+    requireSessionActor(actor, "users:manage");
     const now = this.now();
     const created = await this.input.security.createInvitation({
       email: normalizeAccountEmail(request.email),
@@ -261,7 +301,7 @@ export class AccountUseCases {
   }
 
   public async listInvitations(actor: Actor): Promise<readonly InvitationView[]> {
-    requireUsersManagerActor(actor);
+    requireSessionActor(actor, "users:manage");
     const now = this.now();
     return (await this.input.security.listInvitations()).map((record) => this.view(record, now));
   }
@@ -270,7 +310,7 @@ export class AccountUseCases {
     actor: Actor,
     invitationId: string,
   ): Promise<InvitationIssueResult> {
-    requireUsersManagerActor(actor);
+    requireSessionActor(actor, "users:manage");
     const now = this.now();
     const reissued = await this.input.security.reissueInvitation({ invitationId, now });
     if (reissued.status === "not_found") throw new AccountError("NOT_FOUND");
@@ -279,7 +319,7 @@ export class AccountUseCases {
   }
 
   public async revokeInvitation(actor: Actor, invitationId: string): Promise<void> {
-    requireUsersManagerActor(actor);
+    requireSessionActor(actor, "users:manage");
     const outcome = await this.input.security.revokeInvitation({ invitationId, now: this.now() });
     if (outcome === "not_found") throw new AccountError("NOT_FOUND");
     if (outcome === "conflict") throw new AccountError("CONFLICT");
@@ -354,7 +394,7 @@ export class AccountUseCases {
   }
 
   public async sendPasswordReset(actor: Actor, userId: string): Promise<LinkIssueResult> {
-    requireUsersManagerActor(actor);
+    requireSessionActor(actor, "users:manage");
     const issued = await this.input.security.issuePasswordReset({
       now: this.now(),
       requestedBy: actor.id,
@@ -373,13 +413,14 @@ export class AccountUseCases {
   }
 
   public async signOutUser(actor: Actor, userId: string): Promise<{ readonly revoked: number }> {
-    requireUsersManagerActor(actor);
+    requireSessionActor(actor, "users:manage");
     const revoked = await this.input.security.deleteUserSessions({ userId });
     if (revoked === null) throw new AccountError("NOT_FOUND");
     return Object.freeze({ revoked });
   }
 
   public async updateDisplayName(actor: Actor, displayName: string): Promise<void> {
+    requireSessionActor(actor);
     const updated = await this.input.security.updateDisplayName({
       displayName: normalizeDisplayName(displayName),
       now: this.now(),
@@ -402,6 +443,7 @@ export class AccountUseCases {
       readonly signOutOtherSessions: boolean;
     },
   ): Promise<{ readonly revoked: number }> {
+    requireSessionActor(actor);
     if (request.signOutOtherSessions && currentSessionId === null)
       throw new AccountError("CONFLICT");
     const result = await this.input.security.changePassword({
@@ -431,6 +473,7 @@ export class AccountUseCases {
     actor: Actor,
     currentSessionId: string | null,
   ): Promise<readonly SessionView[]> {
+    requireSessionActor(actor);
     const sessions = await this.input.security.listSessions({ now: this.now(), userId: actor.id });
     return sessions.map((session) =>
       Object.freeze({
@@ -449,6 +492,7 @@ export class AccountUseCases {
     currentSessionId: string | null,
     sessionId: string,
   ): Promise<void> {
+    requireSessionActor(actor);
     if (sessionId === currentSessionId) throw new AccountError("CONFLICT");
     const deleted = await this.input.security.deleteSession({ sessionId, userId: actor.id });
     if (!deleted) throw new AccountError("NOT_FOUND");
@@ -458,6 +502,7 @@ export class AccountUseCases {
     actor: Actor,
     currentSessionId: string | null,
   ): Promise<{ readonly revoked: number }> {
+    requireSessionActor(actor);
     if (currentSessionId === null) throw new AccountError("CONFLICT");
     const revoked = await this.input.security.deleteOtherSessions({
       keepSessionId: currentSessionId,

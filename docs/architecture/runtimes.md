@@ -32,9 +32,10 @@ Both runtimes compose the portable services in one place:
 (repository, security, object storage, image inspector, clock, ids, list-query
 limits, logger, email sender, rate-limit persistence, client-address lookup,
 authentication boundaries, optional MCP and OAuth adapters, HTTP settings) and
-returns the content, media, link, build, account and OAuth-connection use cases
-plus the complete `createLaceApp` input. `createNodeRuntime` and
-`createCloudflareRuntime` build adapters, resolve dispatchers by registered
+returns the content, media, link, build, account, token administration,
+settings, and optional OAuth-connection use cases plus the complete
+`createLaceApp` input. Account and token administration use the composed clock.
+`createNodeRuntime` and `createCloudflareRuntime` build adapters, resolve dispatchers by registered
 event type through the application table, and wire process scheduling. Build
 and media dispatch retain their own lease and completion ports.
 Every content application composition supplies trusted list-query limits
@@ -42,8 +43,10 @@ explicitly: Node uses 200 characters with no LIKE byte cap, and Cloudflare uses
 48 characters and a 50-byte escaped-pattern cap. Request and model configuration
 cannot override this policy; a missing policy fails construction.
 `LACE_API_DOCS_ENABLED` and `LACE_MCP_ENABLED` are parsed by one shared rule.
-Route modules receive actor resolution and the capabilities they call, never
-the raw application input, and depend on the narrow security ports.
+Route modules receive actor resolution, application operations and transport
+capabilities. The application operations call the narrow security ports.
+Build export receives a dedicated credential verifier whose availability
+controls route registration.
 
 Node composition imports and exposes the repository from `@lacecms/db/node`
 and owns the connection lifecycle. D1 composition imports the portable
@@ -87,7 +90,7 @@ flowchart TB
   mcp["@lacecms/mcp (optional)"]
   auth["@lacecms/auth"]
   subgraph appPkg["@lacecms/application"]
-    useCases["content, media, link, build,<br/>account use cases"]
+    useCases["content, media, link, build,<br/>account, token and settings use cases"]
     ports["ports: content, links, media,<br/>builds, outbox, security, infrastructure"]
   end
   nodeEntry --> nodeRuntime

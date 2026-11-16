@@ -5,12 +5,7 @@ import {
   describePolicy,
   validationFailure,
 } from "../shared/openapi.js";
-import {
-  effectiveActorPermissions,
-  importTokenCapabilities,
-  importTokenExpiry,
-} from "@lacecms/application";
-import type { TokenSecurityPort } from "@lacecms/application";
+import { describeImportCredential, type BuildTokenMetadata } from "@lacecms/application";
 import {
   errorEnvelopeSchema,
   buildTokenCreateRequestSchema,
@@ -31,11 +26,7 @@ import * as v from "valibot";
 import type { RouteContext } from "../composition/route-context.js";
 import { v1Routes } from "../routing/v1-routes.js";
 
-function buildTokenDto(
-  value:
-    | Awaited<ReturnType<TokenSecurityPort["createBuildToken"]>>
-    | Awaited<ReturnType<TokenSecurityPort["listBuildTokens"]>>[number],
-) {
+function buildTokenDto(value: BuildTokenMetadata) {
   return {
     capabilities: ["content:build:read"] as const,
     createdAt: toIsoTimestamp(value.createdAt),
@@ -50,8 +41,8 @@ function buildTokenDto(
 const routes = v1Routes.credentials;
 
 export function registerCredentialRoutes(app: Hono, routeContext: RouteContext): void {
-  const { actor, settingsActor } = routeContext.actors;
-  const { tokenSecurity } = routeContext.capabilities;
+  const { actor } = routeContext.actors;
+  const { tokenAdministration } = routeContext.capabilities;
   app.on(
     routes.listBuild.method,
     routes.listBuild.path,
@@ -68,9 +59,9 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
       },
     }),
     async (context) => {
-      await settingsActor(context);
+      const resolvedActor = await actor(context);
       return response(buildTokenListSchema, {
-        items: (await tokenSecurity().listBuildTokens()).map(buildTokenDto),
+        items: (await tokenAdministration().listBuildTokens(resolvedActor)).map(buildTokenDto),
       });
     },
   );
@@ -92,12 +83,9 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
     }),
     validator("json", buildTokenCreateRequestSchema, validationHook),
     async (context) => {
-      await settingsActor(context);
+      const resolvedActor = await actor(context);
       const body = context.req.valid("json") as v.InferOutput<typeof buildTokenCreateRequestSchema>;
-      const token = await tokenSecurity().createBuildToken({
-        name: body.name,
-        now: Date.now() as never,
-      });
+      const token = await tokenAdministration().issueBuildToken(resolvedActor, body.name);
       return response(
         buildTokenCreatedSchema,
         { ...buildTokenDto(token), token: token.token },
@@ -126,11 +114,11 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
       },
     }),
     async (context) => {
-      await settingsActor(context);
-      const token = await tokenSecurity().revokeBuildToken({
-        now: Date.now() as never,
-        tokenId: context.req.param("tokenId"),
-      });
+      const resolvedActor = await actor(context);
+      const token = await tokenAdministration().revokeBuildToken(
+        resolvedActor,
+        context.req.param("tokenId"),
+      );
       return token === null ? notFound() : response(buildTokenSchema, buildTokenDto(token));
     },
   );
@@ -151,9 +139,9 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
       tags: ["admin"],
     }),
     async (context) => {
-      await settingsActor(context);
+      const resolvedActor = await actor(context);
       return response(importTokenListSchema, {
-        items: (await tokenSecurity().listImportTokens()).map(toImportTokenDto),
+        items: (await tokenAdministration().listImportTokens(resolvedActor)).map(toImportTokenDto),
       });
     },
   );
@@ -179,18 +167,11 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
     }),
     validator("json", importTokenCreateRequestSchema, validationHook),
     async (context) => {
-      const resolvedActor = await settingsActor(context);
+      const resolvedActor = await actor(context);
       const body = context.req.valid("json") as v.InferOutput<
         typeof importTokenCreateRequestSchema
       >;
-      const now = Date.now() as never;
-      const token = await tokenSecurity().createImportToken({
-        capabilities: importTokenCapabilities(resolvedActor, body.allowPublish),
-        createdBy: resolvedActor.id,
-        expiresAt: importTokenExpiry(now, body.expiresInDays),
-        name: body.name,
-        now,
-      });
+      const token = await tokenAdministration().issueImportToken(resolvedActor, body);
       return response(
         importTokenCreatedSchema,
         { ...toImportTokenDto(token), token: token.token },
@@ -218,11 +199,11 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
       tags: ["admin"],
     }),
     async (context) => {
-      await settingsActor(context);
-      const token = await tokenSecurity().revokeImportToken({
-        now: Date.now() as never,
-        tokenId: context.req.param("tokenId"),
-      });
+      const resolvedActor = await actor(context);
+      const token = await tokenAdministration().revokeImportToken(
+        resolvedActor,
+        context.req.param("tokenId"),
+      );
       return token === null ? notFound() : response(importTokenSchema, toImportTokenDto(token));
     },
   );
@@ -248,11 +229,12 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
       const token = context.get("lace.importToken");
       // A session actor cannot describe an import credential.
       if (token === undefined) throw new AuthorizationError();
+      const description = describeImportCredential({ actor: resolvedActor, token });
       return response(
         importCredentialSchema,
         {
-          permissions: [...effectiveActorPermissions(resolvedActor)],
-          token: toImportTokenDto(token),
+          permissions: description.permissions,
+          token: toImportTokenDto(description.token),
         },
         200,
         { "cache-control": "no-store" },

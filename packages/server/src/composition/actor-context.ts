@@ -1,4 +1,3 @@
-import { requireSettingsManager, requireUsersManager } from "@lacecms/application";
 import { AuthenticationRequiredError } from "@lacecms/contracts";
 import { AuthorizationError } from "../shared/http.js";
 import { authenticationChallenge, type RoutePolicy } from "../routing/route-policy.js";
@@ -29,18 +28,6 @@ export function createActorContext(actors: ActorResolver) {
     return resolved;
   }
 
-  async function usersActor(context: ActorRequestContext): Promise<Actor> {
-    const value = await actor(context);
-    requireUsersManager(value);
-    return value;
-  }
-
-  async function settingsActor(context: ActorRequestContext): Promise<Actor> {
-    const value = await actor(context);
-    requireSettingsManager(value);
-    return value;
-  }
-
   /** The current session id is resolved once per request beside the actor. */
   async function currentSessionId(context: ActorRequestContext): Promise<string | null> {
     await actor(context);
@@ -51,7 +38,7 @@ export function createActorContext(actors: ActorResolver) {
     return resolved;
   }
 
-  return Object.freeze({ actor, currentSessionId, settingsActor, usersActor });
+  return Object.freeze({ actor, currentSessionId });
 }
 
 export type ActorContext = ReturnType<typeof createActorContext>;

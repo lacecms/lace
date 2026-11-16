@@ -1,46 +1,94 @@
-import { AuthenticationRequiredError } from "@lacecms/contracts";
-import { actorPermissions, unconfiguredEmailSender } from "@lacecms/application";
-import type {
-  AccountSecurityPort,
+import {
   AccountUseCases,
+  ApiTokenUseCases,
+  SiteBuildUseCases,
+  readBuildSite,
+  unconfiguredEmailSender,
+} from "@lacecms/application";
+import type {
+  Clock,
   ContentUseCases,
   DeferTask,
   MediaUseCases,
   MediaView,
-  TokenSecurityPort,
-  UserProfileReader,
 } from "@lacecms/application";
 import {
+  AuthenticationRequiredError,
   InvariantError,
   adminSessionSchema,
   mediaUrl,
+  type BuildSiteIdentityDto,
   toAdminEntryProjectionDto,
   toMediaMetadataDto,
 } from "@lacecms/contracts";
 import { exportSeo } from "../shared/content-config.js";
 import { AuthorizationError, response } from "../shared/http.js";
 import type { Actor, LaceAppInput } from "./input.js";
+import { composeSettings } from "./settings.js";
+
+const systemClock: Clock = { now: () => Date.now() as ReturnType<Clock["now"]> };
+const unavailableBuilds = new SiteBuildUseCases({
+  clock: systemClock,
+  builds: {
+    listSiteBuilds: () => {
+      throw new InvariantError("Build reads are unavailable.");
+    },
+    getSiteBuild: () => {
+      throw new InvariantError("Build reads are unavailable.");
+    },
+    requestBuild: () => {
+      throw new InvariantError("Build commands are unavailable.");
+    },
+  },
+});
 
 /**
  * The capabilities route modules call, built once from the application input.
- * Routes receive these and actor resolution, never the input itself; security
- * is reachable only through the narrow port each route needs.
+ * Routes receive application operations and transport capabilities.
  */
 export function createCapabilities(input: LaceAppInput) {
   const seoSection = exportSeo(input.config);
   const seoModels: ReadonlySet<string> = new Set(Object.keys(seoSection.models));
-  const email = input.email ?? unconfiguredEmailSender;
   const security = input.security;
+  const legacyVerifier = security?.verifyBuildToken;
+  const apiTokens =
+    input.apiTokens ??
+    (security === undefined
+      ? undefined
+      : new ApiTokenUseCases({ clock: systemClock, tokens: security }));
+  const settings =
+    input.settings ??
+    composeSettings({
+      configuredModels: input.config.content.length,
+      ...(input.email === undefined ? {} : { email: input.email }),
+      engineVersion: input.environment.engineVersion,
+      mcpEnabled: input.mcpEnabled === true,
+      publicBaseUrl: input.publicBaseUrl,
+      readiness: input.readiness,
+      users: security,
+    });
+  // Older partial compositions provide security for user administration and
+  // session summaries without configuring the invitation and recovery flows.
+  const accountAccess =
+    input.accounts ??
+    (security === undefined
+      ? undefined
+      : new AccountUseCases({
+          clock: systemClock,
+          email: input.email ?? unconfiguredEmailSender,
+          publicBaseUrl: input.publicBaseUrl ?? "",
+          security,
+        }));
 
-  function requireSecurity<Port>(port: Port | undefined): Port {
-    // This composition lacks the security capability.
-    if (port === undefined) throw new AuthorizationError();
-    return port;
+  function installedAccounts(): AccountUseCases {
+    if (accountAccess === undefined) throw new AuthorizationError();
+    return accountAccess;
   }
 
-  const accountSecurity = (): AccountSecurityPort => requireSecurity(security);
-  const tokenSecurity = (): TokenSecurityPort => requireSecurity(security);
-  const profiles = (): UserProfileReader => requireSecurity(security);
+  function tokenAdministration(): ApiTokenUseCases {
+    if (apiTokens === undefined) throw new AuthorizationError();
+    return apiTokens;
+  }
 
   /** Without security the account routes are unauthorized, as every security route is. */
   function accounts(): AccountUseCases {
@@ -79,22 +127,9 @@ export function createCapabilities(input: LaceAppInput) {
   }
 
   async function sessionSummary(resolvedActor: Actor): Promise<Response> {
-    const profile = await profiles().readUserProfile(resolvedActor.id);
-    if (profile === null || profile.disabled) throw new AuthenticationRequiredError("session");
-    return response(
-      adminSessionSchema,
-      {
-        permissions: [...actorPermissions(resolvedActor)],
-        user: {
-          ...(profile.name === undefined ? {} : { displayName: profile.name }),
-          email: profile.email,
-          id: resolvedActor.id,
-          role: resolvedActor.role,
-        },
-      },
-      200,
-      { "cache-control": "no-store" },
-    );
+    const summary = await installedAccounts().sessionSummary(resolvedActor);
+    if (summary === null) throw new AuthenticationRequiredError("session");
+    return response(adminSessionSchema, summary, 200, { "cache-control": "no-store" });
   }
 
   function deferTask(context: {
@@ -117,26 +152,32 @@ export function createCapabilities(input: LaceAppInput) {
   }
 
   return Object.freeze({
-    accountSecurity,
+    accountCapabilities: (actor: Actor) =>
+      AccountUseCases.accountCapabilities(
+        actor,
+        input.mcpEnabled === true && input.oauthConnections !== undefined,
+      ),
     accounts,
     adminEntryDto,
     apiDocsEnabled: input.apiDocsEnabled ?? false,
     auth: input.auth,
-    buildTokens: security as Pick<TokenSecurityPort, "verifyBuildToken"> | undefined,
-    builds: input.builds,
-    buildSite: input.buildSite ?? null,
+    buildTokenVerifier:
+      input.buildTokenVerifier ??
+      (typeof legacyVerifier === "function" ? legacyVerifier.bind(security) : undefined),
+    builds: input.builds ?? unavailableBuilds,
+    buildSite: (actor: Actor): BuildSiteIdentityDto | null =>
+      readBuildSite(actor, input.buildSite ?? null),
     config: input.config,
     content: input.content,
     deferTask,
-    email,
     environment: input.environment,
     links: input.links,
+    installedAccounts,
     mcp: input.mcp,
     mcpEnabled: input.mcpEnabled ?? false,
     media,
     mediaDto,
     oauthConnections: input.oauthConnections,
-    profiles,
     publicBaseUrl: input.publicBaseUrl,
     publicContent: input.publicContent,
     publicMediaUrl,
@@ -144,7 +185,8 @@ export function createCapabilities(input: LaceAppInput) {
     seoModels,
     seoSection,
     sessionSummary,
-    tokenSecurity,
+    settings,
+    tokenAdministration,
   });
 }
 

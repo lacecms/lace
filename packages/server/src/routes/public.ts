@@ -259,8 +259,8 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
     },
   );
 
-  const { buildTokens } = capabilities;
-  if (typeof buildTokens?.verifyBuildToken !== "function") return;
+  const { buildTokenVerifier } = capabilities;
+  if (typeof buildTokenVerifier !== "function") return;
 
   app.on(
     routes.buildExport.method,
@@ -316,7 +316,7 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
       if (
         authorization === undefined ||
         !authorization.startsWith("Bearer ") ||
-        !(await buildTokens.verifyBuildToken({
+        !(await buildTokenVerifier({
           now: Date.now() as never,
           token: authorization.slice(7) as never,
         }))

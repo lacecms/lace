@@ -1,5 +1,6 @@
-import { DomainError, type Actor } from "@lacecms/domain";
+import type { Actor } from "@lacecms/domain";
 import type { Clock } from "../ports/infrastructure.js";
+import { requireSessionActor } from "../shared/permissions.js";
 /** Portable durable OAuth lifecycle values. Provider SDK objects stay in auth. */
 export interface OAuthGrant {
   readonly id: string;
@@ -94,19 +95,15 @@ export class OAuthConnectionUseCases {
     actor: Actor,
     query: { readonly after?: string; readonly limit: number },
   ): Promise<readonly OAuthConnection[]> {
-    this.sessionAuthority(actor);
+    requireSessionActor(actor);
     return this.input.connections.listConnections(actor.id, query.after, query.limit);
   }
   public revoke(actor: Actor, connectionId: string): Promise<boolean> {
-    this.sessionAuthority(actor);
+    requireSessionActor(actor);
     return this.input.connections.revokeConnection(
       actor.id,
       connectionId,
       Number(this.input.clock.now()),
     );
-  }
-  private sessionAuthority(actor: Actor): void {
-    if (actor.authority !== undefined)
-      throw new DomainError("AUTHORIZATION_DENIED", "A browser session is required.");
   }
 }

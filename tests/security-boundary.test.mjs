@@ -254,12 +254,44 @@ for (const kind of ["node", "cloudflare"]) {
       return response.headers.getSetCookie()[0].split(";")[0];
     };
     const setup = await f.runtime.security.createSetupToken();
-    const { user: admin } = await f.runtime.security.bootstrap({
-      email: "flow-admin@lace.test",
-      password,
-      token: setup.token,
+    expect(await (await invoke("/api/v1/setup/state")).json()).toEqual({ setupComplete: false });
+    const setupResponse = await invoke("/api/v1/setup/admin", {
+      json: { email: "flow-admin@lace.test", password, token: setup.token },
     });
+    expect(setupResponse.status).toBe(201);
+    const admin = await setupResponse.json();
+    expect(admin.role).toBe("admin");
+    expect(await (await invoke("/api/v1/setup/state")).json()).toEqual({ setupComplete: true });
     const adminCookie = await signIn(admin.email, password, peer(1));
+    const settings = await invoke("/api/v1/admin/settings/status", { cookie: adminCookie });
+    expect(settings.status).toBe(200);
+    expect(await settings.json()).toMatchObject({
+      configuredModels: config.content.length,
+      email: { provider: "none" },
+      mcp: { enabled: false, endpoint: `${origin}/mcp` },
+    });
+
+    const importResponse = await invoke("/api/v1/admin/import-tokens", {
+      cookie: adminCookie,
+      json: { name: "Import", expiresInDays: 1 },
+    });
+    expect(importResponse.status).toBe(201);
+    const issuedImport = await importResponse.json();
+    expect(issuedImport.createdBy.id).toBe(admin.id);
+    const listImports = await invoke("/api/v1/admin/import-tokens", { cookie: adminCookie });
+    expect(listImports.status).toBe(200);
+    expect(JSON.stringify(await listImports.json())).not.toContain(issuedImport.token);
+    const revokeImport = () =>
+      invoke(`/api/v1/admin/import-tokens/${issuedImport.id}`, {
+        cookie: adminCookie,
+        method: "DELETE",
+      });
+    const revoked = await revokeImport();
+    expect(revoked.status).toBe(200);
+    const revokedImport = await revoked.json();
+    expect(revokedImport).toMatchObject({ id: issuedImport.id, revokedAt: expect.any(String) });
+    expect(revokedImport).not.toHaveProperty("token");
+    expect(await (await revokeImport()).json()).toEqual(revokedImport);
 
     const invited = await invoke("/api/v1/admin/invitations", {
       cookie: adminCookie,
@@ -287,6 +319,9 @@ for (const kind of ["node", "cloudflare"]) {
     expect((await reused.json()).error.code).toBe("INVITATION_INVALID");
 
     const first = await signIn("invitee@lace.test", password, peer(3));
+    const deniedSettings = await invoke("/api/v1/admin/settings/status", { cookie: first });
+    expect(deniedSettings.status).toBe(403);
+    expect((await deniedSettings.json()).error.code).toBe("AUTHORIZATION_DENIED");
     const second = await signIn("invitee@lace.test", password, peer(3));
     const sessions = await (await invoke("/api/v1/account/sessions", { cookie: first })).json();
     expect(sessions.items).toHaveLength(2);

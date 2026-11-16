@@ -1,5 +1,6 @@
 import type { UserProfileReader } from "../ports/security.js";
-import { requirePermission, type Actor } from "@lacecms/domain";
+import { DomainError, type Actor } from "@lacecms/domain";
+import { requireSessionActor } from "../shared/permissions.js";
 
 export type EmailProviderKind = "cloudflare" | "log" | "none" | "resend" | "smtp";
 
@@ -180,14 +181,27 @@ export function testEmailTemplate(input: { readonly installationUrl: string }): 
   });
 }
 
+/** Safe provider status suitable for display in installation settings. */
+export function emailDeliveryStatus(
+  sender: Pick<EmailSender, "from" | "provider">,
+):
+  | { readonly provider: "none" }
+  | { readonly from: string; readonly provider: Exclude<EmailProviderKind, "none"> } {
+  if (sender.provider === "none" || sender.from === undefined)
+    return Object.freeze({ provider: "none" });
+  return Object.freeze({ from: sender.from, provider: sender.provider });
+}
+
 /** Sends the fixed test message only to the acting administrator's own address. */
 export async function sendTestEmail(input: {
   readonly actor: Actor;
   readonly email: EmailSender;
   readonly installationUrl: string;
-  readonly users: UserProfileReader;
+  readonly users: UserProfileReader | undefined;
 }): Promise<EmailDeliveryOutcome> {
-  requirePermission(input.actor, "settings:manage");
+  requireSessionActor(input.actor, "settings:manage");
+  if (input.users === undefined)
+    throw new DomainError("AUTHORIZATION_DENIED", "Account security is unavailable.");
   if (input.email.provider === "none") return emailFailed("not_configured");
   const profile = await input.users.readUserProfile(input.actor.id);
   if (profile === null || profile.disabled) return emailFailed("invalid_message");

@@ -238,13 +238,9 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
       },
     }),
     async (context) => {
-      await actor(context);
       return response(
         accountCapabilitiesSchema,
-        {
-          mcpEnabled:
-            capabilities.mcpEnabled === true && capabilities.oauthConnections !== undefined,
-        },
+        capabilities.accountCapabilities(await actor(context)),
         200,
         noStore,
       );

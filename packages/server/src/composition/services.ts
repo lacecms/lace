@@ -1,5 +1,6 @@
 import {
   AccountUseCases,
+  ApiTokenUseCases,
   ContentLinkUseCases,
   routeLessModelKeys,
   ContentUseCases,
@@ -17,6 +18,7 @@ import type {
   PublicContentReadPort,
   SecurityService,
   SensitiveRateLimiter,
+  SettingsUseCases,
 } from "@lacecms/application";
 import type { BuildSiteIdentityDto } from "@lacecms/contracts";
 import type { RuntimeFeatureFlags } from "../runtime/feature-flags.js";
@@ -33,6 +35,7 @@ import type {
   ServerEnvironmentMetadata,
   ServerLogger,
 } from "./input.js";
+import { composeSettings } from "./settings.js";
 
 type ContentInput = ConstructorParameters<typeof ContentUseCases>[0];
 type MediaInput = ConstructorParameters<typeof MediaUseCases>[0];
@@ -111,6 +114,8 @@ export interface LaceServices {
   readonly links: ContentLinkUseCases;
   readonly builds: SiteBuildUseCases;
   readonly accounts: AccountUseCases;
+  readonly apiTokens: ApiTokenUseCases;
+  readonly settings: SettingsUseCases;
   readonly oauthConnections?: OAuthConnectionUseCases;
   /** The complete `createLaceApp` input. */
   readonly appInput: LaceAppInput;
@@ -157,6 +162,17 @@ export function composeLaceServices(input: LaceServicesInput): LaceServices {
     security: input.security,
   });
   const { flags } = input.http;
+  const apiTokens = new ApiTokenUseCases({ clock, tokens: input.security });
+  const settings = composeSettings({
+    configuredModels: input.config.content.length,
+    email: input.email,
+    engineVersion: input.http.environment.engineVersion,
+    mcpEnabled: flags.mcpEnabled,
+    publicBaseUrl,
+    readiness: input.http.readiness,
+    users: input.security,
+  });
+  const verifyBuildToken = input.security.verifyBuildToken;
   const mcpAdapters = flags.mcpEnabled ? input.mcp : undefined;
   const oauthConnections =
     mcpAdapters === undefined
@@ -172,17 +188,20 @@ export function composeLaceServices(input: LaceServicesInput): LaceServices {
     actors: input.auth.actors ?? input.auth.boundary.actors,
     ...(input.http.adminAssets === undefined ? {} : { adminAssets: input.http.adminAssets }),
     apiDocsEnabled: flags.apiDocsEnabled,
+    apiTokens,
     auth: input.auth.boundary,
     builds,
     clientAddress: input.limits.clientAddress,
     buildSite: input.http.buildSite,
+    ...(typeof verifyBuildToken === "function"
+      ? { buildTokenVerifier: verifyBuildToken.bind(input.security) }
+      : {}),
     config: input.config,
     content,
     // Requests use their own `waitUntil` when they have one; this is the fallback.
     defer: (task) => {
       void task.catch(() => logger.error({ component: "deferred", reason: "task_failed" }));
     },
-    email: input.email,
     environment: input.http.environment,
     importActors: input.auth.importActors,
     links,
@@ -199,16 +218,18 @@ export function composeLaceServices(input: LaceServicesInput): LaceServices {
       new SensitiveRequestRateLimiter(input.limits.sensitive, clock, input.limits.clientAddress),
     readiness: input.http.readiness,
     requestIds: input.http.requestIds,
-    security: input.security,
+    settings,
     ...(requests === undefined ? { sensitiveLimiter: input.limits.sensitive } : {}),
   };
   return Object.freeze({
     accounts,
+    apiTokens,
     appInput: Object.freeze(appInput),
     builds,
     content,
     links,
     media,
+    settings,
     ...(oauthConnections === undefined ? {} : { oauthConnections }),
   });
 }
