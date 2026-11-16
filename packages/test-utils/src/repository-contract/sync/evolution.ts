@@ -437,6 +437,13 @@ contract(
     await applySync(repository, [v1], 10);
     await seedHintedEntries(repository, sql);
     const request = (id: string) => ({
+      events: [
+        {
+          type: "media.delete.requested" as const,
+          requestedAt: unixMilliseconds(40),
+          payload: { mediaId: mediaId(id), requestedBy: editor.id },
+        },
+      ],
       mediaId: mediaId(id),
       requestedAt: unixMilliseconds(40),
       requestedBy: editor,

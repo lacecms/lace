@@ -373,6 +373,13 @@ test("processes queued media deletion outside the HTTP request", async () => {
       width: 1,
     });
     await value.runtime.repository.markForDeletion({
+      events: [
+        {
+          type: "media.delete.requested",
+          requestedAt: 2,
+          payload: { mediaId: "queued-media", requestedBy: admin.id },
+        },
+      ],
       mediaId: mediaId("queued-media"),
       requestedAt: unixMilliseconds(2),
       requestedBy: admin,

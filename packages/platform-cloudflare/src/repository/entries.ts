@@ -94,7 +94,12 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
     try {
       result = await executeWritePlan(
         this.database,
-        publishWritePlan(input, entry, committed, this.nextId()),
+        publishWritePlan(
+          input,
+          entry,
+          committed,
+          input.events.map(() => this.nextId()),
+        ),
         input.publishedAt,
         this.options.beforeMutation,
       );
@@ -128,7 +133,11 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
     try {
       result = await executeWritePlan(
         this.database,
-        unpublishWritePlan(input, entry, this.nextId()),
+        unpublishWritePlan(
+          input,
+          entry,
+          input.events.map(() => this.nextId()),
+        ),
         input.unpublishedAt,
         this.options.beforeMutation,
       );
@@ -239,7 +248,11 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
     try {
       result = await executeWritePlan(
         this.database,
-        deleteEntryWritePlan(input, entry?.draft_snapshot_id ?? null, this.nextId()),
+        deleteEntryWritePlan(
+          input,
+          entry?.draft_snapshot_id ?? null,
+          input.events.map(() => this.nextId()),
+        ),
         input.deletedAt,
         this.options.beforeMutation,
       );

@@ -1,21 +1,6 @@
-import { parseObject } from "../shared/values.js";
-import type { JsonObject } from "@lacecms/content";
+import { SITE_BUILD_REQUESTED, outboxEvents } from "@lacecms/contracts/outbox";
 
-/** Validates a claimed `site.build.requested` payload; `null` marks an invalid event. */
-export function siteBuildPayload(payloadJson: string): JsonObject | null {
-  let payload: JsonObject;
-  try {
-    payload = parseObject(payloadJson, "Build payload");
-  } catch {
-    return null;
-  }
-  return !Number.isSafeInteger(payload.targetVersion) ||
-    Number(payload.targetVersion) < 0 ||
-    typeof payload.requestedBy !== "string" ||
-    !payload.requestedBy ||
-    typeof payload.reason !== "string" ||
-    !payload.reason ||
-    !Number.isSafeInteger(payload.requestedAt)
-    ? null
-    : payload;
+/** Decode a stored build request, including legacy version 1 rows. */
+export function siteBuildPayload(payloadJson: string) {
+  return outboxEvents[SITE_BUILD_REQUESTED].decodeJson(payloadJson);
 }

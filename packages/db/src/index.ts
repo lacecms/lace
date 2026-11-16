@@ -32,7 +32,11 @@ export * from "./sync/block-migration-writes.js";
 export * from "./sync/field-rewrite.js";
 export { configurationSyncRecursiveScans } from "./sync/recursive-scans.js";
 export { prepareConfigurationSync } from "./sync/preflight.js";
-export { configurationSyncApplyResult, configurationSyncWritePlan } from "./sync/write-plan.js";
+export {
+  configurationSyncApplyResult,
+  configurationSyncWritePlan,
+  validateConfigurationSyncEvents,
+} from "./sync/write-plan.js";
 export {
   PUBLIC_ROUTE_SQL,
   PUBLIC_GLOBAL_SQL,
@@ -48,12 +52,9 @@ export * from "./builds/site-builds.js";
 export * from "./builds/requests.js";
 export * from "./builds/write-plan.js";
 export {
-  buildEnqueueStatements,
-  buildRequestPayload,
   PENDING_SITE_BUILD_SQL,
-  publicBuildStatements,
+  publicStateIncrementStatement,
 } from "./write-plan/build-enqueue.js";
-export type { BuildEnqueueInput } from "./write-plan/build-enqueue.js";
 export * from "./builds/claim-write-plan.js";
 export * from "./builds/transition-write-plan.js";
 export type { OutboxRow } from "./shared/outbox-row.js";

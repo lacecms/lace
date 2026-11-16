@@ -32,7 +32,7 @@ contract(
     const patch = (id: string, expected: number, time: number, tags: readonly string[]) => ({
       ...metadataUpdate(id, expected, time),
       tags,
-      publishedEffect: false,
+      events: [],
     });
     await repository.updateMediaMetadata(patch("media-1", 1, 10, [" Birch ", "IBIZA", "birch"]));
     expect((await repository.loadMediaCatalogItem("media-1"))!.media.tags).toEqual([
@@ -129,6 +129,13 @@ contract(
     await repository.updateMediaMetadata(patch("media-1", current.updatedAt, 13, []));
     expect((await repository.loadMedia("media-1"))!.tags).toEqual([]);
     await repository.markForDeletion({
+      events: [
+        {
+          type: "media.delete.requested" as const,
+          requestedAt: unixMilliseconds(20),
+          payload: { mediaId: mediaId("tag-new"), requestedBy: editor.id },
+        },
+      ],
       mediaId: mediaId("tag-new"),
       requestedAt: unixMilliseconds(20),
       requestedBy: editor,
@@ -200,7 +207,7 @@ contract(
     await repository.updateMediaMetadata({
       ...metadataUpdate("media-1", 1, 10),
       tags: ["before"],
-      publishedEffect: false,
+      events: [],
     });
     const before = await mediaMetadataState(sql);
     fail = true;
@@ -208,7 +215,7 @@ contract(
       repository.updateMediaMetadata({
         ...metadataUpdate("media-1", 10, 11),
         tags: ["after"],
-        publishedEffect: false,
+        events: [],
       }),
     ).rejects.toThrow();
     expect(await mediaMetadataState(sql)).toEqual(before);

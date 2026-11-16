@@ -16,6 +16,7 @@ import {
   configurationSyncApplyResult,
   configurationSyncRecursiveScans,
   configurationSyncWritePlan,
+  validateConfigurationSyncEvents,
   prepareConfigurationSync,
   COMMIT_SYNC_LINK_GRAPH_SQL,
   STORED_MODEL_BASELINES_SQL,
@@ -229,6 +230,7 @@ export class D1ConfigurationSync
   ): Promise<ApplyConfigurationSynchronizationResult> {
     const { json, state } = await this.readSyncState();
     const report = prepareConfigurationSync(input, state);
+    validateConfigurationSyncEvents(input, report);
     if (!report.requiresApply) return configurationSyncApplyResult(report);
     const rewrites = new Map<string, ConfigurationSyncSnapshotRewrite[]>();
     for (const scan of configurationSyncRecursiveScans(input.models, report)) {

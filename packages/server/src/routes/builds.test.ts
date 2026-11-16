@@ -30,7 +30,10 @@ test("admin build routes queue strict requests without running a trigger", async
     );
   expect((await post("/api/v1/admin/builds")).status).toBe(202);
   expect((await post("/api/v1/admin/builds/failed-1/retry", {})).status).toBe(202);
-  expect(calls).toMatchObject([{}, { retryOfBuildId: "failed-1" }]);
+  expect(calls).toMatchObject([
+    { events: [{ payload: { reason: "manual" } }] },
+    { events: [{ payload: { reason: "retry", retryOfBuildId: "failed-1" } }] },
+  ]);
   expect((await post("/api/v1/admin/builds", { command: "echo secret" })).status).toBe(422);
   expect(calls).toHaveLength(2);
   const editorApp = (await fixture({ actor: editor, builds })).app;

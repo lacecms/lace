@@ -228,6 +228,10 @@ uploaded, never transcoded
 `outbox_events` holds durable asynchronous work with nullable lease fields
 `locked_at` and `locked_by`. `site_builds` holds one row per build request,
 including the optional `published_snapshot_id` of the initiating publication.
+`@lacecms/contracts/outbox` defines the identities and version 1 payloads of
+`site.build.requested` and `media.delete.requested`. Their existing persisted
+type and JSON layout identify version 1. Reads tolerate extra fields and the
+legacy omissions of a build snapshot ID or media requester.
 
 A dispatcher claims only an available, unprocessed row whose lease is absent or
 expired, through a conditional write; the lease prevents duplicate dispatch yet
@@ -237,6 +241,9 @@ minutes, with 8 total attempts
 ([outbox-dispatch](../../openspec/specs/outbox-dispatch/spec.md)). A terminal
 failure marks the event processed, keeps `last_error` and marks its media or
 build aggregate failed; an explicit admin retry creates a fresh event.
+A failed payload validation retires the observed eligible event with one
+failed attempt and a closed reason. It leaves any related aggregate and
+external storage unchanged.
 
 `site_builds.status` is a closed enum; `accepted`, `succeeded`, `failed`,
 `cancelled` and `unknown` are terminal
@@ -286,10 +293,15 @@ event or extends its deadline, through `INSERT OR IGNORE` and a guarded update
 of the unlocked row. A claimed event is never modified; later publications
 create the next event, allowing at most one redundant build around a claim race
 and never skipping published state. Media-deletion events are never coalesced.
-Shared `db` plans define build and outbox transitions and the enqueue group.
-The request payload is constructed in JavaScript; the atomic SQL write fills
-the current target version and any inherited retry source. An explicit retry
-source takes precedence, and a claimed payload remains unchanged.
+Use cases supply registered event requests with their mutation commands;
+persistence retains admission, guards and atomic enqueue. A public-state
+increment is a separate write and does not implicitly enqueue work. Shared
+`db` plans compile every event write through `enqueueEvents`. It validates
+the request fields before execution. The atomic SQL fills the build
+target version (zero without a state row) and any valid pending retry source.
+An explicit retry source takes precedence, coalescing keeps the pending ID and
+attempt count, and a claimed payload remains unchanged. Media deletion and
+retry each insert a distinct event available at the request time.
 
 ### 9.9 Referential actions
 

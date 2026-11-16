@@ -34,7 +34,9 @@ limits, logger, email sender, rate-limit persistence, client-address lookup,
 authentication boundaries, optional MCP and OAuth adapters, HTTP settings) and
 returns the content, media, link, build, account and OAuth-connection use cases
 plus the complete `createLaceApp` input. `createNodeRuntime` and
-`createCloudflareRuntime` build adapters, dispatchers and process wiring only.
+`createCloudflareRuntime` build adapters, resolve dispatchers by registered
+event type through the application table, and wire process scheduling. Build
+and media dispatch retain their own lease and completion ports.
 Every content application composition supplies trusted list-query limits
 explicitly: Node uses 200 characters with no LIKE byte cap, and Cloudflare uses
 48 characters and a 50-byte escaped-pattern cap. Request and model configuration
@@ -238,10 +240,15 @@ connections always keep foreign keys on.
 Node SQLite and D1 share every row mapper, every identical read
 (`SqlContentReader`), block-migration and link statement builders, and ordered
 plans for entry, media, build, outbox and final configuration-sync mutations.
-Shared enqueue statements derive the target version and inherited retry
-lineage inside the atomic write, after any public-state bump. Typed admission,
+Use cases supply request-owned event data through portable commands. Persistence
+binds admission guards and commits enqueue with the mutation. One shared enqueue
+compiler validates request fields and derives the build
+target version and inherited retry lineage inside the atomic write, after any
+public-state bump. Registry decoding precedes dispatch. An invalid known
+candidate uses a guarded retirement statement matching the observed raw
+payload and claim eligibility. Typed admission,
 ordered statements, result slots, exact counts and outbox markers belong to
-the plan. Executors retain their runtime-specific transaction boundaries
+the plan. Only committed inserts or coalesces trigger dispatch. Executors retain their runtime-specific transaction boundaries
 ([ADR 0002](../adr/0002-d1-batches-and-node-transactions.md)). The table lists
 the runtime differences and how the repository contracts verify observable
 results.

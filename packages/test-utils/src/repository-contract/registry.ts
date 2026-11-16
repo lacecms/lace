@@ -23,6 +23,9 @@ import { cases as globalsSeo } from "./entries/globals-seo.js";
 import { cases as conditional } from "./entries/conditional.js";
 import { cases as resultParity } from "./entries/result-parity.js";
 import { cases as claimCap } from "./builds/claim-cap.js";
+import { cases as enqueue } from "./builds/enqueue.js";
+import { cases as registeredClaims } from "./builds/registered-claims.js";
+
 import { cases as routeLess } from "./entries/route-less.js";
 import { cases as retention } from "./entries/retention.js";
 import { cases as attribution } from "./entries/attribution.js";
@@ -54,6 +57,9 @@ export const contentRepositoryContractCases: readonly RepositoryContractCase[] =
   ...conditional,
   ...resultParity,
   ...claimCap,
+  ...enqueue,
+  ...registeredClaims,
+
   ...routeLess,
   ...retention,
   ...attribution,

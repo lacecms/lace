@@ -65,6 +65,16 @@ test("scheduled and post-commit dispatch recover builds and media deletions", as
 
   const failing = await upload(fixture, "second.png");
   await fixture.runtime.repository.markForDeletion({
+    events: [
+      {
+        type: "media.delete.requested" as const,
+        requestedAt: unixMilliseconds(Date.now()),
+        payload: {
+          mediaId: mediaId(string(object(failing.body).id)),
+          requestedBy: { id: actorId("admin"), role: "admin" }.id,
+        },
+      },
+    ],
     mediaId: mediaId(string(object(failing.body).id)),
     requestedAt: unixMilliseconds(Date.now()),
     requestedBy: { id: actorId("admin"), role: "admin" },
@@ -129,6 +139,16 @@ test("a scheduled run with many pending deletions stays within 50 D1 queries", a
     const uploaded = await upload(fixture, `bulk-${index}.png`);
     ids.push(string(object(uploaded.body).id));
     await fixture.runtime.repository.markForDeletion({
+      events: [
+        {
+          type: "media.delete.requested" as const,
+          requestedAt: unixMilliseconds(Date.now()),
+          payload: {
+            mediaId: mediaId(string(object(uploaded.body).id)),
+            requestedBy: { id: actorId("admin"), role: "admin" }.id,
+          },
+        },
+      ],
       mediaId: mediaId(string(object(uploaded.body).id)),
       requestedAt: unixMilliseconds(Date.now()),
       requestedBy: { id: actorId("admin"), role: "admin" },
@@ -222,4 +242,78 @@ test("Worker history and detail preserve source diagnostics", async () => {
     `/api/v1/admin/site-builds/${string(object(receipt.body).eventId)}`,
   );
   expect(detail.body).toMatchObject({ error: "source_symlink", errorPath: "src/linked.astro" });
+});
+
+test("scheduled dispatch runs build, tracking and media in order and post-commit runs media then build", async () => {
+  const fixture = await workerFixture();
+  await fixture.signIn();
+  await fixture.settle();
+  const order: Array<[string, number | undefined]> = [];
+  vi.spyOn(fixture.runtime.buildDispatcher, "runOnce").mockImplementation(async (limit) => {
+    order.push(["build", limit]);
+  });
+  vi.spyOn(fixture.runtime.buildTracker, "runOnce").mockImplementation(async (limit) => {
+    order.push(["tracking", limit]);
+  });
+  vi.spyOn(fixture.runtime.deletionDispatcher, "runOnce").mockImplementation(async (limit) => {
+    order.push(["media", limit]);
+  });
+
+  await fixture.worker.scheduled({}, fixture.env, fixture.ctx);
+  expect(order.splice(0)).toEqual([
+    ["build", 1],
+    ["tracking", 5],
+    ["media", 5],
+  ]);
+  expect(fixture.pending).toEqual([]);
+
+  const build = await fixture.call("/api/v1/admin/builds", { method: "POST", json: {} });
+  expect(build.response.status).toBe(202);
+  expect(fixture.pending).toHaveLength(1);
+  await fixture.settle();
+  expect(order).toEqual([
+    ["media", 5],
+    ["build", 1],
+  ]);
+});
+
+test("committed insert and coalesce each wake the Worker once and deletion rollback never wakes it", async () => {
+  const fixture = await workerFixture();
+  await fixture.signIn();
+  await fixture.settle();
+  const db = fixture.local.database;
+  await db.prepare("delete from outbox_events").run();
+  const requestBuild = () => fixture.call("/api/v1/admin/builds", { method: "POST", json: {} });
+
+  const inserted = await requestBuild();
+  expect(inserted.response.status).toBe(202);
+  expect(inserted.body).toMatchObject({ coalesced: false });
+  expect(fixture.pending).toHaveLength(1);
+  await fixture.settle();
+
+  const coalesced = await requestBuild();
+  expect(coalesced.response.status).toBe(202);
+  expect(coalesced.body).toMatchObject({ coalesced: true, eventId: object(inserted.body).eventId });
+  expect(fixture.pending).toHaveLength(1);
+  await fixture.settle();
+
+  const media = await upload(fixture);
+  const id = string(object(media.body).id);
+  await db
+    .prepare(
+      "create trigger reject_media_event before insert on outbox_events when new.type = 'media.delete.requested' begin select raise(abort, 'late enqueue failure'); end",
+    )
+    .run();
+  const deletion = await fixture.call(`/api/v1/admin/media/${id}`, { method: "DELETE" });
+  expect(deletion.response.status).toBe(422);
+  expect(deletion.body).toMatchObject({ error: { code: "CONTENT_INVALID_STATE" } });
+  expect(fixture.pending).toHaveLength(0);
+  expect(await db.prepare("select status from media where id = ?").bind(id).first()).toEqual({
+    status: "active",
+  });
+  expect(
+    await db
+      .prepare("select count(*) as n from outbox_events where type = 'media.delete.requested'")
+      .first(),
+  ).toEqual({ n: 0 });
 });

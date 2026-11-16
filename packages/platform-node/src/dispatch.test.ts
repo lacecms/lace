@@ -1,3 +1,4 @@
+import { siteBuildEvent } from "@lacecms/application";
 import type {
   SiteBuildRequest,
   DispatcherLeasePort,
@@ -55,6 +56,14 @@ test("site-build dispatcher bounds failures at eight attempts and handles trigge
         work: repository,
       });
       const failed = await repository.requestBuild({
+        events: [
+          siteBuildEvent({
+            reason: "manual",
+            requestedAt: now,
+            requestedBy: requestedBy.id,
+            publishedSnapshotId: null,
+          }),
+        ],
         requestedAt: unixMilliseconds(now),
         requestedBy,
       });
@@ -79,6 +88,14 @@ test("site-build dispatcher bounds failures at eight attempts and handles trigge
       now = 10_000;
       outcome = "succeeded";
       const success = await repository.requestBuild({
+        events: [
+          siteBuildEvent({
+            reason: "manual",
+            requestedAt: now,
+            requestedBy: requestedBy.id,
+            publishedSnapshotId: null,
+          }),
+        ],
         requestedAt: unixMilliseconds(now),
         requestedBy,
       });
@@ -93,6 +110,14 @@ test("site-build dispatcher bounds failures at eight attempts and handles trigge
       now = 20_000;
       outcome = "accepted";
       const accepted = await repository.requestBuild({
+        events: [
+          siteBuildEvent({
+            reason: "manual",
+            requestedAt: now,
+            requestedBy: requestedBy.id,
+            publishedSnapshotId: null,
+          }),
+        ],
         requestedAt: unixMilliseconds(now),
         requestedBy,
       });
@@ -106,6 +131,14 @@ test("site-build dispatcher bounds failures at eight attempts and handles trigge
 
       now = 30_000;
       const thrown = await repository.requestBuild({
+        events: [
+          siteBuildEvent({
+            reason: "manual",
+            requestedAt: now,
+            requestedBy: requestedBy.id,
+            publishedSnapshotId: null,
+          }),
+        ],
         requestedAt: unixMilliseconds(now),
         requestedBy,
       });
@@ -154,6 +187,7 @@ test("dispatches media deletion with retry, terminal, and malformed-event bounda
   const completed: unknown[] = [];
   const failed: unknown[] = [];
   const deleted: string[] = [];
+  const logs: unknown[] = [];
   let now = unixMilliseconds(1_000);
   const lease = (payload: JsonObject, attempts = 0) => ({
     event: {
@@ -201,7 +235,7 @@ test("dispatches media deletion with retry, terminal, and malformed-event bounda
   };
   const dispatcher = new NodeMediaDeletionDispatcher({
     clock: { now: () => now },
-    logger: { error: () => {} },
+    logger: { error: (entry) => logs.push(entry) },
     random: () => 0.5,
     storage,
     work,
@@ -217,7 +251,9 @@ test("dispatches media deletion with retry, terminal, and malformed-event bounda
   await dispatcher.runOnce();
   expect(failed).toMatchObject([{ sanitizedError: "storage_unavailable", terminal: true }]);
 
-  work.claim = async () => [lease({}, 0)];
+  work.claim = async () => [lease({ mediaId: "private-media-id", requestedBy: false }, 0)];
   await dispatcher.runOnce();
   expect(completed).toHaveLength(2);
+  expect(failed).toHaveLength(1);
+  expect(logs.at(-1)).toEqual({ eventId: "event-0", reason: "invalid_media_deletion_event" });
 });

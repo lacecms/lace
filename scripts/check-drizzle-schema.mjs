@@ -5,17 +5,21 @@ import { relative, resolve } from "node:path";
 import config from "../drizzle.config.ts";
 
 const root = resolve(import.meta.dirname, "..");
-const executable = resolve(root, "node_modules/.bin/drizzle-kit");
+const executable = resolve(root, "node_modules/drizzle-kit/bin.cjs");
 const source = resolve(root, "packages/db/drizzle");
 const cache = resolve(root, "node_modules/.cache/lace-drizzle-check");
 
 function run(args) {
-  const result = spawnSync(executable, args, {
-    cwd: root,
-    encoding: "utf8",
-    input: "",
-    timeout: 60_000,
-  });
+  const result = spawnSync(
+    process.execPath,
+    ["--conditions=@lacecms/source", executable, ...args],
+    {
+      cwd: root,
+      encoding: "utf8",
+      input: "",
+      timeout: 60_000,
+    },
+  );
   if (result.status !== 0) {
     throw new Error(
       `drizzle-kit ${args[0]} failed: ${result.error?.message ?? ""}\n${result.stdout}\n${result.stderr}`,

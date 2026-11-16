@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import { actorId, siteBuildId, unixMilliseconds } from "@lacecms/domain";
+import { siteBuildEvent } from "@lacecms/application";
 import {
   migrateNodeDatabase,
   NodeContentRepository,
@@ -58,6 +59,14 @@ test("a separate worker recovers durable build work after the API connection clo
     const api = openNodeDatabase(path);
     const apiRepository = new NodeContentRepository(api.connection, () => undefined);
     const receipt = await apiRepository.requestBuild({
+      events: [
+        siteBuildEvent({
+          reason: "manual",
+          requestedAt: 1_000,
+          requestedBy: "admin",
+          publishedSnapshotId: null,
+        }),
+      ],
       requestedAt: unixMilliseconds(1_000),
       requestedBy: { id: actorId("admin"), role: "admin" },
     });

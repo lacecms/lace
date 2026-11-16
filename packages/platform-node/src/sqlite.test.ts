@@ -1,3 +1,4 @@
+import { siteBuildEvent } from "@lacecms/application";
 import { strict as assert } from "node:assert";
 import type { ContentModelRoute, DraftMediaReference } from "@lacecms/domain";
 import { object } from "./test-support/json.js";
@@ -398,6 +399,14 @@ test("bounds Node build-export queries and selects the entry-list index", async 
           mediaReferences: references(`${id}-block`),
         });
         await repository.publish({
+          events: [
+            siteBuildEvent({
+              reason: "publication",
+              requestedAt: at + 10,
+              requestedBy: editor.id,
+              publishedSnapshotId: `${id}-published`,
+            }),
+          ],
           entryId: contentEntryId(id),
           expectedRevision: 1,
           publishedAt: unixMilliseconds(at + 10),
@@ -490,6 +499,14 @@ test("reads each Node build-export page from one snapshot despite concurrent com
           mediaReferences: references(`${id}-block`),
         });
         await repository.publish({
+          events: [
+            siteBuildEvent({
+              reason: "publication",
+              requestedAt: at + 10,
+              requestedBy: editor.id,
+              publishedSnapshotId: `${id}-published`,
+            }),
+          ],
           entryId: contentEntryId(id),
           expectedRevision: 1,
           publishedAt: unixMilliseconds(at + 10),

@@ -1,6 +1,23 @@
 import type { UnixMilliseconds } from "@lacecms/domain";
 import type { JsonObject } from "@lacecms/content";
+import type { OutboxEnqueuePayload, RegisteredOutboxType } from "@lacecms/contracts/outbox";
+import { SITE_BUILD_REQUESTED } from "@lacecms/contracts/outbox";
 import type { DispatcherEventId, DispatcherLeaseId } from "../shared/brands.js";
+
+/** Request-owned data; persistence supplies IDs, guards and commit-time fields. */
+export type OutboxEventRequest = {
+  [Type in RegisteredOutboxType]: {
+    readonly type: Type;
+    readonly requestedAt: number;
+    readonly payload: OutboxEnqueuePayload<Type>;
+  };
+}[RegisteredOutboxType];
+
+export function siteBuildEvent(
+  payload: OutboxEnqueuePayload<typeof SITE_BUILD_REQUESTED>,
+): OutboxEventRequest {
+  return { type: SITE_BUILD_REQUESTED, requestedAt: payload.requestedAt, payload };
+}
 
 export interface DispatcherEvent {
   readonly attempts: number;

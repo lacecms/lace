@@ -187,6 +187,7 @@ export interface CreateMediaMetadataInput {
 
 /** A durable request to delete binary media asynchronously after reference checks. */
 export interface MarkMediaForDeletionInput {
+  readonly events: readonly import("./outbox.js").OutboxEventRequest[];
   readonly mediaId: MediaId;
   readonly requestedAt: UnixMilliseconds;
   readonly requestedBy: Actor;
@@ -202,8 +203,8 @@ export interface MarkMediaForDeletionResult {
  * by the `updatedAt` the values were merged from.
  */
 export interface UpdateMediaMetadataInput {
+  readonly events: readonly import("./outbox.js").OutboxEventRequest[];
   readonly tags?: readonly string[];
-  readonly publishedEffect?: boolean;
   readonly alt: string | null;
   readonly caption: string | null;
   readonly expectedUpdatedAt: UnixMilliseconds;

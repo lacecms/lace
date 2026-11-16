@@ -5,7 +5,11 @@ import {
   changedPost,
   seedPublishedLifecycle,
 } from "../entries/fixtures.js";
-import { publicationIdempotencyKey, publicationRequestFingerprint } from "@lacecms/application";
+import {
+  publicationIdempotencyKey,
+  publicationRequestFingerprint,
+  siteBuildEvent,
+} from "@lacecms/application";
 import { readAllBuildContentPages } from "../../delivery/build-export.js";
 import {
   contentEntryId,
@@ -79,7 +83,13 @@ contract("unpublishes a publication and keeps the draft", async (runtime, expect
     "select payload_json from outbox_events where type = 'site.build.requested' and processed_at is null",
   );
   expect(pending).toHaveLength(1);
-  expect(JSON.parse(pending[0]!.payload_json)).toMatchObject({ targetVersion: version + 1 });
+  expect(JSON.parse(pending[0]!.payload_json)).toMatchObject({
+    reason: "publication",
+    requestedAt: 5,
+    requestedBy: admin.id,
+    publishedSnapshotId: "post-published",
+    targetVersion: version + 1,
+  });
   const listed = await repository.list({
     limit: 10,
     listFields: [],
@@ -296,6 +306,17 @@ contract("guards deletions by draft revision and publication identity", async (r
   await repository.create({ entry: post, mediaReferences: [] });
   const remove = (expectedRevision: number, at: number, expectedPublishedSnapshotId?: string) =>
     repository.delete({
+      events:
+        expectedPublishedSnapshotId === undefined
+          ? []
+          : [
+              siteBuildEvent({
+                reason: "publication",
+                requestedAt: at,
+                requestedBy: editor.id,
+                publishedSnapshotId: expectedPublishedSnapshotId,
+              }),
+            ],
       deletedAt: unixMilliseconds(at),
       deletedBy: editor,
       entryId: post.id,
@@ -328,7 +349,13 @@ contract("guards deletions by draft revision and publication identity", async (r
       (await sql.get<{ payload_json: string }>("select payload_json from outbox_events"))!
         .payload_json,
     ),
-  ).toMatchObject({ publishedSnapshotId: "guarded-post-published", targetVersion: version + 1 });
+  ).toMatchObject({
+    reason: "publication",
+    requestedAt: 24,
+    requestedBy: editor.id,
+    publishedSnapshotId: "guarded-post-published",
+    targetVersion: version + 1,
+  });
   await expect(remove(1, 25)).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
 
   await repository.create({
@@ -336,6 +363,7 @@ contract("guards deletions by draft revision and publication identity", async (r
     mediaReferences: [],
   });
   await repository.delete({
+    events: [],
     deletedAt: unixMilliseconds(31),
     deletedBy: editor,
     entryId: contentEntryId("draft-only"),

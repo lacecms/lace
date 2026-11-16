@@ -1,13 +1,15 @@
+import { MEDIA_DELETE_REQUESTED } from "@lacecms/contracts/outbox";
 import { DISPATCHER_LEASE_DURATION_MS } from "@lacecms/application";
 import type { MarkMediaForDeletionInput } from "@lacecms/application";
 import { sanitizeDispatchError } from "../shared/dispatch-error.js";
+import { bindEventRequest, enqueueEvents } from "../write-plan/enqueue-events.js";
 import type { WritePlan, WritePlanGroup } from "../write-plan/plan.js";
 
 export type MediaDeletionMiss = "in-use" | "ineligible" | "lease" | "mismatch" | "media";
 
 export function requestMediaDeletionWritePlan(
   input: MarkMediaForDeletionInput,
-  eventId: string,
+  eventIds: readonly string[],
   retry: boolean,
 ): WritePlan<MediaDeletionMiss> {
   const status = retry ? "delete_failed" : "active";
@@ -33,26 +35,17 @@ export function requestMediaDeletionWritePlan(
         params: [input.requestedAt, input.mediaId, ...guard.params],
         expectedChanges: 1,
       },
-      {
-        checkpoint: "media.outbox",
-        outbox: true,
-        sql: `insert into outbox_events (id, type, payload_json, attempts, available_at, created_at) select ?, 'media.delete.requested', ?, 0, ?, ? where ${guard.sql}`,
-        params: [
-          eventId,
-          JSON.stringify({ mediaId: input.mediaId, requestedBy: input.requestedBy.id }),
-          input.requestedAt,
-          input.requestedAt,
-          ...guard.params,
-        ],
-        expectedChanges: 1,
-      },
+      ...enqueueEvents(
+        input.events.map((event, index) =>
+          bindEventRequest(event, eventIds[index]!, guard, false, "media.outbox"),
+        ),
+      ),
     ],
   };
 }
 
 type LeaseInput = { readonly mediaId: string; readonly leaseId: string; readonly now: number };
-const eventPredicate =
-  "locked_by = ? and type = 'media.delete.requested' and processed_at is null and locked_at > ?";
+const eventPredicate = "locked_by = ? and type = ? and processed_at is null and locked_at > ?";
 function leasePlan(
   input: LeaseInput,
   requireMedia: "finalize" | "fail" | "none",
@@ -64,7 +57,11 @@ function leasePlan(
     requireMedia === "none"
       ? "1"
       : `exists (select 1 from media m where m.id = ? and m.status = 'deleting' ${requireMedia === "finalize" ? "and not exists (select 1 from content_media_references r where r.media_id = m.id)" : ""})`;
-  const leaseParams = [input.leaseId, input.now - DISPATCHER_LEASE_DURATION_MS];
+  const leaseParams = [
+    input.leaseId,
+    MEDIA_DELETE_REQUESTED,
+    input.now - DISPATCHER_LEASE_DURATION_MS,
+  ];
   const matching = `${eventPredicate} and case when json_valid(payload_json) then json_extract(payload_json, '$.mediaId') end = ?`;
   return {
     admission: { sql: "1", params: [] },
@@ -100,7 +97,13 @@ export function completeMediaDeletionWritePlan(input: LeaseInput): WritePlanGrou
       },
       {
         sql: `update outbox_events set processed_at = ?, locked_at = null, locked_by = null where id = (select id from outbox_events where ${matching} limit 1) and changes() = 1`,
-        params: [input.now, input.leaseId, input.now - DISPATCHER_LEASE_DURATION_MS, input.mediaId],
+        params: [
+          input.now,
+          input.leaseId,
+          MEDIA_DELETE_REQUESTED,
+          input.now - DISPATCHER_LEASE_DURATION_MS,
+          input.mediaId,
+        ],
       },
     ],
   };
@@ -133,6 +136,7 @@ export function failMediaDeletionWritePlan(
           input.terminal ? input.now : (input.retryAt ?? input.now),
           error,
           input.leaseId,
+          MEDIA_DELETE_REQUESTED,
           input.now - DISPATCHER_LEASE_DURATION_MS,
           input.mediaId,
           ...guard.params,

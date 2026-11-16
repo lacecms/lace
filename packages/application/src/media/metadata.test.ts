@@ -98,7 +98,7 @@ test("validates media metadata patches before any read and merges onto stored va
   expect(writes).toEqual([
     {
       tags: [],
-      publishedEffect: true,
+      events: [expect.objectContaining({ type: "site.build.requested" })],
       alt: "Old alt",
       caption: "Line\nTwo",
       expectedUpdatedAt: unixMilliseconds(9),
@@ -127,7 +127,7 @@ test("media tags validate before I/O, preserve authorization, and separate build
     updateMediaMetadata: async (input) => {
       writes.push(input);
       stored = { ...stored, tags: input.tags ?? [], updatedAt: input.updatedAt };
-      return { media: stored, ...(input.publishedEffect ? { targetVersion: 4 } : {}) };
+      return { media: stored, ...(input.events.length ? { targetVersion: 4 } : {}) };
     },
     listMedia: async (input) => {
       reads++;
@@ -181,7 +181,7 @@ test("media tags validate before I/O, preserve authorization, and separate build
     build: { status: "not-dispatched" },
     media: { updatedAt: 10, tags: ["b"] },
   });
-  expect(writes[0]).toMatchObject({ publishedEffect: false, tags: ["b"] });
+  expect(writes[0]).toMatchObject({ events: [], tags: ["b"] });
   await expect(
     media.updateMetadata({
       actor: mediaEditor,

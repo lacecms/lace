@@ -162,6 +162,18 @@ test("only requests that committed outbox work register a post-commit pass", asy
       )
     ).passes,
   ).toBe(0);
+  expect(
+    (
+      await passes(
+        `${path}/publish`,
+        {
+          json: { expectedRevision: 1 },
+          method: "POST",
+        },
+        409,
+      )
+    ).passes,
+  ).toBe(0);
   const publication = {
     headers: { "idempotency-key": "worker-publication" },
     json: { expectedRevision: 2 },

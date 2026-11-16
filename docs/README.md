@@ -112,6 +112,7 @@ Git history keeps the originals.
 | [0029-rc1-baseline.md](adr/0029-rc1-baseline.md) | authoritative | ADR 0029: rc1 is the oldest supported state |
 | [0030-rc2-oldest-supported.md](adr/0030-rc2-oldest-supported.md) | authoritative | ADR 0030: rc2 is the oldest supported release |
 | [0031-route-less-collections.md](adr/0031-route-less-collections.md) | authoritative | ADR 0031: Route-less collections |
+| [0032-outbox-contract-boundary.md](adr/0032-outbox-contract-boundary.md) | authoritative | ADR 0032: Share durable outbox contracts through a dedicated subpath |
 
 ## docs/archive/
 

@@ -10,6 +10,7 @@ import {
   unixMilliseconds,
 } from "@lacecms/domain";
 import { executeWritePlan } from "./write-plan.js";
+import { siteBuildEvent } from "@lacecms/application";
 
 test("publication admission diagnoses a stale candidate before invalid links", () => {
   const db = new Database(":memory:");
@@ -41,18 +42,23 @@ test("publication admission diagnoses a stale candidate before invalid links", (
       },
     });
     const input = {
+      events: [
+        siteBuildEvent({
+          reason: "publication",
+          requestedAt: 2,
+          requestedBy: actor.id,
+          publishedSnapshotId: "published",
+        }),
+      ],
       entryId: id,
       expectedRevision: 1,
       publishedAt: unixMilliseconds(2),
       publishedBy: actor,
       publishedSnapshotId: contentSnapshotId("published"),
     };
-    const plan = publishWritePlan(
-      input,
-      entry,
-      publicationResultEntry(entry, input, "editor"),
+    const plan = publishWritePlan(input, entry, publicationResultEntry(entry, input, "editor"), [
       "event",
-    );
+    ]);
     expect(executeWritePlan(db, plan)).toMatchObject({
       kind: "rejected",
       reason: { kind: "revision" },

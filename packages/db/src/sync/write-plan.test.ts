@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import {
   createConfigurationSyncSingletonEntry,
+  configurationSyncAdvancesPublicState,
+  siteBuildEvent,
   planConfigurationSynchronization,
   SITE_BUILD_DEBOUNCE_MS,
 } from "@lacecms/application";
@@ -51,9 +53,9 @@ function stored() {
   );
 }
 
-function reviewed(models: readonly Model[]): ApplyConfigurationSynchronizationInput {
+function reviewed(models: readonly Model[], at = 10): ApplyConfigurationSynchronizationInput {
   const expectedStoredModels = stored();
-  const appliedAt = unixMilliseconds(10);
+  const appliedAt = unixMilliseconds(at);
   const plan = planConfigurationSynchronization({ models, storedModels: expectedStoredModels });
   const singletonEntries = models
     .filter((model) => model.kind !== "collection")
@@ -65,7 +67,17 @@ function reviewed(models: readonly Model[]): ApplyConfigurationSynchronizationIn
         snapshotId: `s-${model.key}`,
       }),
     );
-  return { appliedAt, evidence: {}, expectedStoredModels, models, plan, singletonEntries };
+  const events = configurationSyncAdvancesPublicState(plan)
+    ? [
+        siteBuildEvent({
+          reason: "configuration_sync",
+          requestedAt: appliedAt,
+          requestedBy: "system:content-sync",
+          publishedSnapshotId: null,
+        }),
+      ]
+    : [];
+  return { appliedAt, events, evidence: {}, expectedStoredModels, models, plan, singletonEntries };
 }
 
 function execute(plan: WritePlan<"guard-miss">) {
@@ -104,6 +116,18 @@ function applyWithReceipt(input: ApplyConfigurationSynchronizationInput, eventId
 function apply(input: ApplyConfigurationSynchronizationInput) {
   return applyWithReceipt(input, "sync-event").report;
 }
+
+test("rejects event requests inconsistent with the revalidated sync plan", () => {
+  const input = reviewed([collection("posts")]);
+  expect(input.events).toHaveLength(1);
+  expect(() => apply({ ...input, events: [] })).toThrow("event requests do not match");
+  expect(database.prepare("select count(*) as count from outbox_events").get()).toEqual({
+    count: 0,
+  });
+  expect(database.prepare("select count(*) as count from content_models").get()).toEqual({
+    count: 0,
+  });
+});
 
 test("writes reviewed model identities in key order and creates only singleton drafts", () => {
   const posts = collection("posts");
@@ -357,10 +381,7 @@ test("queues the committed version once and preserves pending retry lineage on c
     projectionHash: hash("articles"),
     publicProjectionHash: hash("articles"),
   };
-  const updated = applyWithReceipt(
-    { ...reviewed([next]), appliedAt: unixMilliseconds(20) },
-    "next-build",
-  );
+  const updated = applyWithReceipt(reviewed([next], 20), "next-build");
   expect(updated.result).toEqual({
     status: "applied",
     operations: updated.report.operations,

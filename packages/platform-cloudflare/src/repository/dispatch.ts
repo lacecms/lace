@@ -28,7 +28,9 @@ export class D1DispatcherLeases extends D1RepositoryBase implements DispatcherLe
       input.now,
     );
     const result = await executeWritePlanGroup(this.database, prepared.plan);
-    return Object.freeze(prepared.leases.filter((_, index) => result.changes[index] === 1));
+    return Object.freeze(
+      prepared.leases.filter((_, index) => result.changes[prepared.claimIndices[index]!] === 1),
+    );
   }
   public async complete(input: CompleteDispatcherLeaseInput): Promise<void> {
     await this.transition(completeDispatcherPlan(input));

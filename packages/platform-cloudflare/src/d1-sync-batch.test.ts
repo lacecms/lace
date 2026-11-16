@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import {
   applyPreparedConfigurationSynchronization,
   contentModelRoute,
+  configurationSyncAdvancesPublicState,
+  siteBuildEvent,
   prepareConfigurationSynchronization,
 } from "@lacecms/application";
 import type {
@@ -327,6 +329,16 @@ async function reviewFinalSync(
   const appliedAt = unixMilliseconds(5);
   return {
     appliedAt,
+    events: configurationSyncAdvancesPublicState(plan)
+      ? [
+          siteBuildEvent({
+            reason: "configuration_sync",
+            requestedAt: appliedAt,
+            requestedBy: "system:content-sync",
+            publishedSnapshotId: null,
+          }),
+        ]
+      : [],
     evidence,
     expectedStoredModels: storedModels,
     models,

@@ -339,6 +339,13 @@ test("SQLite persistence refuses a new reference after media deletion commits", 
     updatedAt: unixMilliseconds(1),
   });
   await store.markForDeletion({
+    events: [
+      {
+        type: "media.delete.requested" as const,
+        requestedAt: unixMilliseconds(2),
+        payload: { mediaId: id, requestedBy: editor.id },
+      },
+    ],
     mediaId: id,
     requestedAt: unixMilliseconds(2),
     requestedBy: editor,
@@ -371,6 +378,13 @@ test("marks only unreferenced active media for independent deletion", async () =
   });
   await expect(
     store.markForDeletion({
+      events: [
+        {
+          type: "media.delete.requested" as const,
+          requestedAt: unixMilliseconds(2),
+          payload: { mediaId: mediaId("unused-media"), requestedBy: admin.id },
+        },
+      ],
       mediaId: mediaId("unused-media"),
       requestedAt: unixMilliseconds(2),
       requestedBy: admin,
@@ -437,6 +451,13 @@ test("rebuilds complete-draft media projections instead of retaining stale refer
   expect(persistedMediaReferences(connection, saved.draft.id)).toEqual([]);
   await expect(
     store.markForDeletion({
+      events: [
+        {
+          type: "media.delete.requested" as const,
+          requestedAt: unixMilliseconds(3),
+          payload: { mediaId: mediaId("attached-media"), requestedBy: editor.id },
+        },
+      ],
       mediaId: mediaId("attached-media"),
       requestedAt: unixMilliseconds(3),
       requestedBy: editor,

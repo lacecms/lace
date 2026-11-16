@@ -91,7 +91,7 @@ from committed outbox work, and `401 AUTHENTICATION_REQUIRED`.
 | --- | --- | :---: | --- | --- |
 | EX1 | Test foundation (from RF9C–RF9F) | L | EX1A → EX1B → EX1D; EX1C after EX2D | proposed |
 | EX2 | Shared write plans | L | EX2A → EX2B → EX2C → EX2D | done |
-| EX3 | Typed outbox events | M | EX3A → EX3B | planned |
+| EX3 | Typed outbox events | M | EX3A → EX3B | in progress |
 | EX4 | Route policies and security use cases | L | EX4A → EX4B → EX4C → EX4D | planned |
 | EX5 | Model kind descriptor | S | EX5A | planned |
 | EX6 | Trusted client identity and production Compose ingress | M | EX6A and EX6B independent | done |
@@ -400,6 +400,8 @@ are preserved in the linked archives. Dates refer to the final recorded event.
 
 | Date | Session | Change | Status |
 | --- | --- | --- | --- |
+| 2026-11-16 | EX3B | [Use cases emit events](../openspec/changes/archive/2026-11-16-ex03b-use-cases-emit-events/) | done. Nine producer paths supply explicit event requests: publish, unpublish, published deletion, media metadata, media deletion and retry, manual build and retry, and final configuration sync. The combined public-state/enqueue helper was removed; every production event insert remains in the shared enqueue compiler. |
+| 2026-11-16 | EX3A | [Event registry and one enqueue path](../openspec/changes/archive/2026-11-16-ex03a-event-registry-and-enqueue/) | done. Two version 1 event descriptors in one registry. Hardcoded event identities in live SQL and the Drizzle predicate fell from eight to zero, excluding historical migrations. Two insert owners became one shared enqueue compiler. Verified both SQLite modes, local D1, Worker wake-ups, and mixed dispatch with invalid work within the D1 budgets. |
 | 2026-11-16 | EX1C | [Type db and platform tests](../openspec/changes/archive/2026-11-16-ex01c-type-db-and-platform-tests/) | done: workspace test typecheck exceptions fell from 48 to 0; removed the empty baseline. Verified DB, Node and Cloudflare suites, including both SQLite repository modes and local D1 contracts. |
 | 2026-11-16 | EX2D | [One test store](../openspec/changes/archive/2026-11-16-ex02d-one-test-store/) | done. Content repositories fell from three to two, with the same contract suite on file-backed SQLite, in-memory SQLite and local D1. Removed 1,671 lines of the JavaScript content store and reduced direct content-to-provider SQL reads from seven to zero. Verified actor attribution and existing D1 statement, bind and batch limits. |
 | 2026-11-15 | EX2C | [Shared configuration synchronization write plan](../openspec/changes/archive/2026-11-15-ex02c-shared-write-plans-configuration-sync/) | done. Node/D1 write SQL counts 48/58 → 39/50 and shared `db` count 111 → 116 using the §3 counting pattern. Repository modules remain 9/11. The Node and D1 sync modules shrink from 400/498 to 214/333 lines. Local D1 applies 34 model creates in one 40-statement batch, with 13 binds at most and 42 queries including revalidation. The migration test confirms whole-unit packing, published-before-draft splitting and one final build request after resume. |

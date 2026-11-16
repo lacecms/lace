@@ -547,6 +547,7 @@ export interface ConfigurationSyncSingletonEntry {
 
 /** Complete guarded input for one atomic synchronization mutation. */
 export interface ApplyConfigurationSynchronizationInput {
+  readonly events: readonly import("../ports/outbox.js").OutboxEventRequest[];
   readonly linkRewrites?: readonly ConfigurationSyncLinkRewrite[];
   readonly appliedAt: UnixMilliseconds;
   /** The scan evidence the plan was derived from; repositories re-plan with it. */

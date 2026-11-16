@@ -1,3 +1,4 @@
+import { siteBuildEvent } from "@lacecms/application";
 import {
   applicationSqlite,
   repositorySqlite,
@@ -61,6 +62,14 @@ test("derives SQLite media usage and in-use refusals from current snapshots", as
     ],
   });
   await store.publish({
+    events: [
+      siteBuildEvent({
+        reason: "publication",
+        requestedAt: unixMilliseconds(30),
+        requestedBy: editor.id,
+        publishedSnapshotId: contentSnapshotId("e-one-published"),
+      }),
+    ],
     entryId: entry.id,
     expectedRevision: 1,
     publishedAt: unixMilliseconds(30),
@@ -157,6 +166,14 @@ test("derives SQLite media usage and in-use refusals from current snapshots", as
     media.requestDeletion({ actor: editor, mediaId: mediaId("m-d") }),
   ).resolves.toMatchObject({ status: "deleting", usageCount: 0 });
   await store.publish({
+    events: [
+      siteBuildEvent({
+        reason: "publication",
+        requestedAt: unixMilliseconds(56),
+        requestedBy: editor.id,
+        publishedSnapshotId: contentSnapshotId("e-one-published-2"),
+      }),
+    ],
     entryId: entry.id,
     expectedRevision: 3,
     publishedAt: unixMilliseconds(56),

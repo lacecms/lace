@@ -953,3 +953,32 @@ test.each([
   expect(result.status).not.toBe(0);
   expect(result.stderr).toContain(message);
 });
+
+test.each(["application", "db"])("%s may import only the outbox subpath of contracts", (name) => {
+  const root = mkdtempSync(join(tmpdir(), "lace-outbox-boundary-"));
+  try {
+    for (const member of [name, "contracts"]) {
+      const base = join(root, "packages", member);
+      mkdirSync(join(base, "src"), { recursive: true });
+      writeFileSync(join(base, "package.json"), JSON.stringify({ name: `@lacecms/${member}` }));
+    }
+    const entry = join(root, "packages", name, "src", "index.ts");
+    for (const specifier of [
+      "@lacecms/contracts/outbox",
+      "@lacecms/contracts",
+      "@lacecms/contracts/dto",
+    ]) {
+      writeFileSync(entry, `import "${specifier}";`);
+      const result = spawnSync(process.execPath, [checker, root], { encoding: "utf8" });
+      if (specifier === "@lacecms/contracts/outbox") {
+        expect(result.stderr).toBe("");
+        expect(result.status).toBe(0);
+      } else {
+        expect(result.status).not.toBe(0);
+        expect(result.stderr).toMatch(/may not import|forbidden dependency/u);
+      }
+    }
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});

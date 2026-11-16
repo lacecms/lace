@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { opaqueCursor } from "@lacecms/application";
+import { opaqueCursor, siteBuildEvent } from "@lacecms/application";
 import type { ListContentEntriesInput } from "@lacecms/application";
 import type { Actor, ContentBlock, ContentModelRoute, DraftMediaReference } from "@lacecms/domain";
 import type { JsonObject } from "@lacecms/content";
@@ -168,6 +168,14 @@ function saveInput(
 
 function publishInput(id: string, expectedRevision: number, at: number, snapshot: string) {
   return {
+    events: [
+      siteBuildEvent({
+        reason: "publication",
+        requestedAt: at,
+        requestedBy: editor.id,
+        publishedSnapshotId: snapshot,
+      }),
+    ],
     entryId: contentEntryId(id),
     expectedRevision,
     publishedAt: unixMilliseconds(at),
@@ -548,6 +556,14 @@ test("fails a build-export page when a publication lands between its batches", a
     () => other.publish(publishInput("c", 1, 3, "c-published")),
     () =>
       other.unpublish({
+        events: [
+          siteBuildEvent({
+            reason: "publication",
+            requestedAt: 4,
+            requestedBy: editor.id,
+            publishedSnapshotId: "c-published",
+          }),
+        ],
         entryId: contentEntryId("c"),
         expectedPublishedSnapshotId: contentSnapshotId("c-published"),
         unpublishedAt: unixMilliseconds(4),
@@ -638,6 +654,14 @@ test("final removal guard rejects a source published after impact preflight", as
   );
   await expect(
     raced.unpublish({
+      events: [
+        siteBuildEvent({
+          reason: "publication",
+          requestedAt: 4,
+          requestedBy: editor.id,
+          publishedSnapshotId: "target-published",
+        }),
+      ],
       entryId: contentEntryId("post"),
       expectedPublishedSnapshotId: contentSnapshotId("target-published"),
       unpublishedAt: unixMilliseconds(4),
@@ -677,6 +701,14 @@ test("final removal guard rejects a source published after impact preflight", as
   );
   await expect(
     confirmed.unpublish({
+      events: [
+        siteBuildEvent({
+          reason: "publication",
+          requestedAt: 6,
+          requestedBy: editor.id,
+          publishedSnapshotId: "target-published",
+        }),
+      ],
       entryId: contentEntryId("post"),
       expectedPublishedSnapshotId: contentSnapshotId("target-published"),
       unpublishedAt: unixMilliseconds(6),

@@ -41,14 +41,10 @@ export class NodeSiteBuilds
 {
   public async requestBuild(input: EnqueueSiteBuildInput): Promise<BuildQueueReceipt> {
     try {
-      const plan = requestBuildWritePlan({
-        eventId: this.nextId(),
-        reason: input.retryOfBuildId === undefined ? "manual" : "retry",
-        requestedAt: input.requestedAt,
-        requestedBy: input.requestedBy.id,
-        snapshotId: null,
-        ...(input.retryOfBuildId === undefined ? {} : { retryOfBuildId: input.retryOfBuildId }),
-      });
+      const plan = requestBuildWritePlan(
+        input,
+        input.events.map(() => this.nextId()),
+      );
       const result = executeWritePlan(this.connection, plan, this.options.beforeMutation);
       if (result.kind === "rejected") failure(RETRYABLE_SITE_BUILD_REFUSAL);
       const row = result.slots.queue?.[0] as

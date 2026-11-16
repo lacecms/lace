@@ -1,5 +1,6 @@
 import type { CreateMediaMetadataInput, UpdateMediaMetadataInput } from "@lacecms/application";
-import { buildEnqueueStatements } from "../write-plan/build-enqueue.js";
+import { publicStateIncrementStatement } from "../write-plan/build-enqueue.js";
+import { enqueueRequests } from "../write-plan/enqueue-events.js";
 import type { WritePlan, WritePlanStatement } from "../write-plan/plan.js";
 import {
   MEDIA_METADATA_UPDATE_SQL,
@@ -47,7 +48,7 @@ export function createMediaWritePlan(input: CreateMediaMetadataInput): WritePlan
 
 export function updateMediaWritePlan(
   input: UpdateMediaMetadataInput,
-  eventId: string,
+  eventIds: readonly string[],
 ): WritePlan<"inactive" | "conflict"> {
   const params = mediaMetadataUpdateParams(input);
   const tags = input.tags === undefined ? undefined : normalizedMediaWriteTags(input.tags);
@@ -82,7 +83,7 @@ export function updateMediaWritePlan(
           statements.push({ ...insert, params: [...insert.params, ...guard.params] });
       }
       const published = {
-        sql: `${guard.sql} and ${MEDIA_PUBLISHED_REFERENCE_SQL} and ${input.publishedEffect === false ? "0" : "1"}`,
+        sql: `${guard.sql} and ${MEDIA_PUBLISHED_REFERENCE_SQL} and ${input.events.length === 0 ? "0" : "1"}`,
         params: [...guard.params, input.mediaId],
       };
       statements.push({
@@ -91,20 +92,8 @@ export function updateMediaWritePlan(
         sql: "select 1",
         params: [],
       });
-      statements.push({
-        checkpoint: "public-state",
-        sql: `insert into published_state (singleton_key, version, updated_at) select 1, 1, ? where ${published.sql} on conflict(singleton_key) do update set version = version + 1, updated_at = excluded.updated_at`,
-        params: [input.updatedAt, ...published.params],
-      });
-      statements.push(
-        ...buildEnqueueStatements(published, {
-          eventId,
-          reason: "media_metadata",
-          requestedAt: input.updatedAt,
-          requestedBy: input.requestedBy.id,
-          snapshotId: null,
-        }),
-      );
+      statements.push(publicStateIncrementStatement(published, input.updatedAt));
+      statements.push(...enqueueRequests(input.events, eventIds, published));
       statements.push({
         slot: "published",
         sql: `select (${published.sql}) as bumped`,

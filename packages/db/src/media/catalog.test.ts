@@ -36,6 +36,7 @@ test("maps descriptive media metadata and refuses inconsistent rows", () => {
     );
   }
   const input: UpdateMediaMetadataInput = {
+    events: [],
     alt: "Bike",
     caption: null,
     expectedUpdatedAt: unixMilliseconds(4),

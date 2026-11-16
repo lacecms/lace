@@ -1,3 +1,4 @@
+import { siteBuildEvent } from "@lacecms/application";
 import {
   applicationSqlite,
   repositorySqlite,
@@ -294,6 +295,14 @@ test("nested synchronization preserves audits and rebuilds media usage", async (
     mediaReferences: [{ sourceKey: "$fields", fieldPath: "/profile/image", mediaId: mediaId("m") }],
   });
   await store.publish({
+    events: [
+      siteBuildEvent({
+        reason: "publication",
+        requestedAt: unixMilliseconds(2),
+        requestedBy: admin.id,
+        publishedSnapshotId: contentSnapshotId("nested-published"),
+      }),
+    ],
     entryId: contentEntryId("nested"),
     expectedRevision: 1,
     publishedAt: unixMilliseconds(2),

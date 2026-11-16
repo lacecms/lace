@@ -52,7 +52,36 @@ test("only administrators can enqueue manual or retry build commands", async () 
   const admin = { id: actorId("admin-1"), role: "admin" as const };
   await expect(useCases.request(admin)).resolves.toMatchObject({ targetVersion: 3 });
   await expect(useCases.retry(admin, "failed-1")).resolves.toMatchObject({ targetVersion: 3 });
-  expect(calls).toMatchObject([{ requestedAt: 42 }, { retryOfBuildId: "failed-1" }]);
+  expect(calls).toMatchObject([
+    {
+      requestedAt: 42,
+      events: [
+        {
+          type: "site.build.requested",
+          payload: {
+            reason: "manual",
+            requestedAt: 42,
+            requestedBy: "admin-1",
+            publishedSnapshotId: null,
+          },
+        },
+      ],
+    },
+    {
+      events: [
+        {
+          type: "site.build.requested",
+          payload: {
+            reason: "retry",
+            requestedAt: 42,
+            requestedBy: "admin-1",
+            publishedSnapshotId: null,
+            retryOfBuildId: "failed-1",
+          },
+        },
+      ],
+    },
+  ]);
   for (const role of ["editor", "viewer"] as const) {
     expect(() => useCases.request({ id: actorId(role), role })).toThrow(DomainError);
     expect(() => useCases.retry({ id: actorId(role), role }, "failed-1")).toThrow(DomainError);

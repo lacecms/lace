@@ -62,6 +62,11 @@ export * from "./builds/tracker.js";
 // Outbox
 export * from "./outbox/retry-policy.js";
 export * from "./outbox/dispatchers.js";
+export {
+  MEDIA_DELETE_REQUESTED,
+  SITE_BUILD_REQUESTED,
+  createOutboxDispatchers,
+} from "./outbox/registered-dispatchers.js";
 
 // Configuration
 export * from "./configuration/limits.js";

@@ -3,6 +3,7 @@ import {
   applyPreparedConfigurationSynchronization,
   contentModelRoute,
   prepareConfigurationSynchronization,
+  siteBuildEvent,
 } from "@lacecms/application";
 import type {
   ListQueryLimits,
@@ -289,11 +290,39 @@ export function save(
 
 export function publish(entryId: string, expectedRevision: number, at: number, snapshot?: string) {
   return {
+    events: [
+      siteBuildEvent({
+        reason: "publication",
+        requestedAt: at,
+        requestedBy: editor.id,
+        publishedSnapshotId: snapshot ?? `${entryId}-published-${at}`,
+      }),
+    ],
     entryId: contentEntryId(entryId),
     expectedRevision,
     publishedAt: unixMilliseconds(at),
     publishedBy: editor,
     publishedSnapshotId: contentSnapshotId(snapshot ?? `${entryId}-published-${at}`),
+  };
+}
+
+export function buildRequest(
+  requestedAt: import("@lacecms/domain").UnixMilliseconds,
+  requestedBy: import("@lacecms/domain").Actor,
+  retryOfBuildId?: string,
+) {
+  return {
+    requestedAt,
+    requestedBy,
+    events: [
+      siteBuildEvent({
+        reason: retryOfBuildId === undefined ? "manual" : "retry",
+        requestedAt,
+        requestedBy: requestedBy.id,
+        publishedSnapshotId: null,
+        ...(retryOfBuildId === undefined ? {} : { retryOfBuildId }),
+      }),
+    ],
   };
 }
 

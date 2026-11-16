@@ -462,6 +462,13 @@ contract(
         "select count(*) as count from outbox_events where type = 'media.delete.requested'",
       );
     const request = (id: string) => ({
+      events: [
+        {
+          type: "media.delete.requested" as const,
+          requestedAt: unixMilliseconds(60),
+          payload: { mediaId: mediaId(id), requestedBy: editor.id },
+        },
+      ],
       mediaId: mediaId(id),
       requestedAt: unixMilliseconds(60),
       requestedBy: editor,

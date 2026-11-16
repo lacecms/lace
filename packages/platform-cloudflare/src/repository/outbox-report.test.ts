@@ -1,5 +1,9 @@
 import { afterEach, expect, test } from "vitest";
-import { publicationIdempotencyKey, publicationRequestFingerprint } from "@lacecms/application";
+import {
+  publicationIdempotencyKey,
+  publicationRequestFingerprint,
+  siteBuildEvent,
+} from "@lacecms/application";
 import {
   actorId,
   blockKey,
@@ -95,6 +99,14 @@ async function createPost({ repository }: Opened, id: string, blocks: readonly C
 
 function publishInput(id: string, at: number, idempotent = false) {
   return {
+    events: [
+      siteBuildEvent({
+        reason: "publication",
+        requestedAt: at,
+        requestedBy: editor.id,
+        publishedSnapshotId: `${id}-published`,
+      }),
+    ],
     entryId: contentEntryId(id),
     expectedRevision: 1,
     publishedAt: unixMilliseconds(at),
@@ -128,6 +140,14 @@ async function createMedia({ repository }: Opened, id: string) {
 
 function metadataUpdate(id: string, expectedUpdatedAt: number, updatedAt: number) {
   return {
+    events: [
+      siteBuildEvent({
+        reason: "media_metadata",
+        requestedAt: updatedAt,
+        requestedBy: editor.id,
+        publishedSnapshotId: null,
+      }),
+    ],
     alt: `alt ${updatedAt}`,
     caption: null,
     expectedUpdatedAt: unixMilliseconds(expectedUpdatedAt),
@@ -144,10 +164,40 @@ const drainOutbox = (opened: Opened) =>
 
 test("a batch reports once when an outbox statement changes a row", async () => {
   const opened = await open();
-  await opened.repository.requestBuild({ requestedAt: unixMilliseconds(10), requestedBy: editor });
+  await opened.repository.requestBuild({
+    events: [
+      {
+        type: "site.build.requested" as const,
+        requestedAt: unixMilliseconds(10),
+        payload: {
+          reason: "manual",
+          requestedAt: unixMilliseconds(10),
+          requestedBy: editor.id,
+          publishedSnapshotId: null,
+        },
+      },
+    ],
+    requestedAt: unixMilliseconds(10),
+    requestedBy: editor,
+  });
   expect(opened.reports()).toBe(1);
   // The second request coalesces into the pending event: the update changes a row.
-  await opened.repository.requestBuild({ requestedAt: unixMilliseconds(20), requestedBy: editor });
+  await opened.repository.requestBuild({
+    events: [
+      {
+        type: "site.build.requested" as const,
+        requestedAt: unixMilliseconds(20),
+        payload: {
+          reason: "manual",
+          requestedAt: unixMilliseconds(20),
+          requestedBy: editor.id,
+          publishedSnapshotId: null,
+        },
+      },
+    ],
+    requestedAt: unixMilliseconds(20),
+    requestedBy: editor,
+  });
   expect(opened.reports()).toBe(1);
 });
 
@@ -155,9 +205,21 @@ test("a batch whose guard fails reports nothing", async () => {
   const opened = await open();
   await expect(
     opened.repository.requestBuild({
+      events: [
+        {
+          type: "site.build.requested" as const,
+          requestedAt: unixMilliseconds(10),
+          payload: {
+            reason: "retry",
+            requestedAt: unixMilliseconds(10),
+            requestedBy: editor.id,
+            publishedSnapshotId: null,
+            retryOfBuildId: siteBuildId("missing"),
+          },
+        },
+      ],
       requestedAt: unixMilliseconds(10),
       requestedBy: editor,
-      retryOfBuildId: siteBuildId("missing"),
     }),
   ).rejects.toThrow();
   expect(opened.reports()).toBe(0);
@@ -191,6 +253,14 @@ test("publication, unpublication and deletion report committed outbox work", asy
 
   await drainOutbox(opened);
   await repository.unpublish({
+    events: [
+      siteBuildEvent({
+        reason: "publication",
+        requestedAt: 5,
+        requestedBy: editor.id,
+        publishedSnapshotId: "first-published",
+      }),
+    ],
     entryId: contentEntryId("first"),
     expectedPublishedSnapshotId: contentSnapshotId("first-published"),
     unpublishedAt: unixMilliseconds(5),
@@ -203,6 +273,14 @@ test("publication, unpublication and deletion report committed outbox work", asy
   expect(opened.reports()).toBe(1);
   await drainOutbox(opened);
   await repository.delete({
+    events: [
+      siteBuildEvent({
+        reason: "publication",
+        requestedAt: 7,
+        requestedBy: editor.id,
+        publishedSnapshotId: "second-published",
+      }),
+    ],
     deletedAt: unixMilliseconds(7),
     deletedBy: editor,
     entryId: contentEntryId("second"),
@@ -228,21 +306,55 @@ test("media metadata reports work only when a publication uses the media", async
 
 test("build requests, build retries and media deletions report committed outbox work", async () => {
   const opened = await open();
-  await opened.repository.requestBuild({ requestedAt: unixMilliseconds(10), requestedBy: editor });
+  await opened.repository.requestBuild({
+    events: [
+      {
+        type: "site.build.requested" as const,
+        requestedAt: unixMilliseconds(10),
+        payload: {
+          reason: "manual",
+          requestedAt: unixMilliseconds(10),
+          requestedBy: editor.id,
+          publishedSnapshotId: null,
+        },
+      },
+    ],
+    requestedAt: unixMilliseconds(10),
+    requestedBy: editor,
+  });
   expect(opened.reports()).toBe(1);
   await drainOutbox(opened);
   await opened.sql(
     "insert into site_builds (id, reason, status, target_version, requested_by, requested_at) values ('failed-build', 'manual', 'failed', 0, 'editor', 1)",
   );
   await opened.repository.requestBuild({
+    events: [
+      {
+        type: "site.build.requested" as const,
+        requestedAt: unixMilliseconds(20),
+        payload: {
+          reason: "retry",
+          requestedAt: unixMilliseconds(20),
+          requestedBy: editor.id,
+          publishedSnapshotId: null,
+          retryOfBuildId: siteBuildId("failed-build"),
+        },
+      },
+    ],
     requestedAt: unixMilliseconds(20),
     requestedBy: editor,
-    retryOfBuildId: siteBuildId("failed-build"),
   });
   expect(opened.reports()).toBe(1);
 
   await createMedia(opened, "media-2");
   await opened.repository.markForDeletion({
+    events: [
+      {
+        type: "media.delete.requested" as const,
+        requestedAt: unixMilliseconds(30),
+        payload: { mediaId: mediaId("media-2"), requestedBy: editor.id },
+      },
+    ],
     mediaId: mediaId("media-2"),
     requestedAt: unixMilliseconds(30),
     requestedBy: editor,
@@ -250,9 +362,46 @@ test("build requests, build retries and media deletions report committed outbox 
   expect(opened.reports()).toBe(1);
   await opened.sql("update media set status = 'delete_failed' where id = 'media-2'");
   await opened.repository.retryDeletion({
+    events: [
+      {
+        type: "media.delete.requested" as const,
+        requestedAt: unixMilliseconds(40),
+        payload: { mediaId: mediaId("media-2"), requestedBy: editor.id },
+      },
+    ],
     mediaId: mediaId("media-2"),
     requestedAt: unixMilliseconds(40),
     requestedBy: editor,
   });
   expect(opened.reports()).toBe(1);
+});
+
+test("build lease and outcome changes never report committed enqueue work", async () => {
+  const { repository, reports } = await open();
+  await repository.requestBuild({
+    events: [
+      {
+        type: "site.build.requested" as const,
+        requestedAt: unixMilliseconds(1),
+        payload: {
+          reason: "manual",
+          requestedAt: unixMilliseconds(1),
+          requestedBy: editor.id,
+          publishedSnapshotId: null,
+        },
+      },
+    ],
+    requestedAt: unixMilliseconds(1),
+    requestedBy: editor,
+  });
+  expect(reports()).toBe(1);
+
+  const now = unixMilliseconds(5_001);
+  const [lease] = await repository.claimSiteBuilds({ limit: 1, now });
+  expect(lease).toBeDefined();
+  expect(reports()).toBe(0);
+  expect(await repository.renewSiteBuildLease({ leaseId: lease!.id, now })).toBe(true);
+  expect(reports()).toBe(0);
+  await repository.recordSiteBuildSuccess({ leaseId: lease!.id, now });
+  expect(reports()).toBe(0);
 });

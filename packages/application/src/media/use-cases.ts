@@ -1,4 +1,5 @@
 import { InvariantError, MAX_PAGE_SIZE } from "@lacecms/content";
+import { MEDIA_DELETE_REQUESTED } from "@lacecms/contracts/outbox";
 import {
   DomainError,
   isMediaSha256,
@@ -9,6 +10,7 @@ import {
 } from "@lacecms/domain";
 import type { Actor, MediaId, MediaMetadata } from "@lacecms/domain";
 import { DEFAULT_MEDIA_SORT, MEDIA_SORTS } from "../ports/media.js";
+import { siteBuildEvent } from "../ports/outbox.js";
 import type {
   ListMediaTagsInput,
   MediaTagCount,
@@ -160,9 +162,17 @@ export class MediaUseCases {
   public async requestDeletion(input: DeleteMediaUseCaseInput): Promise<MediaView> {
     requirePermission(input.actor, "media:write");
     if (input.detach === "drafts") await this.detachDraftUsage(input);
+    const requestedAt = this.dependencies.clock.now();
     const result = await this.dependencies.media.markForDeletion({
+      events: [
+        {
+          type: MEDIA_DELETE_REQUESTED,
+          requestedAt,
+          payload: { mediaId: input.mediaId, requestedBy: input.actor.id },
+        },
+      ],
       mediaId: input.mediaId,
-      requestedAt: this.dependencies.clock.now(),
+      requestedAt,
       requestedBy: input.actor,
     });
     return this.catalogView(result.media.id, "Media deletion mark could not be reloaded.");
@@ -170,9 +180,17 @@ export class MediaUseCases {
 
   public async retryDeletion(input: DeleteMediaUseCaseInput): Promise<MediaView> {
     requirePermission(input.actor, "media:write");
+    const requestedAt = this.dependencies.clock.now();
     const result = await this.dependencies.media.retryDeletion({
+      events: [
+        {
+          type: MEDIA_DELETE_REQUESTED,
+          requestedAt,
+          payload: { mediaId: input.mediaId, requestedBy: input.actor.id },
+        },
+      ],
       mediaId: input.mediaId,
-      requestedAt: this.dependencies.clock.now(),
+      requestedAt,
       requestedBy: input.actor,
     });
     return this.catalogView(result.media.id, "Media deletion retry could not be reloaded.");
@@ -219,13 +237,25 @@ export class MediaUseCases {
         media: await this.catalogView(current.id, "Media could not be reloaded."),
       });
     }
+    const updatedAt = unixMilliseconds(
+      Math.max(this.dependencies.clock.now(), expectedUpdatedAt + 1),
+    );
     const result = await this.dependencies.media.updateMediaMetadata({
       ...next,
-      publishedEffect: descriptiveChanged,
+      events: descriptiveChanged
+        ? [
+            siteBuildEvent({
+              reason: "media_metadata",
+              requestedAt: updatedAt,
+              requestedBy: input.actor.id,
+              publishedSnapshotId: null,
+            }),
+          ]
+        : [],
       expectedUpdatedAt,
       mediaId: current.id,
       requestedBy: input.actor,
-      updatedAt: unixMilliseconds(Math.max(this.dependencies.clock.now(), expectedUpdatedAt + 1)),
+      updatedAt,
     });
     return Object.freeze({
       build: Object.freeze(

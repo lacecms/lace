@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { siteBuildEvent } from "@lacecms/application";
 import {
   actorId,
   contentEntryId,
@@ -69,6 +70,14 @@ test("a concurrent draft change outranks invalid delivered links at publication 
     const publisher = new D1ContentRepository(racing, () => model);
     await expect(
       publisher.publish({
+        events: [
+          siteBuildEvent({
+            reason: "publication",
+            requestedAt: 2,
+            requestedBy: actor.id,
+            publishedSnapshotId: "published",
+          }),
+        ],
         entryId: id,
         expectedRevision: 1,
         publishedAt: unixMilliseconds(2),
@@ -95,6 +104,14 @@ test("a concurrent draft change outranks invalid delivered links at publication 
       },
     });
     const publish = {
+      events: [
+        siteBuildEvent({
+          reason: "publication",
+          requestedAt: 3,
+          requestedBy: actor.id,
+          publishedSnapshotId: "published",
+        }),
+      ],
       entryId: id,
       expectedRevision: 2,
       publishedAt: unixMilliseconds(3),
@@ -104,6 +121,14 @@ test("a concurrent draft change outranks invalid delivered links at publication 
     await reporting.publish(publish);
     await reporting.publish({
       ...publish,
+      events: [
+        siteBuildEvent({
+          reason: "publication",
+          requestedAt: 4,
+          requestedBy: actor.id,
+          publishedSnapshotId: "published-again",
+        }),
+      ],
       publishedSnapshotId: contentSnapshotId("published-again"),
       publishedAt: unixMilliseconds(4),
     });
@@ -126,6 +151,14 @@ test("a concurrent draft change outranks invalid delivered links at publication 
     });
     await expect(
       failing.unpublish({
+        events: [
+          siteBuildEvent({
+            reason: "publication",
+            requestedAt: 5,
+            requestedBy: actor.id,
+            publishedSnapshotId: "published-again",
+          }),
+        ],
         entryId: id,
         expectedPublishedSnapshotId: contentSnapshotId("published-again"),
         unpublishedAt: unixMilliseconds(5),

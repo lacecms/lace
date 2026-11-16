@@ -6,6 +6,7 @@ import type {
   SiteBuildReadPort,
 } from "../ports/builds.js";
 import type { Clock } from "../ports/infrastructure.js";
+import { siteBuildEvent } from "../ports/outbox.js";
 
 /** Administrator commands enqueue durable work without invoking a build provider. */
 export class SiteBuildUseCases {
@@ -26,18 +27,36 @@ export class SiteBuildUseCases {
 
   public request(actor: Actor): Promise<BuildQueueReceipt> {
     requirePermission(actor, "settings:manage");
+    const requestedAt = this.dependencies.clock.now();
     return this.dependencies.builds.requestBuild({
-      requestedAt: this.dependencies.clock.now(),
+      events: [
+        siteBuildEvent({
+          reason: "manual",
+          requestedAt,
+          requestedBy: actor.id,
+          publishedSnapshotId: null,
+        }),
+      ],
+      requestedAt,
       requestedBy: actor,
     });
   }
 
   public retry(actor: Actor, buildId: string): Promise<BuildQueueReceipt> {
     requirePermission(actor, "settings:manage");
+    const requestedAt = this.dependencies.clock.now();
     return this.dependencies.builds.requestBuild({
-      requestedAt: this.dependencies.clock.now(),
+      events: [
+        siteBuildEvent({
+          reason: "retry",
+          requestedAt,
+          requestedBy: actor.id,
+          publishedSnapshotId: null,
+          retryOfBuildId: siteBuildId(buildId),
+        }),
+      ],
+      requestedAt,
       requestedBy: actor,
-      retryOfBuildId: siteBuildId(buildId),
     });
   }
 }

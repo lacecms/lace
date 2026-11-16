@@ -1,4 +1,4 @@
-import { ContentUseCases } from "@lacecms/application";
+import { ContentUseCases, siteBuildEvent } from "@lacecms/application";
 
 import { readAllBuildContentPages } from "../../delivery/build-export.js";
 import type { CollectionModelInput } from "@lacecms/config";
@@ -241,6 +241,13 @@ contract(
     expect(await pendingBuilds(sql)).toEqual(builds);
     await expect(
       repository.markForDeletion({
+        events: [
+          {
+            type: "media.delete.requested" as const,
+            requestedAt: unixMilliseconds(21),
+            payload: { mediaId: mediaId("media-hidden"), requestedBy: editor.id },
+          },
+        ],
         mediaId: mediaId("media-hidden"),
         requestedAt: unixMilliseconds(21),
         requestedBy: editor,
@@ -342,6 +349,14 @@ contract("refuses a projection that does not name the draft's blocks", async (ru
   const state = await lifecycleState(sql);
   await expect(
     repository.publish({
+      events: [
+        siteBuildEvent({
+          reason: "publication",
+          requestedAt: 30,
+          requestedBy: admin.id,
+          publishedSnapshotId: "bad-projection",
+        }),
+      ],
       entryId: created.id,
       expectedRevision: 1,
       publishedAt: unixMilliseconds(30),

@@ -48,6 +48,13 @@ contract("a draft save and media deletion cannot both win", async (runtime, expe
       }),
     ),
     harness.reopen().markForDeletion({
+      events: [
+        {
+          type: "media.delete.requested" as const,
+          requestedAt: unixMilliseconds(2),
+          payload: { mediaId: mediaId("race-media"), requestedBy: editor.id },
+        },
+      ],
       mediaId: mediaId("race-media"),
       requestedAt: unixMilliseconds(2),
       requestedBy: editor,
@@ -394,6 +401,13 @@ contract(
       }),
     );
     const request = (at: number) => ({
+      events: [
+        {
+          type: "media.delete.requested" as const,
+          requestedAt: unixMilliseconds(at),
+          payload: { mediaId: mediaId("media-1"), requestedBy: editor.id },
+        },
+      ],
       mediaId: mediaId("media-1"),
       requestedAt: unixMilliseconds(at),
       requestedBy: editor,

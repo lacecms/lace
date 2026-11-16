@@ -7,7 +7,8 @@ Part of the [Lace architecture](README.md).
 Publication is an application use case reserved to `content:publish`, which
 only administrators hold in the default role policy ([ADR 0025](../adr/0025-better-auth-role-permissions.md)). It takes the
 entry ID, expected draft revision, actor and an optional idempotency key, and
-writes an outbox event that triggers a static rebuild ([ADR 0027](../adr/0027-outbox-triggered-rebuild.md)). Detailed
+supplies a build event request that is committed with the mutation and triggers
+a static rebuild ([ADR 0027](../adr/0027-outbox-triggered-rebuild.md)). Detailed
 behavior is in
 [content-use-cases](../../openspec/specs/content-use-cases/spec.md)
 ("Publication is guarded, idempotent, and build-independent").
@@ -31,7 +32,8 @@ then ([ADR 0002](../adr/0002-d1-batches-and-node-transactions.md)):
 3. replaces the entry's route; a path collision rolls back everything;
 4. points `content_entries.published_snapshot_id` at the new snapshot;
 5. increments `published_state.version`;
-6. creates or coalesces the `site.build.requested` outbox event;
+6. uses the shared `enqueueEvents` compiler to create or coalesce the supplied
+   build event with the version read after that increment;
 7. stores the idempotency result when a key was supplied;
 8. deletes the old published snapshot, whose blocks and references cascade.
 
@@ -43,7 +45,9 @@ models atomic publication explicitly rather than assuming that D1 supports an
 interactive transaction callback; Node may use a SQLite transaction, D1 uses
 guarded batches.
 
-Publication, unpublication and deletion share their ordered statements,
+The use case supplies the actor, operation time and new or removed snapshot;
+persistence owns admission and the guarded atomic write. Publication,
+unpublication and deletion share their ordered statements,
 including public-state and build work, with runtime-specific executors. A
 receipt reports outbox work only after the atomic unit commits; replays,
 guard misses, draft-only mutations and rollbacks report none.
