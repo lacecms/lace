@@ -2,7 +2,7 @@ import { AuthorizationError, notFound, response, validationHook } from "../share
 import {
   authenticationFailure,
   authorizationFailure,
-  security,
+  describePolicy,
   validationFailure,
 } from "../shared/openapi.js";
 import {
@@ -26,9 +26,10 @@ import {
   toIsoTimestamp,
 } from "@lacecms/contracts";
 import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { resolver, validator } from "hono-openapi";
 import * as v from "valibot";
 import type { RouteContext } from "../composition/route-context.js";
+import { v1Routes } from "../routing/v1-routes.js";
 
 function buildTokenDto(
   value:
@@ -46,15 +47,17 @@ function buildTokenDto(
   };
 }
 
+const routes = v1Routes.credentials;
+
 export function registerCredentialRoutes(app: Hono, routeContext: RouteContext): void {
   const { actor, settingsActor } = routeContext.actors;
   const { tokenSecurity } = routeContext.capabilities;
-  app.get(
-    "/api/v1/admin/api-tokens",
-    describeRoute({
+  app.on(
+    routes.listBuild.method,
+    routes.listBuild.path,
+    describePolicy(routes.listBuild, {
       summary: "List build tokens",
       tags: ["admin"],
-      security: security.session,
       responses: {
         200: {
           description: "Build token metadata",
@@ -71,12 +74,12 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
       });
     },
   );
-  app.post(
-    "/api/v1/admin/api-tokens",
-    describeRoute({
+  app.on(
+    routes.issueBuild.method,
+    routes.issueBuild.path,
+    describePolicy(routes.issueBuild, {
       summary: "Create a build token",
       tags: ["admin"],
-      security: security.session,
       responses: {
         201: {
           description: "The created token; the plaintext is returned only here",
@@ -102,12 +105,12 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
       );
     },
   );
-  app.delete(
-    "/api/v1/admin/api-tokens/:tokenId",
-    describeRoute({
+  app.on(
+    routes.revokeBuild.method,
+    routes.revokeBuild.path,
+    describePolicy(routes.revokeBuild, {
       summary: "Revoke a build token",
       tags: ["admin"],
-      security: security.session,
       parameters: [{ name: "tokenId", in: "path", required: true, schema: { type: "string" } }],
       responses: {
         200: {
@@ -132,9 +135,10 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
     },
   );
   /** Import-token administration needs a browser session; Bearer requests never reach it. */
-  app.get(
-    "/api/v1/admin/import-tokens",
-    describeRoute({
+  app.on(
+    routes.listImport.method,
+    routes.listImport.path,
+    describePolicy(routes.listImport, {
       responses: {
         200: {
           content: { "application/json": { schema: resolver(importTokenListSchema) } },
@@ -143,7 +147,6 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
         ...authenticationFailure(),
         ...authorizationFailure(),
       },
-      security: security.session,
       summary: "List import tokens. Requires a session with settings:manage.",
       tags: ["admin"],
     }),
@@ -154,9 +157,10 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
       });
     },
   );
-  app.post(
-    "/api/v1/admin/import-tokens",
-    describeRoute({
+  app.on(
+    routes.issueImport.method,
+    routes.issueImport.path,
+    describePolicy(routes.issueImport, {
       requestBody: {
         content: { "application/json": { schema: resolver(importTokenCreateRequestSchema) } },
       },
@@ -169,7 +173,6 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
       summary:
         "Create an import token for lace import (1–7 days; publishing only for creators with content:publish). Requires a session with settings:manage.",
       tags: ["admin"],
@@ -195,9 +198,10 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
       );
     },
   );
-  app.delete(
-    "/api/v1/admin/import-tokens/:tokenId",
-    describeRoute({
+  app.on(
+    routes.revokeImport.method,
+    routes.revokeImport.path,
+    describePolicy(routes.revokeImport, {
       responses: {
         200: {
           content: { "application/json": { schema: resolver(importTokenSchema) } },
@@ -210,7 +214,6 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
           description: "Token not found",
         },
       },
-      security: security.session,
       summary: "Revoke an import token. Requires a session with settings:manage.",
       tags: ["admin"],
     }),
@@ -224,9 +227,10 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
     },
   );
   /** Describes the presented import token; only an import token reaches this route. */
-  app.get(
-    "/api/v1/admin/import-credential",
-    describeRoute({
+  app.on(
+    routes.describeImport.method,
+    routes.describeImport.path,
+    describePolicy(routes.describeImport, {
       responses: {
         200: {
           content: { "application/json": { schema: resolver(importCredentialSchema) } },
@@ -235,7 +239,6 @@ export function registerCredentialRoutes(app: Hono, routeContext: RouteContext):
         ...authenticationFailure(),
         ...authorizationFailure(),
       },
-      security: security.importOnly,
       summary:
         "Describe the presented import token. Accepts only Authorization: Bearer <import token>.",
       tags: ["admin"],

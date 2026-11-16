@@ -1,4 +1,4 @@
-// Directory dependencies: shared ← runtime, security ← composition ← routes ← app.
+// Directory dependencies: routing ← shared, security. shared ← runtime. routing, runtime, security, shared ← composition ← routes ← app.
 export const packageName = "@lacecms/server";
 
 // Runtime
@@ -9,7 +9,12 @@ export * from "./runtime/feature-flags.js";
 
 // Security
 export { IMPORT_ROUTE_ALLOWLIST, isImportRoute } from "./security/import-routes.js";
-export * from "./security/sensitive-limits.js";
+export {
+  sensitiveRequestLimit,
+  sensitiveRequestSubject,
+  type SensitiveRequestLimit,
+  type SensitiveRequestOperation,
+} from "./security/sensitive-limits.js";
 export { SensitiveRequestRateLimiter } from "./security/request-rate-limiter.js";
 
 // Composition

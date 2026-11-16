@@ -27,6 +27,8 @@ import {
   canContentOperation,
   authorizeContentOperation,
   delegatedContentOperations,
+  mcpContentOperations,
+  mcpToolScope,
 } from "../index.js";
 
 const grant = (
@@ -34,6 +36,27 @@ const grant = (
   permissions: readonly Permission[] = ["content:read", "content:write"],
   operations: readonly string[] = delegatedContentOperations,
 ) => attenuateActor({ id: actorId("user"), role }, { permissions, operations });
+
+test("delegated MCP tools have a closed operation and scope inventory", () => {
+  expect(mcpContentOperations).toEqual({
+    list_content_models: "discoverModels",
+    list_entries: "list",
+    get_entry: "load",
+    create_entry: "create",
+    save_draft: "save",
+    publish_entry: "publish",
+  });
+  expect(Object.keys(mcpContentOperations).map(mcpToolScope)).toEqual([
+    "content:read",
+    "content:read",
+    "content:read",
+    "content:write",
+    "content:write",
+    "content:publish",
+  ]);
+  for (const name of ["delete_entry", "constructor", "__proto__", null])
+    expect(mcpToolScope(name)).toBeUndefined();
+});
 
 test("delegated authority is immutable, role-intersected and can only narrow another ceiling", () => {
   const permissions: Permission[] = ["content:read", "content:write"];

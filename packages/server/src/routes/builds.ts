@@ -3,7 +3,7 @@ import { optionalJsonBody } from "../shared/request.js";
 import {
   authenticationFailure,
   authorizationFailure,
-  security,
+  describePolicy,
   validationFailure,
 } from "../shared/openapi.js";
 import { requireContentReader } from "@lacecms/application";
@@ -19,18 +19,21 @@ import {
   errorEnvelopeSchema,
 } from "@lacecms/contracts";
 import { Hono } from "hono";
-import { describeRoute, resolver } from "hono-openapi";
+import { resolver } from "hono-openapi";
 import type { RouteContext } from "../composition/route-context.js";
+import { v1Routes } from "../routing/v1-routes.js";
+
+const routes = v1Routes.builds;
 
 export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void {
   const { actor, settingsActor } = routeContext.actors;
   const { capabilities } = routeContext;
-  app.get(
-    "/api/v1/admin/build-site",
-    describeRoute({
+  app.on(
+    routes.buildSite.method,
+    routes.buildSite.path,
+    describePolicy(routes.buildSite, {
       summary: "Read current configured build site",
       tags: ["admin"],
-      security: security.session,
       responses: {
         200: {
           description: "Current configuration, not deployment verification",
@@ -46,9 +49,10 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
       return response(buildSiteSelectionSchema, { site: capabilities.buildSite ?? null });
     },
   );
-  app.get(
-    "/api/v1/admin/site-builds",
-    describeRoute({
+  app.on(
+    routes.list.method,
+    routes.list.path,
+    describePolicy(routes.list, {
       responses: {
         200: {
           content: { "application/json": { schema: resolver(siteBuildListSchema) } },
@@ -57,7 +61,6 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
         ...authenticationFailure(),
         ...authorizationFailure(),
       },
-      security: security.session,
       summary: "List site builds",
       tags: ["admin"],
     }),
@@ -69,9 +72,10 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
       return response(siteBuildListSchema, { items: items.map(toSiteBuildRecordDto) });
     },
   );
-  app.get(
-    "/api/v1/admin/site-builds/:buildId",
-    describeRoute({
+  app.on(
+    routes.get.method,
+    routes.get.path,
+    describePolicy(routes.get, {
       responses: {
         200: {
           content: { "application/json": { schema: resolver(siteBuildRecordSchema) } },
@@ -85,7 +89,6 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
         },
         ...validationFailure(),
       },
-      security: security.session,
       summary: "Get a site build",
       tags: ["admin"],
     }),
@@ -100,9 +103,10 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
         : response(siteBuildRecordSchema, toSiteBuildRecordDto(build));
     },
   );
-  app.post(
-    "/api/v1/admin/builds",
-    describeRoute({
+  app.on(
+    routes.request.method,
+    routes.request.path,
+    describePolicy(routes.request, {
       requestBody: { content: { "application/json": { schema: resolver(buildRequestSchema) } } },
       responses: {
         202: {
@@ -113,7 +117,6 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
       summary: "Request a site build",
       tags: ["admin"],
     }),
@@ -129,9 +132,10 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
       );
     },
   );
-  app.post(
-    "/api/v1/admin/builds/:buildId/retry",
-    describeRoute({
+  app.on(
+    routes.retry.method,
+    routes.retry.path,
+    describePolicy(routes.retry, {
       requestBody: { content: { "application/json": { schema: resolver(buildRequestSchema) } } },
       responses: {
         202: {
@@ -142,7 +146,6 @@ export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
       summary: "Retry a failed site build",
       tags: ["admin"],
     }),

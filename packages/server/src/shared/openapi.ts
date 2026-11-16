@@ -1,6 +1,8 @@
 import { errorEnvelopeSchema } from "@lacecms/contracts";
-import { resolver } from "hono-openapi";
-import type { ResolverReturnType } from "hono-openapi";
+import { describeRoute, resolver } from "hono-openapi";
+import type { DescribeRouteOptions, ResolverReturnType } from "hono-openapi";
+import type { RestCredentialMode, RoutePolicy } from "../routing/route-policy.js";
+import { withRoutePolicy } from "../routing/route-matching.js";
 
 interface EnvelopeResponse {
   readonly content: { readonly "application/json": { readonly schema: ResolverReturnType } };
@@ -38,20 +40,28 @@ export function authorizationFailure(alsoMeans?: string): { readonly 403: Envelo
 }
 
 /** Security requirements per credential boundary (ADR 0016, architecture §14). */
-export const security: Readonly<
-  Record<"build" | "import" | "importOnly" | "none" | "session", Record<string, string[]>[]>
-> = Object.freeze({
+const security: Readonly<Record<RestCredentialMode, Record<string, string[]>[]>> = Object.freeze({
   /** The public build export. */
   build: [{ buildToken: [] }],
   /** Routes on `IMPORT_ROUTE_ALLOWLIST`: a session or an import token. */
-  import: [{ session: [] }, { importToken: [] }],
+  "session-or-import": [{ session: [] }, { importToken: [] }],
   /** The allowlisted route that describes the presented import token. */
-  importOnly: [{ importToken: [] }],
+  "import-only": [{ importToken: [] }],
   /** Public reads and token-in-body account flows. */
-  none: [],
+  public: [],
   /** Admin and account routes. */
   session: [{ session: [] }],
 });
+
+export function describePolicy(
+  policy: RoutePolicy<string, RestCredentialMode>,
+  description: Omit<DescribeRouteOptions, "security">,
+) {
+  return withRoutePolicy(
+    policy,
+    describeRoute({ ...description, security: security[policy.auth] }),
+  );
+}
 
 /** The schemes `security` names, declared once in the generated document. */
 export const securitySchemes = {

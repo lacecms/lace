@@ -83,6 +83,11 @@ creation can join a D1 transaction
   The creator's account-security events revoke their import tokens, and
   re-enabling does not restore them.
 
+The route's credential mode drives import eligibility and the REST challenge.
+The import allowlist is derived from those declarations. Build export is
+registered only with a build-token verifier and authenticates before export
+reads and conditional responses.
+
 ### Invitations, resets and self-service
 
 Invitations and password resets use Lace-owned tokens rather than the
@@ -128,6 +133,9 @@ content-operation ceiling
   scope and the current role permission. Unpublishing, deletion, revert,
   duplicate, media and administrative operations are never grantable, even to
   an administrator.
+- The application owns the tool-to-operation mapping. The same operation
+  permission determines the scope for MCP requests, delegated actor authority,
+  and the corresponding REST route metadata.
 - Credentials do not cross boundaries: a cookie, build token or import token
   does not authenticate MCP, and an MCP token does not authenticate admin REST.
 - Grant state and current roles are checked on every request and refresh
@@ -144,6 +152,10 @@ content-operation ceiling
   without dropping tables.
 
 ### Rate limits
+
+The matched route policy selects the operation and whether it counts by actor
+or by trusted client. Namespace defaults cover unmatched requests where an
+existing boundary applies to the whole namespace.
 
 Rate limits use a portable fixed-window SQL projection (`rate_limit_buckets`),
 so behavior does not depend on one process or Worker isolate. The key is an

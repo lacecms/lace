@@ -122,7 +122,6 @@ export function createCapabilities(input: LaceAppInput) {
     adminEntryDto,
     apiDocsEnabled: input.apiDocsEnabled ?? false,
     auth: input.auth,
-    /** Absent security leaves the build export without a credential check (tests). */
     buildTokens: security as Pick<TokenSecurityPort, "verifyBuildToken"> | undefined,
     builds: input.builds,
     buildSite: input.buildSite ?? null,

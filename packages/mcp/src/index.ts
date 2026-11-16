@@ -4,8 +4,9 @@ import * as v from "valibot";
 import {
   canContentOperation,
   authorizeContentOperation,
+  contentOperationPermissions,
+  mcpContentOperations,
   opaqueCursor,
-  type ContentOperation,
   type ContentUseCases,
 } from "@lacecms/application";
 import { contentEntryId, type Actor } from "@lacecms/domain";
@@ -40,40 +41,33 @@ function argumentsFor<S extends v.BaseSchema<unknown, unknown, v.BaseIssue<unkno
 }
 const tools: readonly {
   readonly name: ToolName;
-  readonly operation: ContentOperation;
   readonly description: string;
 }[] = Object.freeze([
   {
     name: "list_content_models",
-    operation: "discoverModels",
     description:
       "Inspect content models and their fields, blocks and query limits. A field named under an owner's `visibility` applies only while its sibling controller holds one of the listed values.",
   },
   {
     name: "list_entries",
-    operation: "list",
     description: "List and filter draft entries for one content model.",
   },
   {
     name: "get_entry",
-    operation: "load",
     description: "Read an entry, its draft revision and published snapshot.",
   },
   {
     name: "create_entry",
-    operation: "create",
     description:
       "Create an unpublished entry from a complete draft. Fill a conditional field only when its controller selects it; values of hidden fields are kept and validated as drafts. Re-read after an uncertain outcome; creation is not idempotent.",
   },
   {
     name: "publish_entry",
-    operation: "publish",
     description:
       "Publish the saved draft at the expected revision. Requires content:publish. Hidden conditional fields are not required and their values are never published. Retry with the same idempotencyKey after an uncertain outcome.",
   },
   {
     name: "save_draft",
-    operation: "save",
     description:
       "Replace the complete draft using the explicit expected revision. Values of hidden conditional fields are kept and validated as drafts. Does not publish or request a build.",
   },
@@ -210,8 +204,9 @@ export function createMcpContentHandler(input: {
         () => {
           const server = new McpServer({ name: "lace-content", version: input.version });
           for (const tool of tools) {
+            const operation = mcpContentOperations[tool.name];
             if (
-              !canContentOperation(actor, tool.operation) &&
+              !canContentOperation(actor, operation) &&
               !(publicationCall && tool.name === "publish_entry")
             )
               continue;
@@ -237,7 +232,7 @@ export function createMcpContentHandler(input: {
                 description: tool.description,
                 inputSchema,
                 annotations: {
-                  readOnlyHint: ["discoverModels", "list", "load"].includes(tool.operation),
+                  readOnlyHint: contentOperationPermissions[operation] === "content:read",
                   destructiveHint: false,
                   openWorldHint: false,
                 },
@@ -246,7 +241,7 @@ export function createMcpContentHandler(input: {
                 const started = Date.now();
                 let outcome: "success" | "error" = "success";
                 try {
-                  authorizeContentOperation(actor, tool.operation);
+                  authorizeContentOperation(actor, operation);
                   const result = await execute(tool.name, raw, actor);
                   return {
                     content: [{ type: "text" as const, text: JSON.stringify(result) }],

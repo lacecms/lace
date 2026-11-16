@@ -14,6 +14,7 @@ import type {
 } from "@lacecms/application";
 import type { BuildSiteIdentityDto } from "@lacecms/contracts";
 import type { ServerConfig } from "../shared/content-config.js";
+import type { SensitiveRequestLimit } from "../routing/route-policy.js";
 
 export type Actor = Parameters<ContentUseCases["create"]>[0]["actor"];
 
@@ -37,6 +38,8 @@ export interface RequestRateLimiter {
     readonly requestId: string;
     readonly clientAddress?: string;
     readonly actor?: Actor;
+    /** The matched transport policy. Null means no sensitive limit applies. */
+    readonly limit?: SensitiveRequestLimit | null;
   }): Promise<boolean | RateLimitDecision>;
 }
 

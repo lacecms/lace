@@ -169,6 +169,7 @@ export async function fixture({
     storage,
   });
   let exportLoads = 0;
+  let exportVersionReads = 0;
   const exportPage = store.exportBuildContentPage.bind(store);
   const readExportPage = exportBuildContentPage?.(exportPage) ?? exportPage;
   const securityPort =
@@ -221,7 +222,10 @@ export async function fixture({
       loadPublic: store.loadPublic.bind(store),
       loadPublicGlobal: store.loadPublicGlobal.bind(store),
       loadPublicMedia: store.loadPublicMedia.bind(store),
-      publishedContentVersion: store.publishedContentVersion.bind(store),
+      publishedContentVersion: async () => {
+        exportVersionReads += 1;
+        return store.publishedContentVersion();
+      },
     },
     rateLimiter: rateLimiter ?? { check: async () => allowed },
     ...(clientAddress === undefined ? {} : { clientAddress }),
@@ -232,6 +236,7 @@ export async function fixture({
     app,
     content,
     exportLoads: () => exportLoads,
+    exportVersionReads: () => exportVersionReads,
     logs,
     media,
     seedProfile,
@@ -247,6 +252,22 @@ export async function json(app: App, path: string, init?: RequestInit) {
     body: response.status === 204 || response.status === 304 ? undefined : await response.json(),
     response,
   };
+}
+
+const buildToken = "build-token";
+
+export const buildTokenSecurity: Pick<SecurityService, "verifyBuildToken"> = {
+  verifyBuildToken: async ({ token }) => token === buildToken,
+};
+
+export function buildExportJson(
+  app: App,
+  path = "/api/v1/public/build-export",
+  init?: RequestInit,
+) {
+  const headers = new Headers(init?.headers);
+  headers.set("authorization", `Bearer ${buildToken}`);
+  return json(app, path, { ...init, headers });
 }
 
 export const profiles: Record<string, { disabled: boolean; email: string; name?: string }> = {

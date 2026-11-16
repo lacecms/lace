@@ -111,6 +111,8 @@ test("packaged entry point keeps its public exports", async () => {
     "invitationEmailTemplate",
     "isEmailAddress",
     "isMediaFocalCoordinate",
+    "mcpContentOperations",
+    "mcpToolScope",
     "normalizeAccountEmail",
     "normalizeDisplayName",
     "normalizeDraftCandidate",

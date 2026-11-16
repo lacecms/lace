@@ -3,7 +3,7 @@ import { mediaIdParams, pagination } from "../shared/request.js";
 import {
   authenticationFailure,
   authorizationFailure,
-  security,
+  describePolicy,
   validationFailure,
 } from "../shared/openapi.js";
 import {
@@ -26,9 +26,10 @@ import {
   toMediaDetailDto,
 } from "@lacecms/contracts";
 import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { resolver, validator } from "hono-openapi";
 import * as v from "valibot";
 import type { RouteContext } from "../composition/route-context.js";
+import { v1Routes } from "../routing/v1-routes.js";
 import {
   conditionalMediaResponse,
   PUBLIC_MEDIA_CACHE_CONTROL,
@@ -36,13 +37,16 @@ import {
 } from "./media-binary.js";
 import { readMediaUpload } from "./media-upload.js";
 
+const routes = v1Routes.media;
+
 export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void {
   const { actor } = routeContext.actors;
   const { capabilities } = routeContext;
   const { media, mediaDto } = capabilities;
-  app.get(
-    "/api/v1/admin/media",
-    describeRoute({
+  app.on(
+    routes.list.method,
+    routes.list.path,
+    describePolicy(routes.list, {
       responses: {
         200: {
           content: { "application/json": { schema: resolver(mediaListSchema) } },
@@ -52,7 +56,6 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.import,
       summary: "List media",
       tags: ["admin"],
     }),
@@ -75,9 +78,10 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
     },
   );
 
-  app.get(
-    "/api/v1/admin/media/tags",
-    describeRoute({
+  app.on(
+    routes.tags.method,
+    routes.tags.path,
+    describePolicy(routes.tags, {
       summary: "List media tags with counts",
       tags: ["admin"],
       responses: {
@@ -89,7 +93,6 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
     }),
     validator("query", mediaTagCatalogQuerySchema, validationHook),
     async (context) => {
@@ -105,9 +108,10 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
     },
   );
 
-  app.post(
-    "/api/v1/admin/media",
-    describeRoute({
+  app.on(
+    routes.upload.method,
+    routes.upload.path,
+    describePolicy(routes.upload, {
       requestBody: {
         required: true,
         content: {
@@ -140,7 +144,6 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.import,
       summary: "Upload media",
       tags: ["admin"],
     }),
@@ -153,9 +156,10 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
     },
   );
 
-  app.delete(
-    "/api/v1/admin/media/:mediaId",
-    describeRoute({
+  app.on(
+    routes.delete.method,
+    routes.delete.path,
+    describePolicy(routes.delete, {
       responses: {
         202: {
           content: { "application/json": { schema: resolver(mediaMetadataSchema) } },
@@ -165,7 +169,6 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
       summary: "Request media deletion",
       description:
         "With `detach=drafts`, first removes the media from the current draft of every entry that uses it; refused with `MEDIA_IN_USE` while a current publication uses it.",
@@ -184,9 +187,10 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
     },
   );
 
-  app.get(
-    "/api/v1/admin/media/:mediaId",
-    describeRoute({
+  app.on(
+    routes.get.method,
+    routes.get.path,
+    describePolicy(routes.get, {
       responses: {
         200: {
           content: { "application/json": { schema: resolver(mediaDetailSchema) } },
@@ -196,7 +200,6 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.import,
       summary: "Get media details",
       tags: ["admin"],
     }),
@@ -217,9 +220,10 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
     },
   );
 
-  app.patch(
-    "/api/v1/admin/media/:mediaId",
-    describeRoute({
+  app.on(
+    routes.update.method,
+    routes.update.path,
+    describePolicy(routes.update, {
       description:
         "Updates alt text, caption, and focal point of active media. Requires media:write and the item's ETag in If-Match. Editing media used by published content queues a site build.",
       parameters: [
@@ -245,7 +249,6 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.import,
       summary: "Update media metadata",
       tags: ["admin"],
     }),
@@ -282,9 +285,10 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
     },
   );
 
-  app.post(
-    "/api/v1/admin/media/:mediaId/retry-deletion",
-    describeRoute({
+  app.on(
+    routes.retryDeletion.method,
+    routes.retryDeletion.path,
+    describePolicy(routes.retryDeletion, {
       responses: {
         202: {
           content: { "application/json": { schema: resolver(mediaMetadataSchema) } },
@@ -294,7 +298,6 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
       summary: "Retry media deletion",
       tags: ["admin"],
     }),
@@ -308,9 +311,10 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
     },
   );
 
-  app.get(
-    "/api/v1/public/media/:mediaId",
-    describeRoute({
+  app.on(
+    routes.binary.method,
+    routes.binary.path,
+    describePolicy(routes.binary, {
       description:
         "Streams media that a current publication uses. The response carries a strong `ETag` " +
         "derived from the media ID, which never changes because stored bytes are immutable, " +
@@ -323,7 +327,6 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
         404: { description: "Media is not published or does not exist" },
         ...validationFailure(),
       },
-      security: security.none,
       summary: "Read published media",
       tags: ["public"],
     }),
@@ -340,9 +343,10 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
     },
   );
 
-  app.get(
-    "/api/v1/admin/media/:mediaId/preview",
-    describeRoute({
+  app.on(
+    routes.preview.method,
+    routes.preview.path,
+    describePolicy(routes.preview, {
       description:
         "Streams active media to an authenticated reader with the same immutable `ETag` as " +
         "the public route and `Cache-Control: private, no-cache`. A matching `If-None-Match` " +
@@ -355,7 +359,6 @@ export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
       summary: "Preview media",
       tags: ["admin"],
     }),

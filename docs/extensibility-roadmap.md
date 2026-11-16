@@ -92,7 +92,7 @@ from committed outbox work, and `401 AUTHENTICATION_REQUIRED`.
 | EX1 | Test foundation (from RF9C–RF9F) | L | EX1A → EX1B → EX1D; EX1C after EX2D | proposed |
 | EX2 | Shared write plans | L | EX2A → EX2B → EX2C → EX2D | done |
 | EX3 | Typed outbox events | M | EX3A → EX3B | in progress |
-| EX4 | Route policies and security use cases | L | EX4A → EX4B → EX4C → EX4D | planned |
+| EX4 | Route policies and security use cases | L | EX4A → EX4B → EX4C → EX4D | in progress |
 | EX5 | Model kind descriptor | S | EX5A | planned |
 | EX6 | Trusted client identity and production Compose ingress | M | EX6A and EX6B independent | done |
 | EX7 | pnpm 12.21.0 toolchain | S | EX7A | planned |
@@ -395,11 +395,13 @@ Complete exact-artifact acceptance for the new build set before recording
 
 ## 6. Progress log
 
-One row per change; detailed decisions, verification and synchronized deltas
-are preserved in the linked archives. Dates refer to the final recorded event.
+Each row links to the change and its decisions and verification. Archived
+changes also preserve their synchronized deltas. Dates refer to the final
+recorded event.
 
 | Date | Session | Change | Status |
 | --- | --- | --- | --- |
+| 2026-11-16 | EX4A | [Route metadata](../openspec/changes/archive/2026-11-16-ex04a-route-metadata/) | done. The v1 mount uses declared body, credential and rate-limit policies and shares delegated scopes with MCP. Build export registers only with a verifier. Node/SQLite, Worker/local D1, the security boundary and MCP compatibility suites passed, and the checked-in OpenAPI matches the full composition. |
 | 2026-11-16 | EX3B | [Use cases emit events](../openspec/changes/archive/2026-11-16-ex03b-use-cases-emit-events/) | done. Nine producer paths supply explicit event requests: publish, unpublish, published deletion, media metadata, media deletion and retry, manual build and retry, and final configuration sync. The combined public-state/enqueue helper was removed; every production event insert remains in the shared enqueue compiler. |
 | 2026-11-16 | EX3A | [Event registry and one enqueue path](../openspec/changes/archive/2026-11-16-ex03a-event-registry-and-enqueue/) | done. Two version 1 event descriptors in one registry. Hardcoded event identities in live SQL and the Drizzle predicate fell from eight to zero, excluding historical migrations. Two insert owners became one shared enqueue compiler. Verified both SQLite modes, local D1, Worker wake-ups, and mixed dispatch with invalid work within the D1 budgets. |
 | 2026-11-16 | EX1C | [Type db and platform tests](../openspec/changes/archive/2026-11-16-ex01c-type-db-and-platform-tests/) | done: workspace test typecheck exceptions fell from 48 to 0; removed the empty baseline. Verified DB, Node and Cloudflare suites, including both SQLite repository modes and local D1 contracts. |

@@ -1,6 +1,10 @@
 import type { DBAdapter } from "better-auth";
-import type { OAuthIssuancePersistence } from "@lacecms/application";
-import { actorId, attenuateActor, type Actor, type Permission } from "@lacecms/domain";
+import {
+  contentOperationPermissions,
+  delegatedContentOperations,
+  type OAuthIssuancePersistence,
+} from "@lacecms/application";
+import { actorId, attenuateActor, type Actor } from "@lacecms/domain";
 import { mcpOAuthUrls } from "./oauth.js";
 import { oauthCredentialHash } from "./guard.js";
 
@@ -103,16 +107,12 @@ export function createMcpActorResolver(input: {
       const scopes = token.scopes.filter((scope) => authority.grant.scopes.includes(scope));
       if (!scopes.includes("content:read") || !scopes.includes(requiredScope))
         return failure(403, "insufficient_scope", requiredScope);
-      const permissions: Permission[] = ["content:read"];
-      const operations = ["discoverModels", "list", "load"];
-      if (scopes.includes("content:write")) {
-        permissions.push("content:write");
-        operations.push("create", "save");
-      }
-      if (scopes.includes("content:publish")) {
-        permissions.push("content:publish");
-        operations.push("publish");
-      }
+      const operations = delegatedContentOperations.filter((operation) =>
+        scopes.includes(contentOperationPermissions[operation]),
+      );
+      const permissions = [
+        ...new Set(operations.map((operation) => contentOperationPermissions[operation])),
+      ];
       return {
         actor: attenuateActor(
           { id: actorId(authority.grant.userId), role },

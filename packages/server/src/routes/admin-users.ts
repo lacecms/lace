@@ -3,7 +3,7 @@ import { optionalJsonBody } from "../shared/request.js";
 import {
   authenticationFailure,
   authorizationFailure,
-  security,
+  describePolicy,
   validationFailure,
 } from "../shared/openapi.js";
 import { invitationDto, invitationIssueDto, linkIssueDto } from "../shared/account-dtos.js";
@@ -23,19 +23,22 @@ import {
   sessionRevokeRequestSchema,
 } from "@lacecms/contracts";
 import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { resolver, validator } from "hono-openapi";
 import * as v from "valibot";
 import type { RouteContext } from "../composition/route-context.js";
+import { v1Routes } from "../routing/v1-routes.js";
+
+const routes = v1Routes.adminUsers;
 
 export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): void {
   const { actor, usersActor } = routeContext.actors;
   const { accounts, accountSecurity } = routeContext.capabilities;
-  app.get(
-    "/api/v1/admin/users",
-    describeRoute({
+  app.on(
+    routes.users.method,
+    routes.users.path,
+    describePolicy(routes.users, {
       summary: "List managed users",
       tags: ["admin"],
-      security: security.session,
       responses: {
         200: {
           description: "Successful response",
@@ -50,9 +53,10 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
       return response(managedUserListSchema, { items: await accountSecurity().listUsers() });
     },
   );
-  app.get(
-    "/api/v1/admin/invitations",
-    describeRoute({
+  app.on(
+    routes.invitations.method,
+    routes.invitations.path,
+    describePolicy(routes.invitations, {
       summary: "List pending and expired invitations",
       tags: ["admin"],
       responses: {
@@ -63,16 +67,16 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
         ...authenticationFailure(),
         ...authorizationFailure(),
       },
-      security: security.session,
     }),
     async (context) => {
       const items = await accounts().listInvitations(await actor(context));
       return response(invitationListSchema, { items: items.map(invitationDto) }, 200, noStore);
     },
   );
-  app.post(
-    "/api/v1/admin/invitations",
-    describeRoute({
+  app.on(
+    routes.invite.method,
+    routes.invite.path,
+    describePolicy(routes.invite, {
       summary: "Invite an email address with a role",
       tags: ["admin"],
       responses: {
@@ -88,7 +92,6 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
     }),
     validator("json", invitationCreateRequestSchema, validationHook),
     async (context) => {
@@ -102,9 +105,10 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
       );
     },
   );
-  app.post(
-    "/api/v1/admin/invitations/:invitationId/resend",
-    describeRoute({
+  app.on(
+    routes.resendInvitation.method,
+    routes.resendInvitation.path,
+    describePolicy(routes.resendInvitation, {
       summary: "Resend an invitation with a new link",
       tags: ["admin"],
       requestBody: {
@@ -119,7 +123,6 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
     }),
     async (context) => {
       const resolvedActor = await actor(context);
@@ -133,12 +136,12 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
       );
     },
   );
-  app.delete(
-    "/api/v1/admin/invitations/:invitationId",
-    describeRoute({
+  app.on(
+    routes.revokeInvitation.method,
+    routes.revokeInvitation.path,
+    describePolicy(routes.revokeInvitation, {
       summary: "Revoke an invitation",
       tags: ["admin"],
-      security: security.session,
       responses: {
         204: { description: "Invitation revoked" },
         ...authenticationFailure(),
@@ -153,9 +156,10 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
       return new Response(null, { status: 204 });
     },
   );
-  app.post(
-    "/api/v1/admin/users/:userId/password-reset",
-    describeRoute({
+  app.on(
+    routes.resetUserPassword.method,
+    routes.resetUserPassword.path,
+    describePolicy(routes.resetUserPassword, {
       summary: "Send a password reset to a user",
       tags: ["admin"],
       requestBody: {
@@ -170,7 +174,6 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
     }),
     async (context) => {
       const resolvedActor = await actor(context);
@@ -184,9 +187,10 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
       );
     },
   );
-  app.post(
-    "/api/v1/admin/users/:userId/sessions/revoke",
-    describeRoute({
+  app.on(
+    routes.revokeUserSessions.method,
+    routes.revokeUserSessions.path,
+    describePolicy(routes.revokeUserSessions, {
       summary: "Sign a user out everywhere",
       tags: ["admin"],
       requestBody: {
@@ -201,7 +205,6 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
     }),
     async (context) => {
       const resolvedActor = await actor(context);
@@ -213,12 +216,12 @@ export function registerAdminUserRoutes(app: Hono, routeContext: RouteContext): 
       );
     },
   );
-  app.patch(
-    "/api/v1/admin/users/:userId",
-    describeRoute({
+  app.on(
+    routes.updateUser.method,
+    routes.updateUser.path,
+    describePolicy(routes.updateUser, {
       summary: "Change a user's role or disabled state",
       tags: ["admin"],
-      security: security.session,
       responses: {
         200: {
           content: { "application/json": { schema: resolver(managedUserSchema) } },

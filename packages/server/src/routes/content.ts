@@ -12,7 +12,7 @@ import { contentModel } from "../shared/content-config.js";
 import {
   authenticationFailure,
   authorizationFailure,
-  security,
+  describePolicy,
   validationFailure,
 } from "../shared/openapi.js";
 import { opaqueCursor } from "@lacecms/application";
@@ -46,17 +46,21 @@ import {
   toPublishContentEntryResultDto,
 } from "@lacecms/contracts";
 import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { resolver, validator } from "hono-openapi";
 import * as v from "valibot";
 import type { RouteContext } from "../composition/route-context.js";
+import { v1Routes } from "../routing/v1-routes.js";
+
+const routes = v1Routes.content;
 
 export function registerContentRoutes(app: Hono, routeContext: RouteContext): void {
   const { actor } = routeContext.actors;
   const { capabilities } = routeContext;
   const { adminEntryDto, seoSection } = capabilities;
-  app.get(
-    "/api/v1/admin/content-models",
-    describeRoute({
+  app.on(
+    routes.models.method,
+    routes.models.path,
+    describePolicy(routes.models, {
       responses: {
         200: {
           content: { "application/json": { schema: resolver(contentModelListSchema) } },
@@ -65,7 +69,6 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
         ...authenticationFailure(),
         ...authorizationFailure(),
       },
-      security: security.import,
       summary: "List content models",
       tags: ["admin"],
     }),
@@ -79,9 +82,10 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
     },
   );
 
-  app.get(
-    "/api/v1/admin/models/:modelKey/entries",
-    describeRoute({
+  app.on(
+    routes.listEntries.method,
+    routes.listEntries.path,
+    describePolicy(routes.listEntries, {
       responses: {
         200: {
           content: { "application/json": { schema: resolver(contentEntryListSchema) } },
@@ -91,7 +95,6 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.import,
       summary: "List content entries",
       tags: ["admin"],
     }),
@@ -140,9 +143,10 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
     },
   );
 
-  app.post(
-    "/api/v1/admin/models/:modelKey/entries",
-    describeRoute({
+  app.on(
+    routes.createEntry.method,
+    routes.createEntry.path,
+    describePolicy(routes.createEntry, {
       requestBody: {
         content: { "application/json": { schema: resolver(createContentEntryRequestSchema) } },
       },
@@ -155,7 +159,6 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.import,
       summary: "Create content entry",
       tags: ["admin"],
     }),
@@ -182,9 +185,10 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
     },
   );
 
-  app.get(
-    "/api/v1/admin/link-targets",
-    describeRoute({
+  app.on(
+    routes.linkTargets.method,
+    routes.linkTargets.path,
+    describePolicy(routes.linkTargets, {
       summary: "Search internal link destinations",
       description:
         "Requires content:read. Title-prefix search trims input and compares ASCII case-insensitively; non-ASCII characters and SQL wildcards are literal. Globals are excluded.",
@@ -200,7 +204,6 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
     }),
     validator("query", linkTargetQuerySchema, validationHook),
     async (context) => {
@@ -215,9 +218,10 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
       return response(linkTargetPageSchema, result);
     },
   );
-  app.post(
-    "/api/v1/admin/link-targets/resolve",
-    describeRoute({
+  app.on(
+    routes.resolveLinkTargets.method,
+    routes.resolveLinkTargets.path,
+    describePolicy(routes.resolveLinkTargets, {
       summary: "Resolve up to 200 distinct destination IDs",
       tags: ["admin"],
       requestBody: {
@@ -234,7 +238,6 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
     }),
     validator("json", resolveLinkTargetsRequestSchema, validationHook),
     async (context) => {
@@ -247,9 +250,10 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
       );
     },
   );
-  app.get(
-    "/api/v1/admin/entries/:entryId/link-impact",
-    describeRoute({
+  app.on(
+    routes.linkImpact.method,
+    routes.linkImpact.path,
+    describePolicy(routes.linkImpact, {
       summary: "Review incoming links before delete or unpublish",
       description:
         "Requires content:read. Source pages contain at most ten initial locations each. Continue an individual source with sourceEntryId, snapshotId and locationsAfter. A 409 CONTENT_LINK_IMPACT_CHANGED requires restarting the review; receipts confer no permissions.",
@@ -265,7 +269,6 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
     }),
     validator("param", v.strictObject({ entryId: linkTargetIdSchema }), validationHook),
     validator("query", linkImpactQuerySchema, validationHook),
@@ -286,9 +289,10 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
     },
   );
 
-  app.get(
-    "/api/v1/admin/entries/:entryId",
-    describeRoute({
+  app.on(
+    routes.getEntry.method,
+    routes.getEntry.path,
+    describePolicy(routes.getEntry, {
       responses: {
         200: {
           content: { "application/json": { schema: resolver(adminContentEntrySchema) } },
@@ -298,7 +302,6 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.import,
       summary: "Load content entry",
       tags: ["admin"],
     }),
@@ -315,9 +318,10 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
     },
   );
 
-  app.put(
-    "/api/v1/admin/entries/:entryId/draft",
-    describeRoute({
+  app.on(
+    routes.saveDraft.method,
+    routes.saveDraft.path,
+    describePolicy(routes.saveDraft, {
       requestBody: {
         content: { "application/json": { schema: resolver(saveDraftRequestSchema) } },
       },
@@ -330,7 +334,6 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.import,
       summary: "Save complete draft",
       tags: ["admin"],
     }),
@@ -353,9 +356,10 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
     },
   );
 
-  app.post(
-    "/api/v1/admin/entries/:entryId/publish",
-    describeRoute({
+  app.on(
+    routes.publishEntry.method,
+    routes.publishEntry.path,
+    describePolicy(routes.publishEntry, {
       requestBody: {
         content: { "application/json": { schema: resolver(publishContentEntryRequestSchema) } },
       },
@@ -368,7 +372,6 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.import,
       summary: "Publish content entry",
       tags: ["admin"],
     }),
@@ -398,9 +401,10 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
     },
   );
 
-  app.post(
-    "/api/v1/admin/entries/:entryId/unpublish",
-    describeRoute({
+  app.on(
+    routes.unpublishEntry.method,
+    routes.unpublishEntry.path,
+    describePolicy(routes.unpublishEntry, {
       description:
         "Removes the entry's publication and public route, keeps the draft, and queues a site build. Requires content:publish.",
       requestBody: {
@@ -417,7 +421,6 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
       summary: "Unpublish content entry",
       tags: ["admin"],
     }),
@@ -450,9 +453,10 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
     },
   );
 
-  app.post(
-    "/api/v1/admin/entries/:entryId/revert",
-    describeRoute({
+  app.on(
+    routes.revertDraft.method,
+    routes.revertDraft.path,
+    describePolicy(routes.revertDraft, {
       description:
         "Replaces the draft with the current publication. Requires content:write and the expected draft revision.",
       requestBody: {
@@ -467,7 +471,6 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
       summary: "Revert draft to published",
       tags: ["admin"],
     }),
@@ -484,9 +487,10 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
     },
   );
 
-  app.post(
-    "/api/v1/admin/entries/:entryId/duplicate",
-    describeRoute({
+  app.on(
+    routes.duplicateEntry.method,
+    routes.duplicateEntry.path,
+    describePolicy(routes.duplicateEntry, {
       description:
         "Creates an unpublished copy of a collection entry's draft with a cleared slug. Requires content:write.",
       requestBody: {
@@ -501,7 +505,6 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
       summary: "Duplicate content entry",
       tags: ["admin"],
     }),
@@ -522,9 +525,10 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
     },
   );
 
-  app.delete(
-    "/api/v1/admin/entries/:entryId",
-    describeRoute({
+  app.on(
+    routes.deleteEntry.method,
+    routes.deleteEntry.path,
+    describePolicy(routes.deleteEntry, {
       summary: "Delete content entry",
       tags: ["admin"],
       description:
@@ -539,7 +543,6 @@ export function registerContentRoutes(app: Hono, routeContext: RouteContext): vo
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
     }),
     validator("param", entryIdParams, validationHook),
     async (context) => {

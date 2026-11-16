@@ -120,6 +120,45 @@ test("renders stable body-limit and rate-limit envelopes", async () => {
   });
 });
 
+test("passes selected route and unmatched namespace limits to the limiter", async () => {
+  const checks: unknown[] = [];
+  const { app } = await fixture({
+    rateLimiter: {
+      async check({ actor, limit, request }) {
+        checks.push({ actor: actor?.id, limit, path: new URL(request.url).pathname });
+        return true;
+      },
+    },
+  });
+  for (const [method, path] of [
+    ["POST", "/api/v1/admin/settings/email-test"],
+    ["HEAD", "/api/v1/admin/api-tokens"],
+    ["PUT", "/api/v1/setup/admin"],
+    ["POST", "/api/v1/admin/api-tokens/missing/operation"],
+    ["GET", "/api/v1/public/collections/posts"],
+  ] as const)
+    await app.request(path, { method });
+  expect(checks).toEqual([
+    {
+      actor: "admin",
+      limit: { operation: "email", scope: "actor" },
+      path: "/api/v1/admin/settings/email-test",
+    },
+    {
+      actor: "admin",
+      limit: { operation: "token", scope: "actor" },
+      path: "/api/v1/admin/api-tokens",
+    },
+    { limit: { operation: "setup", scope: "client" }, path: "/api/v1/setup/admin" },
+    {
+      actor: "admin",
+      limit: { operation: "token", scope: "actor" },
+      path: "/api/v1/admin/api-tokens/missing/operation",
+    },
+    { limit: null, path: "/api/v1/public/collections/posts" },
+  ]);
+});
+
 test("optional API reference uses live same-origin contracts and preserves API boundaries", async () => {
   const disabled = await fixture();
   const explicit = await fixture({ apiDocsEnabled: false });

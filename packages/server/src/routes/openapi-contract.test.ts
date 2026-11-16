@@ -5,7 +5,7 @@ import { uniqueSymbol } from "hono-openapi";
 import { expect, test } from "vitest";
 import { isImportRoute } from "../security/import-routes.js";
 import { validationFailure } from "../shared/openapi.js";
-import { fixture, json } from "../test-support/app-harness.js";
+import { buildTokenSecurity, fixture, json } from "../test-support/app-harness.js";
 
 interface Operation {
   readonly parameters?: readonly {
@@ -62,6 +62,7 @@ async function generated() {
     throw new Error("OpenAPI generation must not call connection storage");
   };
   const { app } = await fixture({
+    security: buildTokenSecurity,
     oauthConnections: new OAuthConnectionUseCases({
       clock: { now: () => unixMilliseconds(0) },
       connections: { listConnections: unused, revokeConnection: unused, invalidateUser: unused },

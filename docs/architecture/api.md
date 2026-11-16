@@ -13,13 +13,19 @@ parameters and response schemas live in the generated OpenAPI document
 section keeps resource ownership, authorization boundaries, contract rules and
 the limits that shape design.
 
+Node and Cloudflare mount the same v1 sub-application once at `/api/v1`.
+Route declarations bind the HTTP method and path to credential mode, body
+handling and rate-limit policy. Authentication challenges and OpenAPI security
+use the same credential mode. Live OpenAPI describes the routes mounted in the
+current composition.
+
 ### Authorization boundaries
 
 | Path | Caller | Rule |
 | --- | --- | --- |
 | `/api/auth/*` | browser | Better Auth sign-in and session. |
 | `/api/v1/public/*` | anonymous | Published snapshots only; cacheable. |
-| `/api/v1/public/build-export` | build token | Accepted only by build-oriented endpoints. |
+| `/api/v1/public/build-export` | build token | A build-token verifier is required for registration. |
 | `/api/v1/admin/*` | session actor | Permissions are checked by the use cases. |
 | `/api/v1/admin/*` | import token | Only a fixed route allowlist accepts it. |
 | `/api/v1/account/*` | session actor | Each actor manages their own account. |
@@ -62,6 +68,12 @@ responses return published entries").
   build-export ETag changes with them.
 
 ### Build export
+
+The application registers build export only when its composition supplies a
+build-token verifier. Without one, the path returns the standard API `404`
+and live OpenAPI omits the operation. A registered export verifies the token
+before reading a page or the published-state version used for conditional
+responses.
 
 `build-export` returns all routed published entries, every published global,
 the export SEO section and referenced media in one build-efficient sequence, so

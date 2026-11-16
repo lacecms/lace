@@ -40,6 +40,9 @@ test("import tokens reach allowlisted routes as their creator without a session"
   const hash = "0".repeat(63) + "1";
   const { call, sessions, limited, store } = await importFixture();
   expect((await call("GET", "/api/v1/admin/content-models")).status).toBe(200);
+  const head = await call("HEAD", "/api/v1/admin/content-models");
+  expect(head.status).toBe(200);
+  expect(head.body).toBeNull();
   const created = await call("POST", "/api/v1/admin/models/posts/entries", {
     blocks: [],
     fields: {},
@@ -101,6 +104,9 @@ test("import tokens are denied everywhere else and never fall back to a session"
     ["GET", "/api/v1/admin/builds"],
     ["GET", "/api/v1/admin/session"],
     ["GET", "/api/v1/admin/users"],
+    ["GET", "/api/v1/admin/unknown"],
+    ["PATCH", "/api/v1/admin/media/tags"],
+    ["POST", "/api/v1/admin/content-models"],
     ["GET", "/api/v1/admin/invitations"],
     ["GET", "/api/v1/admin/settings/status"],
     ["POST", "/api/v1/admin/api-tokens"],

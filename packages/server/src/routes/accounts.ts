@@ -10,7 +10,7 @@ import { optionalJsonBody } from "../shared/request.js";
 import {
   authenticationFailure,
   authorizationFailure,
-  security,
+  describePolicy,
   validationFailure,
 } from "../shared/openapi.js";
 import {
@@ -36,17 +36,21 @@ import {
 } from "@lacecms/contracts";
 import { toJsonSchema } from "@valibot/to-json-schema";
 import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { resolver, validator } from "hono-openapi";
 import * as v from "valibot";
 import type { RouteContext } from "../composition/route-context.js";
+import { v1Routes } from "../routing/v1-routes.js";
+
+const routes = v1Routes.accounts;
 
 export function registerAccountRoutes(app: Hono, routeContext: RouteContext): void {
   const { actor, currentSessionId } = routeContext.actors;
   const { capabilities } = routeContext;
   const { accounts, deferTask, sessionSummary } = capabilities;
-  app.post(
-    "/api/v1/invitations/inspect",
-    describeRoute({
+  app.on(
+    routes.inspectInvitation.method,
+    routes.inspectInvitation.path,
+    describePolicy(routes.inspectInvitation, {
       summary: "Inspect an invitation token",
       tags: ["account"],
       responses: {
@@ -60,7 +64,6 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
         },
         ...validationFailure(),
       },
-      security: security.none,
     }),
     validator("json", invitationInspectRequestSchema, validationHook),
     async (context) => {
@@ -76,9 +79,10 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
       );
     },
   );
-  app.post(
-    "/api/v1/invitations/accept",
-    describeRoute({
+  app.on(
+    routes.acceptInvitation.method,
+    routes.acceptInvitation.path,
+    describePolicy(routes.acceptInvitation, {
       summary: "Accept an invitation by choosing a password",
       tags: ["account"],
       responses: {
@@ -96,7 +100,6 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
         },
         ...validationFailure(),
       },
-      security: security.none,
     }),
     validator("json", invitationAcceptRequestSchema, validationHook),
     async (context) => {
@@ -113,16 +116,16 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
       );
     },
   );
-  app.post(
-    "/api/v1/password-reset/request",
-    describeRoute({
+  app.on(
+    routes.requestReset.method,
+    routes.requestReset.path,
+    describePolicy(routes.requestReset, {
       summary: "Request a password reset link",
       tags: ["account"],
       responses: {
         202: { description: "Accepted; identical whether or not the address has an account" },
         ...validationFailure(),
       },
-      security: security.none,
     }),
     validator("json", passwordResetRequestSchema, validationHook),
     async (context) => {
@@ -131,9 +134,10 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
       return new Response(null, { headers: noStore, status: 202 });
     },
   );
-  app.post(
-    "/api/v1/password-reset/confirm",
-    describeRoute({
+  app.on(
+    routes.confirmReset.method,
+    routes.confirmReset.path,
+    describePolicy(routes.confirmReset, {
       summary: "Choose a new password with a reset token",
       tags: ["account"],
       responses: {
@@ -144,7 +148,6 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
         },
         ...validationFailure(),
       },
-      security: security.none,
     }),
     validator("json", passwordResetConfirmRequestSchema, validationHook),
     async (context) => {
@@ -156,9 +159,10 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
     },
   );
 
-  app.patch(
-    "/api/v1/account",
-    describeRoute({
+  app.on(
+    routes.profile.method,
+    routes.profile.path,
+    describePolicy(routes.profile, {
       summary: "Change the signed-in user's display name",
       tags: ["account"],
       responses: {
@@ -170,7 +174,6 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
     }),
     validator("json", accountProfileUpdateRequestSchema, validationHook),
     async (context) => {
@@ -182,9 +185,10 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
       return sessionSummary(resolvedActor);
     },
   );
-  app.post(
-    "/api/v1/account/password",
-    describeRoute({
+  app.on(
+    routes.password.method,
+    routes.password.path,
+    describePolicy(routes.password, {
       summary: "Change the signed-in user's password",
       tags: ["account"],
       responses: {
@@ -200,7 +204,6 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
     }),
     validator("json", accountPasswordChangeRequestSchema, validationHook),
     async (context) => {
@@ -219,12 +222,12 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
       );
     },
   );
-  app.get(
-    "/api/v1/account/capabilities",
-    describeRoute({
+  app.on(
+    routes.capabilities.method,
+    routes.capabilities.path,
+    describePolicy(routes.capabilities, {
       summary: "Read account capabilities",
       tags: ["account"],
-      security: security.session,
       responses: {
         200: {
           description: "Successful response",
@@ -249,12 +252,12 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
   );
   if (capabilities.mcpEnabled && capabilities.oauthConnections) {
     const connections = capabilities.oauthConnections;
-    app.get(
-      "/api/v1/account/mcp-connections",
-      describeRoute({
+    app.on(
+      routes.connections.method,
+      routes.connections.path,
+      describePolicy(routes.connections, {
         summary: "List the signed-in user's MCP connections",
         tags: ["account"],
-        security: security.session,
         parameters: [
           {
             in: "query",
@@ -310,12 +313,12 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
         );
       },
     );
-    app.post(
-      "/api/v1/account/mcp-connections/:connectionId/revoke",
-      describeRoute({
+    app.on(
+      routes.revokeConnection.method,
+      routes.revokeConnection.path,
+      describePolicy(routes.revokeConnection, {
         summary: "Revoke an owned MCP connection",
         tags: ["account"],
-        security: security.session,
         parameters: [
           {
             in: "path",
@@ -359,9 +362,10 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
     );
   }
 
-  app.get(
-    "/api/v1/account/sessions",
-    describeRoute({
+  app.on(
+    routes.sessions.method,
+    routes.sessions.path,
+    describePolicy(routes.sessions, {
       summary: "List the signed-in user's sessions",
       tags: ["account"],
       responses: {
@@ -372,7 +376,6 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
         ...authenticationFailure(),
         ...authorizationFailure(),
       },
-      security: security.session,
     }),
     async (context) => {
       const resolvedActor = await actor(context);
@@ -394,9 +397,10 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
       );
     },
   );
-  app.delete(
-    "/api/v1/account/sessions/:sessionId",
-    describeRoute({
+  app.on(
+    routes.revokeSession.method,
+    routes.revokeSession.path,
+    describePolicy(routes.revokeSession, {
       summary: "End another session of the signed-in user",
       tags: ["account"],
       responses: {
@@ -413,7 +417,6 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
     }),
     async (context) => {
       const resolvedActor = await actor(context);
@@ -422,9 +425,10 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
       return new Response(null, { status: 204 });
     },
   );
-  app.post(
-    "/api/v1/account/sessions/revoke-others",
-    describeRoute({
+  app.on(
+    routes.revokeOtherSessions.method,
+    routes.revokeOtherSessions.path,
+    describePolicy(routes.revokeOtherSessions, {
       summary: "End every other session of the signed-in user",
       tags: ["account"],
       requestBody: {
@@ -439,7 +443,6 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
     }),
     async (context) => {
       const resolvedActor = await actor(context);

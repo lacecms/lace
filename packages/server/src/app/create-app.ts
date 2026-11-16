@@ -1,5 +1,5 @@
 import { AuthenticationRequiredError } from "@lacecms/contracts";
-import { registerDocsRoutes } from "../routes/docs.js";
+import { registerDocsRoutes, registerOpenApiRoute } from "../routes/docs.js";
 import { registerPublicRoutes } from "../routes/public.js";
 import { registerContentRoutes } from "../routes/content.js";
 import { registerMediaRoutes } from "../routes/media.js";
@@ -14,25 +14,33 @@ import { createActorContext } from "../composition/actor-context.js";
 import { createCapabilities } from "../composition/capabilities.js";
 import type { RouteContext } from "../composition/route-context.js";
 import type { Actor, LaceAppInput } from "../composition/input.js";
-import { sensitiveRequestLimit } from "../security/sensitive-limits.js";
+import { routeSensitiveLimit } from "../security/sensitive-limits.js";
 import {
   isMcpSurfacePath,
   isProtocolErrorPath,
   protocolErrorResponse,
 } from "../shared/protocol.js";
 import { AuthorizationError, errorResponse, noStore, notFound } from "../shared/http.js";
-import { isBearerManagementRequest, isImportRoute } from "../security/import-routes.js";
-import { RateLimitExceededError } from "@lacecms/application";
+import { isBearerManagementRequest, isReservedImportPath } from "../security/import-routes.js";
+import { mcpToolScope, RateLimitExceededError } from "@lacecms/application";
 import type { ImportTokenMetadata } from "@lacecms/application";
 import { classifyError, transportError } from "@lacecms/contracts";
 import { bodyLimit } from "hono/body-limit";
 import { Hono } from "hono";
+import { API_V1 } from "../routing/v1-routes.js";
+import { matchedRoutePolicy } from "../routing/route-matching.js";
+import {
+  acceptsImport,
+  authenticationChallenge,
+  type RoutePolicy,
+} from "../routing/route-policy.js";
 
 declare module "hono" {
   interface ContextVariableMap {
     "lace.actor": Actor | undefined;
     "lace.clientAddress": string;
     "lace.requestId": string;
+    "lace.routePolicy": RoutePolicy | undefined;
     "lace.sessionId": string | null | undefined;
     "lace.mcpCompletion": { readonly tool: string; readonly outcome: "success" | "error" };
     /** Set only when an import token authenticated the request (ADR 0016). */
@@ -60,6 +68,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
 
   app.use(async (context, next) => {
     context.set("lace.clientAddress", input.clientAddress?.(context.req.raw) ?? "0.0.0.0");
+    context.set("lace.routePolicy", matchedRoutePolicy(context));
     const requestId = input.requestIds.next();
     context.set("lace.requestId", requestId);
     const startedAt = performance.now();
@@ -111,7 +120,7 @@ export function createLaceApp(input: LaceAppInput): Hono {
     const request = context.req.raw;
     const hasBodyHeaders =
       request.headers.has("content-length") || request.headers.has("transfer-encoding");
-    if (context.req.path === "/api/v1/admin/media" && context.req.method === "POST") return next();
+    if (context.get("lace.routePolicy")?.bodyLimit === "media-upload") return next();
     if (request.headers.get("content-length") === "0" && !request.headers.has("transfer-encoding"))
       return next();
     if (!hasBodyHeaders) {
@@ -137,19 +146,24 @@ export function createLaceApp(input: LaceAppInput): Hono {
     const request = context.req.raw;
     if (!isBearerManagementRequest(request, context.req.path)) return next();
     // A Bearer credential is not accepted on this route or without an import resolver.
-    if (input.importActors === undefined || !isImportRoute(request.method, context.req.path))
+    const auth = context.get("lace.routePolicy")?.auth;
+    if (
+      input.importActors === undefined ||
+      !acceptsImport(auth) ||
+      isReservedImportPath(context.req.path)
+    )
       throw new AuthorizationError();
     const resolved = await input.importActors.resolve(request);
     // A foreign origin is refused independently of the credential.
     if (resolved === "request-denied") throw new AuthorizationError();
-    if (resolved === null) throw new AuthenticationRequiredError("session-or-bearer");
+    if (resolved === null) throw new AuthenticationRequiredError(authenticationChallenge(auth));
     context.set("lace.actor", resolved.actor);
     context.set("lace.importToken", resolved.token);
     context.set("lace.sessionId", null);
     return next();
   });
   app.use(async (context, next) => {
-    if (context.req.path === "/mcp") {
+    if (context.get("lace.routePolicy")?.auth === "mcp") {
       if (!input.mcp) return new Response(null, { status: 503 });
       let scope: "content:read" | "content:write" | "content:publish" = "content:read";
       if (context.req.method === "POST") {
@@ -163,12 +177,9 @@ export function createLaceApp(input: LaceAppInput): Hono {
             "params" in value &&
             typeof value.params === "object" &&
             value.params !== null &&
-            "name" in value.params &&
-            (value.params.name === "create_entry" ||
-              value.params.name === "save_draft" ||
-              value.params.name === "publish_entry")
+            "name" in value.params
           )
-            scope = value.params.name === "publish_entry" ? "content:publish" : "content:write";
+            scope = mcpToolScope(value.params.name) ?? scope;
         } catch {
           /* Protocol syntax remains SDK-owned. */
         }
@@ -177,12 +188,16 @@ export function createLaceApp(input: LaceAppInput): Hono {
       if (resolved.response) return resolved.response;
       context.set("lace.actor", resolved.actor);
     }
-    const actorLimited =
-      sensitiveRequestLimit(context.req.method, context.req.path)?.scope === "actor";
-    const resolvedActor = actorLimited ? await actor(context) : undefined;
+    const limit = routeSensitiveLimit(
+      context.get("lace.routePolicy"),
+      context.req.method,
+      context.req.path,
+    );
+    const resolvedActor = limit?.scope === "actor" ? await actor(context) : undefined;
     const decision = await input.rateLimiter.check({
       ...(resolvedActor === undefined ? {} : { actor: resolvedActor }),
       clientAddress: context.get("lace.clientAddress"),
+      limit: limit ?? null,
       request: context.req.raw,
       requestId: context.get("lace.requestId") as string,
     });
@@ -202,18 +217,17 @@ export function createLaceApp(input: LaceAppInput): Hono {
 
   registerProtocolRoutes(app, routeContext);
   registerHealthRoutes(app, routeContext);
-  registerSetupSessionRoutes(app, routeContext);
-  registerAccountRoutes(app, routeContext);
-  registerAdminUserRoutes(app, routeContext);
-  registerCredentialRoutes(app, routeContext);
-  registerBuildRoutes(app, routeContext);
-
-  registerMediaRoutes(app, routeContext);
-
-  registerContentRoutes(app, routeContext);
-
-  registerPublicRoutes(app, routeContext);
-
+  const v1 = new Hono();
+  registerSetupSessionRoutes(v1, routeContext);
+  registerAccountRoutes(v1, routeContext);
+  registerAdminUserRoutes(v1, routeContext);
+  registerCredentialRoutes(v1, routeContext);
+  registerBuildRoutes(v1, routeContext);
+  registerMediaRoutes(v1, routeContext);
+  registerContentRoutes(v1, routeContext);
+  registerPublicRoutes(v1, routeContext);
+  registerOpenApiRoute(v1, app, routeContext);
+  app.route(API_V1, v1);
   registerDocsRoutes(app, routeContext);
 
   app.notFound(async (context) => {

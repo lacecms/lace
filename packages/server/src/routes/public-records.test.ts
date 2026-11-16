@@ -2,7 +2,13 @@ import { expect, test } from "vitest";
 import { defineCollection, definePage } from "@lacecms/config";
 import { field } from "@lacecms/content";
 
-import { admin, fixture, json } from "../test-support/app-harness.js";
+import {
+  admin,
+  buildExportJson,
+  buildTokenSecurity,
+  fixture,
+  json,
+} from "../test-support/app-harness.js";
 
 const models = [
   definePage({ key: "home", path: "/", version: 1 }),
@@ -16,7 +22,7 @@ const models = [
 ];
 
 async function publishedTestimonials() {
-  const harness = await fixture({ models });
+  const harness = await fixture({ models, security: buildTokenSecurity });
   for (const title of ["Ada", "Grace"]) {
     const created = await harness.content.create({
       actor: admin,
@@ -62,7 +68,7 @@ test("records and collection reads answer 404 for the other kind", async () => {
 
 test("the build export and model DTOs describe route-less collections", async () => {
   const { app } = await publishedTestimonials();
-  const exported = await json(app, "/api/v1/public/build-export");
+  const exported = await buildExportJson(app);
   expect(exported.body.formatVersion).toBe(2);
   expect(exported.body.entries).toEqual([]);
   expect(exported.body.records.map((record: { title: string }) => record.title).sort()).toEqual([

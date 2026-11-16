@@ -12,27 +12,30 @@ import {
   InvariantError,
 } from "@lacecms/contracts";
 import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { resolver, validator } from "hono-openapi";
 import * as v from "valibot";
 import { emailDeliveryStatus } from "../runtime/email.js";
 import {
   authenticationFailure,
   authorizationFailure,
-  security,
+  describePolicy,
   validationFailure,
 } from "../shared/openapi.js";
 import type { RouteContext } from "../composition/route-context.js";
+import { v1Routes } from "../routing/v1-routes.js";
+
+const routes = v1Routes.setupSession;
 
 export function registerSetupSessionRoutes(app: Hono, routeContext: RouteContext): void {
   const { actor, settingsActor } = routeContext.actors;
   const { capabilities } = routeContext;
   const { email, sessionSummary, accountSecurity, profiles } = capabilities;
-  app.get(
-    "/api/v1/setup/state",
-    describeRoute({
+  app.on(
+    routes.setupState.method,
+    routes.setupState.path,
+    describePolicy(routes.setupState, {
       summary: "Read installation setup completion",
       tags: ["setup"],
-      security: security.none,
       responses: {
         200: {
           content: { "application/json": { schema: resolver(setupStateSchema) } },
@@ -50,12 +53,12 @@ export function registerSetupSessionRoutes(app: Hono, routeContext: RouteContext
     },
   );
 
-  app.post(
-    "/api/v1/setup/admin",
-    describeRoute({
+  app.on(
+    routes.setupAdmin.method,
+    routes.setupAdmin.path,
+    describePolicy(routes.setupAdmin, {
       summary: "Create the first administrator with the setup token",
       tags: ["setup"],
-      security: security.none,
       responses: {
         201: {
           content: { "application/json": { schema: resolver(managedUserSchema) } },
@@ -82,9 +85,10 @@ export function registerSetupSessionRoutes(app: Hono, routeContext: RouteContext
     },
   );
 
-  app.get(
-    "/api/v1/admin/session",
-    describeRoute({
+  app.on(
+    routes.session.method,
+    routes.session.path,
+    describePolicy(routes.session, {
       summary: "Read the signed-in user and server-derived permissions",
       tags: ["admin"],
       responses: {
@@ -95,16 +99,15 @@ export function registerSetupSessionRoutes(app: Hono, routeContext: RouteContext
         ...authenticationFailure(),
         ...authorizationFailure(),
       },
-      security: security.session,
     }),
     async (context) => sessionSummary(await actor(context)),
   );
-  app.get(
-    "/api/v1/admin/settings/status",
-    describeRoute({
+  app.on(
+    routes.status.method,
+    routes.status.path,
+    describePolicy(routes.status, {
       summary: "Read settings status",
       tags: ["admin"],
-      security: security.session,
       responses: {
         200: {
           description: "Successful response",
@@ -130,9 +133,10 @@ export function registerSetupSessionRoutes(app: Hono, routeContext: RouteContext
       });
     },
   );
-  app.post(
-    "/api/v1/admin/settings/email-test",
-    describeRoute({
+  app.on(
+    routes.emailTest.method,
+    routes.emailTest.path,
+    describePolicy(routes.emailTest, {
       summary: "Send a test email to the signed-in administrator",
       tags: ["admin"],
       responses: {
@@ -144,7 +148,6 @@ export function registerSetupSessionRoutes(app: Hono, routeContext: RouteContext
         ...authorizationFailure(),
         ...validationFailure(),
       },
-      security: security.session,
     }),
     validator("json", emailTestRequestSchema, validationHook),
     async (context) => {
