@@ -1,4 +1,10 @@
-import { BLOCK_TYPE_PATTERN, deepFreeze, isPlainObject } from "@lacecms/content";
+import {
+  BLOCK_TYPE_PATTERN,
+  deepFreeze,
+  isModelIconEmoji,
+  isModelIconName,
+  isPlainObject,
+} from "@lacecms/content";
 import { normalizeFieldVisibility, normalizeFormLayout } from "@lacecms/content";
 import type { FieldVisibility } from "@lacecms/content";
 import {
@@ -39,6 +45,13 @@ export function normalizeCommonModel<Fields extends FieldMap>(
   }
   assertOptionalDisplayValue(input.label, "label");
   assertOptionalDisplayValue(input.description, "description");
+  const { icon } = input;
+  if (
+    icon !== undefined &&
+    (typeof icon !== "string" || (!isModelIconName(icon) && !isModelIconEmoji(icon)))
+  ) {
+    fail(`model "${input.key}" icon must be a supported Lucide name or one emoji.`);
+  }
 
   const blocks = normalizeBlocks(input.blocks);
   const { fields, renamedFields } = normalizeFields(input.fields);
@@ -63,6 +76,7 @@ export function normalizeCommonModel<Fields extends FieldMap>(
     blocks,
     ...(input.description === undefined ? {} : { description: input.description }),
     fields,
+    ...(icon === undefined ? {} : { icon }),
     key: input.key,
     ...(layout === undefined ? {} : { layout }),
     ...(input.label === undefined ? {} : { label: input.label }),

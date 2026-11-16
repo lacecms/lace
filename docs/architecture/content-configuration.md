@@ -24,7 +24,7 @@ are detached, portable JSON ([field-descriptors]).
 route-less singleton for site-wide content such as settings or a footer, read
 by model key and never served by path;
 [ADR 0010](../adr/0010-global-models.md)). `defineGlobal` accepts `key`,
-`version`, `label`, `description`, `fields`, `blocks` and the sync hints, and
+`version`, `label`, `description`, `icon`, `fields`, `blocks` and the sync hints, and
 never has a `path`, `route`, `listFields` or `seo`.
 
 Pages, collection entries and globals share storage, snapshot, block,
@@ -272,17 +272,23 @@ serializable projection. Field keys and default values stay structural even
 under those names. A changed structure hash without a version bump fails
 ([content-model-configuration]).
 
+**Sidebar icons.** Any model can declare an optional `icon` as one supported
+Lucide name or a single Unicode emoji. It is portable display metadata for
+model links in the admin sidebar and its mobile navigation sheet.
+
 **Collection list metadata.** `listFields` names root scalar fields shown as
 admin list columns; `listOptions` enables sorting, filtering and searching on
 up to 16 root fields per operation, may target fields absent from
 `listFields`, may name the `defaultSort` the admin list opens in, and is
 rejected on pages and globals
 ([content-model-configuration], [collection-query-options]). Both are
-projection-only. An internal `publicProjectionHash` omits only `listOptions`,
-so query-only edits neither advance published state nor request a build when
-a trusted baseline proves the public projection unchanged; without such proof
-sync rebuilds once conservatively ([collection-query-options] "Query metadata
-synchronization uses a guarded public identity").
+projection-only, as is the model icon. An internal `publicProjectionHash`
+omits the root model `icon` and the collection's root `listOptions`. When a
+trusted baseline proves the public projection unchanged, edits to these
+options preserve published state and build work. If the full projection
+changes without that proof, sync requests a build and records the new
+baseline ([collection-query-options] "Query metadata synchronization uses a
+guarded public identity").
 
 **Model renames.** A model's temporary `renamedFrom` key is applied only when
 the previous key exists, the new one does not and the kind is unchanged;

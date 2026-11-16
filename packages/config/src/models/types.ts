@@ -52,6 +52,8 @@ export interface CommonModelInput<Fields extends FieldMap> {
   readonly blocks?: readonly string[];
   readonly description?: string;
   readonly fields?: Fields;
+  /** A supported Lucide name or one emoji for the admin sidebar. */
+  readonly icon?: string;
   readonly layout?: FormLayout<keyof Fields & string>;
   readonly key: string;
   readonly label?: string;
@@ -157,6 +159,7 @@ export interface NormalizedCommonModel<Fields extends FieldMap> {
   readonly blocks: readonly string[];
   readonly description?: string;
   readonly fields: Fields;
+  readonly icon?: string;
   readonly layout?: FormLayout<keyof Fields & string>;
   readonly key: string;
   readonly label?: string;

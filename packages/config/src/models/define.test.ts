@@ -15,6 +15,26 @@ import {
 } from "../index.js";
 import { blocks, postModel, homeModel } from "../test-support/model-fixtures.js";
 
+test("normalizes sidebar icons for all model kinds and omits absent icons", () => {
+  expect(definePage({ icon: "house", key: "home", path: "/", version: 1 }).icon).toBe("house");
+  expect(defineCollection({ icon: "newspaper", key: "posts", version: 1 }).icon).toBe("newspaper");
+  expect(defineGlobal({ icon: "🧭", key: "navigation", version: 1 }).icon).toBe("🧭");
+  expect(defineGlobal({ key: "settings", version: 1 })).not.toHaveProperty("icon");
+});
+
+test.each(["👩‍💻", "⚙️", "👍🏽", "🇮🇹"])("retains the complete model emoji %s", (icon) => {
+  expect(defineGlobal({ icon, key: "navigation", version: 1 }).icon).toBe(icon);
+});
+
+test.each(["setings", "camera", "MENU", "", "🧭⚙️", " 🧭", "🧭\n", "🧭 menu", 1, null])(
+  "rejects invalid model icon %s with the model key",
+  (icon) => {
+    expect(() => defineGlobal({ icon: icon as string, key: "navigation", version: 1 })).toThrow(
+      'model "navigation" icon must be a supported Lucide name or one emoji.',
+    );
+  },
+);
+
 test("defines deeply readonly page and collection models", () => {
   const fields: { heading: ReturnType<typeof field.text> } = {
     heading: field.text({ label: "Original", required: true }),

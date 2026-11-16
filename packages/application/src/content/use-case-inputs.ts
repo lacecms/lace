@@ -54,6 +54,7 @@ export interface DiscoveredContentModel {
   readonly version: number;
   readonly label?: string;
   readonly description?: string;
+  readonly icon?: string;
   readonly fields: Readonly<Record<string, FieldDefinition>>;
   readonly blocks: readonly string[];
   readonly blockDefinitions: readonly BlockMetadata[];

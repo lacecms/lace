@@ -27,14 +27,15 @@ export function omitDisplayMetadata(value: JsonValue): MutableJsonValue {
 
 /**
  * Removes model-level presentation metadata that must not affect structural
- * identity: `listFields`, the SEO fallback mapping (only whether SEO is enabled
- * is structural) and `seoDefaults`.
+ * identity, including the sidebar icon and list presentation. For SEO,
+ * structural identity tracks whether SEO is enabled.
  */
-export function omitListFields(model: JsonValue): JsonValue {
+export function omitModelOptionsFromStructure(model: JsonValue): JsonValue {
   if (model === null || typeof model !== "object" || Array.isArray(model)) {
     return model;
   }
   const {
+    icon: _icon,
     listFields: _listFields,
     listOptions: _listOptions,
     layout: _layout,
@@ -119,7 +120,7 @@ export function contentModelStructure(
   registry: BlockRegistry,
 ): ContentModelStructure {
   const projection = modelForHash(model, registry) as JsonObject;
-  const structure = withoutDisplayProperties(omitListFields(projection));
+  const structure = withoutDisplayProperties(omitModelOptionsFromStructure(projection));
   structure.fields = fieldMapStructure(projection.fields);
   structure.blockDefinitions = (projection.blockDefinitions as readonly JsonObject[]).map(
     (definition) => ({

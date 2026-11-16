@@ -2340,6 +2340,12 @@
                           "fields": {
                             "$ref": "#/components/schemas/FieldMetadataMap"
                           },
+                          "icon": {
+                            "description": "Decorative admin sidebar icon: a lowercase Lucide name or one Unicode emoji.",
+                            "maxLength": 64,
+                            "minLength": 1,
+                            "type": "string"
+                          },
                           "key": {
                             "maxLength": 255,
                             "minLength": 1,

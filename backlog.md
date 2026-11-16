@@ -29,13 +29,10 @@
   archived and synchronized. The roadmap moved to
   [`docs/archive/site-migration-roadmap.md`](docs/archive/site-migration-roadmap.md).
 
-- **Per-model navigation icons (from the admin UI review, 2026-11-10):** every
-  global uses the same globe icon in the admin navigation, so Navigation and
-  Site settings look alike; pages and collections share one icon per kind.
-  Candidate: an optional model `icon` from a fixed admin icon set, carried in
-  the model metadata contract, with the current kind icons as the default.
-  Settle in the spec: the allowed names, validation in configuration and the
-  admin fallback for an unknown name.
+- **Per-model navigation icons (implemented, archived 2026-11-17):** model
+  links in the admin sidebar support a Lucide name or one Unicode emoji,
+  with the model kind's icon as the fallback. See the archived
+  [model icons change](openspec/changes/archive/2026-11-17-add-admin-model-icons/).
 
 - **Optional slugs on route-less records (deferred 2026-11-11):**
   `route-less-collections` ships collections without `route` whose entries

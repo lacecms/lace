@@ -56,6 +56,33 @@ later synchronization and SHALL NOT infer a rename or removal when absent.
 - **THEN** configuration normalization succeeds and the runtime model carries
   the hints
 
+### Requirement: Models accept an optional sidebar icon
+Page, collection, and global definitions SHALL accept an optional `icon`
+string. Its value SHALL be one of the case-sensitive names `book-open`,
+`calendar-days`, `file-text`, `globe`, `house`, `images`, `layers`, `menu`,
+`newspaper`, `settings`, `tags`, or `users`, or exactly one emoji sequence
+recognized by the release's pinned Unicode emoji data. The input SHALL fit
+within 64 UTF-16 code units. Normalization SHALL preserve accepted strings
+exactly and omit `icon` when it is absent. Invalid values SHALL produce a
+configuration diagnostic naming the model and its `icon` option.
+
+#### Scenario: Each model kind can specify a sidebar icon
+- **WHEN** configuration defines a page with `icon: "house"`, a collection
+  with `icon: "newspaper"`, and a global with `icon: "🧭"`
+- **THEN** all three icons are present as strings in their normalized model
+  definitions and serializable model metadata
+
+#### Scenario: An emoji sequence is one icon
+- **WHEN** the configured string is `"👩‍💻"`, `"⚙️"`, `"👍🏽"`, or `"🇮🇹"`
+- **THEN** the same complete emoji sequence is carried as a single icon
+
+#### Scenario: Invalid values fail configuration normalization
+- **WHEN** a model supplies an unknown name such as `"setings"`, an unsupported
+  Lucide name, an empty string, two emoji, an emoji surrounded by text or
+  whitespace, or a non-string value
+- **THEN** the model fails validation with a diagnostic for its `icon` option
+  with the same acceptance rules on Node and Cloudflare
+
 ### Requirement: Canonical page and collection routes
 The system SHALL accept only canonical absolute page paths and collection route
 patterns. A page path SHALL be fixed. A collection route SHALL contain exactly
@@ -115,11 +142,12 @@ inside default values SHALL be preserved even when they are named `label` or
 `description`, `itemLabel` or `placeholder`. A list descriptor's optional `itemLabel` SHALL also be removed only at descriptor positions;
 field keys and default-value keys named `itemLabel` SHALL remain structural.
 The optional `placeholder` SHALL be removed only at descriptor positions, recursively in model fields, block data and block settings; placeholders SHALL remain in projection hashes. Field keys and default-value keys named `placeholder` SHALL remain structural. Configurations omitting placeholders SHALL retain their prior hashes.
-Structural hashes SHALL exclude a collection's `listOptions` and `listFields`
-presentation metadata and the temporary synchronization hints (`renamedFrom`
+Structural hashes SHALL exclude the root model `icon`, a collection's
+`listOptions` and `listFields` presentation metadata, and the temporary
+synchronization hints (`renamedFrom`
 on a model or a field, `removedFields`, `removedBlocks`); projection hashes
 SHALL include the complete serializable normalized definition, including
-`listOptions`, `listFields` and list `itemLabel`, except those hints. Normalized field definitions SHALL NOT
+`icon`, `listOptions`, `listFields` and list `itemLabel`, except those hints. Normalized field definitions SHALL NOT
 contain the field `renamedFrom` hint. Each runtime model SHALL carry its
 temporary hints, its detached canonical structure and, when it differs from
 the structural hash, the structural hash produced by the earlier rule that
@@ -130,12 +158,13 @@ order.
 
 Each runtime model SHALL additionally carry an internal `publicProjectionHash`,
 computed with the same canonical JSON and SHA-256 model projection inputs as
-`projectionHash`, omitting only the collection's root `listOptions`. Labels,
-`listFields`, SEO mappings, blocks and consumer field/default keys named
-`listOptions` SHALL remain in that input. The new hash SHALL be excluded from
-the serializable projection and all structural/full projection hash inputs.
-Models without nonempty listOptions SHALL have equal public and full projection
-hashes; introducing this internal identity SHALL NOT change existing hashes.
+`projectionHash`, omitting the root model `icon` and the collection's root
+`listOptions`. Labels, `listFields`, SEO mappings, blocks and consumer field
+and default-value keys named `listOptions` or `icon` SHALL remain in that input.
+The internal hash SHALL be excluded from the serializable projection and all
+structural/full projection hash inputs. Models without an icon or nonempty
+listOptions SHALL have equal public and full projection hashes. Configurations
+omitting icons SHALL retain their prior hashes.
 Runtime listQueryLimits SHALL remain separate from model definitions and all structural/full/public projection hash inputs; deploying the same model on Node or Cloudflare SHALL NOT cause a configuration hash or sync change solely due to search policy. Synchronization SHALL use the persisted public-identity baseline and legacy
 proof rules in collection-query-options to decide public-state/build impact;
 projection-only SHALL NOT by itself imply that all display changes skip builds.
@@ -217,6 +246,18 @@ projection-only SHALL NOT by itself imply that all display changes skip builds.
 #### Scenario: Internal public identity preserves serialized hash compatibility
 - **WHEN** an old configuration without listOptions is normalized with the new internal identity
 - **THEN** prior structural/full projection hashes and serialized metadata are unchanged, the runtime public hash equals the model full projection hash, and no internal public hash is exposed through REST metadata
+
+#### Scenario: Adding, switching or removing an icon changes display identity
+- **WHEN** a model changes only its root `icon`, including adding it, switching
+  between a name and an emoji, or removing it
+- **THEN** the model and configuration full projection hashes change and the
+  structural hashes, model version, and model public projection hash remain equal
+
+#### Scenario: An icon-named content field remains structural
+- **WHEN** only a field named `icon` or a default-value property named `icon`
+  changes its structure or default value
+- **THEN** the canonical structure retains that field or property and the
+  change is reflected in the structural and public projection hashes
 
 ### Requirement: Collection list fields
 The system SHALL let a collection definition declare an optional ordered

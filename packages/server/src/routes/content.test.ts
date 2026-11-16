@@ -54,22 +54,20 @@ test("entry detail returns a draft precondition without caching the publication"
   expect(unauthorized.response.headers.get("etag")).toBeNull();
 });
 
-test("content model discovery retains interleaved declaration order", async () => {
+test("content model discovery retains interleaved declaration order and sidebar icons", async () => {
   const models = [
-    definePage({ key: "zebra", path: "/zebra", version: 1 }),
+    definePage({ icon: "house", key: "zebra", path: "/zebra", version: 1 }),
     defineCollection({ key: "posts", route: "/posts/:slug", version: 1 }),
     definePage({ key: "about", path: "/about", version: 1 }),
-    defineGlobal({ key: "settings", version: 1 }),
+    defineGlobal({ icon: "⚙️", key: "settings", version: 1 }),
   ];
   const { app } = await fixture({ actor: editor, models });
   const result = await json(app, "/api/v1/admin/content-models");
   expect(result.response.status).toBe(200);
-  expect(v.parse(contentModelListSchema, result.body).items.map((item) => item.key)).toEqual([
-    "zebra",
-    "posts",
-    "about",
-    "settings",
-  ]);
+  const items = v.parse(contentModelListSchema, result.body).items;
+  expect(items.map((item) => item.key)).toEqual(["zebra", "posts", "about", "settings"]);
+  expect(items.map((item) => item.icon)).toEqual(["house", undefined, undefined, "⚙️"]);
+  expect(items[1]).not.toHaveProperty("icon");
 });
 
 test("editor and viewer mutations are denied by the API independently of Admin controls", async () => {

@@ -7,6 +7,7 @@ import { useSession, useSessionRecovery } from "../../../entities/session/index.
 import { adminQueryKeys, useAdminClient } from "../../../shared/api/index.js";
 import { Skeleton } from "../../../shared/ui/Skeleton/index.js";
 import { navigationGroups, type NavigationItem } from "../navigation.js";
+import type { ModelNavigationIcon } from "../model-icons.js";
 import { UserMenu } from "../UserMenu.js";
 
 const itemClass =
@@ -130,15 +131,28 @@ function NavigationLink({
   readonly item: NavigationItem;
   readonly onNavigate?: (() => void) | undefined;
 }) {
-  const Icon = item.icon;
   if (item.kind === "page" || item.kind === "global")
     return <SingletonLink item={item} onNavigate={onNavigate} />;
   if (item.kind === "collection") return <CollectionLink item={item} onNavigate={onNavigate} />;
+  const Icon = item.icon;
   return (
     <Link className={itemClass} onClick={onNavigate} to={item.path}>
       <Icon aria-hidden="true" />
       <span className="truncate">{item.label}</span>
     </Link>
+  );
+}
+
+function ModelIcon({ icon: Icon }: { readonly icon: ModelNavigationIcon }) {
+  return typeof Icon === "string" ? (
+    <span
+      aria-hidden="true"
+      className="grid size-4 shrink-0 place-items-center text-sm leading-none"
+    >
+      {Icon}
+    </span>
+  ) : (
+    <Icon aria-hidden="true" />
   );
 }
 
@@ -152,10 +166,9 @@ function SingletonLink({
   const overview = useEntryOverview(item.modelKey);
   useSessionRecovery(overview.error);
   const singleton = overview.data?.items[0];
-  const Icon = item.icon;
   const content = (
     <>
-      <Icon aria-hidden="true" />
+      <ModelIcon icon={item.icon} />
       <span className="truncate">{item.label}</span>
     </>
   );
@@ -195,7 +208,6 @@ function CollectionLink({
   const overview = useEntryOverview(item.modelKey);
   useSessionRecovery(overview.error);
   const count = overview.data?.totals.all;
-  const Icon = item.icon;
   return (
     <Link
       className={itemClass}
@@ -203,7 +215,7 @@ function CollectionLink({
       params={{ modelKey: item.modelKey }}
       to="/content/$modelKey"
     >
-      <Icon aria-hidden="true" />
+      <ModelIcon icon={item.icon} />
       <span className="truncate">{item.label}</span>
       {count === undefined ? undefined : (
         <>

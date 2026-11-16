@@ -11,26 +11,27 @@ import {
 } from "lucide-react";
 import { isSingletonModel } from "../../entities/content/index.js";
 import { can, type AdminPermission, type AdminSession } from "../../entities/session/index.js";
+import { resolveModelNavigationIcon, type ModelNavigationIcon } from "./model-icons.js";
 
-type ModelSummary = Pick<ContentModelDto, "key" | "kind" | "label">;
+type ModelSummary = Pick<ContentModelDto, "icon" | "key" | "kind" | "label">;
 
 export type ResourcePath = "/builds" | "/media" | "/settings" | "/users";
 
 export type NavigationItem =
   | {
-      readonly icon: LucideIcon;
+      readonly icon: ModelNavigationIcon;
       readonly kind: "page";
       readonly label: string;
       readonly modelKey: string;
     }
   | {
-      readonly icon: LucideIcon;
+      readonly icon: ModelNavigationIcon;
       readonly kind: "collection";
       readonly label: string;
       readonly modelKey: string;
     }
   | {
-      readonly icon: LucideIcon;
+      readonly icon: ModelNavigationIcon;
       readonly kind: "global";
       readonly label: string;
       readonly modelKey: string;
@@ -69,7 +70,7 @@ export function navigationGroups(
       items: models
         .filter((model) => model.kind === "page")
         .map((model) => ({
-          icon: FileText,
+          icon: resolveModelNavigationIcon(model.icon, FileText),
           kind: "page" as const,
           label: modelLabel(model),
           modelKey: model.key,
@@ -81,7 +82,7 @@ export function navigationGroups(
       items: models
         .filter((model) => model.kind === "collection")
         .map((model) => ({
-          icon: Layers,
+          icon: resolveModelNavigationIcon(model.icon, Layers),
           kind: "collection" as const,
           label: modelLabel(model),
           modelKey: model.key,
@@ -93,7 +94,7 @@ export function navigationGroups(
       items: models
         .filter((model) => model.kind === "global")
         .map((model) => ({
-          icon: Globe,
+          icon: resolveModelNavigationIcon(model.icon, Globe),
           kind: "global" as const,
           label: modelLabel(model),
           modelKey: model.key,

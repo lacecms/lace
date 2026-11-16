@@ -421,6 +421,66 @@ test("query-only sync records trusted public identity and remains idempotent wit
   }
 });
 
+test("sidebar icon sync preserves snapshots and uses guarded public identity on SQLite", async () => {
+  const make = async (icon?: string, label = "Home") =>
+    (
+      await defineConfig({
+        content: [
+          definePage({
+            key: "home",
+            label,
+            path: "/",
+            version: 1,
+            ...(icon === undefined ? {} : { icon }),
+          }),
+        ],
+      })
+    ).runtime.content;
+  const initial = await make();
+  const { connection, store } = applicationSqlite(initial, false);
+  const clock = new DeterministicClock(unixMilliseconds(10));
+  const ids = new DeterministicIdGenerator("icon-sync");
+  const sync = async (models: readonly NormalizedContentModel[]) =>
+    applyPreparedConfigurationSynchronization({
+      clock,
+      ids,
+      models,
+      target: store,
+      prepared: await prepareConfigurationSynchronization({ models, state: store }),
+    });
+  await sync(initial);
+  const readSnapshots = () =>
+    connection.prepare("select * from content_snapshots order by id").all();
+  const snapshots = readSnapshots();
+  expect(snapshots).toHaveLength(1);
+  const version = await store.publishedContentVersion();
+  const buildVersions = () => pendingBuildVersions(connection, "configuration_sync");
+  expect(buildVersions()).toEqual([version]);
+
+  const named = await make("house");
+  expect(await sync(named)).toMatchObject({
+    status: "applied",
+    operations: [{ action: "label-update", affectsPublicProjection: false }],
+  });
+  const model = present(named[0]);
+  expect((await store.readConfigurationSyncState())[0]).toMatchObject({
+    version: 1,
+    projectionHash: model.projectionHash,
+    publicProjectionHash: model.publicProjectionHash,
+    publicProjectionSourceHash: model.projectionHash,
+  });
+  expect(await sync(named)).toMatchObject({ status: "noop" });
+  expect(await store.publishedContentVersion()).toBe(version);
+  expect(buildVersions()).toEqual([version]);
+
+  expect(await sync(await make("🧭", "Start"))).toMatchObject({ targetVersion: version + 1 });
+  expect(buildVersions()).toEqual([version + 1]);
+  connection.prepare("update content_models set public_projection_source_hash = null").run();
+  expect(await sync(await make(undefined, "Start"))).toMatchObject({ targetVersion: version + 2 });
+  expect(buildVersions()).toEqual([version + 2]);
+  expect(readSnapshots()).toEqual(snapshots);
+});
+
 test.each(["publicProjectionHash", "publicProjectionSourceHash"] as const)(
   "sync guards a concurrent %s change even when the derived plan is unchanged",
   async (key) => {

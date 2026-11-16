@@ -1,7 +1,30 @@
 import { expect, test } from "vitest";
+import * as v from "valibot";
 import { CONTENT_MODEL_DTO_KEYS } from "./model-projection.js";
 import { toContentModelDto } from "./model-projection.js";
 import { contentModelSchema } from "./models.js";
+
+const modelWithOptionalIcon = {
+  blockDefinitions: [],
+  blocks: [],
+  fields: {},
+  key: "settings",
+  kind: "global",
+  version: 1,
+} as const;
+
+test.each(["settings", "👩‍💻", "future-icon"])("model metadata accepts icon %s", (icon) => {
+  expect(
+    v.parse(contentModelSchema, toContentModelDto({ ...modelWithOptionalIcon, icon })).icon,
+  ).toBe(icon);
+});
+
+test.each(["", "settings\n", " Settings", "🧭⚙️", "a".repeat(65), null, 5])(
+  "model metadata rejects malformed icon %s",
+  (icon) => {
+    expect(v.safeParse(contentModelSchema, { ...modelWithOptionalIcon, icon }).success).toBe(false);
+  },
+);
 
 test("content model projection covers exactly the DTO schema keys", () => {
   expect([...CONTENT_MODEL_DTO_KEYS].sort()).toEqual(

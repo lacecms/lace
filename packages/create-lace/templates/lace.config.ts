@@ -55,6 +55,7 @@ export default await defineConfig({
       key: "settings",
       version: 2,
       label: "Site settings",
+      icon: "⚙️",
       description: "Site name, tagline and the search and social defaults of every page.",
       fields: {
         helpUrl: field.url({ label: "Help page" }),
@@ -69,6 +70,7 @@ export default await defineConfig({
       key: "navigation",
       version: 1,
       label: "Navigation",
+      icon: "menu",
       description: "Links shown in the header of every page.",
       blocks: ["navigation"],
     }),

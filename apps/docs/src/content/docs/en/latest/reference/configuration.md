@@ -30,6 +30,7 @@ export default await defineConfig({ blocks: [/* block definitions */], content: 
 | `version`       | Yes      | Positive integer. Increase it for every structural change ([Synchronize configuration](../../content-modeling/synchronization/)).                                                                                                  |
 | `label`         | No       | Name shown in Admin.                                                                                                                                                                                                               |
 | `description`   | No       | Help text shown in Admin.                                                                                                                                                                                                          |
+| `icon`          | No       | Icon beside the model's label in the Admin sidebar. See [Sidebar icons](#sidebar-icons).                                                                                                                                           |
 | `fields`        | No       | The fields, keyed by field key (an ASCII letter followed by letters or digits); each value is a [field builder](#field-builders) result.                                                                                           |
 | `blocks`        | No       | Block types the entry's block area allows, unique and registered in `defineConfig`. Omit or leave empty for no block area.                                                                                                         |
 | `layout`        | No       | Form layout of the top-level fields: `mode` (`sections` or `tabs`) and `groups`, each with `key`, `label`, optional `description` and the `fields` it shows ([Groups, lists and form layout](../../content-modeling/composites/)). |
@@ -39,6 +40,23 @@ export default await defineConfig({ blocks: [/* block definitions */], content: 
 | `removedBlocks` | No       | Temporary synchronization hint: block types that are no longer allowed and whose stored blocks synchronization deletes. Remove it after synchronization has run everywhere.                                                        |
 
 The temporary hints `renamedFrom`, `removedFields`, `removedBlocks` and `removedSeo` tell [synchronization](../../content-modeling/synchronization/) how to treat stored content; they are not part of the model's structure and change no hash. Configuration rejects contradictory hints, such as a removed field that is still configured.
+
+### Sidebar icons
+
+Set `icon: "menu"` for a Lucide glyph or `icon: "⚙️"` for one Unicode emoji. A
+sequence such as `"👩‍💻"` also counts as one emoji. The supported Lucide names
+are `book-open`, `calendar-days`, `file-text`, `globe`, `house`, `images`,
+`layers`, `menu`, `newspaper`, `settings`, `tags`, and `users`. The config
+loader reports invalid values with the model key.
+
+Omit `icon` to use the default for the model kind. Admin also uses that
+default when it receives an icon name its version does not recognize.
+
+You can change an icon without increasing the model version. When
+synchronization has a recorded public baseline and only the icon changes, it
+updates model metadata without requesting a site build. On an older
+installation, running an ordinary sync before adding icons can record a
+missing baseline.
 
 ## Page options
 

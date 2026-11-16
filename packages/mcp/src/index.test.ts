@@ -40,8 +40,8 @@ async function fixture() {
         version: 1,
         fields: { author: field.text({ defaultValue: "Unknown" }) },
       }),
-      definePage({ key: "home", path: "/", version: 1 }),
-      defineGlobal({ key: "settings", version: 1 }),
+      definePage({ icon: "house", key: "home", path: "/", version: 1 }),
+      defineGlobal({ icon: "⚙️", key: "settings", version: 1 }),
       definePage({ key: "about", path: "/about", version: 1 }),
     ],
   });
@@ -129,6 +129,8 @@ test("SDK client discovers derived schemas and executes all five shared content 
     await client.callTool({ name: "list_content_models", arguments: {} }),
   );
   expect(models.items.map((m) => m.key)).toEqual(["posts", "home", "settings", "about"]);
+  expect(models.items.map((m) => m.icon)).toEqual([undefined, "house", "⚙️", undefined]);
+  expect(models.items[0]).not.toHaveProperty("icon");
   const created = entryPayload(await client.callTool({ name: "create_entry", arguments: draft }));
   expect(created.draft.fields).toEqual({ author: "Unknown" });
   expect(created.published).toBeUndefined();

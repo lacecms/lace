@@ -38,6 +38,7 @@ const contentModelProjection = {
   blocks: (m) => [...m.blocks],
   description: (m) => m.description,
   fields: (m) => m.fields,
+  icon: (m) => m.icon,
   key: (m) => m.key,
   kind: (m) => m.kind,
   label: (m) => m.label,
@@ -79,6 +80,7 @@ export interface ContentModelSource {
   readonly blocks: readonly string[];
   readonly description?: string;
   readonly fields: FieldMetadataMapDto;
+  readonly icon?: string;
   readonly key: string;
   readonly kind: ContentModelKind;
   readonly label?: string;

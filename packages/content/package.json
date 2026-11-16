@@ -33,6 +33,7 @@
     "test:packaged": "vitest run --config vitest.packaged.config.mjs"
   },
   "dependencies": {
+    "emoji-regex": "catalog:",
     "valibot": "catalog:"
   },
   "devDependencies": {

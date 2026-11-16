@@ -502,3 +502,59 @@ test("public identity excludes only root query options and stays internal", asyn
     present((await named("b")).runtime.content[0]).publicProjectionHash,
   );
 });
+
+test.each([
+  ["scalar", { icon: field.text({ defaultValue: "first" }) }],
+  [
+    "composite",
+    { details: field.group({ fields: { icon: field.text({ defaultValue: "first" }) } }) },
+  ],
+] as const)("treats the sidebar icon as display metadata with %s fields", async (_, fields) => {
+  const make = (icon?: string) =>
+    defineConfig({
+      content: [
+        definePage({
+          fields,
+          key: "home",
+          path: "/",
+          version: 1,
+          ...(icon === undefined ? {} : { icon }),
+        }),
+      ],
+    });
+  const plain = await make();
+  const named = await make("house");
+  const emoji = await make("🧭");
+  for (const config of [named, emoji]) {
+    expect(config.structureHash).toBe(plain.structureHash);
+    expect(present(config.runtime.content[0])).toMatchObject({
+      structureHash: present(plain.runtime.content[0]).structureHash,
+      publicProjectionHash: present(plain.runtime.content[0]).publicProjectionHash,
+      version: 1,
+    });
+    expect(config.projectionHash).not.toBe(plain.projectionHash);
+    expect(present(config.content[0]).projectionHash).not.toBe(
+      present(plain.content[0]).projectionHash,
+    );
+  }
+  expect(present(named.public.content[0]).icon).toBe("house");
+  expect(present(emoji.public.content[0]).icon).toBe("🧭");
+  expect(emoji.projectionHash).not.toBe(named.projectionHash);
+  expect((await make()).public).toEqual(plain.public);
+});
+
+test("keeps icon-named fields and their defaults in model identity", async () => {
+  const make = (fields: ModelFieldDefinitions) =>
+    defineConfig({ content: [definePage({ fields, key: "home", path: "/", version: 1 })] });
+  const empty = await make({});
+  const first = await make({ icon: field.text({ defaultValue: "first" }) });
+  const second = await make({ icon: field.text({ defaultValue: "second" }) });
+  const model = present(second.runtime.content[0]);
+  expect(at(model.structure, "fields", "icon", "defaultValue")).toBe("second");
+  for (const config of [empty, first]) {
+    expect(model.structureHash).not.toBe(present(config.runtime.content[0]).structureHash);
+    expect(model.publicProjectionHash).not.toBe(
+      present(config.runtime.content[0]).publicProjectionHash,
+    );
+  }
+});

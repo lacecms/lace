@@ -4,6 +4,13 @@
 export { LaceError, InvariantError } from "./shared/errors.js";
 export * from "./shared/objects.js";
 export * from "./shared/identifiers.js";
+export {
+  isModelIconEmoji,
+  isModelIconIdentifier,
+  isModelIconName,
+  MAX_MODEL_ICON_LENGTH,
+  MODEL_ICON_NAMES,
+} from "./shared/model-icons.js";
 export type { ValidationPathSegment, ContentValidationIssue } from "./shared/errors.js";
 export { FieldConfigurationError, ContentValidationError } from "./shared/errors.js";
 export type { JsonPrimitive, JsonValue, JsonObject } from "./shared/json.js";

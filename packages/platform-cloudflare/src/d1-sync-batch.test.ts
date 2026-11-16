@@ -13,7 +13,7 @@ import type {
   ConfigurationSyncSnapshotRewrite,
   PreparedConfigurationSynchronization,
 } from "@lacecms/application";
-import { defineCollection, defineConfig } from "@lacecms/config";
+import { defineCollection, defineConfig, definePage } from "@lacecms/config";
 import { field } from "@lacecms/content";
 import { unixMilliseconds } from "@lacecms/domain";
 import { test } from "vitest";
@@ -26,6 +26,77 @@ import {
 } from "./d1/database.js";
 import type { D1Database } from "./d1/database.js";
 import { countingD1, openLocalD1 } from "./test-support/d1-test-harness.js";
+
+test("sidebar icon sync preserves snapshots and uses guarded public identity on local D1", async () => {
+  const { database, dispose } = await openLocalD1();
+  try {
+    const make = async (icon?: string, label = "Home") =>
+      (
+        await defineConfig({
+          content: [
+            definePage({
+              key: "home",
+              label,
+              path: "/",
+              version: 1,
+              ...(icon === undefined ? {} : { icon }),
+            }),
+          ],
+        })
+      ).runtime.content;
+    const initial = await make();
+    const repository = new D1ContentRepository(database, () => contentModelRoute(initial[0]!));
+    let next = 0;
+    const sync = async (models: typeof initial) =>
+      applyPreparedConfigurationSynchronization({
+        clock: { now: () => unixMilliseconds(10) },
+        ids: { next: () => `icon-sync-${++next}` },
+        models,
+        target: repository,
+        prepared: await prepareConfigurationSynchronization({ models, state: repository }),
+      });
+    await sync(initial);
+    const readSnapshots = () =>
+      database.prepare("select * from content_snapshots order by id").all();
+    const snapshots = (await readSnapshots()).results;
+    assert.equal(snapshots.length, 1);
+    const version = await repository.publishedContentVersion();
+    const buildVersions = async () =>
+      (
+        await database
+          .prepare(
+            "select json_extract(payload_json, '$.targetVersion') version from outbox_events where type = 'site.build.requested' and processed_at is null",
+          )
+          .all<{ version: number }>()
+      ).results.map((row) => row.version);
+    assert.deepEqual(await buildVersions(), [version]);
+
+    const named = await make("house");
+    const result = await sync(named);
+    assert.equal(result.status, "applied");
+    assert.equal(result.operations[0]?.action, "label-update");
+    const stored = (await repository.readConfigurationSyncState())[0];
+    assert.equal(stored?.version, 1);
+    assert.equal(stored?.projectionHash, named[0]!.projectionHash);
+    assert.equal(stored?.publicProjectionHash, named[0]!.publicProjectionHash);
+    assert.equal(stored?.publicProjectionSourceHash, named[0]!.projectionHash);
+    assert.equal((await sync(named)).status, "noop");
+    assert.equal(await repository.publishedContentVersion(), version);
+    assert.deepEqual(await buildVersions(), [version]);
+
+    await sync(await make("🧭", "Start"));
+    assert.equal(await repository.publishedContentVersion(), version + 1);
+    assert.deepEqual(await buildVersions(), [version + 1]);
+    await database.prepare("update content_models set public_projection_source_hash = null").run();
+    await sync(await make(undefined, "Start"));
+    assert.equal(await repository.publishedContentVersion(), version + 2);
+    assert.deepEqual(await buildVersions(), [version + 2]);
+    assert.deepEqual((await readSnapshots()).results, snapshots);
+  } finally {
+    await dispose();
+  }
+});
+
 test("bulk nested rewrites fit one guarded D1 batch and roll back failures", async () => {
   const { database: db, dispose } = await openLocalD1();
   const count = 251;

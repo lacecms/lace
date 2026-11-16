@@ -1,6 +1,9 @@
 import {
   canonicalizeJson,
   fieldTypeCapabilities,
+  isModelIconEmoji,
+  isModelIconIdentifier,
+  MAX_MODEL_ICON_LENGTH,
   normalizeFieldVisibility,
   normalizeFormLayout,
 } from "@lacecms/content";
@@ -128,6 +131,20 @@ export const contentModelSchema = v.pipe(
     blocks: v.array(identifierSchema),
     description: v.optional(v.string()),
     fields: fieldMetadataMapSchema,
+    icon: v.optional(
+      v.pipe(
+        v.string(),
+        v.minLength(1),
+        v.maxLength(MAX_MODEL_ICON_LENGTH),
+        v.check(
+          (value) => isModelIconIdentifier(value) || isModelIconEmoji(value),
+          "Expected a lowercase icon identifier or one emoji.",
+        ),
+        v.description(
+          "Decorative admin sidebar icon: a lowercase Lucide name or one Unicode emoji.",
+        ),
+      ),
+    ),
     key: identifierSchema,
     kind: v.picklist(["collection", "global", "page"]),
     label: v.optional(v.string()),

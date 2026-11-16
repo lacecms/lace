@@ -20,7 +20,7 @@ import { fail } from "../shared/errors.js";
 import { pageMatchesCollection } from "../models/routes.js";
 import {
   omitDisplayMetadata,
-  omitListFields,
+  omitModelOptionsFromStructure,
   withoutDisplayProperties,
   fieldMapWithoutPlaceholders,
   fieldMapStructure,
@@ -163,7 +163,11 @@ export async function defineConfig<const Models extends readonly ContentModelDef
   const normalizedModels = await Promise.all(
     models.map(async (model) => {
       const projection = modelForHash(model, registry);
-      const { listOptions: _listOptions, ...publicIdentity } = projection as JsonObject;
+      const {
+        icon: _icon,
+        listOptions: _listOptions,
+        ...publicIdentity
+      } = projection as JsonObject;
       const structure = contentModelStructure(model, registry);
       const structureHash = await sha256CanonicalJson(structure);
       const normalized: NormalizedContentModel = {
@@ -185,7 +189,7 @@ export async function defineConfig<const Models extends readonly ContentModelDef
   const projection = { blocks, content: hashModels } as unknown as JsonValue;
   const structure = {
     blocks,
-    content: hashModels.map(omitListFields),
+    content: hashModels.map(omitModelOptionsFromStructure),
   } as unknown as JsonValue;
   // Preserve scalar-only global hashes; composite identity visits descriptor positions
   // so content/default keys named label or description remain structural.
@@ -208,7 +212,7 @@ export async function defineConfig<const Models extends readonly ContentModelDef
                 : { settings: fieldMapStructure(block.settings as unknown as JsonValue) }),
             })),
             content: hashModels.map((model) => ({
-              ...withoutDisplayProperties(omitListFields(model)),
+              ...withoutDisplayProperties(omitModelOptionsFromStructure(model)),
               fields: fieldMapStructure((model as JsonObject).fields),
             })),
           }
@@ -224,7 +228,7 @@ export async function defineConfig<const Models extends readonly ContentModelDef
                   }),
             })),
             content: hashModels.map((model) => ({
-              ...(omitListFields(model) as JsonObject),
+              ...(omitModelOptionsFromStructure(model) as JsonObject),
               fields: fieldMapWithoutPlaceholders((model as JsonObject).fields),
             })),
           } as unknown as JsonValue),

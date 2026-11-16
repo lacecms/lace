@@ -105,6 +105,7 @@ export default await defineConfig({
       key: "settings",
       version: 3,
       label: "Site settings",
+      icon: "⚙️",
       description: "Site name, tagline and the search and social defaults of every page.",
       fields: {
         siteName: field.text({ label: "Site name", required: true }),
@@ -125,6 +126,7 @@ export default await defineConfig({
       key: "navigation",
       version: 1,
       label: "Navigation",
+      icon: "menu",
       description: "Links shown in the header of every page.",
       blocks: ["navigation"],
     }),

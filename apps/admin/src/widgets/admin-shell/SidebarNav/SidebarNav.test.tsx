@@ -19,6 +19,66 @@ afterEach(() => {
 
 const nav = () => <SidebarNav onSignOut={() => undefined} signingOut={false} />;
 
+test("desktop and mobile navigation show decorative model icons and kind fallbacks", async () => {
+  const user = userEvent.setup();
+  const modelList = {
+    listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+    items: [
+      ...models.items.map((model) =>
+        model.key === "posts" ? { ...model, icon: "future-icon" } : model,
+      ),
+      {
+        blocks: [],
+        fields: {},
+        version: 1,
+        kind: "global" as const,
+        key: "navigation",
+        label: "Navigation",
+        icon: "menu",
+      },
+      {
+        blocks: [],
+        fields: {},
+        version: 1,
+        kind: "global" as const,
+        key: "settings",
+        label: "Site settings",
+        icon: "⚙️",
+      },
+      {
+        blocks: [],
+        fields: {},
+        version: 1,
+        kind: "global" as const,
+        key: "footer",
+        label: "Footer",
+      },
+    ],
+  };
+  renderRoute(
+    "/content",
+    staticSessionSource({ id: "editor-1", role: "editor" }),
+    client({ listModels: async () => modelList }),
+  );
+  async function expectIcons(surface: HTMLElement) {
+    const nav = within(surface);
+    for (const [name, glyph] of [
+      ["Navigation", "menu"],
+      ["home", "file-text"],
+      ["posts, 1 entry", "layers"],
+      ["Footer", "globe"],
+    ] as const) {
+      const link = await nav.findByRole("link", { name });
+      expect(link.querySelector(`svg.lucide-${glyph}`)).toHaveAttribute("aria-hidden", "true");
+    }
+    const settings = await nav.findByRole("link", { name: "Site settings" });
+    expect(within(settings).getByText("⚙️")).toHaveAttribute("aria-hidden", "true");
+  }
+  await expectIcons(await screen.findByRole("complementary", { name: "Admin navigation" }));
+  await user.click(screen.getByRole("button", { name: "Open navigation" }));
+  await expectIcons(await screen.findByRole("dialog", { name: "Navigation" }));
+});
+
 test("model groups collapse independently with the keyboard", async () => {
   const user = userEvent.setup();
   renderInRouter(nav(), { session: { id: "editor-1", role: "editor" } });
