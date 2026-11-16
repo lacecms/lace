@@ -1,7 +1,7 @@
-import { errorEnvelopeSchema } from "@lacecms/contracts";
+import { errorEnvelopeSchema, linkTargetQuerySchema } from "@lacecms/contracts";
 import { resolver } from "hono-openapi";
-import { expect, test } from "vitest";
-import { authorizationFailure, validationFailure } from "./openapi.js";
+import { expect, expectTypeOf, test } from "vitest";
+import { authorizationFailure, validate, validationFailure } from "./openapi.js";
 
 test("both failure responses resolve to the shared error envelope", async () => {
   const envelope = await resolver(errorEnvelopeSchema).toOpenAPISchema();
@@ -17,4 +17,11 @@ test("a route's own denial reason merges into the one 403 description", () => {
   expect(authorizationFailure("an invalid origin")[403].description).toBe(
     "Permission denied (AUTHORIZATION_DENIED); also an invalid origin",
   );
+});
+
+test("a validated query has the schema's transformed output in the handler", () => {
+  const middleware = validate("query", linkTargetQuerySchema);
+  type Context = Parameters<typeof middleware>[0];
+  type Query = ReturnType<Context["req"]["valid"]>;
+  expectTypeOf<Query["limit"]>().toEqualTypeOf<number>();
 });

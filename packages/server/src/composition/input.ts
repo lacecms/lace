@@ -1,12 +1,15 @@
 import type {
   AccountUseCases,
+  ApiTokenUseCases,
   ContentUseCases,
   ContentLinkUseCases,
   OAuthConnectionUseCases,
   ImportTokenMetadata,
   RateLimitDecision,
   SecurityService,
+  SettingsUseCases,
   SiteBuildUseCases,
+  TokenSecurityPort,
   MediaUseCases,
   PublicContentReadPort,
   EmailSender,
@@ -14,6 +17,7 @@ import type {
 } from "@lacecms/application";
 import type { BuildSiteIdentityDto } from "@lacecms/contracts";
 import type { ServerConfig } from "../shared/content-config.js";
+import type { SensitiveRequestLimit } from "../routing/route-policy.js";
 
 export type Actor = Parameters<ContentUseCases["create"]>[0]["actor"];
 
@@ -37,6 +41,8 @@ export interface RequestRateLimiter {
     readonly requestId: string;
     readonly clientAddress?: string;
     readonly actor?: Actor;
+    /** The matched transport policy. Null means no sensitive limit applies. */
+    readonly limit?: SensitiveRequestLimit | null;
   }): Promise<boolean | RateLimitDecision>;
 }
 
@@ -69,11 +75,15 @@ export interface BuiltAdminResponder {
 export interface LaceAppInput {
   /** Reads trusted ingress metadata from the original request. */
   readonly clientAddress?: (request: Request) => string;
-  /** Invitation, recovery and self-service flows; absent disables the account routes. */
+  /** Setup, user administration, invitations, recovery and self-service. */
   readonly accounts?: AccountUseCases;
+  readonly apiTokens?: ApiTokenUseCases;
+  readonly settings?: SettingsUseCases;
   /** Opt-in browser reference; machine-readable OpenAPI remains available. */
   readonly apiDocsEnabled?: boolean;
   readonly buildSite?: BuildSiteIdentityDto | null;
+  /** When callable, enables build-export authentication and route registration. */
+  readonly buildTokenVerifier?: TokenSecurityPort["verifyBuildToken"];
   readonly auth?: AuthRouteHandler;
   readonly oauthConnections?: OAuthConnectionUseCases;
   readonly mcpEnabled?: boolean;
@@ -116,6 +126,7 @@ export interface LaceAppInput {
   readonly rateLimiter: RequestRateLimiter;
   readonly readiness: ReadinessProbe;
   readonly requestIds: RequestIdGenerator;
+  /** Security adapters for callers that supply their own partial application composition. */
   readonly security?: SecurityService;
   readonly builds?: SiteBuildUseCases;
   /** Transactional email; absent means the `none` provider. */

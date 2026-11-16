@@ -1,12 +1,12 @@
-import { requireSettingsManager, requireUsersManager } from "@lacecms/application";
 import { AuthenticationRequiredError } from "@lacecms/contracts";
 import { AuthorizationError } from "../shared/http.js";
-import { isImportRoute } from "../security/import-routes.js";
+import { authenticationChallenge, type RoutePolicy } from "../routing/route-policy.js";
+import { isReservedImportPath } from "../security/import-routes.js";
 import type { Actor, ActorResolver } from "./input.js";
 
 /** The Hono context members actor resolution reads and caches per request. */
 export interface ActorRequestContext {
-  readonly req: { readonly raw: Request };
+  readonly req: { readonly raw: Request; readonly path: string };
   get(key: string): unknown;
   set(key: string, value: unknown): void;
 }
@@ -20,27 +20,12 @@ export function createActorContext(actors: ActorResolver) {
     // Origin and Fetch Metadata refusals are authorization denials.
     if (resolved === "request-denied") throw new AuthorizationError();
     if (resolved === null) {
-      const request = context.req.raw;
-      throw new AuthenticationRequiredError(
-        isImportRoute(request.method, new URL(request.url).pathname)
-          ? "session-or-bearer"
-          : "session",
-      );
+      const policy = context.get("lace.routePolicy") as RoutePolicy | undefined;
+      const auth = isReservedImportPath(context.req.path) ? "session" : policy?.auth;
+      throw new AuthenticationRequiredError(authenticationChallenge(auth));
     }
     context.set("lace.actor", resolved);
     return resolved;
-  }
-
-  async function usersActor(context: ActorRequestContext): Promise<Actor> {
-    const value = await actor(context);
-    requireUsersManager(value);
-    return value;
-  }
-
-  async function settingsActor(context: ActorRequestContext): Promise<Actor> {
-    const value = await actor(context);
-    requireSettingsManager(value);
-    return value;
   }
 
   /** The current session id is resolved once per request beside the actor. */
@@ -53,7 +38,12 @@ export function createActorContext(actors: ActorResolver) {
     return resolved;
   }
 
-  return Object.freeze({ actor, currentSessionId, settingsActor, usersActor });
+  async function authenticate(context: ActorRequestContext, next: () => Promise<void>) {
+    await actor(context);
+    await next();
+  }
+
+  return Object.freeze({ actor, authenticate, currentSessionId });
 }
 
 export type ActorContext = ReturnType<typeof createActorContext>;

@@ -13,11 +13,13 @@ import { can, useSession, useSessionRecovery } from "../../../entities/session/i
 import {
   adminQueryKeys,
   errorDescription,
-  technicalDetails,
+  isSessionExpiredError,
   useAdminClient,
+  useCursorList,
 } from "../../../shared/api/index.js";
 import { formatAbsoluteTime, formatRelativeTime } from "../../../shared/lib/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
+import { CursorListActions } from "../../../shared/ui/CursorListActions/index.js";
 import { EmptyState } from "../../../shared/ui/EmptyState/index.js";
 import { ErrorState } from "../../../shared/ui/ErrorState/index.js";
 import { cardClass, pageClass } from "../../../shared/ui/layout/index.js";
@@ -82,10 +84,8 @@ export function BuildsPage() {
   const [action, setAction] = useState<"request" | "retry" | null>(null);
   const [actionError, setActionError] = useState<unknown>(null);
   const [queuedVersion, setQueuedVersion] = useState<number | null>(null);
-  const history = useQuery({
-    queryKey: adminQueryKeys.builds,
-    queryFn: client.listBuilds,
-    refetchInterval: 5_000,
+  const history = useCursorList(adminQueryKeys.buildHistory, client.listBuilds, {
+    pollInterval: 5_000,
   });
   const detail = useQuery({
     queryKey: adminQueryKeys.buildDetail(selectedId ?? ""),
@@ -97,7 +97,7 @@ export function BuildsPage() {
         ? false
         : 5_000,
   });
-  useSessionRecovery(history.error ?? detail.error ?? actionError);
+  useSessionRecovery([history.query.error, detail.error, actionError].find(isSessionExpiredError));
   const isAdmin = can(session, "settings:manage");
 
   async function send(actionKind: "request" | "retry", buildId?: string) {
@@ -115,7 +115,7 @@ export function BuildsPage() {
     }
   }
 
-  const items = history.data?.items;
+  const items = history.query.data?.pages.flatMap((page) => page.items);
   return (
     <section className={pageClass} aria-labelledby="builds-title">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -141,15 +141,7 @@ export function BuildsPage() {
       {actionError === null ? undefined : (
         <ErrorState description={errorDescription(actionError)} title="Build request failed" />
       )}
-      {history.isPending ? <LoadingState label="Loading builds" lines={4} /> : undefined}
-      {history.error === null ? undefined : (
-        <ErrorState
-          description={errorDescription(history.error)}
-          onRetry={() => void history.refetch()}
-          retrying={history.isFetching}
-          technicalDetails={technicalDetails(history.error)}
-        />
-      )}
+      {history.query.isPending ? <LoadingState label="Loading builds" lines={4} /> : undefined}
       {items?.length === 0 ? (
         <EmptyState
           description={
@@ -308,6 +300,7 @@ export function BuildsPage() {
           )}
         </div>
       )}
+      <CursorListActions list={history} label="Load more builds" />
     </section>
   );
 }

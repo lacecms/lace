@@ -95,6 +95,9 @@ export const invitations = sqliteTable(
     uniqueIndex("invitations_active_email_idx")
       .on(table.email)
       .where(sql`${table.acceptedAt} is null and ${table.revokedAt} is null`),
+    index("invitations_pending_order_idx")
+      .on(table.createdAt, table.id)
+      .where(sql`${table.acceptedAt} is null and ${table.revokedAt} is null`),
   ],
 );
 

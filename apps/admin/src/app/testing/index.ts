@@ -149,7 +149,7 @@ export function stubClient(overrides: Partial<AdminClient> = {}): AdminClient {
     requestBuild: async () => ({ coalesced: false, eventId: "event-1", targetVersion: 0 }),
     retryBuild: async () => ({ coalesced: false, eventId: "event-1", targetVersion: 0 }),
     updateUser: async () => ({}) as never,
-    listUsers: async () => ({ items: [] }),
+    listUsers: async () => ({ items: [], total: 0, disabledCount: 0 }),
     signOutUser: async () => ({ revoked: 0 }),
     sendPasswordReset: async () => ({ delivery: { status: "sent" as const } }),
     listInvitations: async () => ({ items: [] }),
@@ -211,7 +211,7 @@ export function stubClient(overrides: Partial<AdminClient> = {}): AdminClient {
     revertEntry: async () => ({}) as never,
     duplicateEntry: async () => ({}) as never,
     loadAccountCapabilities: async () => ({ mcpEnabled: false }),
-    listMcpConnections: async () => ({ items: [], nextCursor: null }),
+    listMcpConnections: async () => ({ items: [] }),
     revokeMcpConnection: async () => undefined,
     loadMcpConsent: async (transaction) => ({
       transaction,

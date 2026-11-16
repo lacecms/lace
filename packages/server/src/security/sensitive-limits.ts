@@ -1,63 +1,72 @@
-export type SensitiveRequestOperation =
-  | "auth"
-  | "email"
-  | "invite"
-  | "setup"
-  | "token"
-  | "upload"
-  | "mcp"
-  | "oauth-register"
-  | "oauth-token"
-  | "oauth-revoke";
+import {
+  routePathPattern,
+  type RoutePolicy,
+  type SensitiveRequestLimit,
+} from "../routing/route-policy.js";
+import { outerRoutes } from "../routing/outer-routes.js";
+import { API_V1, v1RoutePolicies, v1Routes } from "../routing/v1-routes.js";
 
-export interface SensitiveRequestLimit {
-  readonly operation: SensitiveRequestOperation;
-  /** `actor` limits count per resolved actor; `client` per trusted client address. */
-  readonly scope: "actor" | "client";
-}
+export type { SensitiveRequestLimit, SensitiveRequestOperation } from "../routing/route-policy.js";
 
-const INVITE_LIMITED_PATH =
+const limitedRoutes = [
+  ...Object.values(outerRoutes).map((route) => ({ route, path: route.path })),
+  ...v1RoutePolicies.map((route) => ({ route, path: API_V1 + route.path })),
+].flatMap(({ route, path }) => {
+  const limit = route.rateLimit;
+  return limit === undefined || limit === "namespace"
+    ? []
+    : [{ method: route.method, path: routePathPattern(path), limit }];
+});
+
+const LEGACY_INVITE_PATH =
   /^\/api\/v1\/admin\/(?:invitations(?:\/[^/]+(?:\/resend)?)?|users\/[^/]+\/password-reset)$/u;
 
-/**
- * Maps a request to its sensitive fixed-window limit, shared by both runtimes so
- * Node and the Worker count the same routes under the same subjects.
- */
-export function sensitiveRequestLimit(
-  method: string,
-  pathname: string,
-): SensitiveRequestLimit | undefined {
-  if (pathname === "/mcp") return { operation: "mcp", scope: "actor" };
-  if (pathname === "/api/auth/oauth2/register" && method === "POST")
-    return { operation: "oauth-register", scope: "client" };
-  if (pathname === "/api/auth/oauth2/token" && method === "POST")
-    return { operation: "oauth-token", scope: "client" };
-  if (/^\/api\/v1\/account\/mcp-connections\/[^/]+\/revoke$/u.test(pathname) && method === "POST")
-    return { operation: "oauth-revoke", scope: "actor" };
+/** Broad controls remain in force even if the request never reaches an operation. */
+function namespaceLimit(method: string, pathname: string): SensitiveRequestLimit | undefined {
   if (pathname.startsWith("/api/auth/oauth2/")) return undefined;
   if (pathname.startsWith("/api/auth/") && method !== "GET")
     return { operation: "auth", scope: "client" };
   if (
     method === "POST" &&
-    (pathname.startsWith("/api/v1/invitations/") || pathname.startsWith("/api/v1/password-reset/"))
+    (pathname.startsWith(`${API_V1}/invitations/`) ||
+      pathname.startsWith(`${API_V1}/password-reset/`))
   )
     return { operation: "auth", scope: "client" };
-  if (pathname === "/api/v1/account/password" && method === "POST")
-    return { operation: "auth", scope: "actor" };
-  if (pathname === "/api/v1/setup/admin") return { operation: "setup", scope: "client" };
+  const setup = v1Routes.setupSession.setupAdmin;
+  if (pathname === API_V1 + setup.path && typeof setup.rateLimit === "object")
+    return setup.rateLimit;
   if (
-    (pathname.startsWith("/api/v1/admin/api-tokens") ||
-      pathname.startsWith("/api/v1/admin/import-tokens")) &&
+    (pathname.startsWith(API_V1 + v1Routes.credentials.listBuild.path) ||
+      pathname.startsWith(API_V1 + v1Routes.credentials.listImport.path)) &&
     method !== "GET"
   )
     return { operation: "token", scope: "actor" };
-  if (pathname === "/api/v1/admin/media" && method === "POST")
-    return { operation: "upload", scope: "actor" };
-  if (pathname === "/api/v1/admin/settings/email-test" && method === "POST")
-    return { operation: "email", scope: "actor" };
-  if ((method === "POST" || method === "DELETE") && INVITE_LIMITED_PATH.test(pathname))
+  if ((method === "POST" || method === "DELETE") && LEGACY_INVITE_PATH.test(pathname))
     return { operation: "invite", scope: "actor" };
   return undefined;
+}
+
+/** Compatibility view for standalone limiters and requests outside the registered routes. */
+export function sensitiveRequestLimit(
+  method: string,
+  pathname: string,
+): SensitiveRequestLimit | undefined {
+  const declared = limitedRoutes.find(
+    (route) => (route.method === "ALL" || route.method === method) && route.path.test(pathname),
+  );
+  return declared?.limit ?? namespaceLimit(method, pathname);
+}
+
+export function routeSensitiveLimit(
+  policy: RoutePolicy | undefined,
+  method: string,
+  pathname: string,
+): SensitiveRequestLimit | undefined {
+  if (policy === undefined) return sensitiveRequestLimit(method, pathname);
+  // Hono matches HEAD as GET. The broad namespace controls use the original method.
+  if (policy.rateLimit === "namespace" || (policy.method !== "ALL" && policy.method !== method))
+    return namespaceLimit(method, pathname);
+  return policy.rateLimit;
 }
 
 /** Same token/client-address subject on Node and Worker, using trusted address input. */

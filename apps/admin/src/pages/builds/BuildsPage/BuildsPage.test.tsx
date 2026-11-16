@@ -17,8 +17,12 @@ const failed = {
   error: "provider_failed" as const,
 };
 
-test("admin inspects and retries a failed build", async () => {
+test("admin loads older history and can inspect and retry a failed build there", async () => {
   const user = userEvent.setup();
+  const newest = { ...failed, id: "new-build", targetVersion: 5, status: "succeeded" as const };
+  const listBuilds = vi.fn(async (after?: string) =>
+    after === undefined ? { items: [newest], nextCursor: "older" } : { items: [failed] },
+  );
   const retryBuild = vi.fn(async () => ({
     coalesced: false,
     eventId: "event-2",
@@ -28,14 +32,16 @@ test("admin inspects and retries a failed build", async () => {
     "/builds",
     staticSessionSource({ id: "admin-1", role: "admin" }),
     stubClient({
-      listBuilds: async () => ({ items: [failed] }),
+      listBuilds,
       getBuild: async () => failed,
       retryBuild,
     }),
   );
   const table = await screen.findByRole("table", { name: "Build history" });
-  expect(table).toHaveTextContent("v4");
-  await user.click(within(table).getByRole("button", { name: "View build for version 4" }));
+  expect(table).toHaveTextContent("v5");
+  await user.click(screen.getByRole("button", { name: "Load more builds" }));
+  await user.click(await within(table).findByRole("button", { name: "View build for version 4" }));
+  expect(listBuilds).toHaveBeenLastCalledWith("older");
   const detail = await screen.findByRole("region", { name: "Build details" });
   expect(detail).toHaveTextContent("provider-1");
   expect(detail).toHaveTextContent("The build provider failed.");
@@ -43,6 +49,65 @@ test("admin inspects and retries a failed build", async () => {
   await user.click(within(detail).getByRole("button", { name: "Retry build" }));
   await waitFor(() => expect(retryBuild).toHaveBeenCalledWith("build-1"));
   expect(await screen.findByRole("status")).toHaveTextContent("version 4 queued");
+});
+
+test("build polling follows fresh cursors when new history arrives", async () => {
+  const user = userEvent.setup();
+  const prior = { ...failed, id: "prior", targetVersion: 5 };
+  const latest = { ...failed, id: "latest", targetVersion: 6 };
+  let added = false;
+  const listBuilds = vi.fn(async (after?: string) => {
+    if (after === undefined)
+      return added
+        ? { items: [latest], nextCursor: "new-boundary" }
+        : { items: [prior], nextCursor: "old-boundary" };
+    return { items: after === "new-boundary" ? [prior, failed] : [failed] };
+  });
+  renderRoute(
+    "/builds",
+    staticSessionSource({ id: "admin-1", role: "admin" }),
+    stubClient({ listBuilds }),
+  );
+  await user.click(await screen.findByRole("button", { name: "Load more builds" }));
+  const table = await screen.findByRole("table", { name: "Build history" });
+  expect(await within(table).findByText("v4")).toBeInTheDocument();
+  added = true;
+  await waitFor(() => expect(table).toHaveTextContent("v6"), { timeout: 7_000 });
+  const versions = within(table)
+    .getAllByRole("button", { name: /View build for version/u })
+    .map((button) => button.getAttribute("aria-label"));
+  expect(versions).toEqual([6, 5, 4].map((version) => `View build for version ${version}`));
+  expect(listBuilds.mock.calls.slice(-2)).toEqual([[undefined], ["new-boundary"]]);
+}, 10_000);
+
+test("builds keeps available rows and restarts an invalid continuation", async () => {
+  const user = userEvent.setup();
+  let restarted = false;
+  const listBuilds = vi.fn(async (after?: string) => {
+    if (after !== undefined) {
+      restarted = true;
+      throw new AdminClientError({
+        code: "VALIDATION_FAILED",
+        message: "Invalid cursor.",
+        status: 422,
+        issues: [
+          { path: "/after", code: "invalid_value", message: "The submitted value is invalid." },
+        ],
+      });
+    }
+    return { items: [failed], ...(restarted ? {} : { nextCursor: "former" }) };
+  });
+  renderRoute(
+    "/builds",
+    staticSessionSource({ id: "admin-1", role: "admin" }),
+    stubClient({ listBuilds }),
+  );
+  await user.click(await screen.findByRole("button", { name: "Load more builds" }));
+  expect(await screen.findByRole("button", { name: "Restart list" })).toBeInTheDocument();
+  expect(screen.getByRole("table", { name: "Build history" })).toHaveTextContent("v4");
+  await user.click(screen.getByRole("button", { name: "Restart list" }));
+  expect(await screen.findByRole("table", { name: "Build history" })).toHaveTextContent("v4");
+  expect(listBuilds.mock.calls).toEqual([[undefined], ["former"], [undefined]]);
 });
 
 test("viewer can inspect history without build controls", async () => {

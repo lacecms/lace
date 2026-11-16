@@ -10,6 +10,7 @@ import type {
   BuildContentExportPage,
   ContentLinkReadPort,
   CursorPage,
+  CursorPageInput,
   ExportBuildContentPageInput,
   LinkImpactQuery,
   LinkTargetQuery,
@@ -26,7 +27,6 @@ import type {
   PublicRecordContent,
   SiteBuildRecord,
 } from "@lacecms/application";
-import { MAX_PAGE_SIZE } from "@lacecms/content";
 import type {
   ActorId,
   ContentEntry,
@@ -91,7 +91,13 @@ import {
 import { mediaListFilters, mediaTagCatalogQuery } from "../media/tags.js";
 import { MEDIA_USAGE_SQL, mediaUsageEntries } from "../media/usage.js";
 import type { MediaUsageRow } from "../media/usage.js";
-import { decodeCursor, encodeCursor, encodeSortCursor } from "../shared/cursors.js";
+import {
+  decodeCursor,
+  encodeCursor,
+  encodeSortCursor,
+  operationalCursor,
+  operationalPage,
+} from "../shared/cursors.js";
 import { failure } from "../shared/failures.js";
 import { assertPageSize, chunks } from "../shared/values.js";
 
@@ -441,13 +447,22 @@ export class SqlContentReader implements ContentLinkReadPort {
     );
   }
 
-  public async listSiteBuilds(limit: number): Promise<readonly SiteBuildRecord[]> {
-    const bounded = Math.max(1, Math.min(MAX_PAGE_SIZE, Math.trunc(limit)));
+  public async listSiteBuilds(input: CursorPageInput): Promise<CursorPage<SiteBuildRecord>> {
+    const limit = assertPageSize(input.limit);
+    const kind = "admin-site-builds";
+    const after = operationalCursor(input.after, kind);
+    const boundary = after === undefined ? "" : "where (requested_at, id) < (?, ?)";
     const rows = await this.sql.all<SiteBuildRow>(
-      "select * from site_builds order by requested_at desc, id desc limit ?",
-      bounded,
+      `select * from site_builds ${boundary} order by requested_at desc, id desc limit ?`,
+      ...(after === undefined ? [] : [after.timestamp, after.id]),
+      limit + 1,
     );
-    return rows.map(siteBuildRecord);
+    return operationalPage(
+      rows,
+      limit,
+      (row) => encodeCursor(kind, row.requested_at, row.id),
+      siteBuildRecord,
+    );
   }
 
   public async getSiteBuild(buildId: SiteBuildId): Promise<SiteBuildRecord | null> {

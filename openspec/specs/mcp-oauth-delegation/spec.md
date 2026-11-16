@@ -167,6 +167,23 @@ The disabled installation SHALL hide the section and refuse its endpoints.
 - **WHEN** a signed-in user requests another user's connection identifier
 - **THEN** the response is `404` and the connection remains unchanged
 
+### Requirement: Account traverses owned connection pages
+The Account screen SHALL use the common continuation contract to load
+additional owned connections. Connection lists SHALL continue to include
+expired and revoked connections with their existing status. Each request
+SHALL derive ownership from the current session.
+
+#### Scenario: More owned connections are available
+- **WHEN** the Account screen receives a connection page with a continuation
+- **THEN** its Load more action submits that opaque continuation and appends
+  the next page of owned connections
+
+#### Scenario: A previous grant ID is received as a continuation
+- **WHEN** a signed-in user submits a raw grant ID from a pre-upgrade
+  connection page in `after`
+- **THEN** the list returns the standard invalid-cursor response and a new
+  request without `after` starts a fresh traversal of their connections
+
 ### Requirement: OAuth traffic is bounded without leaking credentials
 Registration SHALL use the existing trusted-client-address limiter with a
 limit of ten attempts per fifteen minutes. Token requests SHALL be limited to
@@ -193,7 +210,7 @@ The generated versioned OpenAPI document SHALL describe the session-authenticate
 
 #### Scenario: Generated inventory includes connection management
 - **WHEN** a consumer inspects the generated versioned OpenAPI document
-- **THEN** it describes `GET /api/v1/account/mcp-connections`, including `after` and `limit`, and `POST /api/v1/account/mcp-connections/{connectionId}/revoke`, including the path parameter and response contracts
+- **THEN** it describes `GET /api/v1/account/mcp-connections` with opaque `after`, the common `limit`, an optional `nextCursor` and invalid-pagination errors, and `POST /api/v1/account/mcp-connections/{connectionId}/revoke` with its path parameter and response contracts
 
 #### Scenario: Disabled MCP remains inaccessible
 - **WHEN** MCP is disabled and a session requests either connection operation

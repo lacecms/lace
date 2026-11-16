@@ -3,7 +3,7 @@ import { entityTagSchema, expectedRevisionSchema, nonNegativeIntegerSchema } fro
 import type { EntityTag } from "./primitives.js";
 import { invalidPrecondition } from "./validation-error.js";
 
-/** Derives the build-export entity tag from the published-state version. */
+/** Formats the version carried by a draft or build-export entity tag. */
 export function entityTagForVersion(version: number): EntityTag {
   const parsed = v.safeParse(nonNegativeIntegerSchema, version);
   if (!parsed.success || !Number.isSafeInteger(version))

@@ -1,0 +1,21 @@
+## 1. Entry preconditions and shared contracts
+
+- [x] 1.1 Return the authorized entry's quoted draft revision and `Cache-Control: no-store` from the detail response. Document the response header and five draft revision request headers in generated OpenAPI. Run server cases for session and import detail reads, verbatim header-only save, a stale tag, header/body mismatch, denied or missing entries, and a publication change with the same draft revision. Run existing media metadata, unpublish, deletion race and public conditional-read cases.
+- [x] 1.2 Build the shared page limit in `@lacecms/contracts` and use its REST and MCP input forms to normalize before reads. Define the reusable operational pagination schema and transport-neutral page input. Update the existing admin entry/media list adapters and MCP `list_entries`. Run contract, server and MCP cases for omitted limits, boundaries 1 and 100, invalid transports and the exact value-free `/limit` issue. Assert that bounded public export, link and tag-catalog read contracts still match their existing tests.
+
+## 2. Application and persistence pages
+
+- [x] 2.1 Wire user and invitation pages from the protected routes through their use cases and both security adapters. Return aggregate user totals with the page. Declare the partial invitation ordering index in Drizzle and add it through the next forward migration. Test migration from existing data and run `pnpm db:check`. In the shared security suite, exercise exact terminal pages, user totals across boundaries, deleted user anchors, invitation timestamp ties and existing eligibility on Node/SQLite and local D1. Check query plans use the indexed keysets and return bounded rows.
+- [x] 2.2 Wire paged build history from its session route through the build use case and shared reader. Update direct callers and fixtures. Run repository cases for 105+ builds, timestamp ties and no trailing empty page on in-memory and file-backed SQLite and local D1. Verify direct delegated actors are refused before reading history and viewers can still open build details.
+- [x] 2.3 Wire OAuth connection pages from the feature-gated session route through the use case and shared owner-scoped store. Test interleaved owners, old raw grant IDs and terminal pages. Verify that ownership comes from the current actor, a foreign cursor produces the standard issue, and revoked and expired connections remain visible to that owner.
+- [x] 2.4 Run the typed server route checks and the shared HTTP boundary suite on Node/SQLite and Worker/local D1. Verify continuation round-trips, page-size changes mid-traversal, denied direct or HTTP calls before protected reads, and sanitized `422` issues including malformed, oversized and wrong-list continuations. Verify the full generated document includes the new headers and page contracts, and the MCP-disabled live document omits connection operations.
+
+## 3. Admin paging
+
+- [x] 3.1 Make the Admin client and Users, Pending invitations and Assistant connections consume the common page shape. Use independent paging state, server totals, the existing row actions and session recovery. Run Admin cases for independent Load more actions, totals on a partial page, refresh after a successful mutation on a later page, prior rows retained on failure, and restart without the rejected cursor.
+- [x] 3.2 Page Builds in Admin and separate its infinite-query cache entry from entry-editor build polling. Run Admin cases for older build detail and retry, insertion during polling without duplicate rows, invalid continuation recovery and the existing editor build-status behavior.
+
+## 4. Documentation and final verification
+
+- [x] 4.1 Update architecture §12 and the API and MCP reference pages with the ETag scope, the four list contracts, the OAuth cursor restart and the common limit. Record the validator decision and verified outcomes in the EX4D roadmap. Regenerate the checked-in OpenAPI JSON and verify it with `pnpm openapi:check`. Run `pnpm docs:check` for the updated references.
+- [x] 4.2 Run the focused contracts, application, MCP, server, persistence and Admin suites for the changed paths, then `pnpm typecheck`, `pnpm lint`, `pnpm format:check` and `pnpm exec openspec validate ex04d-http-consistency --type change --strict`.

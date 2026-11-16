@@ -14,7 +14,13 @@ import {
   unixMilliseconds,
 } from "@lacecms/domain";
 
-import { editor, fixture, json } from "../test-support/app-harness.js";
+import {
+  editor,
+  buildExportJson,
+  buildTokenSecurity,
+  fixture,
+  json,
+} from "../test-support/app-harness.js";
 
 test("content validation failures use the validation envelope with JSON Pointers", async () => {
   const { app, store } = await fixture({
@@ -183,7 +189,7 @@ test("lists entries with filters, totals, and query-bound cursors", async () => 
 
 test("admin entry responses name the last editor while public DTOs carry no editor names", async () => {
   const viewer: Actor = { id: actorId("viewer"), role: "viewer" };
-  const { app, seedProfile } = await fixture();
+  const { app, seedProfile } = await fixture({ security: buildTokenSecurity });
   seedProfile("admin", "admin@example.test", "admin");
   const post = (body: unknown) => ({
     body: JSON.stringify(body),
@@ -250,7 +256,7 @@ test("admin entry responses name the last editor while public DTOs carry no edit
   }
 
   const page = await json(app, "/api/v1/public/collections/posts/named");
-  const exported = await json(app, "/api/v1/public/build-export");
+  const exported = await buildExportJson(app);
   expect(page).toMatchObject({
     body: { entry: { path: "/blog/named" } },
     response: { status: 200 },

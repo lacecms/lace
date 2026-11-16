@@ -100,6 +100,27 @@ dialog SHALL issue no request and return focus to the control that opened it.
 - **WHEN** an editor opens `/users`
 - **THEN** the screen shows access denied and issues no user-list or invitation-list request
 
+### Requirement: Users and invitations can be paged independently
+The Users screen SHALL load the first user and invitation pages independently
+and offer a separate accessible Load more action for each list with a
+continuation. The user summary SHALL use server totals for all accounts and
+all disabled accounts. The existing row affordances, confirmation and
+session recovery SHALL apply across all loaded pages. After a successful
+change the screen SHALL refresh the affected list and its totals from the
+server, including when the changed record was on a subsequent page.
+
+#### Scenario: A disabled account is on a later page
+- **WHEN** the first user page contains enabled accounts only, and the server
+  reports an additional disabled account on a later page
+- **THEN** the summary includes the disabled account immediately, and loading
+  the next user page makes its row available without advancing invitations
+
+#### Scenario: An invitation is revoked from a later page
+- **WHEN** the administrator revokes an invitation reached through Load more
+  and the server confirms the change
+- **THEN** the invitation is absent from the refreshed list and the
+  invitation paging state can continue from that refreshed result
+
 ### Requirement: Administrator can inspect local settings and manage build tokens
 The Settings screen SHALL show status cards for API readiness (Ready or Not
 ready), the configured-model count, and the number of active build tokens,

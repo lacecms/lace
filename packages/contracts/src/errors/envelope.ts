@@ -89,7 +89,9 @@ export interface ClassifiedError {
 }
 
 /** Creates a safe validation envelope from already-normalized contract issues. */
-export function validationError(issues: readonly ContractValidationIssue[]): ClassifiedError {
+export function validationError(
+  issues: readonly ContractValidationIssue[],
+): ClassifiedError & { readonly status: 422 } {
   return {
     body: {
       error: {

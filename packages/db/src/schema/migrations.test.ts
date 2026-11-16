@@ -3,6 +3,7 @@ import { expect, test } from "vitest";
 import { readFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { checkedInMigrations } from "./migrations.js";
+import { readInvitationPage, readManagedUserPage } from "../security/account-pages.js";
 
 test("checked-in migration inventory matches the Drizzle journal", async () => {
   const journal: { entries: { when: number; tag: string }[] } = JSON.parse(
@@ -81,6 +82,46 @@ const persistenceIndexes = [
 
 const migrationSql = (name: string) =>
   readFile(new URL(`../../drizzle/${name}`, import.meta.url), "utf8");
+
+test("the invitation index migrates existing rows and both account keysets use indexes", async () => {
+  const database = new DatabaseSync(":memory:");
+  try {
+    const forwards = checkedInMigrations.findIndex(
+      ({ name }) => name === "0003_invitation_pagination.sql",
+    );
+    for (const { name } of checkedInMigrations.slice(0, forwards))
+      database.exec(await migrationSql(name));
+    database.exec(`
+      insert into user (id, name, email, email_verified, role, disabled, created_at, updated_at)
+      values ('a','a','a@lace.test',0,'viewer',0,1,1), ('b','b','b@lace.test',0,'viewer',1,1,1);
+      insert into invitations (id,email,role,token_hash,invited_by,created_at,expires_at)
+      values ('i-1','1@invite.test','viewer','hash1','a',1,2), ('i-2','2@invite.test','viewer','hash2','a',1,2);
+    `);
+    database.exec(await migrationSql(checkedInMigrations[forwards]!.name));
+    const plans: string[] = [];
+    const sql = (query: string, ...bindings: (string | number)[]) => {
+      const plan = database.prepare(`explain query plan ${query}`).all(...bindings);
+      plans.push(plan.map((row) => String(row.detail)).join("\n"));
+      const result = database.prepare(query).all(...bindings);
+      expect(result.length).toBeLessThanOrEqual(2);
+      return result;
+    };
+    const users = await readManagedUserPage(sql, { limit: 1 });
+    expect(users).toMatchObject({ total: 2, disabledCount: 1 });
+    const userTail = await readManagedUserPage(sql, { after: users.nextCursor!, limit: 1 });
+    expect(userTail.items.map((item) => item.id)).toEqual(["b"]);
+    expect(plans.at(-1)).toMatch(/SEARCH user USING INDEX .+ \(email>\?\)/u);
+    const invitations = await readInvitationPage(sql, { limit: 1 });
+    const invitationTail = await readInvitationPage(sql, {
+      after: invitations.nextCursor!,
+      limit: 1,
+    });
+    expect(invitationTail.items.map((item) => item.id)).toEqual(["i-1"]);
+    expect(plans.at(-1)).toMatch(/SEARCH i USING INDEX invitations_pending_order_idx/u);
+  } finally {
+    database.close();
+  }
+});
 
 test("a seeded baseline database migrates to 0001 with each index once and rows unchanged", async () => {
   const [baseline, ...forward] = checkedInMigrations;

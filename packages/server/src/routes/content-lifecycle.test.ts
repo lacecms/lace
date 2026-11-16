@@ -8,7 +8,14 @@ import { defineCollection, defineGlobal, definePage } from "@lacecms/config";
 import { defineBlock, field } from "@lacecms/content";
 import { actorId, mediaId, unixMilliseconds } from "@lacecms/domain";
 
-import { admin, editor, fixture, json } from "../test-support/app-harness.js";
+import {
+  admin,
+  editor,
+  buildExportJson,
+  buildTokenSecurity,
+  fixture,
+  json,
+} from "../test-support/app-harness.js";
 
 const issueEnvelope = v.object({
   error: v.object({
@@ -30,7 +37,7 @@ test("globals are read by model key and refused as routed or deletable entries",
   const {
     app,
     sqlite: { connection },
-  } = await fixture({ maxBodyBytes: 4096, models });
+  } = await fixture({ maxBodyBytes: 4096, models, security: buildTokenSecurity });
   seedSqliteMedia(connection, {
     createdAt: unixMilliseconds(1),
     createdBy: admin.id,
@@ -83,7 +90,7 @@ test("globals are read by model key and refused as routed or deletable entries",
     response: { status: 404 },
   });
 
-  const before = await json(app, "/api/v1/public/build-export");
+  const before = await buildExportJson(app);
   const published = await call(`${entryPath}/publish`, { body: { expectedRevision: 1 } });
   expect(published.response.status).toBe(200);
   const read = await json(app, "/api/v1/public/globals/settings");
@@ -106,7 +113,7 @@ test("globals are read by model key and refused as routed or deletable entries",
   expect((await json(app, "/api/v1/public/globals/Not%20Valid")).response.status).not.toBe(200);
   expect((await json(app, "/api/v1/public/pages/settings")).response.status).toBe(404);
 
-  const exported = await json(app, "/api/v1/public/build-export");
+  const exported = await buildExportJson(app);
   expect(exported.response.headers.get("etag")).not.toBe(before.response.headers.get("etag"));
   expect(exported.body.entries).toEqual([]);
   expect(v.parse(buildExportSchema, exported.body).globals.map((item) => item.modelKey)).toEqual([
@@ -132,7 +139,7 @@ test("globals are read by model key and refused as routed or deletable entries",
   });
   expect(unpublished.response.status).toBe(200);
   expect((await json(app, "/api/v1/public/globals/settings")).response.status).toBe(404);
-  const afterUnpublish = await json(app, "/api/v1/public/build-export");
+  const afterUnpublish = await buildExportJson(app);
   expect(afterUnpublish.response.headers.get("etag")).not.toBe(
     exported.response.headers.get("etag"),
   );
@@ -301,7 +308,7 @@ test("SEO values travel through admin, public and export contracts", async () =>
     app,
     sqlite: { connection },
     store,
-  } = await fixture({ maxBodyBytes: 8192, models });
+  } = await fixture({ maxBodyBytes: 8192, models, security: buildTokenSecurity });
   for (const id of ["share", "other"]) {
     seedSqliteMedia(connection, {
       createdAt: unixMilliseconds(1),
@@ -414,10 +421,7 @@ test("SEO values travel through admin, public and export contracts", async () =>
   expect(await store.loadPublicMedia(mediaId("share"))).toMatchObject({ id: "share" });
   expect(await store.loadPublicMedia(mediaId("other"))).toBeNull();
 
-  const exported = v.parse(
-    buildExportSchema,
-    (await json(app, "/api/v1/public/build-export")).body,
-  );
+  const exported = v.parse(buildExportSchema, (await buildExportJson(app)).body);
   expect(exported.seo).toEqual({
     defaults: {
       description: null,
@@ -457,7 +461,7 @@ test("block envelopes travel through admin, public and export contracts", async 
   const {
     app,
     sqlite: { connection },
-  } = await fixture({ blocks: [panel], maxBodyBytes: 8192, models });
+  } = await fixture({ blocks: [panel], maxBodyBytes: 8192, models, security: buildTokenSecurity });
   for (const id of ["shown", "secret"]) {
     seedSqliteMedia(connection, {
       createdAt: unixMilliseconds(1),
@@ -637,10 +641,7 @@ test("block envelopes travel through admin, public and export contracts", async 
   expect((await json(app, "/api/v1/public/collections/posts")).body.items[0].blocks).toEqual(
     delivered,
   );
-  const exported = v.parse(
-    buildExportSchema,
-    (await json(app, "/api/v1/public/build-export")).body,
-  );
+  const exported = v.parse(buildExportSchema, (await buildExportJson(app)).body);
   expect(exported.entries[0]?.blocks).toEqual(delivered);
   expect(Object.keys(exported.media)).toEqual(["shown"]);
   expect((await json(app, "/api/v1/public/media/shown")).response.status).not.toBe(404);

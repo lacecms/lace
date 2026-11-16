@@ -1,5 +1,6 @@
 import { opaqueCursor } from "@lacecms/application";
-import { LaceError } from "@lacecms/content";
+import type { CursorPage } from "@lacecms/application";
+import { ContentValidationError, LaceError } from "@lacecms/content";
 import { decodeBase64Url, encodeBase64Url } from "./base64.js";
 import { failure } from "./failures.js";
 import { SQL_CURSOR_VERSION, SQL_SORT_CURSOR_VERSION } from "./limits.js";
@@ -61,6 +62,40 @@ export function decodeCursor(value: string, kind: string): DecodedCursor {
     failure("Cursor is unsupported or belongs to a different list.");
   }
   return { id: candidate.id, timestamp: assertTimestamp(candidate.timestamp, "Cursor timestamp") };
+}
+
+export function invalidOperationalCursor(): never {
+  throw new ContentValidationError([
+    { code: "invalid_value", message: "The submitted value is invalid.", path: ["after"] },
+  ]);
+}
+
+export function operationalCursor(
+  value: string | undefined,
+  kind: string,
+): DecodedCursor | undefined {
+  if (value === undefined) return undefined;
+  if (value.length > 4096) invalidOperationalCursor();
+  try {
+    return decodeCursor(value, kind);
+  } catch (error) {
+    if (error instanceof LaceError && error.code === "CONTENT_INVALID_STATE")
+      invalidOperationalCursor();
+    throw error;
+  }
+}
+
+export function operationalPage<Row, Item>(
+  rows: readonly Row[],
+  limit: number,
+  cursor: (row: Row) => NonNullable<CursorPage<Item>["nextCursor"]>,
+  item: (row: Row) => Item,
+): CursorPage<Item> {
+  const visible = rows.slice(0, limit);
+  return {
+    items: visible.map(item),
+    ...(rows.length > limit ? { nextCursor: cursor(visible[limit - 1]!) } : {}),
+  };
 }
 
 export function encodeSortCursor(

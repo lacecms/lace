@@ -70,8 +70,8 @@ function QueuedBuild({
 }) {
   const client = useAdminClient();
   const history = useQuery({
-    queryKey: adminQueryKeys.builds,
-    queryFn: client.listBuilds,
+    queryKey: adminQueryKeys.currentBuilds,
+    queryFn: () => client.listBuilds(),
     refetchInterval: (query) =>
       query.state.data !== undefined &&
       isTerminalBuildState(coveringBuildState(query.state.data.items, targetVersion))

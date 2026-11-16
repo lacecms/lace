@@ -193,6 +193,7 @@ test("packaged entry point keeps its public exports", async () => {
     "oauthConnectionRevokeSchema",
     "oauthConnectionSchema",
     "opaqueCursorSchema",
+    "operationalPageQuerySchema",
     "packageName",
     "passwordResetConfirmRequestSchema",
     "passwordResetRequestSchema",

@@ -35,7 +35,9 @@ for (const kind of ["node", "worker"]) {
       const record = await f.runtime.repository.loadMedia(media.id);
       expect(await storage.get(record.storageKey)).not.toBeNull();
       let now = 1000;
-      const admin = (await f.runtime.security.listUsers()).find((user) => user.role === "admin");
+      const admin = (await f.runtime.security.listUsers({ limit: 50 })).items.find(
+        (user) => user.role === "admin",
+      );
       await f.runtime.repository.markForDeletion({
         mediaId: media.id,
         requestedAt: now,

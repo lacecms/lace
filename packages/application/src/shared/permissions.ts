@@ -1,10 +1,18 @@
 import {
+  DomainError,
   hasPermission,
   permissionsFor,
   requirePermission,
   type Actor,
   type Permission,
 } from "@lacecms/domain";
+
+/** Session-only application operations refuse every delegated credential. */
+export function requireSessionActor(actor: Actor, permission?: Permission): void {
+  if (actor.authority !== undefined)
+    throw new DomainError("AUTHORIZATION_DENIED", "A browser session is required.");
+  if (permission !== undefined) requirePermission(actor, permission);
+}
 
 /** Keeps the role matrix in the domain policy rather than HTTP handlers. */
 export function requireUsersManager(actor: Actor): void {

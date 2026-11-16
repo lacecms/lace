@@ -62,6 +62,7 @@ async function open(kind, options = {}) {
         LACE_MINIO_REGION: "us-east-1",
         LACE_MINIO_TIMEOUT_MS: "1000",
         LACE_TRUSTED_PROXY_CIDRS: "10.0.0.0/8",
+        LACE_MCP_ENABLED: options.mcpEnabled ? "true" : "false",
       }),
     });
     cleanups.push(() => runtime.close());
@@ -70,7 +71,7 @@ async function open(kind, options = {}) {
       return runtime.app.fetch(request);
     };
     query = (statement) => runtime.database.connection.prepare(statement).all();
-    sql = (statement) => runtime.database.connection.prepare(statement).run();
+    sql = (statement, ...values) => runtime.database.connection.prepare(statement).run(...values);
     rows = () => query("select * from rate_limit_buckets");
   } else {
     const local = await openLocalCloudflare();
@@ -99,6 +100,7 @@ async function open(kind, options = {}) {
       LACE_ENVIRONMENT: production ? "production" : "development",
       LACE_AUTH_SECRET: options.secret ?? "local-security-auth-secret-at-least-32-characters",
       LACE_PUBLIC_BASE_URL: base,
+      LACE_MCP_ENABLED: options.mcpEnabled ? "true" : "false",
     };
     runtime = worker.runtime(env);
     call = (request, ip) => {
@@ -110,7 +112,11 @@ async function open(kind, options = {}) {
       });
     };
     query = async (statement) => (await local.database.prepare(statement).all()).results;
-    sql = (statement) => local.database.prepare(statement).run();
+    sql = (statement, ...values) =>
+      local.database
+        .prepare(statement)
+        .bind(...values)
+        .run();
     rows = () => query("select * from rate_limit_buckets");
   }
   const prepared = await prepareConfigurationSynchronization({
@@ -126,6 +132,101 @@ async function open(kind, options = {}) {
     target: runtime.repository,
   });
   return { runtime, call, rows, query, sql };
+}
+
+for (const kind of ["node", "cloudflare"]) {
+  test(`${kind}: protected list continuations use the same contract and keep session boundaries`, async () => {
+    const fixture = await open(kind, { mcpEnabled: true });
+    const setup = await fixture.runtime.security.createSetupToken();
+    const { user } = await fixture.runtime.security.bootstrap({
+      email: "admin@lace.test",
+      password,
+      token: setup.token,
+    });
+    const viewer = await createUserByInvitation(fixture.runtime.security, {
+      email: "viewer@lace.test",
+      invitedBy: user.id,
+      now: Date.now(),
+      password,
+      role: "viewer",
+    });
+    const peer = (index) => `198.51.100.${kind === "node" ? 150 + index : 160 + index}`;
+    async function session(email, index) {
+      const login = await fixture.call(
+        new Request(`${origin}/api/auth/sign-in/email`, {
+          method: "POST",
+          headers: { origin, "content-type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        }),
+        peer(index),
+      );
+      expect(login.status).toBe(200);
+      return login.headers.getSetCookie()[0].split(";")[0];
+    }
+    const adminCookie = await session(user.email, 1);
+    const viewerCookie = await session(viewer.email, 2);
+    const get = (path, cookie) =>
+      fixture.call(
+        new Request(`${origin}/api/v1/${path}`, {
+          headers: { origin, ...(cookie === undefined ? {} : { cookie }) },
+        }),
+        peer(3),
+      );
+    const [home] = await fixture.query("select id from content_entries where model_key = 'home'");
+    const entry = await get(`admin/entries/${home.id}`, viewerCookie);
+    expect(entry.status).toBe(200);
+    expect(entry.headers.get("cache-control")).toBe("no-store");
+    expect(entry.headers.get("etag")).toBe(`"${(await entry.json()).draft.revision}"`);
+    const users = await (await get("admin/users?limit=1", adminCookie)).json();
+    expect(users).toMatchObject({ items: [{ id: user.id }], total: 2, disabledCount: 0 });
+    const userQuery = `admin/users?limit=2&after=${encodeURIComponent(users.nextCursor)}`;
+    expect((await get(userQuery)).status).toBe(401);
+    expect((await get(userQuery, viewerCookie)).status).toBe(403);
+    expect(await (await get(userQuery, adminCookie)).json()).toMatchObject({
+      items: [{ id: viewer.id }],
+      total: 2,
+    });
+    const wrongList = await get(
+      `admin/invitations?after=${encodeURIComponent(users.nextCursor)}`,
+      adminCookie,
+    );
+    expect(wrongList.status).toBe(422);
+    const cursorFailure = await wrongList.json();
+    expect(cursorFailure.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: { issues: [{ path: "/after" }] },
+    });
+    for (const value of ["", "raw-oauth-grant-id", "x".repeat(4097)]) {
+      const invalid = await get(`admin/site-builds?after=${value}`, viewerCookie);
+      expect(invalid.status).toBe(422);
+      expect(await invalid.json()).toEqual(cursorFailure);
+    }
+    await fixture.sql(
+      "insert into oauth_clients (id, client_id, name, redirect_uris) values ('paged-client', 'paged-client', 'Assistant', '[]')",
+    );
+    for (const [id, owner] of [
+      ["admin-first", user.id],
+      ["admin-last", user.id],
+      ["viewer-only", viewer.id],
+    ]) {
+      await fixture.sql(
+        "insert into oauth_grants (id, user_id, client_id, resource, scopes_json, user_generation, created_at, expires_at) values (?, ?, 'paged-client', '/mcp', '[]', 0, 1, 2)",
+        id,
+        owner,
+      );
+    }
+    const first = await (await get("account/mcp-connections?limit=1", adminCookie)).json();
+    expect(first).toMatchObject({ items: [{ id: "admin-first" }], nextCursor: expect.any(String) });
+    const next = `account/mcp-connections?after=${encodeURIComponent(first.nextCursor)}`;
+    const tail = await get(next, adminCookie);
+    expect(tail.status).toBe(200);
+    const page = await tail.json();
+    expect(page.items).toMatchObject([{ id: "admin-last" }]);
+    expect(page).not.toHaveProperty("nextCursor");
+    const foreign = await get(next, viewerCookie);
+    expect(foreign.status).toBe(422);
+    expect(await foreign.json()).toEqual(cursorFailure);
+  }, 30000);
 }
 
 for (const kind of ["node", "cloudflare"]) {
@@ -254,12 +355,44 @@ for (const kind of ["node", "cloudflare"]) {
       return response.headers.getSetCookie()[0].split(";")[0];
     };
     const setup = await f.runtime.security.createSetupToken();
-    const { user: admin } = await f.runtime.security.bootstrap({
-      email: "flow-admin@lace.test",
-      password,
-      token: setup.token,
+    expect(await (await invoke("/api/v1/setup/state")).json()).toEqual({ setupComplete: false });
+    const setupResponse = await invoke("/api/v1/setup/admin", {
+      json: { email: "flow-admin@lace.test", password, token: setup.token },
     });
+    expect(setupResponse.status).toBe(201);
+    const admin = await setupResponse.json();
+    expect(admin.role).toBe("admin");
+    expect(await (await invoke("/api/v1/setup/state")).json()).toEqual({ setupComplete: true });
     const adminCookie = await signIn(admin.email, password, peer(1));
+    const settings = await invoke("/api/v1/admin/settings/status", { cookie: adminCookie });
+    expect(settings.status).toBe(200);
+    expect(await settings.json()).toMatchObject({
+      configuredModels: config.content.length,
+      email: { provider: "none" },
+      mcp: { enabled: false, endpoint: `${origin}/mcp` },
+    });
+
+    const importResponse = await invoke("/api/v1/admin/import-tokens", {
+      cookie: adminCookie,
+      json: { name: "Import", expiresInDays: 1 },
+    });
+    expect(importResponse.status).toBe(201);
+    const issuedImport = await importResponse.json();
+    expect(issuedImport.createdBy.id).toBe(admin.id);
+    const listImports = await invoke("/api/v1/admin/import-tokens", { cookie: adminCookie });
+    expect(listImports.status).toBe(200);
+    expect(JSON.stringify(await listImports.json())).not.toContain(issuedImport.token);
+    const revokeImport = () =>
+      invoke(`/api/v1/admin/import-tokens/${issuedImport.id}`, {
+        cookie: adminCookie,
+        method: "DELETE",
+      });
+    const revoked = await revokeImport();
+    expect(revoked.status).toBe(200);
+    const revokedImport = await revoked.json();
+    expect(revokedImport).toMatchObject({ id: issuedImport.id, revokedAt: expect.any(String) });
+    expect(revokedImport).not.toHaveProperty("token");
+    expect(await (await revokeImport()).json()).toEqual(revokedImport);
 
     const invited = await invoke("/api/v1/admin/invitations", {
       cookie: adminCookie,
@@ -287,6 +420,9 @@ for (const kind of ["node", "cloudflare"]) {
     expect((await reused.json()).error.code).toBe("INVITATION_INVALID");
 
     const first = await signIn("invitee@lace.test", password, peer(3));
+    const deniedSettings = await invoke("/api/v1/admin/settings/status", { cookie: first });
+    expect(deniedSettings.status).toBe(403);
+    expect((await deniedSettings.json()).error.code).toBe("AUTHORIZATION_DENIED");
     const second = await signIn("invitee@lace.test", password, peer(3));
     const sessions = await (await invoke("/api/v1/account/sessions", { cookie: first })).json();
     expect(sessions.items).toHaveLength(2);
@@ -368,7 +504,7 @@ for (const kind of ["node", "cloudflare"]) {
       json: { email: "bulk-last@lace.test", role: "viewer" },
     });
     expect(exhausted.status).toBe(429);
-    expect((await f.runtime.security.listInvitations()).length).toBe(18);
+    expect((await f.runtime.security.listInvitations({ limit: 50 })).items.length).toBe(18);
 
     const guesses = [];
     for (let index = 0; index < 11; index += 1)
@@ -405,7 +541,7 @@ for (const kind of ["node", "cloudflare"]) {
     );
     expect(login.status).toBe(200);
     const cookie = login.headers.getSetCookie()[0].split(";")[0];
-    const before = await fixture.runtime.security.listUsers();
+    const before = await fixture.runtime.security.listUsers({ limit: 50 });
     const response = await fixture.call(
       new Request(`${origin}/api/v1/admin/invitations`, {
         method: "POST",
@@ -419,8 +555,8 @@ for (const kind of ["node", "cloudflare"]) {
       peer,
     );
     expect(response.status).toBe(403);
-    expect(await fixture.runtime.security.listUsers()).toEqual(before);
-    expect(await fixture.runtime.security.listInvitations()).toEqual([]);
+    expect(await fixture.runtime.security.listUsers({ limit: 50 })).toEqual(before);
+    expect((await fixture.runtime.security.listInvitations({ limit: 50 })).items).toEqual([]);
   }, 30000);
 }
 

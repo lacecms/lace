@@ -30,7 +30,7 @@ test("unexpected MCP and OAuth failures keep the protocol server_error body", as
 
 test("account MCP connection routes keep ownership, CSRF, strict bodies and safe projections", async () => {
   const now = 1800000000000;
-  const calls: { userId: string; after: string | undefined; limit: number }[] = [];
+  const calls: { userId: string; after?: string; limit: number }[] = [];
   const records = ["admin", "viewer"].map((userId) => ({
     id: `connection-${userId}`,
     userId,
@@ -47,9 +47,9 @@ test("account MCP connection routes keep ownership, CSRF, strict bodies and safe
   const connections = new OAuthConnectionUseCases({
     clock: { now: () => unixMilliseconds(now) },
     connections: {
-      listConnections: async (userId, after, limit) => {
-        calls.push({ userId, after, limit });
-        return records.filter((r) => r.userId === userId);
+      listConnections: async (userId, query) => {
+        calls.push({ userId, ...query });
+        return { items: records.filter((r) => r.userId === userId) };
       },
       revokeConnection: async (userId, id) => {
         const row = records.find((r) => r.userId === userId && r.id === id);
@@ -97,17 +97,20 @@ test("account MCP connection routes keep ownership, CSRF, strict bodies and safe
   expect((await revoke("connection-viewer")).status).toBe(204);
   expect((await revoke("connection-viewer")).status).toBe(204);
   expect(records[1]?.revokedAt).toBe(now);
-  for (const query of ["limit=51", "limit=0", "limit=1&unknown=x"])
+  for (const query of ["limit=101", "limit=0", "limit=1&unknown=x"])
     expect(
       (await app.request(`https://lace.test/api/v1/account/mcp-connections?${query}`)).status,
     ).toBe(422);
 });
 
-test("disabled and anonymous MCP account routes do not disclose connections", async () => {
-  const disabled = await fixture();
+test("unavailable and anonymous MCP account routes do not disclose connections", async () => {
+  const disabled = await fixture({ mcpEnabled: true });
   expect(await (await disabled.app.request("/api/v1/account/capabilities")).json()).toEqual({
     mcpEnabled: false,
   });
+  const doc = (await json(disabled.app, "/api/v1/openapi.json")).body;
+  expect(doc.paths).not.toHaveProperty("/api/v1/account/mcp-connections");
+  expect(doc.paths).not.toHaveProperty("/api/v1/account/mcp-connections/{connectionId}/revoke");
   for (const method of ["GET", "POST", "HEAD", "DELETE"]) {
     expect(
       (await disabled.app.request("https://lace.test/api/v1/account/mcp-connections", { method }))

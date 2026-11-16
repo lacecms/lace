@@ -1,6 +1,6 @@
 import { MAX_DISPLAY_NAME_LENGTH } from "@lacecms/domain";
 import * as v from "valibot";
-import { identifierSchema, isoTimestampSchema } from "../shared/primitives.js";
+import { cursorPageSchema, identifierSchema, isoTimestampSchema } from "../shared/primitives.js";
 import { emailSchema, roleSchema, passwordSchema } from "./users.js";
 import {
   accountLinkSchema,
@@ -38,7 +38,7 @@ export const invitationSchema = v.strictObject({
   role: roleSchema,
   state: invitationStateSchema,
 });
-export const invitationListSchema = v.strictObject({ items: v.array(invitationSchema) });
+export const invitationListSchema = cursorPageSchema(invitationSchema);
 /** The accept link is present exactly when the invitation email was not sent. */
 export const invitationIssueResultSchema = v.pipe(
   v.strictObject({

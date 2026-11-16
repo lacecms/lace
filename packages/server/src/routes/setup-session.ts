@@ -1,5 +1,4 @@
-import { response, validationHook } from "../shared/http.js";
-import { sendTestEmail } from "@lacecms/application";
+import { response } from "../shared/http.js";
 import {
   errorEnvelopeSchema,
   adminSettingsStatusSchema,
@@ -9,153 +8,134 @@ import {
   managedUserSchema,
   setupAdminRequestSchema,
   setupStateSchema,
-  InvariantError,
 } from "@lacecms/contracts";
 import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
-import * as v from "valibot";
-import { emailDeliveryStatus } from "../runtime/email.js";
+import { resolver } from "hono-openapi";
 import {
   authenticationFailure,
   authorizationFailure,
-  security,
+  describePolicy,
+  validate,
   validationFailure,
 } from "../shared/openapi.js";
 import type { RouteContext } from "../composition/route-context.js";
+import { v1Routes } from "../routing/v1-routes.js";
 
-export function registerSetupSessionRoutes(app: Hono, routeContext: RouteContext): void {
-  const { actor, settingsActor } = routeContext.actors;
-  const { capabilities } = routeContext;
-  const { email, sessionSummary, accountSecurity, profiles } = capabilities;
-  app.get(
-    "/api/v1/setup/state",
-    describeRoute({
-      summary: "Read installation setup completion",
-      tags: ["setup"],
-      security: security.none,
-      responses: {
-        200: {
-          content: { "application/json": { schema: resolver(setupStateSchema) } },
-          description: "Minimal installation completion state",
-        },
-      },
-    }),
-    async () => {
-      return response(
-        setupStateSchema,
-        { setupComplete: await accountSecurity().isSetupComplete() },
-        200,
-        { "cache-control": "no-store" },
-      );
-    },
-  );
+const routes = v1Routes.setupSession;
 
-  app.post(
-    "/api/v1/setup/admin",
-    describeRoute({
-      summary: "Create the first administrator with the setup token",
-      tags: ["setup"],
-      security: security.none,
-      responses: {
-        201: {
-          content: { "application/json": { schema: resolver(managedUserSchema) } },
-          description: "The created administrator",
+export function createSetupSessionRoutes(routeContext: RouteContext) {
+  const { actor } = routeContext.actors;
+  const { installedAccounts, sessionSummary, settings } = routeContext.capabilities;
+  return new Hono()
+    .on(
+      routes.setupState.method,
+      routes.setupState.path,
+      describePolicy(routes.setupState, {
+        summary: "Read installation setup completion",
+        tags: ["setup"],
+        responses: {
+          200: {
+            content: { "application/json": { schema: resolver(setupStateSchema) } },
+            description: "Minimal installation completion state",
+          },
         },
-        404: {
-          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-          description: "Unknown or expired token, or setup already complete (one ambiguous answer)",
-        },
-        ...validationFailure(),
+      }),
+      async () => {
+        return response(
+          setupStateSchema,
+          { setupComplete: await installedAccounts().isSetupComplete() },
+          200,
+          { "cache-control": "no-store" },
+        );
       },
-    }),
-    validator("json", setupAdminRequestSchema, validationHook),
-    async (context) => {
-      // Setup outcomes raise `AccountError("NOT_FOUND")`, one ambiguous 404 through the
-      // classifier; any other failure keeps its own classification.
-      const body = context.req.valid("json") as v.InferOutput<typeof setupAdminRequestSchema>;
-      const created = await accountSecurity().bootstrap({
-        email: body.email,
-        password: body.password,
-        token: body.token as never,
-      });
-      return response(managedUserSchema, created.user, 201);
-    },
-  );
-
-  app.get(
-    "/api/v1/admin/session",
-    describeRoute({
-      summary: "Read the signed-in user and server-derived permissions",
-      tags: ["admin"],
-      responses: {
-        200: {
-          content: { "application/json": { schema: resolver(adminSessionSchema) } },
-          description: "Session summary without credential material",
+    )
+    .on(
+      routes.setupAdmin.method,
+      routes.setupAdmin.path,
+      describePolicy(routes.setupAdmin, {
+        summary: "Create the first administrator with the setup token",
+        tags: ["setup"],
+        responses: {
+          201: {
+            content: { "application/json": { schema: resolver(managedUserSchema) } },
+            description: "The created administrator",
+          },
+          404: {
+            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+            description:
+              "Unknown or expired token, or setup already complete (one ambiguous answer)",
+          },
+          ...validationFailure(),
         },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
+      }),
+      validate("json", setupAdminRequestSchema),
+      async (context) => {
+        // Setup outcomes raise `AccountError("NOT_FOUND")`, one ambiguous 404 through the
+        // classifier; any other failure keeps its own classification.
+        const body = context.req.valid("json");
+        const created = await installedAccounts().bootstrap(body);
+        return response(managedUserSchema, created.user, 201);
       },
-      security: security.session,
-    }),
-    async (context) => sessionSummary(await actor(context)),
-  );
-  app.get(
-    "/api/v1/admin/settings/status",
-    describeRoute({
-      summary: "Read settings status",
-      tags: ["admin"],
-      security: security.session,
-      responses: {
-        200: {
-          description: "Successful response",
-          content: { "application/json": { schema: resolver(adminSettingsStatusSchema) } },
+    )
+    .on(
+      routes.session.method,
+      routes.session.path,
+      describePolicy(routes.session, {
+        summary: "Read the signed-in user and server-derived permissions",
+        tags: ["admin"],
+        responses: {
+          200: {
+            content: { "application/json": { schema: resolver(adminSessionSchema) } },
+            description: "Session summary without credential material",
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
         },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
+      }),
+      async (context) => sessionSummary(await actor(context)),
+    )
+    .on(
+      routes.status.method,
+      routes.status.path,
+      describePolicy(routes.status, {
+        summary: "Read settings status",
+        tags: ["admin"],
+        responses: {
+          200: {
+            description: "Successful response",
+            content: { "application/json": { schema: resolver(adminSettingsStatusSchema) } },
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+        },
+      }),
+      async (context) =>
+        response(adminSettingsStatusSchema, await settings.readStatus(await actor(context))),
+    )
+    .on(
+      routes.emailTest.method,
+      routes.emailTest.path,
+      describePolicy(routes.emailTest, {
+        summary: "Send a test email to the signed-in administrator",
+        tags: ["admin"],
+        responses: {
+          200: {
+            content: { "application/json": { schema: resolver(emailTestResultSchema) } },
+            description: "Closed delivery outcome; failed sends are reported, not raised",
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          ...validationFailure(),
+        },
+      }),
+      validate("json", emailTestRequestSchema),
+      async (context) => {
+        const resolvedActor = await actor(context);
+        const outcome = await settings.sendTestEmail(
+          resolvedActor,
+          new URL(context.req.url).origin,
+        );
+        return response(emailTestResultSchema, outcome);
       },
-    }),
-    async (context) => {
-      await settingsActor(context);
-      if (!capabilities.publicBaseUrl)
-        throw new InvariantError("Canonical public URL is unavailable.");
-      return response(adminSettingsStatusSchema, {
-        mcp: {
-          enabled: capabilities.mcpEnabled === true,
-          endpoint: new URL("/mcp", capabilities.publicBaseUrl).href,
-        },
-        configuredModels: capabilities.config.content.length,
-        email: emailDeliveryStatus(email),
-        engineVersion: capabilities.environment.engineVersion,
-        ready: await capabilities.readiness.isReady(),
-      });
-    },
-  );
-  app.post(
-    "/api/v1/admin/settings/email-test",
-    describeRoute({
-      summary: "Send a test email to the signed-in administrator",
-      tags: ["admin"],
-      responses: {
-        200: {
-          content: { "application/json": { schema: resolver(emailTestResultSchema) } },
-          description: "Closed delivery outcome; failed sends are reported, not raised",
-        },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
-        ...validationFailure(),
-      },
-      security: security.session,
-    }),
-    validator("json", emailTestRequestSchema, validationHook),
-    async (context) => {
-      const resolvedActor = await settingsActor(context);
-      const outcome = await sendTestEmail({
-        actor: resolvedActor,
-        email,
-        installationUrl: capabilities.publicBaseUrl ?? new URL(context.req.url).origin,
-        users: profiles(),
-      });
-      return response(emailTestResultSchema, outcome);
-    },
-  );
+    );
 }

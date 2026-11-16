@@ -12,7 +12,9 @@ for (const kind of ["node", "worker"]) {
     let browser;
     try {
       const repo = f.runtime.repository;
-      const admin = (await f.runtime.security.listUsers()).find((user) => user.role === "admin");
+      const admin = (await f.runtime.security.listUsers({ limit: 50 })).items.find(
+        (user) => user.role === "admin",
+      );
       const actor = { id: admin.id, role: "admin" };
       const trigger = vi.spyOn(f.runtime.buildDispatcher.options.trigger, "trigger");
       trigger.mockResolvedValue({ status: "succeeded" });
@@ -40,7 +42,7 @@ for (const kind of ["node", "worker"]) {
       };
       await publish("Previous proven release");
       await f.dispatch();
-      const provenVersions = (await repo.listSiteBuilds(50))
+      const provenVersions = (await repo.listSiteBuilds({ limit: 50 })).items
         .filter((build) => build.status === "succeeded")
         .map((build) => build.targetVersion);
       expect(provenVersions).toHaveLength(1);
@@ -53,7 +55,9 @@ for (const kind of ["node", "worker"]) {
       expect(JSON.stringify(await publicHome.json())).toContain(
         "Committed despite provider failure",
       );
-      expect((await repo.listSiteBuilds(50)).some((build) => build.status === "failed")).toBe(true);
+      expect(
+        (await repo.listSiteBuilds({ limit: 50 })).items.some((build) => build.status === "failed"),
+      ).toBe(true);
       let now = Date.now() + 10000;
       for (const status of ["accepted", "cancelled", "unknown"]) {
         await repo.requestBuild({ requestedAt: now, requestedBy: actor });

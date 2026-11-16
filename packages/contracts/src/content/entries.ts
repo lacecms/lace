@@ -11,7 +11,7 @@ import {
   nonNegativeIntegerSchema,
   isoTimestampSchema,
   opaqueCursorSchema,
-  pageLimitQuerySchema,
+  adminPageLimitQuerySchema,
   cursorPageSchema,
 } from "../shared/primitives.js";
 import { contentEntrySortSchema } from "./collection-queries.js";
@@ -155,7 +155,7 @@ export const contentEntryListQuerySchema = v.object({
       ),
     ),
   ),
-  limit: v.optional(pageLimitQuerySchema),
+  limit: adminPageLimitQuerySchema,
   q: v.optional(
     v.pipe(
       v.string(),

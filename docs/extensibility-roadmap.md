@@ -89,10 +89,10 @@ from committed outbox work, and `401 AUTHENTICATION_REQUIRED`.
 
 | Step | Topic | Size | Sessions | Status |
 | --- | --- | :---: | --- | --- |
-| EX1 | Test foundation (from RF9C–RF9F) | L | EX1A → EX1B → EX1D; EX1C after EX2D | proposed |
+| EX1 | Test foundation (from RF9C–RF9F) | L | EX1A → EX1B → EX1D; EX1C after EX2D | done |
 | EX2 | Shared write plans | L | EX2A → EX2B → EX2C → EX2D | done |
-| EX3 | Typed outbox events | M | EX3A → EX3B | in progress |
-| EX4 | Route policies and security use cases | L | EX4A → EX4B → EX4C → EX4D | planned |
+| EX3 | Typed outbox events | M | EX3A → EX3B | done |
+| EX4 | Route policies and security use cases | L | EX4A → EX4B → EX4C → EX4D | done |
 | EX5 | Model kind descriptor | S | EX5A | planned |
 | EX6 | Trusted client identity and production Compose ingress | M | EX6A and EX6B independent | done |
 | EX7 | pnpm 12.21.0 toolchain | S | EX7A | planned |
@@ -318,9 +318,9 @@ Behavior-preserving.
 
 Behavior-touching, with delta specs for the affected REST contracts:
 
-- One optimistic-concurrency model: entry `GET` returns the ETag that
-  `If-Match` accepts; open question whether media and publication adopt the
-  same validator or keep theirs documented.
+- Entry `GET` returns the draft revision ETag that `If-Match` accepts.
+  Media metadata uses its monotonic `updatedAt` tag. Unpublish uses the
+  expected published snapshot ID so the command guards the observed publication.
 - One opaque cursor pagination for OAuth connections, users and invitations;
   builds paginate instead of the fixed cap.
 - REST and MCP parse `limit` through one shared schema.
@@ -395,11 +395,16 @@ Complete exact-artifact acceptance for the new build set before recording
 
 ## 6. Progress log
 
-One row per change; detailed decisions, verification and synchronized deltas
-are preserved in the linked archives. Dates refer to the final recorded event.
+Each row links to the change and its decisions and verification. Archived
+changes also preserve their synchronized deltas. Dates refer to the final
+recorded event.
 
 | Date | Session | Change | Status |
 | --- | --- | --- | --- |
+| 2026-11-16 | EX4D | [HTTP consistency](../openspec/changes/archive/2026-11-16-ex04d-http-consistency/) | done. Verified entry tags and protected cursor pages through Node/SQLite and Worker/local D1, 105-build traversal on both SQLite modes and local D1, and continuation recovery and refresh in Admin. OpenAPI, docs, typecheck, lint, format and strict OpenSpec validation passed. |
+| 2026-11-16 | EX4C | [Typed handlers](../openspec/changes/archive/2026-11-16-ex04c-typed-handlers/) | done. Production route `as never` casts fell from 24 after EX4B to zero, and the shared hook cast was removed. Hono client types passed against source and emitted declarations. The server suite, shared Node/SQLite and Worker/local D1 HTTP tests, and OpenAPI comparison passed. |
+| 2026-11-16 | EX4B | [Security use cases](../openspec/changes/archive/2026-11-16-ex04b-security-use-cases/) | done. Application use cases authorize account, user, token, settings, and build operations. Removed twelve route-level helper calls and the inline build-site permission check. Node/SQLite and Worker/local D1, the shared HTTP security scenarios, OpenAPI comparison, and MCP compatibility passed. |
+| 2026-11-16 | EX4A | [Route metadata](../openspec/changes/archive/2026-11-16-ex04a-route-metadata/) | done. The v1 mount uses declared body, credential and rate-limit policies and shares delegated scopes with MCP. Build export registers only with a verifier. Node/SQLite, Worker/local D1, the security boundary and MCP compatibility suites passed, and the checked-in OpenAPI matches the full composition. |
 | 2026-11-16 | EX3B | [Use cases emit events](../openspec/changes/archive/2026-11-16-ex03b-use-cases-emit-events/) | done. Nine producer paths supply explicit event requests: publish, unpublish, published deletion, media metadata, media deletion and retry, manual build and retry, and final configuration sync. The combined public-state/enqueue helper was removed; every production event insert remains in the shared enqueue compiler. |
 | 2026-11-16 | EX3A | [Event registry and one enqueue path](../openspec/changes/archive/2026-11-16-ex03a-event-registry-and-enqueue/) | done. Two version 1 event descriptors in one registry. Hardcoded event identities in live SQL and the Drizzle predicate fell from eight to zero, excluding historical migrations. Two insert owners became one shared enqueue compiler. Verified both SQLite modes, local D1, Worker wake-ups, and mixed dispatch with invalid work within the D1 budgets. |
 | 2026-11-16 | EX1C | [Type db and platform tests](../openspec/changes/archive/2026-11-16-ex01c-type-db-and-platform-tests/) | done: workspace test typecheck exceptions fell from 48 to 0; removed the empty baseline. Verified DB, Node and Cloudflare suites, including both SQLite repository modes and local D1 contracts. |
@@ -408,6 +413,7 @@ are preserved in the linked archives. Dates refer to the final recorded event.
 | 2026-11-15 | EX2B | [Shared media, build and outbox write plans](../openspec/changes/archive/2026-11-15-ex02b-shared-write-plans-media-builds-outbox/) | done: Node/D1 write SQL counts 79/84 → 48/58; shared `db` count 88 → 111 using the same §3 counting pattern. Runtime repository modules remain 9/11; five shared plan modules cover media creation and edits, deletion, generic outbox, build claims and build transitions. Mixed scheduled dispatch of five media deletions, five provider checks and one build stays within 50 D1 queries. |
 | 2026-11-15 | EX2A | [Shared entry write plans](../openspec/changes/archive/2026-11-15-ex02a-shared-write-plans-entries/) | done: Node/D1 write SQL counts 97/99 → 79/84; shared `db` count 88 (the §3 baseline records 60; the same current counting pattern finds 63 at that commit). Runtime repository modules 8/10 → 9/11 with the two executors; entry-command modules 488/659 → 241/262 lines. Five entry commands now share plans, and application compositions require explicit list limits. |
 | 2026-11-15 | EX1D | [Type CLI, generator and app tests](../openspec/changes/archive/2026-11-15-ex01d-type-cli-generator-and-app-tests/) | done: restored typechecking for 29 source test files and retained the remaining baseline |
+| 2026-11-15 | EX1B | [Type core package tests](../openspec/changes/archive/2026-11-15-ex01b-type-core-package-tests/) | done: restored typechecking for the eight core packages and verified their tests, typechecks and public declarations. |
 | 2026-11-15 | EX1A | [Test size ceiling](../openspec/changes/archive/2026-11-15-ex01a-test-size-ceiling/) | done: workspace test files above 1,000 lines fell from 8 to 0; standalone OAuth/MCP fixture remains outside the guard |
 | 2026-11-15 | EX6A | [Preserve trusted client identity](../openspec/changes/archive/2026-11-15-ex06a-preserve-trusted-client-identity/) | done: request identity survives body replacement on Node and Worker |
 | 2026-11-15 | EX6B | [Restrict production Compose ingress](../openspec/changes/archive/2026-11-15-ex06b-restrict-production-compose-ingress/) | done: production reaches the private API through loopback Nginx; development retains a separate loopback API port |

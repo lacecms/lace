@@ -26,6 +26,7 @@ import type {
   CreateContentEntryInput,
   CreateMediaMetadataInput,
   CursorPage,
+  CursorPageInput,
   DispatcherLease,
   DispatcherLeasePort,
   ExportBuildContentPageInput,
@@ -339,8 +340,8 @@ export class NodeContentRepository
     return this.reader.exportBuildContentPage(input);
   }
 
-  public async listSiteBuilds(limit: number): Promise<readonly SiteBuildRecord[]> {
-    return this.reader.listSiteBuilds(limit);
+  public listSiteBuilds(input: CursorPageInput): Promise<CursorPage<SiteBuildRecord>> {
+    return this.reader.listSiteBuilds(input);
   }
 
   public async getSiteBuild(

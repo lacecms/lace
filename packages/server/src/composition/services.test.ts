@@ -1,4 +1,5 @@
 import type { SecurityService, SensitiveRateLimiter } from "@lacecms/application";
+import { opaqueTokenSecret } from "@lacecms/application";
 import { NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import { defineCollection, defineConfig } from "@lacecms/config";
 import { unixMilliseconds } from "@lacecms/domain";
@@ -13,6 +14,7 @@ import { expect, test } from "vitest";
 import {
   SensitiveRequestRateLimiter,
   composeLaceServices,
+  createLaceApp,
   jsonRequestLogger,
   type LaceRepository,
   type LaceServicesInput,
@@ -76,6 +78,10 @@ test("composes each use case once and hands the same instances to the app input"
   expect(appInput.links).toBe(services.links);
   expect(appInput.builds).toBe(services.builds);
   expect(appInput.accounts).toBe(services.accounts);
+  expect(appInput.apiTokens).toBe(services.apiTokens);
+  expect(appInput.settings).toBe(services.settings);
+  expect(appInput.buildTokenVerifier).toBeTypeOf("function");
+  expect(appInput.security).toBeUndefined();
   expect(appInput.publicBaseUrl).toBe("https://lace.test/");
   expect(appInput.apiDocsEnabled).toBe(true);
   expect(appInput.mcpEnabled).toBe(false);
@@ -134,6 +140,43 @@ test("account flows run on the composed clock", async () => {
     services.accounts.invite(admin, { email: "new@example.com", role: "editor" }),
   ).rejects.toMatchObject({ code: "CONFLICT" });
   expect(seen).toEqual([1_234]);
+});
+
+test("credential routes use composed commands and the runtime clock", async () => {
+  const seen: { now: number; expiresAt: number; createdBy: string }[] = [];
+  const dependencies = await input({
+    security: {
+      createImportToken: async ({ now, name, capabilities, createdBy, expiresAt }) => {
+        seen.push({ now, expiresAt, createdBy });
+        return {
+          id: "import-1",
+          name,
+          capabilities,
+          createdAt: now,
+          createdBy: { id: createdBy, email: "admin@example.test" },
+          expiresAt,
+          tokenPrefix: "test",
+          token: opaqueTokenSecret("test-token"),
+        };
+      },
+    },
+  });
+  const services = composeLaceServices({
+    ...dependencies,
+    auth: { ...dependencies.auth, actors: { resolve: async () => admin } },
+  });
+  const app = createLaceApp(services.appInput);
+  const response = await app.request("https://lace.test/api/v1/admin/import-tokens", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "Import", expiresInDays: 1 }),
+  });
+  expect(response.status).toBe(201);
+  expect(seen).toEqual([{ now: 1_234, expiresAt: 1_234 + 86_400_000, createdBy: admin.id }]);
+  expect(await response.json()).toMatchObject({
+    token: "test-token",
+    capabilities: ["content:import"],
+  });
 });
 
 test("a failed deferred task is logged without request data", async () => {

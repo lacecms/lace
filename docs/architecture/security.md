@@ -30,7 +30,21 @@ permission-based internally over the roles `admin`, `editor` and `viewer`:
 | `content:write`, `media:write` | yes | yes | no |
 | `content:publish`, `users:manage`, `settings:manage` | yes | no | no |
 
-Handlers check permissions; code never compares role strings to authorize.
+Application use cases check permissions and account ownership before reads,
+writes, or email delivery. User and invitation administration, settings,
+token management, account self-service, and site-build administration require
+a browser session. Those use cases refuse delegated actors, even when the
+underlying user is an administrator. Public setup, invitation inspection and
+acceptance, and password recovery use their own credential lifecycles. The
+HTTP adapter applies route credential and
+rate-limit policy, resolves the actor and current session, validates requests,
+and maps use-case outcomes to the REST contract.
+
+`users:manage` authorizes user and invitation administration. `settings:manage`
+authorizes settings, build and import token administration, and manual build
+requests and retries. A signed-in user with `content:read` can read the
+configured build site and build history.
+
 `GET /api/v1/admin/session` returns the permission list computed on the server
 by `permissionsFor(role)`, the function that also backs `hasPermission`. The
 admin decides every guard and affordance through one `can(session,
@@ -65,8 +79,8 @@ creation can join a D1 transaction
   only SHA-256 digests, which suffice because the tokens have high entropy,
   compares them in constant time and shows a plaintext token only once.
 - Human passwords stay wholly inside Better Auth's password hashing; Lace
-  routes call its `hashPassword`/`verifyPassword`, so provider sign-in keeps
-  working.
+  security adapters call its `hashPassword`/`verifyPassword` so provider sign-in
+  keeps working.
 - `api_tokens` holds automation credentials apart from human users. Build and
   import tokens share it and every verifier filters by kind. A build token
   carries exactly `content:build:read` and authenticates only the build
@@ -82,6 +96,11 @@ creation can join a D1 transaction
   media writing (plus publication). An explicit untrusted `Origin` is refused.
   The creator's account-security events revoke their import tokens, and
   re-enabling does not restore them.
+
+The route's credential mode drives import eligibility and the REST challenge.
+The import allowlist is derived from those declarations. Build export is
+registered only with a build-token verifier and authenticates before export
+reads and conditional responses.
 
 ### Invitations, resets and self-service
 
@@ -128,6 +147,9 @@ content-operation ceiling
   scope and the current role permission. Unpublishing, deletion, revert,
   duplicate, media and administrative operations are never grantable, even to
   an administrator.
+- The application owns the tool-to-operation mapping. The same operation
+  permission determines the scope for MCP requests, delegated actor authority,
+  and the corresponding REST route metadata.
 - Credentials do not cross boundaries: a cookie, build token or import token
   does not authenticate MCP, and an MCP token does not authenticate admin REST.
 - Grant state and current roles are checked on every request and refresh
@@ -144,6 +166,10 @@ content-operation ceiling
   without dropping tables.
 
 ### Rate limits
+
+The matched route policy selects the operation and whether it counts by actor
+or by trusted client. Namespace defaults cover unmatched requests where an
+existing boundary applies to the whole namespace.
 
 Rate limits use a portable fixed-window SQL projection (`rate_limit_buckets`),
 so behavior does not depend on one process or Worker isolate. The key is an

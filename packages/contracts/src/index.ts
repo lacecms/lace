@@ -45,6 +45,7 @@ export {
   toIsoTimestamp,
   fromIsoTimestamp,
 } from "./shared/primitives.js";
+export { operationalPageQuerySchema } from "./shared/primitives.js";
 export type {
   OpaqueCursorDto,
   IsoTimestamp,

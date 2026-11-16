@@ -66,8 +66,11 @@ describe("admin entry list contracts", () => {
         sort: "-title",
         status: "changed",
       }),
-    ).toEqual({ limit: "25", q: "launch", sort: "-title", status: "changed" });
-    expect(v.parse(contentEntryListQuerySchema, { q: " ".repeat(300) })).toEqual({ q: "" });
+    ).toEqual({ limit: 25, q: "launch", sort: "-title", status: "changed" });
+    expect(v.parse(contentEntryListQuerySchema, { q: " ".repeat(300) })).toEqual({
+      limit: 50,
+      q: "",
+    });
     for (const invalid of [
       { status: "archived" },
       { sort: "author" },

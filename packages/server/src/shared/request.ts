@@ -1,4 +1,5 @@
 import { opaqueCursor } from "@lacecms/application";
+import type { CursorPageInput } from "@lacecms/application";
 import {
   ContractValidationError,
   DEFAULT_PAGE_SIZE,
@@ -24,6 +25,16 @@ export function pagination(request: Request): {
   if (after === undefined) return { limit: parsedLimit };
   parse(opaqueCursorSchema, after);
   return { after: opaqueCursor(after), limit: parsedLimit };
+}
+
+export function cursorPageInput(query: {
+  after?: string | undefined;
+  limit: number;
+}): CursorPageInput {
+  return {
+    ...(query.after === undefined ? {} : { after: opaqueCursor(query.after) }),
+    limit: query.limit,
+  };
 }
 
 export async function optionalJsonBody(request: Request): Promise<unknown> {

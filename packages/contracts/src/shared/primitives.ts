@@ -1,6 +1,6 @@
 import { unixMilliseconds } from "@lacecms/domain";
 import type { UnixMilliseconds } from "@lacecms/domain";
-import { MAX_PAGE_SIZE } from "@lacecms/content";
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@lacecms/content";
 import * as v from "valibot";
 
 export const identifierSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(255));
@@ -33,6 +33,26 @@ export const pageLimitQuerySchema = v.pipe(
   v.string(),
   v.regex(new RegExp(`^(?:[1-9]|[1-9][0-9]|${MAX_PAGE_SIZE})$`, "u")),
 );
+const pageSizeSchema = v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(MAX_PAGE_SIZE));
+export const numericPageLimitSchema = v.optional(pageSizeSchema, DEFAULT_PAGE_SIZE);
+export const adminPageLimitQuerySchema = v.optional(
+  v.pipe(
+    pageLimitQuerySchema,
+    v.transform(Number),
+    // Keep the input string schema for OpenAPI after normalizing to a number.
+    v.check((size) => v.is(pageSizeSchema, size)),
+  ),
+  String(DEFAULT_PAGE_SIZE),
+);
+export const operationalPageQuerySchema = v.strictObject({
+  after: v.optional(
+    v.pipe(
+      opaqueCursorSchema,
+      v.description("Opaque continuation from the preceding page of this list."),
+    ),
+  ),
+  limit: adminPageLimitQuerySchema,
+});
 export const isoTimestampSchema = v.custom<string>(isUtcTimestamp);
 /** A media content hash: 64 lowercase hexadecimal characters. */
 export const mediaSha256Schema = v.pipe(v.string(), v.regex(/^[0-9a-f]{64}(?![\s\S])/u));

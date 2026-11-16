@@ -9,7 +9,9 @@ import {
 } from "@lacecms/domain";
 import type { SiteBuildProviderStage, SiteBuildState, SiteBuildStatus } from "@lacecms/domain";
 import * as v from "valibot";
+import { MAX_PAGE_SIZE } from "@lacecms/content";
 import {
+  cursorPageSchema,
   identifierSchema,
   nonNegativeIntegerSchema,
   isoTimestampSchema,
@@ -73,7 +75,8 @@ export const siteBuildRecordSchema = v.pipe(
   ),
 );
 export const siteBuildListSchema = v.strictObject({
-  items: v.pipe(v.array(siteBuildRecordSchema), v.maxLength(100)),
+  ...cursorPageSchema(siteBuildRecordSchema).entries,
+  items: v.pipe(v.array(siteBuildRecordSchema), v.maxLength(MAX_PAGE_SIZE)),
 });
 export type SiteBuildRecordDto = v.InferOutput<typeof siteBuildRecordSchema>;
 export type SiteBuildListDto = v.InferOutput<typeof siteBuildListSchema>;

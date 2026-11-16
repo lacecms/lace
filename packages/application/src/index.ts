@@ -13,7 +13,13 @@ export * from "./shared/pagination.js";
 export * from "./shared/limits.js";
 export * from "./shared/actors.js";
 export * from "./shared/text.js";
-export * from "./shared/permissions.js";
+export {
+  actorPermissions,
+  effectiveActorPermissions,
+  requireContentReader,
+  requireSettingsManager,
+  requireUsersManager,
+} from "./shared/permissions.js";
 
 // Ports
 export * from "./ports/infrastructure.js";
@@ -50,9 +56,11 @@ export { CompleteImageContainerInspector } from "./media/image-container.js";
 
 // Accounts
 export * from "./accounts/use-cases.js";
+export * from "./accounts/api-tokens.js";
 export * from "./accounts/email.js";
 export * from "./accounts/oauth.js";
 export * from "./accounts/import-tokens.js";
+export * from "./accounts/settings.js";
 
 // Builds
 export * from "./builds/export-pages.js";

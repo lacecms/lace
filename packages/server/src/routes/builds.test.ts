@@ -10,7 +10,7 @@ test("admin build routes queue strict requests without running a trigger", async
   const builds = new SiteBuildUseCases({
     clock: { now: () => unixMilliseconds(1) },
     builds: {
-      listSiteBuilds: async () => [],
+      listSiteBuilds: async () => ({ items: [] }),
       getSiteBuild: async () => null,
       requestBuild: async (input) => {
         calls.push(input);
@@ -19,8 +19,8 @@ test("admin build routes queue strict requests without running a trigger", async
     },
   });
   const { app } = await fixture({ builds });
-  const post = (path: string, body?: unknown) =>
-    app.fetch(
+  const post = (path: string, body?: unknown, target = app) =>
+    target.fetch(
       new Request(`https://lace.test${path}`, {
         method: "POST",
         ...(body === undefined
@@ -44,7 +44,23 @@ test("admin build routes queue strict requests without running a trigger", async
       )
     ).status,
   ).toBe(403);
+  for (const path of ["/api/v1/admin/builds", "/api/v1/admin/builds/failed-1/retry"]) {
+    const invalidBody = { unexpected: true };
+    expect((await post(path, invalidBody, editorApp)).status).toBe(403);
+    expect((await post(path, invalidBody)).status).toBe(422);
+  }
+  const invalidRetryId = "/api/v1/admin/builds/" + "x".repeat(500) + "/retry";
+  expect((await post(invalidRetryId, {}, editorApp)).status).toBe(403);
+  expect((await post(invalidRetryId, {})).status).toBe(422);
   expect(calls).toHaveLength(2);
+});
+
+test("partial build composition preserves request validation and authorization", async () => {
+  const { app } = await fixture();
+  const { app: viewerApp } = await fixture({ actor: { id: actorId("viewer"), role: "viewer" } });
+  const path = "https://lace.test/api/v1/admin/builds";
+  expect((await app.request(path, { method: "POST" })).status).toBe(500);
+  expect((await viewerApp.request(path, { method: "POST" })).status).toBe(403);
 });
 
 test.each([admin, editor, { id: actorId("viewer"), role: "viewer" as const }])(
@@ -65,7 +81,7 @@ test.each([admin, editor, { id: actorId("viewer"), role: "viewer" as const }])(
     const builds = new SiteBuildUseCases({
       clock: { now: () => unixMilliseconds(1) },
       builds: {
-        listSiteBuilds: async () => [build],
+        listSiteBuilds: async () => ({ items: [build] }),
         getSiteBuild: async (id) => (id === build.id ? build : null),
         requestBuild: async () => ({
           coalesced: false,

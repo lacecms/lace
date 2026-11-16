@@ -67,16 +67,16 @@ Failures use one JSON envelope: `error.code`, `error.message` and, for some code
 
 Every account endpoint acts on the signed-in user and needs a session of any role.
 
-| Method | Path                                                    | Purpose                                                          | Credential |
-| ------ | ------------------------------------------------------- | ---------------------------------------------------------------- | ---------- |
-| PATCH  | `/api/v1/account`                                       | Change your display name.                                        | Session    |
-| GET    | `/api/v1/account/capabilities`                          | Report account features, such as whether MCP is enabled.         | Session    |
-| POST   | `/api/v1/account/password`                              | Change your password.                                            | Session    |
-| GET    | `/api/v1/account/sessions`                              | List your sessions.                                              | Session    |
-| DELETE | `/api/v1/account/sessions/{sessionId}`                  | End another of your sessions.                                    | Session    |
-| POST   | `/api/v1/account/sessions/revoke-others`                | End all your other sessions.                                     | Session    |
-| GET    | `/api/v1/account/mcp-connections`                       | List your MCP connections; `404` while MCP is disabled.          | Session    |
-| POST   | `/api/v1/account/mcp-connections/{connectionId}/revoke` | Revoke one of your MCP connections; `404` while MCP is disabled. | Session    |
+| Method | Path                                                    | Purpose                                                                 | Credential |
+| ------ | ------------------------------------------------------- | ----------------------------------------------------------------------- | ---------- |
+| PATCH  | `/api/v1/account`                                       | Change your display name.                                               | Session    |
+| GET    | `/api/v1/account/capabilities`                          | Report account features, such as whether MCP is enabled.                | Session    |
+| POST   | `/api/v1/account/password`                              | Change your password.                                                   | Session    |
+| GET    | `/api/v1/account/sessions`                              | List your sessions.                                                     | Session    |
+| DELETE | `/api/v1/account/sessions/{sessionId}`                  | End another of your sessions.                                           | Session    |
+| POST   | `/api/v1/account/sessions/revoke-others`                | End all your other sessions.                                            | Session    |
+| GET    | `/api/v1/account/mcp-connections`                       | Page through your MCP connections. Returns `404` while MCP is disabled. | Session    |
+| POST   | `/api/v1/account/mcp-connections/{connectionId}/revoke` | Revoke one of your MCP connections; `404` while MCP is disabled.        | Session    |
 
 ## Admin endpoints
 
@@ -88,7 +88,7 @@ Every account endpoint acts on the signed-in user and needs a session of any rol
 | GET    | `/api/v1/admin/content-models`                | List models with fields, blocks, `listOptions` and `listQueryLimits`.                                                | `content:read`, or import token                                     |
 | GET    | `/api/v1/admin/models/{modelKey}/entries`     | List draft entries of a model with search, sort and filters ([grammar below](#configured-admin-collection-queries)). | `content:read`, or import token                                     |
 | POST   | `/api/v1/admin/models/{modelKey}/entries`     | Create an entry from a complete draft.                                                                               | `content:write`, or import token                                    |
-| GET    | `/api/v1/admin/entries/{entryId}`             | Read an entry with its draft revision and published snapshot.                                                        | `content:read`, or import token                                     |
+| GET    | `/api/v1/admin/entries/{entryId}`             | Read an entry with its published snapshot and draft revision, also returned in `ETag`.                               | `content:read`, or import token                                     |
 | PUT    | `/api/v1/admin/entries/{entryId}/draft`       | Replace the complete draft at the expected revision.                                                                 | `content:write`, or import token                                    |
 | POST   | `/api/v1/admin/entries/{entryId}/publish`     | Publish the saved draft; accepts an `Idempotency-Key` header.                                                        | `content:publish`, or import token issued with publishing           |
 | POST   | `/api/v1/admin/entries/{entryId}/unpublish`   | Withdraw the published snapshot; accepts an `Idempotency-Key` header.                                                | `content:publish`                                                   |
@@ -117,7 +117,7 @@ Every account endpoint acts on the signed-in user and needs a session of any rol
 | Method | Path                                    | Purpose                                                                        | Credential        |
 | ------ | --------------------------------------- | ------------------------------------------------------------------------------ | ----------------- |
 | GET    | `/api/v1/admin/build-site`              | Read the configured build site identity; not proof of a deployment.            | `content:read`    |
-| GET    | `/api/v1/admin/site-builds`             | List recent site builds.                                                       | Session           |
+| GET    | `/api/v1/admin/site-builds`             | Page through persisted site builds, newest first.                              | `content:read`    |
 | GET    | `/api/v1/admin/site-builds/{buildId}`   | Read one site build.                                                           | Session           |
 | POST   | `/api/v1/admin/builds`                  | Request a site build.                                                          | `settings:manage` |
 | POST   | `/api/v1/admin/builds/{buildId}/retry`  | Retry a failed site build.                                                     | `settings:manage` |
@@ -131,20 +131,52 @@ Every account endpoint acts on the signed-in user and needs a session of any rol
 
 ### Users and settings
 
-| Method | Path                                              | Purpose                                                | Credential        |
-| ------ | ------------------------------------------------- | ------------------------------------------------------ | ----------------- |
-| GET    | `/api/v1/admin/users`                             | List users.                                            | `users:manage`    |
-| PATCH  | `/api/v1/admin/users/{userId}`                    | Change a user's role or disable or enable the account. | `users:manage`    |
-| POST   | `/api/v1/admin/users/{userId}/password-reset`     | Send a password reset to a user.                       | `users:manage`    |
-| POST   | `/api/v1/admin/users/{userId}/sessions/revoke`    | Sign a user out everywhere.                            | `users:manage`    |
-| GET    | `/api/v1/admin/invitations`                       | List pending and expired invitations.                  | `users:manage`    |
-| POST   | `/api/v1/admin/invitations`                       | Invite an email address with a role.                   | `users:manage`    |
-| POST   | `/api/v1/admin/invitations/{invitationId}/resend` | Resend an invitation with a new link.                  | `users:manage`    |
-| DELETE | `/api/v1/admin/invitations/{invitationId}`        | Revoke an invitation.                                  | `users:manage`    |
-| GET    | `/api/v1/admin/settings/status`                   | Read engine version, readiness, email and MCP status.  | `settings:manage` |
-| POST   | `/api/v1/admin/settings/email-test`               | Send a test email to the signed-in administrator.      | `settings:manage` |
+| Method | Path                                              | Purpose                                                          | Credential        |
+| ------ | ------------------------------------------------- | ---------------------------------------------------------------- | ----------------- |
+| GET    | `/api/v1/admin/users`                             | Page through users and return total and disabled account counts. | `users:manage`    |
+| PATCH  | `/api/v1/admin/users/{userId}`                    | Change a user's role or disable or enable the account.           | `users:manage`    |
+| POST   | `/api/v1/admin/users/{userId}/password-reset`     | Send a password reset to a user.                                 | `users:manage`    |
+| POST   | `/api/v1/admin/users/{userId}/sessions/revoke`    | Sign a user out everywhere.                                      | `users:manage`    |
+| GET    | `/api/v1/admin/invitations`                       | Page through pending and expired invitations.                    | `users:manage`    |
+| POST   | `/api/v1/admin/invitations`                       | Invite an email address with a role.                             | `users:manage`    |
+| POST   | `/api/v1/admin/invitations/{invitationId}/resend` | Resend an invitation with a new link.                            | `users:manage`    |
+| DELETE | `/api/v1/admin/invitations/{invitationId}`        | Revoke an invitation.                                            | `users:manage`    |
+| GET    | `/api/v1/admin/settings/status`                   | Read engine version, readiness, email and MCP status.            | `settings:manage` |
+| POST   | `/api/v1/admin/settings/email-test`               | Send a test email to the signed-in administrator.                | `settings:manage` |
 
 Outside `/api/v1`, `/health/live` and `/health/ready` report liveness and readiness, `/api/v1/openapi.json` serves the contract and `/api/docs` the optional interactive reference.
+
+## Draft revision preconditions
+
+Copy the entry detail response's `ETag`, including quotes, into `If-Match`
+when saving, publishing, reverting or deleting an entry. A JSON
+`expectedRevision` also supplies the precondition. When both are present,
+they must agree. Duplicate accepts either or both as an optional guard.
+A stale revision returns `409 CONTENT_REVISION_CONFLICT` unless a valid
+idempotent replay already applies.
+
+The tag identifies the draft revision. Entry detail is served with
+`Cache-Control: no-store` and returns the current entry with `200` even
+when the request includes `If-None-Match`. Unpublish uses the JSON
+`expectedPublishedSnapshotId`. Media metadata writes use the tag from
+the media detail response.
+
+## Page through protected lists
+
+Users, invitations, site builds and MCP connections return `items` and
+a `nextCursor` when another page is available. Pass the cursor unchanged
+as `after` on the same list. The last page omits `nextCursor`.
+Each user page reports `total` and `disabledCount` for all accounts,
+including those outside the page. OAuth connection cursors belong to
+the signed-in owner.
+
+For these lists and the admin entry and media lists, `limit` is decimal
+text from 1 to 100, with a default of 50. An invalid limit returns
+`422 VALIDATION_FAILED` at `/limit`. If the API returns that error at
+`/after`, retry from the first page without `after`. This includes
+connection cursors issued as raw grant IDs before the pagination update.
+Older clients that validated the former exact list shapes need the updated
+schemas. Update the API and bundled Admin together.
 
 ## Consume exports safely
 

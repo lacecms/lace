@@ -30,6 +30,7 @@ const app = createLaceApp({
   rateLimiter: { check: async () => true },
   readiness: { isReady: async () => true },
   requestIds: { next: () => "openapi" },
+  buildTokenVerifier: async () => false,
 });
 const response = await app.fetch(new Request("https://openapi.lace.test/api/v1/openapi.json"));
 if (!response.ok) throw new Error(`OpenAPI generation failed with status ${response.status}.`);

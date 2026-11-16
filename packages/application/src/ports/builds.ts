@@ -8,6 +8,7 @@ import type {
   UnixMilliseconds,
 } from "@lacecms/domain";
 import type { DispatcherEventId, DispatcherLeaseId } from "../shared/brands.js";
+import type { CursorPage, CursorPageInput } from "../shared/pagination.js";
 import type { DispatcherLease } from "./outbox.js";
 
 export interface SiteBuildRequest {
@@ -63,7 +64,7 @@ export interface SiteBuildRecord {
 }
 
 export interface SiteBuildReadPort {
-  listSiteBuilds(limit: number): Promise<readonly SiteBuildRecord[]>;
+  listSiteBuilds(input: CursorPageInput): Promise<CursorPage<SiteBuildRecord>>;
   getSiteBuild(buildId: SiteBuildId): Promise<SiteBuildRecord | null>;
 }
 

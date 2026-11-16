@@ -167,6 +167,16 @@ test("SDK client discovers derived schemas and executes all five shared content 
 test("SDK calls preserve safe validation, known application, protocol and internal errors", async () => {
   const f = await fixture();
   const client = await f.connect(actor("admin", "admin", true));
+  const invalidLimit = await client.callTool({
+    name: "list_entries",
+    arguments: { modelKey: "posts", limit: "not-a-number" },
+  });
+  expect(invalidLimit.isError).toBe(true);
+  expect(errorPayload(invalidLimit).error).toMatchObject({
+    code: "VALIDATION_FAILED",
+    details: { issues: [expect.objectContaining({ path: "/limit" })] },
+  });
+  expect(JSON.stringify(errorPayload(invalidLimit))).not.toContain("not-a-number");
   const invalid = await client.callTool({
     name: "save_draft",
     arguments: { entryId: "unknown", title: "x", fields: {}, blocks: [] },

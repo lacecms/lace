@@ -15,10 +15,16 @@ import {
 } from "@lacecms/domain";
 import { readAllBuildContentPages } from "@lacecms/test-utils";
 
-import { admin, fixture, json } from "../test-support/app-harness.js";
+import {
+  admin,
+  buildExportJson,
+  buildTokenSecurity,
+  fixture,
+  json,
+} from "../test-support/app-harness.js";
 
 test("serves public content and short-circuits matching build exports", async () => {
-  const { app, content, exportLoads } = await fixture();
+  const { app, content, exportLoads } = await fixture({ security: buildTokenSecurity });
   const entry = await content.create({
     actor: admin,
     blocks: [],
@@ -32,16 +38,19 @@ test("serves public content and short-circuits matching build exports", async ()
     body: { items: [{ path: "/blog/first" }] },
     response: { status: 200 },
   });
-  const fresh = await json(app, "/api/v1/public/build-export");
+  const fresh = await buildExportJson(app);
   expect(fresh.response.headers.get("etag")).toBe('"1"');
   expect(fresh.body.formatVersion).toBe(2);
   expect(exportLoads()).toBe(1);
   expect(
-    (await json(app, "/api/v1/public/build-export", { headers: { "if-none-match": '"1"' } }))
-      .response.status,
+    (
+      await buildExportJson(app, "/api/v1/public/build-export", {
+        headers: { "if-none-match": '"1"' },
+      })
+    ).response.status,
   ).toBe(304);
   expect(exportLoads()).toBe(1);
-  const weak = await json(app, "/api/v1/public/build-export", {
+  const weak = await buildExportJson(app, "/api/v1/public/build-export", {
     headers: { "if-none-match": 'W/"1"' },
   });
   expect(weak.response.status).toBe(304);
@@ -49,12 +58,17 @@ test("serves public content and short-circuits matching build exports", async ()
   expect(weak.body).toBeUndefined();
   expect(exportLoads()).toBe(1);
   expect(
-    (await json(app, "/api/v1/public/build-export", { headers: { "if-none-match": '"0"' } }))
-      .response.status,
+    (
+      await buildExportJson(app, "/api/v1/public/build-export", {
+        headers: { "if-none-match": '"0"' },
+      })
+    ).response.status,
   ).toBe(200);
   expect(exportLoads()).toBe(2);
   expect(
-    await json(app, "/api/v1/public/build-export", { headers: { "if-none-match": "invalid" } }),
+    await buildExportJson(app, "/api/v1/public/build-export", {
+      headers: { "if-none-match": "invalid" },
+    }),
   ).toMatchObject({ body: { error: { code: "VALIDATION_FAILED" } }, response: { status: 422 } });
   const openApi = await json(app, "/api/v1/openapi.json");
   expect(openApi.body.paths).toHaveProperty("/api/v1/public/build-export");
@@ -89,7 +103,7 @@ test("public responses return published entries with one resolved media dictiona
     app,
     sqlite: { connection },
     store,
-  } = await fixture();
+  } = await fixture({ security: buildTokenSecurity });
   const media = (id: string, extra: Partial<MediaMetadata> = {}): MediaMetadata => ({
     createdAt: unixMilliseconds(1),
     createdBy: admin.id,
@@ -190,7 +204,7 @@ test("public responses return published entries with one resolved media dictiona
     title: "post-b",
   });
   expect(Object.keys(single.body.media)).toEqual(["shared"]);
-  const exported = await json(app, "/api/v1/public/build-export");
+  const exported = await buildExportJson(app);
   expect(Object.keys(exported.body.media)).toEqual(["only-a", "shared"]);
   for (const body of [list.body, single.body, exported.body]) {
     expect(JSON.stringify(body)).not.toContain("DRAFT ONLY");
@@ -252,6 +266,7 @@ test.each([[[1000, 1000]], [[2000, 1000]], [[0, 1000]]])(
 
 test("the export ETag follows its payload when publication races the version lookup", async () => {
   const { app, content } = await fixture({
+    security: buildTokenSecurity,
     exportBuildContentPage: (read) => async (input) => {
       await publish();
       return read(input);
@@ -266,13 +281,15 @@ test("the export ETag follows its payload when publication races the version loo
     title: "Race",
   });
   const publish = () => content.publish({ actor: admin, entryId: entry.id, expectedRevision: 1 });
-  const result = await json(app, "/api/v1/public/build-export");
+  const result = await buildExportJson(app);
   expect(result.body.version).toBe(1);
   expect(result.response.headers.get("etag")).toBe('"1"');
 });
 
 test("serves the build export in version-bound keyset pages", async () => {
-  const { app, content, exportLoads, media, store } = await fixture();
+  const { app, content, exportLoads, media, store } = await fixture({
+    security: buildTokenSecurity,
+  });
   const image = await media.create({
     actor: admin,
     body: (async function* () {
@@ -296,7 +313,7 @@ test("serves the build export in version-bound keyset pages", async () => {
   const version = await store.publishedContentVersion();
   const path = "/api/v1/public/build-export";
 
-  const first = await json(app, `${path}?limit=2`);
+  const first = await buildExportJson(app, `${path}?limit=2`);
   expect(first.response.status).toBe(200);
   expect(first.response.headers.get("etag")).toBe(`"${version}"`);
   expect(first.body).toMatchObject({ formatVersion: 2, globals: [], media: {}, version });
@@ -307,7 +324,7 @@ test("serves the build export in version-bound keyset pages", async () => {
 
   // A continuation ignores If-None-Match and carries no globals or SEO section.
   const after = encodeURIComponent(first.body.nextCursor);
-  const second = await json(app, `${path}?after=${after}&limit=2`, {
+  const second = await buildExportJson(app, `${path}?after=${after}&limit=2`, {
     headers: { "if-none-match": `"${version}"` },
   });
   expect(second.response.status).toBe(200);
@@ -325,7 +342,10 @@ test("serves the build export in version-bound keyset pages", async () => {
   ).toEqual(["/blog/c", "/blog/d"]);
   // Only the page whose entry delivers the media resolves it.
   expect(Object.keys(second.body.media)).toEqual([image.id]);
-  const third = await json(app, `${path}?after=${encodeURIComponent(second.body.nextCursor)}`);
+  const third = await buildExportJson(
+    app,
+    `${path}?after=${encodeURIComponent(second.body.nextCursor)}`,
+  );
   expect(
     v.parse(buildExportContinuationPageSchema, third.body).entries.map((entry) => entry.path),
   ).toEqual(["/blog/e"]);
@@ -333,13 +353,13 @@ test("serves the build export in version-bound keyset pages", async () => {
   expect(third.body.media).toEqual({});
 
   // The default limit returns everything at once for a small site.
-  const whole = await json(app, path);
+  const whole = await buildExportJson(app, path);
   expect(whole.body.entries).toHaveLength(5);
   expect(whole.body).not.toHaveProperty("nextCursor");
 
   // A publication between pages invalidates the cursor with a 409.
   await publishPost("f");
-  const stale = await json(app, `${path}?after=${after}&limit=2`);
+  const stale = await buildExportJson(app, `${path}?after=${after}&limit=2`);
   expect(stale.response.status).toBe(409);
   expect(stale.body).toEqual({
     error: {
@@ -362,7 +382,7 @@ test("serves the build export in version-bound keyset pages", async () => {
     "limit=1&limit=2",
     `after=${encodeURIComponent(collectionCursor)}`,
   ]) {
-    const rejected = await json(app, `${path}?${query}`);
+    const rejected = await buildExportJson(app, `${path}?${query}`);
     expect(rejected.response.status, query).toBe(422);
     expect(rejected.body.error.code, query).toBe("VALIDATION_FAILED");
   }
@@ -377,26 +397,49 @@ test("serves the build export in version-bound keyset pages", async () => {
   expect(operation.responses).toHaveProperty("409");
 });
 
+test("omits build export and its documentation without a verifier", async () => {
+  const { app, exportLoads, exportVersionReads } = await fixture();
+  const path = "/api/v1/public/build-export";
+  expect(await json(app, path)).toMatchObject({
+    body: { error: { code: "NOT_FOUND" } },
+    response: { status: 404 },
+  });
+  const head = await app.request(path, { method: "HEAD" });
+  expect(head.status).toBe(404);
+  expect(head.body).toBeNull();
+  expect((await json(app, "/api/v1/openapi.json")).body.paths).not.toHaveProperty(path);
+  expect((await json(app, "/api/v1/public/collections/posts")).response.status).toBe(200);
+  expect(exportLoads()).toBe(0);
+  expect(exportVersionReads()).toBe(0);
+});
+
 test("checks build credentials before conditional or page reads", async () => {
-  const { app, exportLoads, store } = await fixture({
-    security: { verifyBuildToken: async ({ token }) => token === "build-token" },
+  const { app, exportLoads, exportVersionReads, store } = await fixture({
+    security: buildTokenSecurity,
   });
   const version = await store.publishedContentVersion();
   const path = "/api/v1/public/build-export";
   for (const headers of [
-    { "if-none-match": `W/"${version}"` },
-    { authorization: "Bearer wrong", "if-none-match": `"${version}"` },
-    { authorization: "Bearer wrong" },
+    new Headers({ "if-none-match": `W/"${version}"` }),
+    new Headers({ authorization: "Bearer wrong", "if-none-match": `"${version}"` }),
   ]) {
-    const denied = await json(app, `${path}?limit=0`, { headers });
-    expect(denied.response.status).toBe(401);
-    expect(denied.response.headers.get("www-authenticate")).toBe('Bearer realm="lace"');
+    for (const query of ["", "?limit=0", "?after=continuation"]) {
+      const denied = await json(app, `${path}${query}`, { headers });
+      expect(denied).toMatchObject({
+        body: { error: { code: "AUTHENTICATION_REQUIRED" } },
+        response: { status: 401 },
+      });
+      expect(denied.response.headers.get("www-authenticate")).toBe('Bearer realm="lace"');
+      expect(denied.response.headers.get("cache-control")).toBe("no-store");
+    }
   }
   expect(exportLoads()).toBe(0);
-  const unchanged = await json(app, path, {
-    headers: { authorization: "Bearer build-token", "if-none-match": `W/"${version}"` },
+  expect(exportVersionReads()).toBe(0);
+  const unchanged = await buildExportJson(app, path, {
+    headers: { "if-none-match": `W/"${version}"` },
   });
   expect(unchanged.response.status).toBe(304);
   expect(unchanged.response.headers.get("etag")).toBe(`"${version}"`);
   expect(exportLoads()).toBe(0);
+  expect(exportVersionReads()).toBe(1);
 });

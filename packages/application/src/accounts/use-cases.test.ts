@@ -1,4 +1,4 @@
-import { actorId, unixMilliseconds } from "@lacecms/domain";
+import { actorId, attenuateActor, unixMilliseconds } from "@lacecms/domain";
 import type { Actor } from "@lacecms/domain";
 import type { AccountUseCasesInput } from "./use-cases.js";
 import type { EmailSender, EmailDeliveryOutcome } from "./email.js";
@@ -10,6 +10,7 @@ import {
   AccountUseCases,
   EMAIL_SENT,
   INVITATION_TTL_MS,
+  OAuthConnectionUseCases,
   RateLimitExceededError,
   accountLink,
   emailFailed,
@@ -107,10 +108,9 @@ function memorySecurity() {
         };
       },
     ),
-    listInvitations: vi.fn<AccountUseCasesInput["security"]["listInvitations"]>(async () => [
-      invitation,
-      { ...invitation, expiresAt: unixMilliseconds(NOW - 1), id: "inv-old" },
-    ]),
+    listInvitations: vi.fn<AccountUseCasesInput["security"]["listInvitations"]>(async () => ({
+      items: [invitation, { ...invitation, expiresAt: unixMilliseconds(NOW - 1), id: "inv-old" }],
+    })),
     listSessions: vi.fn<AccountUseCasesInput["security"]["listSessions"]>(async ({ userId }) =>
       sessions.filter((session) => session.userId === userId),
     ),
@@ -126,21 +126,19 @@ function memorySecurity() {
     updateDisplayName: vi.fn<AccountUseCasesInput["security"]["updateDisplayName"]>(
       async () => true,
     ),
-    isSetupComplete: () => {
-      throw new Error("Unexpected isSetupComplete");
-    },
-    bootstrap: () => {
-      throw new Error("Unexpected bootstrap");
-    },
+    isSetupComplete: vi.fn<AccountUseCasesInput["security"]["isSetupComplete"]>(async () => false),
+    bootstrap: vi.fn<AccountUseCasesInput["security"]["bootstrap"]>(async ({ email }) => ({
+      user: { disabled: false, email, id: admin.id, role: "admin" },
+    })),
     disableUser: () => {
       throw new Error("Unexpected disableUser");
     },
-    listUsers: () => {
-      throw new Error("Unexpected listUsers");
-    },
-    updateUser: () => {
-      throw new Error("Unexpected updateUser");
-    },
+    listUsers: vi.fn<AccountUseCasesInput["security"]["listUsers"]>(async () => ({
+      items: [{ disabled: false, email: "editor@example.com", id: editor.id, role: "editor" }],
+      disabledCount: 0,
+      total: 1,
+    })),
+    updateUser: vi.fn<AccountUseCasesInput["security"]["updateUser"]>(async () => null),
   };
 }
 
@@ -161,13 +159,85 @@ function useCases(overrides: { email?: EmailSender; limiter?: SensitiveRateLimit
   return { accounts, email, security };
 }
 
+test("user administration checks session permission before delegating to the guarded port", async () => {
+  const { accounts, security } = useCases();
+  const delegated = attenuateActor(admin, { permissions: ["users:manage"], operations: [] });
+  const update = { userId: editor.id, disabled: true };
+  for (const actor of [editor, delegated]) {
+    await expect(accounts.listUsers(actor, { limit: 50 })).rejects.toMatchObject({
+      code: "AUTHORIZATION_DENIED",
+    });
+    await expect(accounts.updateUser(actor, update)).rejects.toMatchObject({
+      code: "AUTHORIZATION_DENIED",
+    });
+    await expect(accounts.listInvitations(actor, { limit: 50 })).rejects.toMatchObject({
+      code: "AUTHORIZATION_DENIED",
+    });
+  }
+  expect(security.listUsers).not.toHaveBeenCalled();
+  expect(security.updateUser).not.toHaveBeenCalled();
+  expect(security.listInvitations).not.toHaveBeenCalled();
+  await expect(accounts.listUsers(admin, { limit: 50 })).resolves.toMatchObject({
+    items: [{ id: editor.id }],
+  });
+  await expect(accounts.updateUser(admin, update)).resolves.toBeNull();
+  expect(security.updateUser).toHaveBeenCalledWith(update);
+});
+
+test("bootstrap operations preserve the guarded inputs and outcomes", async () => {
+  const { accounts, security } = useCases();
+  const request = { email: "admin@example.com", password: "example password", token: TOKEN };
+  await expect(accounts.isSetupComplete()).resolves.toBe(false);
+  await expect(accounts.bootstrap(request)).resolves.toMatchObject({ user: { id: admin.id } });
+  expect(security.bootstrap).toHaveBeenCalledWith(request);
+  security.bootstrap.mockRejectedValueOnce(new AccountError("NOT_FOUND"));
+  await expect(accounts.bootstrap(request)).rejects.toMatchObject({ code: "NOT_FOUND" });
+});
+
+test("session summary and self-service accept only a session actor", async () => {
+  const { accounts, security } = useCases();
+  const delegated = attenuateActor(editor, { permissions: ["content:read"], operations: [] });
+  const listConnections = vi.fn(async () => ({ items: [] }));
+  const revokeConnection = vi.fn(async () => false);
+  const connections = new OAuthConnectionUseCases({
+    clock: { now: () => unixMilliseconds(NOW) },
+    connections: { listConnections, revokeConnection, invalidateUser: async () => {} },
+  });
+  const denial = { code: "AUTHORIZATION_DENIED" };
+  await expect(accounts.sessionSummary(delegated)).rejects.toMatchObject(denial);
+  await expect(accounts.updateDisplayName(delegated, "Name")).rejects.toMatchObject(denial);
+  await expect(accounts.listSessions(delegated, "s-current")).rejects.toMatchObject(denial);
+  await expect(accounts.deleteSession(delegated, "s-current", "s-other")).rejects.toMatchObject(
+    denial,
+  );
+  expect(() => AccountUseCases.accountCapabilities(delegated, true)).toThrow(
+    expect.objectContaining(denial),
+  );
+  expect(() => connections.list(delegated, { limit: 20 })).toThrow(expect.objectContaining(denial));
+  expect(() => connections.revoke(delegated, "connection")).toThrow(
+    expect.objectContaining(denial),
+  );
+  expect(security.readUserProfile).not.toHaveBeenCalled();
+  expect(security.updateDisplayName).not.toHaveBeenCalled();
+  expect(security.listSessions).not.toHaveBeenCalled();
+  expect(security.deleteSession).not.toHaveBeenCalled();
+  expect(listConnections).not.toHaveBeenCalled();
+  expect(revokeConnection).not.toHaveBeenCalled();
+  await expect(accounts.sessionSummary(editor)).resolves.toEqual({
+    permissions: ["content:read", "content:write", "media:write"],
+    user: { id: editor.id, role: "editor", email: "editor@example.com", displayName: "Ed" },
+  });
+  await expect(accounts.sessionSummary({ ...editor, id: actorId("off-1") })).resolves.toBeNull();
+  expect(AccountUseCases.accountCapabilities(editor, false)).toEqual({ mcpEnabled: false });
+});
+
 describe("administrator invitations", () => {
   test("deny actors without users:manage before any port call", async () => {
     const { accounts, email, security } = useCases();
     await expect(
       accounts.invite(editor, { email: "x@example.com", role: "viewer" }),
     ).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
-    await expect(accounts.listInvitations(editor)).rejects.toMatchObject({
+    await expect(accounts.listInvitations(editor, { limit: 50 })).rejects.toMatchObject({
       code: "AUTHORIZATION_DENIED",
     });
     await expect(accounts.resendInvitation(editor, "inv-1")).rejects.toMatchObject({
@@ -259,7 +329,7 @@ describe("administrator invitations", () => {
 
   test("listed invitations derive pending and expired states without tokens", async () => {
     const { accounts } = useCases();
-    const items = await accounts.listInvitations(admin);
+    const { items } = await accounts.listInvitations(admin, { limit: 50 });
     expect(items.map((item) => [item.id, item.state])).toEqual([
       ["inv-1", "pending"],
       ["inv-old", "expired"],

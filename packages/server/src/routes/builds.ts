@@ -1,162 +1,164 @@
 import { notFound, parse, response } from "../shared/http.js";
-import { optionalJsonBody } from "../shared/request.js";
+import { cursorPageInput, optionalJsonBody } from "../shared/request.js";
 import {
   authenticationFailure,
   authorizationFailure,
-  security,
+  describePolicy,
+  validate,
   validationFailure,
 } from "../shared/openapi.js";
-import { requireContentReader } from "@lacecms/application";
 import {
   buildSiteSelectionSchema,
   buildRequestSchema,
   buildQueueReceiptSchema,
+  operationalPageQuerySchema,
   siteBuildRecordSchema,
   siteBuildListSchema,
   identifierSchemaPublic,
   toSiteBuildRecordDto,
-  InvariantError,
   errorEnvelopeSchema,
 } from "@lacecms/contracts";
 import { Hono } from "hono";
-import { describeRoute, resolver } from "hono-openapi";
+import { resolver } from "hono-openapi";
 import type { RouteContext } from "../composition/route-context.js";
+import { v1Routes } from "../routing/v1-routes.js";
 
-export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void {
-  const { actor, settingsActor } = routeContext.actors;
-  const { capabilities } = routeContext;
-  app.get(
-    "/api/v1/admin/build-site",
-    describeRoute({
-      summary: "Read current configured build site",
-      tags: ["admin"],
-      security: security.session,
-      responses: {
-        200: {
-          description: "Current configuration, not deployment verification",
-          content: { "application/json": { schema: resolver(buildSiteSelectionSchema) } },
+const routes = v1Routes.builds;
+
+export function createBuildRoutes(routeContext: RouteContext) {
+  const { actor, authenticate } = routeContext.actors;
+  const { builds, buildSite } = routeContext.capabilities;
+  return new Hono()
+    .on(
+      routes.buildSite.method,
+      routes.buildSite.path,
+      describePolicy(routes.buildSite, {
+        summary: "Read current configured build site",
+        tags: ["admin"],
+        responses: {
+          200: {
+            description: "Current configuration, not deployment verification",
+            content: { "application/json": { schema: resolver(buildSiteSelectionSchema) } },
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
         },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
+      }),
+      async (context) => {
+        return response(buildSiteSelectionSchema, { site: buildSite(await actor(context)) });
       },
-    }),
-    async (context) => {
-      const resolvedActor = await actor(context);
-      requireContentReader(resolvedActor);
-      return response(buildSiteSelectionSchema, { site: capabilities.buildSite ?? null });
-    },
-  );
-  app.get(
-    "/api/v1/admin/site-builds",
-    describeRoute({
-      responses: {
-        200: {
-          content: { "application/json": { schema: resolver(siteBuildListSchema) } },
-          description: "Recent site builds",
+    )
+    .on(
+      routes.list.method,
+      routes.list.path,
+      describePolicy(routes.list, {
+        responses: {
+          200: {
+            content: { "application/json": { schema: resolver(siteBuildListSchema) } },
+            description: "A page of persisted site builds, newest first",
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          ...validationFailure(),
         },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
+        summary: "List site builds",
+        tags: ["admin"],
+      }),
+      authenticate,
+      validate("query", operationalPageQuerySchema),
+      async (context) => {
+        const resolvedActor = await actor(context);
+        const page = await builds.list(resolvedActor, cursorPageInput(context.req.valid("query")));
+        return response(siteBuildListSchema, {
+          ...page,
+          items: page.items.map(toSiteBuildRecordDto),
+        });
       },
-      security: security.session,
-      summary: "List site builds",
-      tags: ["admin"],
-    }),
-    async (context) => {
-      const resolvedActor = await actor(context);
-      if (capabilities.builds === undefined)
-        throw new InvariantError("Build reads are unavailable.");
-      const items = await capabilities.builds.list(resolvedActor);
-      return response(siteBuildListSchema, { items: items.map(toSiteBuildRecordDto) });
-    },
-  );
-  app.get(
-    "/api/v1/admin/site-builds/:buildId",
-    describeRoute({
-      responses: {
-        200: {
-          content: { "application/json": { schema: resolver(siteBuildRecordSchema) } },
-          description: "Site build detail",
+    )
+    .on(
+      routes.get.method,
+      routes.get.path,
+      describePolicy(routes.get, {
+        responses: {
+          200: {
+            content: { "application/json": { schema: resolver(siteBuildRecordSchema) } },
+            description: "Site build detail",
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          404: {
+            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+            description: "Site build not found",
+          },
+          ...validationFailure(),
         },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
-        404: {
-          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-          description: "Site build not found",
-        },
-        ...validationFailure(),
+        summary: "Get a site build",
+        tags: ["admin"],
+      }),
+      async (context) => {
+        const resolvedActor = await actor(context);
+        const buildId = parse(identifierSchemaPublic, context.req.param("buildId"));
+        const build = await builds.get(resolvedActor, buildId);
+        return build === null
+          ? notFound()
+          : response(siteBuildRecordSchema, toSiteBuildRecordDto(build));
       },
-      security: security.session,
-      summary: "Get a site build",
-      tags: ["admin"],
-    }),
-    async (context) => {
-      const resolvedActor = await actor(context);
-      const buildId = parse(identifierSchemaPublic, context.req.param("buildId"));
-      if (capabilities.builds === undefined)
-        throw new InvariantError("Build reads are unavailable.");
-      const build = await capabilities.builds.get(resolvedActor, buildId);
-      return build === null
-        ? notFound()
-        : response(siteBuildRecordSchema, toSiteBuildRecordDto(build));
-    },
-  );
-  app.post(
-    "/api/v1/admin/builds",
-    describeRoute({
-      requestBody: { content: { "application/json": { schema: resolver(buildRequestSchema) } } },
-      responses: {
-        202: {
-          content: { "application/json": { schema: resolver(buildQueueReceiptSchema) } },
-          description: "Build request queued",
+    )
+    .on(
+      routes.request.method,
+      routes.request.path,
+      describePolicy(routes.request, {
+        requestBody: { content: { "application/json": { schema: resolver(buildRequestSchema) } } },
+        responses: {
+          202: {
+            content: { "application/json": { schema: resolver(buildQueueReceiptSchema) } },
+            description: "Build request queued",
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          ...validationFailure(),
         },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
-        ...validationFailure(),
+        summary: "Request a site build",
+        tags: ["admin"],
+      }),
+      async (context) => {
+        const resolvedActor = await actor(context);
+        return response(
+          buildQueueReceiptSchema,
+          await builds.request(resolvedActor, async () => {
+            parse(buildRequestSchema, await optionalJsonBody(context.req.raw));
+          }),
+          202,
+        );
       },
-      security: security.session,
-      summary: "Request a site build",
-      tags: ["admin"],
-    }),
-    async (context) => {
-      const resolvedActor = await settingsActor(context);
-      parse(buildRequestSchema, await optionalJsonBody(context.req.raw));
-      if (capabilities.builds === undefined)
-        throw new InvariantError("Build commands are unavailable.");
-      return response(
-        buildQueueReceiptSchema,
-        await capabilities.builds.request(resolvedActor),
-        202,
-      );
-    },
-  );
-  app.post(
-    "/api/v1/admin/builds/:buildId/retry",
-    describeRoute({
-      requestBody: { content: { "application/json": { schema: resolver(buildRequestSchema) } } },
-      responses: {
-        202: {
-          content: { "application/json": { schema: resolver(buildQueueReceiptSchema) } },
-          description: "Failed build retry queued",
+    )
+    .on(
+      routes.retry.method,
+      routes.retry.path,
+      describePolicy(routes.retry, {
+        requestBody: { content: { "application/json": { schema: resolver(buildRequestSchema) } } },
+        responses: {
+          202: {
+            content: { "application/json": { schema: resolver(buildQueueReceiptSchema) } },
+            description: "Failed build retry queued",
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          ...validationFailure(),
         },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
-        ...validationFailure(),
+        summary: "Retry a failed site build",
+        tags: ["admin"],
+      }),
+      async (context) => {
+        const resolvedActor = await actor(context);
+        return response(
+          buildQueueReceiptSchema,
+          await builds.retry(resolvedActor, async () => {
+            parse(buildRequestSchema, await optionalJsonBody(context.req.raw));
+            return parse(identifierSchemaPublic, context.req.param("buildId"));
+          }),
+          202,
+        );
       },
-      security: security.session,
-      summary: "Retry a failed site build",
-      tags: ["admin"],
-    }),
-    async (context) => {
-      const resolvedActor = await settingsActor(context);
-      parse(buildRequestSchema, await optionalJsonBody(context.req.raw));
-      const buildId = parse(identifierSchemaPublic, context.req.param("buildId"));
-      if (capabilities.builds === undefined)
-        throw new InvariantError("Build commands are unavailable.");
-      return response(
-        buildQueueReceiptSchema,
-        await capabilities.builds.retry(resolvedActor, buildId),
-        202,
-      );
-    },
-  );
+    );
 }

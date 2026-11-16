@@ -6,13 +6,14 @@ import type {
 } from "../ports/builds.js";
 import { buildWorkPort } from "../test-support/build-port.js";
 import type { UnixMilliseconds } from "@lacecms/domain";
-import { actorId, siteBuildId } from "@lacecms/domain";
-import { expect, test } from "vitest";
+import { actorId, attenuateActor, siteBuildId } from "@lacecms/domain";
+import { expect, test, vi } from "vitest";
 import {
   dispatcherEventId,
   dispatcherLeaseId,
   dispatcherRetryDelay,
   DISPATCHER_LEASE_DURATION_MS,
+  readBuildSite,
   SITE_BUILD_DEBOUNCE_MS,
   siteBuildRetryPolicy,
   SiteBuildDispatcher,
@@ -30,6 +31,41 @@ test("site-build timing follows the fixed architecture defaults", () => {
   expect(dispatcherRetryDelay(siteBuildRetryPolicy, 1, 0.999)).toBeLessThanOrEqual(5_000);
   expect(dispatcherRetryDelay(siteBuildRetryPolicy, 8, 0.999)).toBeLessThanOrEqual(640_000);
   expect(dispatcherRetryDelay(siteBuildRetryPolicy, 99, 0.999)).toBeLessThanOrEqual(900_000);
+});
+
+test("site selection and history are available only to signed-in content readers", async () => {
+  const listSiteBuilds = vi.fn(async () => ({ items: [] }));
+  const getSiteBuild = vi.fn(async () => null);
+  const requestBuild = vi.fn(async () => ({
+    eventId: dispatcherEventId("event"),
+    coalesced: false,
+    targetVersion: 1,
+  }));
+  const useCases = new SiteBuildUseCases({
+    clock: { now: () => unixMilliseconds(42) },
+    builds: { listSiteBuilds, getSiteBuild, requestBuild },
+  });
+  const site = { id: "site", label: "Site" };
+  const delegated = attenuateActor(
+    { id: actorId("admin"), role: "admin" },
+    {
+      permissions: ["content:read", "settings:manage"],
+      operations: [],
+    },
+  );
+  const prepare = vi.fn(async () => "build-1");
+  expect(() => readBuildSite(delegated, site)).toThrow(DomainError);
+  expect(() => useCases.list(delegated, { limit: 50 })).toThrow(DomainError);
+  expect(() => useCases.get(delegated, "build-1")).toThrow(DomainError);
+  expect(() => useCases.retry(delegated, prepare)).toThrow(DomainError);
+  for (const port of [listSiteBuilds, getSiteBuild, requestBuild, prepare])
+    expect(port).not.toHaveBeenCalled();
+  for (const role of ["admin", "editor", "viewer"] as const) {
+    const actor = { id: actorId(role), role };
+    expect(readBuildSite(actor, site)).toEqual(site);
+    await expect(useCases.list(actor, { limit: 50 })).resolves.toEqual({ items: [] });
+    await expect(useCases.get(actor, "build-1")).resolves.toBeNull();
+  }
 });
 
 test("only administrators can enqueue manual or retry build commands", async () => {

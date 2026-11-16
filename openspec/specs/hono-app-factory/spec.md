@@ -92,6 +92,26 @@ only immutable published content and SHALL not require an admin actor.
 - **THEN** the response contains only that collection's published entries and
   a continuation cursor that can be supplied to the same collection route
 
+### Requirement: Entry detail tags are issued after authorization
+The admin detail route SHALL return the REST draft tag on successful reads
+through the existing session or import credential path. Missing, forbidden
+and not-found responses SHALL contain the existing sanitized envelope
+without a draft tag. The HTTP adapter SHALL resolve the revision from the
+existing JSON and header inputs and pass one revision to the application
+command. The application and persistence SHALL retain their existing
+authorization, atomic concurrency checks and idempotency behavior.
+
+#### Scenario: Import clients and session clients see the same tag
+- **WHEN** an authorized import client and an authorized session reader
+  each load the same entry revision
+- **THEN** both successful reads carry the same draft tag and revision
+
+#### Scenario: An entry is unavailable
+- **WHEN** a caller lacks access or an authorized caller requests an
+  unknown entry ID
+- **THEN** the response uses the existing authentication, authorization or
+  not-found outcome without revealing a tag
+
 ### Requirement: Build export supports version-derived conditional reads
 The system SHALL derive every build-export page's ETag from the
 published-state version of that page. On a first-page request (no `after`)
@@ -196,11 +216,40 @@ with `Retry-After`. Route handlers SHALL pass portable commands and actors to
 the supplied boundaries and SHALL NOT query persistence or compare role
 strings.
 
+On Node and Cloudflare, the HTTP application SHALL register build export only
+when its composition provides a callable build-token verifier. Without the
+verifier, requests to the export path SHALL receive the standard API
+not-found response for the request method, generated OpenAPI SHALL omit the
+operation, and the application SHALL continue serving its other configured
+routes. With the verifier, the application SHALL require successful build-token
+authorization before reading the published-state version, reading any export
+page or returning a conditional `304`. Missing or rejected credentials SHALL
+receive the existing `401 AUTHENTICATION_REQUIRED` response with
+`Cache-Control: no-store` and `WWW-Authenticate: Bearer realm="lace"`.
+
 #### Scenario: A build credential is used at an admin route
 - **WHEN** a caller supplies a valid build credential to an administrative
-user or token-management route
+  user or token-management route
 - **THEN** the route denies the request because build credentials do not
-provide a browser actor
+  provide a browser actor
+
+#### Scenario: Build verification is unavailable
+- **WHEN** the app is composed without a callable build-token verifier
+- **THEN** `GET` and `HEAD /api/v1/public/build-export` return the API `404`,
+  no export work runs, generated OpenAPI omits build export and ordinary
+  public routes remain available
+
+#### Scenario: Conditional export requires authentication
+- **WHEN** a caller without a valid build token requests a configured export
+  with a matching `If-None-Match` or asks for a continuation page
+- **THEN** the request receives `401` with the Bearer challenge before any
+  published-state version or export page is read
+
+#### Scenario: Verified build export keeps its contract
+- **WHEN** a caller supplies a valid build token to a configured export
+- **THEN** the export retains its published-only paging and conditional read
+  behavior, and generated OpenAPI documents the operation with build-token
+  security
 
 ### Requirement: Media HTTP routes separate draft administration from public delivery
 The HTTP application SHALL expose authenticated `GET` and `POST`
@@ -278,11 +327,18 @@ The HTTP application SHALL expose versioned authenticated administrator routes f
 - **THEN** the route denies the action without enqueueing work
 
 ### Requirement: Versioned build read routes expose persisted history
-The HTTP application SHALL expose authenticated `GET /api/v1/admin/site-builds` and `GET /api/v1/admin/site-builds/:buildId` routes with shared validated response contracts. A missing build SHALL return the standard not-found envelope. Existing administrator build request and retry routes SHALL remain compatible.
+The HTTP application SHALL expose authenticated `GET /api/v1/admin/site-builds`
+and `GET /api/v1/admin/site-builds/:buildId` routes with shared validated
+response contracts. History SHALL return cursor pages in descending order of
+request time then build ID, under the existing session `content:read`
+permission. A missing build SHALL return the standard not-found envelope.
+Existing administrator build request and retry routes SHALL remain compatible.
 
 #### Scenario: History request
-- **WHEN** an authenticated actor requests the list
-- **THEN** the route returns a bounded newest-first list of validated build records
+- **WHEN** an authenticated actor requests the list and follows its
+  continuation
+- **THEN** the route returns successive bounded newest-first pages of
+  validated build records, including records older than the initial page
 
 #### Scenario: Missing detail
 - **WHEN** an authenticated actor requests an unknown build ID
@@ -541,40 +597,68 @@ document SHALL describe these routes.
 - **WHEN** an import client without publishing calls `GET /api/v1/admin/import-credential`
 - **THEN** the response names the credential, its expiry and the permissions `content:read`, `content:write` and `media:write`
 
+### Requirement: Security and build administration routes defer authorization to application use cases
+
+The HTTP application SHALL use application operations for build and import token administration, the import-credential description, users, invitations, account operations, setup, settings and site-build administration. Handlers SHALL resolve credentials and trusted session context, validate transport inputs, call the use case and map its outcome to the existing REST contract. Route metadata and middleware SHALL continue to enforce credential selection, origin and Fetch Metadata policy, body limits and rate limits. Handlers and route actor helpers SHALL delegate operation permissions and ownership to the application without calling account, session, token-management or profile persistence ports directly.
+
+The application SHALL preserve the existing method/path inventory, credential matrix, response schemas, status codes and headers on Node and Cloudflare. Build export SHALL continue to use its callable credential verifier before any export read or conditional response. MCP SHALL expose only its existing six tools and use the same application content operations as REST. Administrative and account operations SHALL stay outside delegated MCP authority.
+
+#### Scenario: HTTP authentication and use-case authorization return distinct outcomes
+
+- **WHEN** a browser session is missing or invalid, or an authenticated editor sends a valid token-management request
+- **THEN** the former receives the existing `401` with the route's session challenge, the latter receives `403`, and neither performs protected token work
+
+#### Scenario: Build commands keep their authorization and validation precedence
+
+- **WHEN** a viewer with a valid session submits a manual build or retry whose JSON body has an unexpected field, or an administrator submits the same request
+- **THEN** the viewer receives the existing `403` and the administrator receives the existing validation error without enqueueing a build
+
+#### Scenario: Credential kinds stay within their route boundaries
+
+- **WHEN** a caller uses an import or MCP bearer credential alongside a valid cookie on a session-only management route, or uses only a session on the import-credential description
+- **THEN** the request is denied without cookie fallback or disclosure of credential metadata
+
+#### Scenario: Existing methods and responses match across runtimes
+
+- **WHEN** equivalent Node and Cloudflare compositions serve an administrator, a signed-in viewer, an anonymous client and an authorized MCP client
+- **THEN** the runtimes expose the same operation inventory and preserve the existing security responses, OAuth tool scope and OpenAPI contracts
+
 ### Requirement: Runtime compositions share one service composition
+
 The HTTP package SHALL provide one runtime-neutral service composition that
-receives only runtime adapters and settings — persistence, security, object
+receives only runtime adapters and settings (persistence, security, object
 storage, image inspection, clock, identifier generation, list-query limits,
 logging, email delivery, rate-limit persistence, client-address lookup,
 authentication boundaries, optional MCP and OAuth adapters, readiness and
-HTTP settings — and returns the content, media, link, build, account and
-optional OAuth-connection use cases together with the complete HTTP
-application input. The Node and Cloudflare composition roots SHALL obtain
-their use cases and application input from it and SHALL NOT construct those
-use cases themselves. Account flows SHALL use the composed clock, so token
+HTTP settings) and returns the content, media, link, build, account, security
+administration and optional OAuth-connection use cases together with the
+complete HTTP application input. The Node and Cloudflare composition roots
+SHALL obtain their use cases and application input from it and SHALL NOT
+construct those use cases themselves. Account flows and build and import token
+administration SHALL use the composed clock, so token timestamps and
 lifetimes follow the clock a runtime supplies. `LACE_API_DOCS_ENABLED` and
 `LACE_MCP_ENABLED` SHALL be parsed by one shared rule that both runtime
 settings parsers use, keeping the accepted values and the sanitized
 diagnostics of the API documentation and MCP requirements. Route handlers
-SHALL receive actor resolution and the capabilities they call, not the raw
-application input, and SHALL depend only on the security capability ports
-they call.
+SHALL receive actor resolution and the application capabilities they call,
+including the optional build-token verifier for build-export authentication.
 
 #### Scenario: Both runtimes compose the same services
+
 - **WHEN** Node and Cloudflare composition roots supply equivalent adapters
   and settings
 - **THEN** both obtain their use cases and application input from the shared
   composition and expose the same routes, contracts and MCP availability
 
 #### Scenario: Account token lifetimes follow the composed clock
+
 - **WHEN** a runtime composed with a fixed clock issues an invitation or a
   password-reset token
-- **THEN** its expiry is computed from the fixed clock, not from the host
-  system time
+- **THEN** its expiry is computed from the fixed clock
 
 #### Scenario: An invalid feature flag is named once on both runtimes
-- **WHEN** `LACE_API_DOCS_ENABLED` or `LACE_MCP_ENABLED` holds a value other
-  than an accepted one
+
+- **WHEN** Node and the Worker receive a feature flag outside the accepted values
 - **THEN** Node refuses startup and the Worker returns its sanitized
   invalid-environment response, each naming the variable exactly once and
   omitting the supplied value

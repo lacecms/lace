@@ -1,5 +1,10 @@
 import * as v from "valibot";
-import { identifierSchema, isoTimestampSchema, opaqueCursorSchema } from "../shared/primitives.js";
+import {
+  cursorPageSchema,
+  identifierSchema,
+  isoTimestampSchema,
+  operationalPageQuerySchema,
+} from "../shared/primitives.js";
 
 /** Session-only account capabilities and safe OAuth connection projections. */
 export const accountCapabilitiesSchema = v.strictObject({ mcpEnabled: v.boolean() });
@@ -14,14 +19,8 @@ export const oauthConnectionSchema = v.strictObject({
   revokedAt: v.nullable(isoTimestampSchema),
   lastUsedAt: v.optional(isoTimestampSchema),
 });
-export const oauthConnectionListSchema = v.strictObject({
-  items: v.array(oauthConnectionSchema),
-  nextCursor: v.nullable(opaqueCursorSchema),
-});
-export const oauthConnectionListQuerySchema = v.strictObject({
-  after: v.optional(identifierSchema),
-  limit: v.optional(v.pipe(v.string(), v.regex(/^(?:[1-9]|[1-4][0-9]|50)$/u))),
-});
+export const oauthConnectionListSchema = cursorPageSchema(oauthConnectionSchema);
+export const oauthConnectionListQuerySchema = operationalPageQuerySchema;
 export const oauthConnectionRevokeSchema = v.strictObject({});
 export type AccountCapabilitiesDto = v.InferOutput<typeof accountCapabilitiesSchema>;
 export type OAuthConnectionDto = v.InferOutput<typeof oauthConnectionSchema>;

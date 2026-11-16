@@ -21,15 +21,28 @@ export const contentOperationPermissions = Object.freeze({
   readLinkImpact: "content:read",
 } satisfies Record<string, Permission>);
 export type ContentOperation = keyof typeof contentOperationPermissions;
+
 /** Maximum delegated surface. New operations default to denied. */
-export const delegatedContentOperations: readonly ContentOperation[] = Object.freeze([
-  "discoverModels",
-  "list",
-  "load",
-  "create",
-  "save",
-  "publish",
-]);
+export const mcpContentOperations = Object.freeze({
+  list_content_models: "discoverModels",
+  list_entries: "list",
+  get_entry: "load",
+  create_entry: "create",
+  save_draft: "save",
+  publish_entry: "publish",
+} satisfies Record<string, ContentOperation>);
+
+export const delegatedContentOperations: readonly ContentOperation[] = Object.freeze(
+  Object.values(mcpContentOperations),
+);
+
+export function mcpToolScope(name: unknown) {
+  if (typeof name !== "string" || !Object.hasOwn(mcpContentOperations, name)) return undefined;
+  return contentOperationPermissions[
+    mcpContentOperations[name as keyof typeof mcpContentOperations]
+  ];
+}
+
 export function canContentOperation(actor: Actor, operation: string): boolean {
   if (!Object.hasOwn(contentOperationPermissions, operation)) return false;
   const permission = contentOperationPermissions[operation as ContentOperation];

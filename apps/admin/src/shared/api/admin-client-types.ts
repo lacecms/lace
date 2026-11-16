@@ -58,7 +58,7 @@ export interface AdminClient {
   loadSetupState(): Promise<SetupStateDto>;
   setupAdmin(input: { email: string; password: string; token: string }): Promise<void>;
   loadBuildSite(): Promise<BuildSiteSelectionDto>;
-  listBuilds(): Promise<SiteBuildListDto>;
+  listBuilds(after?: string): Promise<SiteBuildListDto>;
   getBuild(buildId: string): Promise<SiteBuildRecordDto>;
   requestBuild(): Promise<BuildQueueReceiptDto>;
   retryBuild(buildId: string): Promise<BuildQueueReceiptDto>;
@@ -66,12 +66,12 @@ export interface AdminClient {
     userId: string,
     input: { disabled?: boolean; role?: "admin" | "editor" | "viewer" },
   ): Promise<ManagedUserDto>;
-  listUsers(): Promise<ManagedUserListDto>;
+  listUsers(after?: string): Promise<ManagedUserListDto>;
   /** Ends every session of another account and reports how many ended. */
   signOutUser(userId: string): Promise<SessionRevocationResultDto>;
   /** Issues a reset for another account; the link is present only when the email was not sent. */
   sendPasswordReset(userId: string): Promise<AdminPasswordResetResultDto>;
-  listInvitations(): Promise<InvitationListDto>;
+  listInvitations(after?: string): Promise<InvitationListDto>;
   /** Invites an address; the link is present only when the email was not sent. */
   createInvitation(input: {
     email: string;

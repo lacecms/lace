@@ -359,13 +359,4 @@ export function createEmailSender(
   }
 }
 
-/** The non-secret status Settings may display. */
-export function emailDeliveryStatus(
-  sender: Pick<EmailSender, "from" | "provider">,
-):
-  | { readonly provider: "none" }
-  | { readonly from: string; readonly provider: Exclude<EmailProviderKind, "none"> } {
-  if (sender.provider === "none" || sender.from === undefined)
-    return Object.freeze({ provider: "none" });
-  return Object.freeze({ from: sender.from, provider: sender.provider });
-}
+export { emailDeliveryStatus } from "@lacecms/application";

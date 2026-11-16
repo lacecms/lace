@@ -44,7 +44,11 @@ test("admin user screen lists accounts, invites users, and keeps confirmed state
     state: "pending" as const,
   };
   let invitations: (typeof invitation)[] = [];
-  const listUsers = vi.fn(async () => ({ items: [soleAdmin, activeEditor, disabledViewer] }));
+  const listUsers = vi.fn(async () => ({
+    items: [soleAdmin, activeEditor, disabledViewer],
+    total: 3,
+    disabledCount: 1,
+  }));
   const listInvitations = vi.fn(async () => ({ items: invitations }));
   const createInvitation = vi.fn(async () => {
     invitations = [invitation];
@@ -131,6 +135,8 @@ test("a failed invitation list offers Try again beside the users", async () => {
       listInvitations,
       listUsers: async () => ({
         items: [{ disabled: false, email: "admin@lace.test", id: "admin-1", role: "admin" }],
+        total: 1,
+        disabledCount: 0,
       }),
     }),
   );
@@ -146,7 +152,7 @@ test("a failed user list offers Try again", async () => {
   let fail = true;
   const listUsers = vi.fn(async () => {
     if (fail) throw new AdminClientError({ message: "Users unavailable.", status: 503 });
-    return { items: [] };
+    return { items: [], total: 0, disabledCount: 0 };
   });
   renderRoute(
     "/users",
@@ -179,7 +185,7 @@ test("expired user request returns to login without stale management content", a
 });
 
 test("non-admin management routes issue no protected requests", async () => {
-  const listUsers = vi.fn(async () => ({ items: [] }));
+  const listUsers = vi.fn(async () => ({ items: [], total: 0, disabledCount: 0 }));
   const listInvitations = vi.fn(async () => ({ items: [] }));
   const listTokens = vi.fn(async () => ({ items: [] }));
   renderRoute(
@@ -198,4 +204,71 @@ test("non-admin management routes issue no protected requests", async () => {
   );
   await screen.findByRole("heading", { name: "Access denied" });
   expect(listTokens).not.toHaveBeenCalled();
+});
+
+test("user and invitation pages advance independently and keep server totals and actions", async () => {
+  const user = userEvent.setup();
+  const admin = {
+    disabled: false,
+    email: "admin@lace.test",
+    id: "admin-1",
+    role: "admin" as const,
+  };
+  const viewer = {
+    disabled: true,
+    email: "viewer@lace.test",
+    id: "viewer-1",
+    role: "viewer" as const,
+  };
+  const invitation = {
+    createdAt: "2026-10-01T00:00:00.000Z",
+    expiresAt: "2026-10-04T00:00:00.000Z",
+    id: "first",
+    email: "first@lace.test",
+    invitedBy: "Admin",
+    role: "viewer" as const,
+    state: "pending" as const,
+  };
+  const later = { ...invitation, id: "later", email: "later@lace.test" };
+  let revoked = false;
+  const listUsers = vi.fn(async (after?: string) =>
+    after === undefined
+      ? { items: [admin], total: 2, disabledCount: 1, nextCursor: "user-page" }
+      : { items: [viewer], total: 2, disabledCount: 1 },
+  );
+  const listInvitations = vi.fn(async (after?: string) =>
+    after === undefined
+      ? { items: [invitation], ...(revoked ? {} : { nextCursor: "invitation-page" }) }
+      : { items: [later] },
+  );
+  const revokeInvitation = vi.fn(async () => {
+    revoked = true;
+  });
+  renderRoute(
+    "/users",
+    staticSessionSource({ id: admin.id, role: "admin" }),
+    client({
+      listUsers,
+      listInvitations,
+      revokeInvitation,
+    }),
+  );
+  expect(await screen.findByText("2 accounts · 1 disabled")).toBeInTheDocument();
+  expect(screen.queryByText(viewer.email)).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Load more users" }));
+  expect(await screen.findByText(viewer.email)).toBeInTheDocument();
+  expect(listUsers).toHaveBeenLastCalledWith("user-page");
+  expect(listInvitations.mock.calls).toEqual([[undefined]]);
+  await user.click(screen.getByRole("button", { name: "Load more invitations" }));
+  await user.click(
+    await screen.findByRole("button", { name: `Revoke invitation for ${later.email}` }),
+  );
+  const dialog = await screen.findByRole("dialog", { name: "Revoke invitation?" });
+  await user.click(within(dialog).getByRole("button", { name: "Revoke invitation" }));
+  await waitFor(() =>
+    expect(screen.queryByText(later.email, { selector: "td" })).not.toBeInTheDocument(),
+  );
+  expect(revokeInvitation).toHaveBeenCalledWith(later.id);
+  expect(listInvitations.mock.calls).toEqual([[undefined], ["invitation-page"], [undefined]]);
+  expect(screen.getByText(viewer.email)).toBeInTheDocument();
 });

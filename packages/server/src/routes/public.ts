@@ -1,6 +1,15 @@
-import { AuthenticationRequiredError } from "@lacecms/contracts";
+import { mountOptionalRoutes } from "../routing/optional-routes.js";
+import { buildTokenVerification, configuredModelKey } from "../shared/application-input.js";
 import { readBuildExportPage, readBuildExportQuery } from "./build-export.js";
-import { notFound, parse, response, validationHook, validationResponse } from "../shared/http.js";
+import {
+  bodyResponse,
+  notFound,
+  parse,
+  response,
+  validationResponse,
+  type BodyResponse,
+  type JsonResponse,
+} from "../shared/http.js";
 import { collectionItemParams, modelKeyParams, pagination, publicPath } from "../shared/request.js";
 import {
   collectionModel,
@@ -8,9 +17,15 @@ import {
   pageModel,
   routeLessCollectionModel,
 } from "../shared/content-config.js";
-import { authenticationFailure, security, validationFailure } from "../shared/openapi.js";
-import { collectionPathFailure } from "@lacecms/contracts";
 import {
+  authenticationFailure,
+  describePolicy,
+  openApiParameterSchema,
+  validate,
+  validationFailure,
+} from "../shared/openapi.js";
+import {
+  AuthenticationRequiredError,
   buildExportContinuationPageSchema,
   buildExportFirstPageSchema,
   DEFAULT_PAGE_SIZE,
@@ -24,6 +39,7 @@ import {
   publicGlobalContentSchema,
   publicContentListSchema,
   publicRecordListSchema,
+  collectionPathFailure,
   toBuildExportContinuationPageDto,
   toBuildExportFirstPageDto,
   toPublicContentEntryDto,
@@ -31,12 +47,14 @@ import {
   toPublicContentListDto,
   toPublicRecordListDto,
   versionFromEntityTag,
+  type BuildExportPageDto,
 } from "@lacecms/contracts";
-import { toJsonSchema } from "@valibot/to-json-schema";
 import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { resolver } from "hono-openapi";
 import * as v from "valibot";
 import type { RouteContext } from "../composition/route-context.js";
+import { v1Routes } from "../routing/v1-routes.js";
+import { authenticationChallenge } from "../routing/route-policy.js";
 
 /** Documents what `pagination()` parses by hand; parsing stays there. */
 const paginationParameters = [
@@ -45,7 +63,7 @@ const paginationParameters = [
     in: "query" as const,
     name: "after",
     required: false,
-    schema: toJsonSchema(opaqueCursorSchema) as never,
+    schema: openApiParameterSchema(opaqueCursorSchema),
   },
   {
     description: "Entries per page.",
@@ -61,203 +79,221 @@ const paginationParameters = [
   },
 ];
 
-export function registerPublicRoutes(app: Hono, routeContext: RouteContext): void {
+const routes = v1Routes.public;
+
+export function createPublicRoutes(routeContext: RouteContext) {
   const { capabilities } = routeContext;
-  const { publicMediaUrl, seoSection, seoModels } = capabilities;
-  app.get(
-    "/api/v1/public/globals/:modelKey",
-    describeRoute({
-      responses: {
-        200: {
-          content: { "application/json": { schema: resolver(publicGlobalContentSchema) } },
-          description: "Published global",
+  const { publicMediaUrl, seoModels } = capabilities;
+  const publicRoutes = new Hono()
+    .on(
+      routes.global.method,
+      routes.global.path,
+      describePolicy(routes.global, {
+        responses: {
+          200: {
+            content: { "application/json": { schema: resolver(publicGlobalContentSchema) } },
+            description: "Published global",
+          },
+          ...validationFailure(),
         },
-        ...validationFailure(),
+        summary: "Read a published global",
+        tags: ["public"],
+      }),
+      validate("param", modelKeyParams),
+      async (context) => {
+        const model = globalModel(capabilities.config, context.req.valid("param").modelKey);
+        if (model === undefined) return notFound();
+        const global = await capabilities.publicContent.loadPublicGlobal(
+          configuredModelKey(model.key),
+        );
+        return global === null
+          ? notFound()
+          : response(publicGlobalContentSchema, toPublicGlobalContentDto(global, publicMediaUrl()));
       },
-      security: security.none,
-      summary: "Read a published global",
-      tags: ["public"],
-    }),
-    validator("param", modelKeyParams, validationHook),
-    async (context) => {
-      const model = globalModel(capabilities.config, context.req.param("modelKey"));
-      if (model === undefined) return notFound();
-      const global = await capabilities.publicContent.loadPublicGlobal(model.key as never);
-      return global === null
-        ? notFound()
-        : response(publicGlobalContentSchema, toPublicGlobalContentDto(global, publicMediaUrl()));
-    },
-  );
-
-  app.get(
-    "/api/v1/public/pages/:modelKey",
-    describeRoute({
-      responses: {
-        200: {
-          content: { "application/json": { schema: resolver(publicContentEntrySchema) } },
-          description: "Published page",
+    )
+    .on(
+      routes.page.method,
+      routes.page.path,
+      describePolicy(routes.page, {
+        responses: {
+          200: {
+            content: { "application/json": { schema: resolver(publicContentEntrySchema) } },
+            description: "Published page",
+          },
+          ...validationFailure(),
         },
-        ...validationFailure(),
+        summary: "Read a published page",
+        tags: ["public"],
+      }),
+      validate("param", modelKeyParams),
+      async (context) => {
+        const model = pageModel(capabilities.config, context.req.valid("param").modelKey);
+        if (model === undefined) return notFound();
+        const entry = await capabilities.publicContent.loadPublic(model.path);
+        return entry === null
+          ? notFound()
+          : response(
+              publicContentEntrySchema,
+              toPublicContentEntryDto(entry, publicMediaUrl(), { seoModels }),
+            );
       },
-      security: security.none,
-      summary: "Read a published page",
-      tags: ["public"],
-    }),
-    validator("param", modelKeyParams, validationHook),
-    async (context) => {
-      const model = pageModel(capabilities.config, context.req.param("modelKey"));
-      if (model === undefined) return notFound();
-      const entry = await capabilities.publicContent.loadPublic(model.path);
-      return entry === null
-        ? notFound()
-        : response(
-            publicContentEntrySchema,
-            toPublicContentEntryDto(entry, publicMediaUrl(), { seoModels }),
-          );
-    },
-  );
-
-  app.get(
-    "/api/v1/public/records/:modelKey",
-    describeRoute({
-      responses: {
-        200: {
-          content: { "application/json": { schema: resolver(publicRecordListSchema) } },
-          description: "Published records of a route-less collection",
+    )
+    .on(
+      routes.records.method,
+      routes.records.path,
+      describePolicy(routes.records, {
+        responses: {
+          200: {
+            content: { "application/json": { schema: resolver(publicRecordListSchema) } },
+            description: "Published records of a route-less collection",
+          },
+          ...validationFailure(),
         },
-        ...validationFailure(),
+        parameters: paginationParameters,
+        summary: "List published records of a route-less collection",
+        tags: ["public"],
+      }),
+      validate("param", modelKeyParams),
+      async (context) => {
+        const model = routeLessCollectionModel(
+          capabilities.config,
+          context.req.valid("param").modelKey,
+        );
+        if (model === undefined) return notFound();
+        const page = await capabilities.publicContent.listPublicRecords({
+          modelKey: configuredModelKey(model.key),
+          ...pagination(context.req.raw),
+        });
+        return response(publicRecordListSchema, toPublicRecordListDto(page, publicMediaUrl()));
       },
-      parameters: paginationParameters,
-      security: security.none,
-      summary: "List published records of a route-less collection",
-      tags: ["public"],
-    }),
-    validator("param", modelKeyParams, validationHook),
-    async (context) => {
-      const model = routeLessCollectionModel(capabilities.config, context.req.param("modelKey"));
-      if (model === undefined) return notFound();
-      const page = await capabilities.publicContent.listPublicRecords({
-        modelKey: model.key as never,
-        ...pagination(context.req.raw),
-      });
-      return response(publicRecordListSchema, toPublicRecordListDto(page, publicMediaUrl()));
-    },
-  );
-
-  app.get(
-    "/api/v1/public/collections/:modelKey",
-    describeRoute({
-      responses: {
-        200: {
-          content: { "application/json": { schema: resolver(publicContentListSchema) } },
-          description: "Published collection page",
+    )
+    .on(
+      routes.collection.method,
+      routes.collection.path,
+      describePolicy(routes.collection, {
+        responses: {
+          200: {
+            content: { "application/json": { schema: resolver(publicContentListSchema) } },
+            description: "Published collection page",
+          },
+          ...validationFailure(),
         },
-        ...validationFailure(),
+        parameters: paginationParameters,
+        summary: "List published collection entries",
+        tags: ["public"],
+      }),
+      validate("param", modelKeyParams),
+      async (context) => {
+        const model = collectionModel(capabilities.config, context.req.valid("param").modelKey);
+        if (model === undefined) return notFound();
+        const page = await capabilities.publicContent.listPublic({
+          modelKey: configuredModelKey(model.key),
+          ...pagination(context.req.raw),
+        });
+        return response(
+          publicContentListSchema,
+          toPublicContentListDto(page, publicMediaUrl(), { seoModels }),
+        );
       },
-      parameters: paginationParameters,
-      security: security.none,
-      summary: "List published collection entries",
-      tags: ["public"],
-    }),
-    validator("param", modelKeyParams, validationHook),
-    async (context) => {
-      const model = collectionModel(capabilities.config, context.req.param("modelKey"));
-      if (model === undefined) return notFound();
-      const page = await capabilities.publicContent.listPublic({
-        modelKey: model.key as never,
-        ...pagination(context.req.raw),
-      });
-      return response(
-        publicContentListSchema,
-        toPublicContentListDto(page, publicMediaUrl(), { seoModels }),
-      );
-    },
-  );
-
-  app.get(
-    "/api/v1/public/collections/:modelKey/:slug",
-    describeRoute({
-      responses: {
-        200: {
-          content: { "application/json": { schema: resolver(publicContentEntrySchema) } },
-          description: "Published collection entry",
+    )
+    .on(
+      routes.collectionItem.method,
+      routes.collectionItem.path,
+      describePolicy(routes.collectionItem, {
+        responses: {
+          200: {
+            content: { "application/json": { schema: resolver(publicContentEntrySchema) } },
+            description: "Published collection entry",
+          },
+          ...validationFailure(),
         },
-        ...validationFailure(),
+        summary: "Read a published collection entry",
+        tags: ["public"],
+      }),
+      validate("param", collectionItemParams),
+      async (context) => {
+        const model = collectionModel(capabilities.config, context.req.valid("param").modelKey);
+        if (model === undefined) return notFound();
+        const resolved = collectionPathFailure(model.route, context.req.valid("param").slug);
+        if (!("path" in resolved))
+          return validationResponse([
+            { code: "invalid_value", message: "The submitted value is invalid.", path: "/slug" },
+          ]);
+        const path = resolved.path;
+        const entry = await capabilities.publicContent.loadPublic(path);
+        return entry === null
+          ? notFound()
+          : response(
+              publicContentEntrySchema,
+              toPublicContentEntryDto(entry, publicMediaUrl(), { seoModels }),
+            );
       },
-      security: security.none,
-      summary: "Read a published collection entry",
-      tags: ["public"],
-    }),
-    validator("param", collectionItemParams, validationHook),
-    async (context) => {
-      const model = collectionModel(capabilities.config, context.req.param("modelKey"));
-      if (model === undefined) return notFound();
-      const resolved = collectionPathFailure(model.route, context.req.param("slug"));
-      if (!("path" in resolved))
-        return validationResponse([
-          { code: "invalid_value", message: "The submitted value is invalid.", path: "/slug" },
-        ]);
-      const path = resolved.path;
-      const entry = await capabilities.publicContent.loadPublic(path);
-      return entry === null
-        ? notFound()
-        : response(
-            publicContentEntrySchema,
-            toPublicContentEntryDto(entry, publicMediaUrl(), { seoModels }),
-          );
-    },
-  );
-
-  app.get(
-    "/api/v1/public/content/by-path",
-    describeRoute({
-      responses: {
-        200: {
-          content: { "application/json": { schema: resolver(publicContentEntrySchema) } },
-          description: "Published entry",
+    )
+    .on(
+      routes.byPath.method,
+      routes.byPath.path,
+      describePolicy(routes.byPath, {
+        responses: {
+          200: {
+            content: { "application/json": { schema: resolver(publicContentEntrySchema) } },
+            description: "Published entry",
+          },
+          ...validationFailure(),
         },
-        ...validationFailure(),
+        parameters: [
+          {
+            description: "The published route path, starting with `/`.",
+            in: "query",
+            name: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        summary: "Read published content by path",
+        tags: ["public"],
+      }),
+      async (context) => {
+        const suppliedPath = new URL(context.req.raw.url).searchParams.get("path");
+        if (suppliedPath === null)
+          return validationResponse([
+            { code: "invalid_value", message: "The submitted value is invalid.", path: "/path" },
+          ]);
+        let path: string;
+        try {
+          path = publicPath(suppliedPath);
+        } catch {
+          return validationResponse([
+            { code: "invalid_value", message: "The submitted value is invalid.", path: "/path" },
+          ]);
+        }
+        const entry = await capabilities.publicContent.loadPublic(path);
+        return entry === null
+          ? notFound()
+          : response(
+              publicContentEntrySchema,
+              toPublicContentEntryDto(entry, publicMediaUrl(), { seoModels }),
+            );
       },
-      parameters: [
-        {
-          description: "The published route path, starting with `/`.",
-          in: "query",
-          name: "path",
-          required: true,
-          schema: { type: "string" },
-        },
-      ],
-      security: security.none,
-      summary: "Read published content by path",
-      tags: ["public"],
-    }),
-    async (context) => {
-      const suppliedPath = new URL(context.req.raw.url).searchParams.get("path");
-      if (suppliedPath === null)
-        return validationResponse([
-          { code: "invalid_value", message: "The submitted value is invalid.", path: "/path" },
-        ]);
-      let path: string;
-      try {
-        path = publicPath(suppliedPath);
-      } catch {
-        return validationResponse([
-          { code: "invalid_value", message: "The submitted value is invalid.", path: "/path" },
-        ]);
-      }
-      const entry = await capabilities.publicContent.loadPublic(path);
-      return entry === null
-        ? notFound()
-        : response(
-            publicContentEntrySchema,
-            toPublicContentEntryDto(entry, publicMediaUrl(), { seoModels }),
-          );
-    },
-  );
+    );
 
-  app.get(
-    "/api/v1/public/build-export",
-    describeRoute({
+  const { buildTokenVerifier } = capabilities;
+  return mountOptionalRoutes(
+    publicRoutes,
+    typeof buildTokenVerifier === "function"
+      ? createBuildExportRoutes(capabilities, buildTokenVerifier)
+      : undefined,
+  );
+}
+
+function createBuildExportRoutes(
+  capabilities: RouteContext["capabilities"],
+  buildTokenVerifier: NonNullable<RouteContext["capabilities"]["buildTokenVerifier"]>,
+) {
+  const { publicMediaUrl, seoSection } = capabilities;
+  return new Hono().on(
+    routes.buildExport.method,
+    routes.buildExport.path,
+    describePolicy(routes.buildExport, {
       description:
         "Returns one bounded page of the published build export. A request without `after` returns the first page with `globals` and `seo`; follow `nextCursor` through `after` until it is absent. A continuation cursor of a superseded published state fails with `409 BUILD_EXPORT_VERSION_CHANGED`; restart from the first page.",
       parameters: [
@@ -300,23 +336,17 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
         ...authenticationFailure(),
         ...validationFailure(),
       },
-      security: security.build,
       summary: "Read a page of the published build export",
       tags: ["public"],
     }),
-    async (context) => {
-      if (capabilities.buildTokens !== undefined) {
-        const authorization = context.req.header("authorization");
-        if (
-          authorization === undefined ||
-          !authorization.startsWith("Bearer ") ||
-          !(await capabilities.buildTokens.verifyBuildToken({
-            now: Date.now() as never,
-            token: authorization.slice(7) as never,
-          }))
-        )
-          throw new AuthenticationRequiredError("bearer");
-      }
+    async (context): Promise<JsonResponse<BuildExportPageDto, 200> | BodyResponse<null, 304>> => {
+      const authorization = context.req.header("authorization");
+      if (
+        authorization === undefined ||
+        !authorization.startsWith("Bearer ") ||
+        !(await buildTokenVerifier(buildTokenVerification(authorization.slice("Bearer ".length))))
+      )
+        throw new AuthenticationRequiredError(authenticationChallenge(routes.buildExport.auth));
       const query = readBuildExportQuery(new URL(context.req.url));
       const suppliedTag = context.req.header("if-none-match") ?? undefined;
       if (suppliedTag !== undefined) parse(entityTagSchema, suppliedTag);
@@ -325,10 +355,7 @@ export function registerPublicRoutes(app: Hono, routeContext: RouteContext): voi
       if (query.after === undefined && suppliedTag !== undefined) {
         const version = await capabilities.publicContent.publishedContentVersion();
         if (versionFromEntityTag(suppliedTag) === version)
-          return new Response(null, {
-            headers: { etag: entityTagForVersion(version) },
-            status: 304,
-          });
+          return bodyResponse(null, 304, { etag: entityTagForVersion(version) });
       }
       const page = await readBuildExportPage(capabilities.publicContent, query);
       // Each page is validated strictly before it is sent; its ETag is the

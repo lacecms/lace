@@ -1,4 +1,5 @@
 import type { Clock, RateLimitDecision, SensitiveRateLimiter } from "@lacecms/application";
+import type { SensitiveRequestLimit } from "../routing/route-policy.js";
 import { sensitiveRequestLimit, sensitiveRequestSubject } from "./sensitive-limits.js";
 
 /**
@@ -19,9 +20,13 @@ export class SensitiveRequestRateLimiter {
     readonly request: Request;
     readonly actor?: { readonly id: string };
     readonly clientAddress?: string;
+    readonly limit?: SensitiveRequestLimit | null;
   }): Promise<boolean | RateLimitDecision> {
-    const limit = sensitiveRequestLimit(input.request.method, new URL(input.request.url).pathname);
-    if (limit === undefined) return true;
+    const limit =
+      input.limit === undefined
+        ? sensitiveRequestLimit(input.request.method, new URL(input.request.url).pathname)
+        : input.limit;
+    if (limit == null) return true;
     const subject = await sensitiveRequestSubject(
       limit,
       input.request,

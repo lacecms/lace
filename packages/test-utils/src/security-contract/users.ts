@@ -13,6 +13,68 @@ import {
 
 export const cases: readonly SecurityContractCase[] = [
   {
+    name: "operational account pages are ordered, bounded and include global totals",
+    async run(runtime, expect) {
+      const { security, sql } = await runtime.open();
+      const at = SECURITY_CONTRACT_EPOCH;
+      for (const [id, disabled] of [
+        ["b", 1],
+        ["c", 0],
+        ["a", 0],
+      ] as const) {
+        await sql.run(
+          "insert into user (id, name, email, email_verified, role, disabled, created_at, updated_at) values (?, ?, ?, 0, 'viewer', ?, ?, ?)",
+          id,
+          id,
+          `${id}@lace.test`,
+          disabled,
+          at,
+          at,
+        );
+      }
+      const first = await security.listUsers({ limit: 1 });
+      expect(first).toMatchObject({ items: [{ id: "a" }], disabledCount: 1, total: 3 });
+      expect(first.nextCursor).toBeDefined();
+      const last = await security.listUsers({ after: first.nextCursor!, limit: 2 });
+      expect(last).toMatchObject({ items: [{ id: "b" }, { id: "c" }], disabledCount: 1, total: 3 });
+      expect(last).not.toHaveProperty("nextCursor");
+      await sql.run("delete from user where id = 'a'");
+      await expect(
+        security.listUsers({ after: first.nextCursor!, limit: 2 }),
+      ).rejects.toMatchObject({
+        code: "VALIDATION_FAILED",
+        issues: [expect.objectContaining({ path: ["after"] })],
+      });
+
+      for (const id of ["a", "c", "d", "b"]) {
+        await sql.run(
+          "insert into invitations (id,email,role,token_hash,invited_by,created_at,expires_at,revoked_at) values (?, ?, 'viewer', ?, 'c', ?, ?, ?)",
+          id,
+          `${id}@invite.test`,
+          id,
+          at,
+          at + 1,
+          id === "d" ? at : null,
+        );
+      }
+      const invitations = await security.listInvitations({ limit: 1 });
+      expect(invitations.items.map((item) => item.id)).toEqual(["c"]);
+      expect(invitations.nextCursor).toBeDefined();
+      await sql.run("update invitations set accepted_at = ? where id = 'b'", at + 1);
+      const remaining = await security.listInvitations({
+        after: invitations.nextCursor!,
+        limit: 1,
+      });
+      expect(remaining.items.map((item) => item.id)).toEqual(["a"]);
+      expect(remaining).not.toHaveProperty("nextCursor");
+      await expect(
+        security.listInvitations({ after: first.nextCursor!, limit: 1 }),
+      ).rejects.toMatchObject({
+        code: "VALIDATION_FAILED",
+      });
+    },
+  },
+  {
     name: "user management keeps one active administrator under concurrency",
     async run(runtime, expect) {
       const harness = await runtime.open();
@@ -59,11 +121,9 @@ export const cases: readonly SecurityContractCase[] = [
           "select count(*) as count from user where role = 'admin' and disabled = 0",
         ),
       ).toEqual({ count: 1 });
-      expect((await harness.security.listUsers()).map((value) => value.email)).toEqual([
-        "admin@lace.test",
-        "editor@lace.test",
-        "second@lace.test",
-      ]);
+      expect(
+        (await harness.security.listUsers({ limit: 50 })).items.map((value) => value.email),
+      ).toEqual(["admin@lace.test", "editor@lace.test", "second@lace.test"]);
     },
   },
   {
@@ -111,7 +171,9 @@ export const cases: readonly SecurityContractCase[] = [
         }),
       ).resolves.toEqual({ status: "conflict" });
       expect(await harness.sql.get("select count(*) as count from user")).toEqual({ count: 1 });
-      expect(await harness.security.listInvitations()).toEqual([created.invitation]);
+      expect((await harness.security.listInvitations({ limit: 50 })).items).toEqual([
+        created.invitation,
+      ]);
       await expect(
         harness.security.inspectInvitation({ now, token: created.token }),
       ).resolves.toEqual({
@@ -126,7 +188,7 @@ export const cases: readonly SecurityContractCase[] = [
       await expect(
         harness.security.acceptInvitation({ now: expired, password, token: created.token }),
       ).resolves.toEqual({ status: "invalid" });
-      expect(await harness.security.listInvitations()).toHaveLength(1);
+      expect((await harness.security.listInvitations({ limit: 50 })).items).toHaveLength(1);
       const fresh = await harness.security.createInvitation({
         email: "new@lace.test",
         invitedBy: admin.id,
@@ -134,9 +196,9 @@ export const cases: readonly SecurityContractCase[] = [
         role: "viewer",
       });
       expect(fresh.status).toBe("created");
-      expect((await harness.security.listInvitations()).map((value) => value.role)).toEqual([
-        "viewer",
-      ]);
+      expect(
+        (await harness.security.listInvitations({ limit: 50 })).items.map((value) => value.role),
+      ).toEqual(["viewer"]);
     },
   },
   {
@@ -192,7 +254,7 @@ export const cases: readonly SecurityContractCase[] = [
       await expect(
         harness.security.acceptInvitation({ now, password, token: created.token }),
       ).resolves.toEqual({ status: "invalid" });
-      expect(await harness.security.listInvitations()).toEqual([]);
+      expect((await harness.security.listInvitations({ limit: 50 })).items).toEqual([]);
       const winner = attempts[0]!.status === "accepted" ? password : "another long password";
       expect(await passwordMatches(harness.security, accepted.user.id, winner)).toBe(true);
       expect(await harness.security.readUserProfile(accepted.user.id)).toMatchObject({
@@ -262,7 +324,7 @@ export const cases: readonly SecurityContractCase[] = [
         harness.security.acceptInvitation({ now: later, password, token: resent.token }),
       ).resolves.toEqual({ status: "invalid" });
       expect(await harness.sql.get("select count(*) as count from user")).toEqual({ count: 1 });
-      expect(await harness.security.listInvitations()).toEqual([]);
+      expect((await harness.security.listInvitations({ limit: 50 })).items).toEqual([]);
       const second = await harness.security.createInvitation({
         email: "new@lace.test",
         invitedBy: admin.id,

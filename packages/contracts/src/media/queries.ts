@@ -10,6 +10,7 @@ import {
 } from "@lacecms/domain";
 import * as v from "valibot";
 import {
+  adminPageLimitQuerySchema,
   cursorPageSchema,
   opaqueCursorSchema,
   pageLimitQuerySchema,
@@ -105,7 +106,7 @@ export const mediaListQuerySchema = v.object({
     ),
   ),
   after: v.optional(opaqueCursorSchema),
-  limit: v.optional(pageLimitQuerySchema),
+  limit: adminPageLimitQuerySchema,
   q: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(MAX_MEDIA_SEARCH_LENGTH))),
   sort: v.optional(mediaSortSchema),
   type: v.optional(mediaMimeTypeSchema),

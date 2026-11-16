@@ -1,3 +1,4 @@
+import { bodyResponse } from "../shared/http.js";
 import type { MediaUseCases, MediaBinary } from "@lacecms/application";
 
 type EligibleMedia = Exclude<Awaited<ReturnType<MediaUseCases["resolvePublic"]>>, null>;
@@ -42,14 +43,14 @@ export async function conditionalMediaResponse(
   media: EligibleMedia,
   cacheControl: string,
   open: (media: EligibleMedia) => Promise<MediaBinary>,
-): Promise<Response> {
+) {
   const headers = { "cache-control": cacheControl, etag: mediaBinaryEntityTag(media.id) };
   if (ifNoneMatchMatches(request.headers.get("if-none-match") ?? undefined, headers.etag))
-    return new Response(null, { headers, status: 304 });
+    return bodyResponse(null, 304, headers);
   return binaryResponse(await open(media), headers);
 }
 
-function binaryResponse(value: MediaBinary, headers: Readonly<Record<string, string>>): Response {
+function binaryResponse(value: MediaBinary, headers: Readonly<Record<string, string>>) {
   const iterator = value.body[Symbol.asyncIterator]();
   const body = new ReadableStream<Uint8Array>({
     async cancel() {
@@ -61,11 +62,9 @@ function binaryResponse(value: MediaBinary, headers: Readonly<Record<string, str
       else controller.enqueue(next.value);
     },
   });
-  return new Response(body, {
-    headers: {
-      ...headers,
-      "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(value.filename)}`,
-      "content-type": value.mimeType,
-    },
+  return bodyResponse(body, 200, {
+    ...headers,
+    "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(value.filename)}`,
+    "content-type": value.mimeType,
   });
 }

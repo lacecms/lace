@@ -29,7 +29,7 @@
     "lint": "oxlint --deny-warnings src",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:packaged": "vitest run --config vitest.packaged.config.mjs"
+    "test:packaged": "tsc -p tsconfig.rpc.test.json && vitest run --config vitest.packaged.config.mjs"
   },
   "dependencies": {
     "@hono/standard-validator": "catalog:",
