@@ -1,4 +1,9 @@
 import {
+  MEDIA_DELETE_REQUESTED,
+  SITE_BUILD_REQUESTED,
+  outboxEvents,
+} from "@lacecms/contracts/outbox";
+import {
   DISPATCHER_LEASE_DURATION_MS,
   MAX_DISPATCHER_CLAIMS_PER_CALL,
   dispatcherEventId,
@@ -15,7 +20,8 @@ import { sanitizeDispatchError } from "../shared/dispatch-error.js";
 import { failure } from "../shared/failures.js";
 import { SQL_MAX_PAGE_SIZE } from "../shared/limits.js";
 import { assertNonNegativeInteger, assertTimestamp, parseObject } from "../shared/values.js";
-import type { WritePlanGroup, WritePlanSql } from "../write-plan/plan.js";
+import { outboxCandidateGuard } from "../write-plan/outbox-candidate.js";
+import type { WritePlanGroup, WritePlanSql, WritePlanStatement } from "../write-plan/plan.js";
 import type { OutboxRow } from "../shared/outbox-row.js";
 
 export function dispatcherCandidates(input: ClaimDispatcherEventsInput): WritePlanSql {
@@ -38,36 +44,46 @@ export function dispatcherClaimPlan(
   rows: readonly OutboxRow[],
   leaseIds: readonly string[],
   now: number,
-): { plan: WritePlanGroup; leases: readonly DispatcherLease[] } {
-  const leases = rows.map((row, index) =>
-    Object.freeze({
-      event: Object.freeze({
-        attempts: assertNonNegativeInteger(row.attempts, "Outbox attempts"),
-        availableAt: unixMilliseconds(assertTimestamp(row.available_at, "Outbox availability")),
-        id: dispatcherEventId(row.id),
-        payload: parseObject(row.payload_json, "Outbox payload"),
-        type: row.type,
+): { plan: WritePlanGroup; leases: readonly DispatcherLease[]; claimIndices: readonly number[] } {
+  const leases: DispatcherLease[] = [];
+  const claimIndices: number[] = [];
+  const statements = rows.map((row, index): WritePlanStatement => {
+    const guard = outboxCandidateGuard(row, now);
+    const type = row.type;
+    const payload =
+      type === MEDIA_DELETE_REQUESTED || type === SITE_BUILD_REQUESTED
+        ? outboxEvents[type].decodeJson(row.payload_json)
+        : parseObject(row.payload_json, "Outbox payload");
+    if (payload === null) {
+      const reason =
+        type === MEDIA_DELETE_REQUESTED ? "invalid_media_deletion_event" : "invalid_build_event";
+      return {
+        sql: `update outbox_events set attempts = attempts + 1, processed_at = ?, locked_at = null, locked_by = null, last_error = ? where ${guard.sql}`,
+        params: [now, reason, ...guard.params],
+      };
+    }
+
+    const leaseId = dispatcherLeaseId(leaseIds[index]!);
+    claimIndices.push(index);
+    leases.push(
+      Object.freeze({
+        event: Object.freeze({
+          attempts: assertNonNegativeInteger(row.attempts, "Outbox attempts"),
+          availableAt: unixMilliseconds(assertTimestamp(row.available_at, "Outbox availability")),
+          id: dispatcherEventId(row.id),
+          payload,
+          type,
+        }),
+        expiresAt: unixMilliseconds(now + DISPATCHER_LEASE_DURATION_MS),
+        id: leaseId,
       }),
-      expiresAt: unixMilliseconds(now + DISPATCHER_LEASE_DURATION_MS),
-      id: dispatcherLeaseId(leaseIds[index]!),
-    }),
-  );
-  return {
-    leases,
-    plan: {
-      statements: rows.map((row, index) => ({
-        sql: "update outbox_events set locked_at = ?, locked_by = ? where id = ? and payload_json = ? and processed_at is null and available_at <= ? and (locked_at is null or locked_at <= ?)",
-        params: [
-          now,
-          leaseIds[index],
-          row.id,
-          row.payload_json,
-          now,
-          now - DISPATCHER_LEASE_DURATION_MS,
-        ],
-      })),
-    },
-  };
+    );
+    return {
+      sql: `update outbox_events set locked_at = ?, locked_by = ? where ${guard.sql}`,
+      params: [now, leaseId, ...guard.params],
+    };
+  });
+  return { leases, claimIndices, plan: { statements } };
 }
 
 export function completeDispatcherPlan(input: CompleteDispatcherLeaseInput): WritePlanGroup {

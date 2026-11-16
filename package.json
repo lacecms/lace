@@ -16,7 +16,7 @@
     "acceptance:restart-site": "node scripts/dev-stack.mjs acceptance:restart-site",
     "build": "turbo run build",
     "content:sync": "node scripts/dev-stack.mjs sync",
-    "db:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "db:generate": "node --conditions=@lacecms/source node_modules/drizzle-kit/bin.cjs generate --config drizzle.config.ts",
     "db:migrate:cloudflare": "node scripts/cloudflare.mjs migrate",
     "db:migrate:node": "pnpm --filter @lacecms/db run build && pnpm --filter @lacecms/platform-node run db:migrate",
     "dev:cloudflare": "node scripts/cloudflare.mjs dev",

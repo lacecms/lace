@@ -256,3 +256,18 @@ test("build requests, build retries and media deletions report committed outbox 
   });
   expect(opened.reports()).toBe(1);
 });
+
+test("build lease and outcome changes never report committed enqueue work", async () => {
+  const { repository, reports } = await open();
+  await repository.requestBuild({ requestedAt: unixMilliseconds(1), requestedBy: editor });
+  expect(reports()).toBe(1);
+
+  const now = unixMilliseconds(5_001);
+  const [lease] = await repository.claimSiteBuilds({ limit: 1, now });
+  expect(lease).toBeDefined();
+  expect(reports()).toBe(0);
+  expect(await repository.renewSiteBuildLease({ leaseId: lease!.id, now })).toBe(true);
+  expect(reports()).toBe(0);
+  await repository.recordSiteBuildSuccess({ leaseId: lease!.id, now });
+  expect(reports()).toBe(0);
+});

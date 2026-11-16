@@ -2,9 +2,10 @@ import { createD1OAuthPersistence } from "../security/oauth.js";
 import { engineVersion } from "./release-version.js";
 import { CLOUDFLARE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import {
-  MediaDeletionDispatcher,
+  MEDIA_DELETE_REQUESTED,
   SITE_BUILD_DEBOUNCE_MS,
-  SiteBuildDispatcher,
+  SITE_BUILD_REQUESTED,
+  createOutboxDispatchers,
   SiteBuildTracker,
 } from "@lacecms/application";
 import type {
@@ -12,6 +13,8 @@ import type {
   Cache,
   Clock,
   ImageInspector,
+  MediaDeletionDispatcher,
+  SiteBuildDispatcher,
   SiteBuildTrigger,
   EmailSender,
 } from "@lacecms/application";
@@ -207,17 +210,19 @@ export function createCloudflareRuntime(
     publicBaseUrl: settings.publicBaseUrl,
     timeoutMs: settings.storageTimeoutMs,
   });
-  const deletionDispatcher = new MediaDeletionDispatcher({
-    clock,
-    logger: { error: (entry) => logger.error({ component: "media-deletion", ...entry }) },
-    storage,
-    work: repository,
-  });
-  const buildDispatcher = new SiteBuildDispatcher({
-    clock,
-    logger: { error: (entry) => logger.error({ component: "site-build", ...entry }) },
-    trigger: input.buildTrigger?.(settings) ?? defaultBuildTrigger(settings),
-    work: repository,
+  const dispatchers = createOutboxDispatchers({
+    mediaDeletion: {
+      clock,
+      logger: { error: (entry) => logger.error({ component: "media-deletion", ...entry }) },
+      storage,
+      work: repository,
+    },
+    siteBuild: {
+      clock,
+      logger: { error: (entry) => logger.error({ component: "site-build", ...entry }) },
+      trigger: input.buildTrigger?.(settings) ?? defaultBuildTrigger(settings),
+      work: repository,
+    },
   });
   const tracking = settings.pagesTracking;
   const buildTracker = new SiteBuildTracker({
@@ -301,10 +306,10 @@ export function createCloudflareRuntime(
       await repository.purgeExpiredIdempotencyRecords(now, IDEMPOTENCY_PURGE_LIMIT);
     },
     app,
-    buildDispatcher,
+    buildDispatcher: dispatchers[SITE_BUILD_REQUESTED],
     buildTracker,
     cache,
-    deletionDispatcher,
+    deletionDispatcher: dispatchers[MEDIA_DELETE_REQUESTED],
     repository,
     security,
     settings,

@@ -1,7 +1,9 @@
-import { SITE_BUILD_DEBOUNCE_MS } from "@lacecms/application";
+import { SITE_BUILD_REQUESTED, outboxEvents } from "@lacecms/contracts/outbox";
+import type { OutboxEnqueuePayload } from "@lacecms/contracts/outbox";
+import { enqueueEvents } from "./enqueue-events.js";
 import type { WritePlanGuard, WritePlanStatement } from "./plan.js";
-export const PENDING_SITE_BUILD_SQL =
-  "type = 'site.build.requested' and processed_at is null and locked_at is null";
+
+export { PENDING_SITE_BUILD_SQL } from "./enqueue-events.js";
 
 /** Public state and outbox statements share the version committed by the plan. */
 export function publicBuildStatements(
@@ -46,67 +48,40 @@ export interface BuildEnqueueInput {
   readonly retryOfBuildId?: string;
 }
 
-/** Serialize request-owned fields before entering the atomic write. */
-export function buildRequestPayload(input: BuildEnqueueInput): string {
-  return JSON.stringify({
-    publishedSnapshotId: input.snapshotId,
-    reason: input.reason,
-    requestedAt: input.requestedAt,
-    requestedBy: input.requestedBy,
-    ...(input.retryOfBuildId === undefined ? {} : { retryOfBuildId: input.retryOfBuildId }),
-  });
+function buildPayload({
+  snapshotId,
+  reason,
+  requestedAt,
+  requestedBy,
+  retryOfBuildId,
+}: BuildEnqueueInput): OutboxEnqueuePayload<typeof SITE_BUILD_REQUESTED> {
+  return {
+    publishedSnapshotId: snapshotId,
+    reason,
+    requestedAt,
+    requestedBy,
+    ...(retryOfBuildId === undefined ? {} : { retryOfBuildId }),
+  };
 }
 
-/** Enqueue or coalesce against the version and retry lineage inside the atomic unit. */
+/** Serialize the registered request-owned fields. */
+export function buildRequestPayload(input: BuildEnqueueInput): string {
+  return JSON.stringify(outboxEvents[SITE_BUILD_REQUESTED].parseEnqueue(buildPayload(input)));
+}
+
+/** Keep the build-specific entry used by the existing write plans. */
 export function buildEnqueueStatements(
   guard: WritePlanGuard,
   input: BuildEnqueueInput,
   requireEnqueue = false,
 ): readonly WritePlanStatement[] {
-  const payload = buildRequestPayload(input);
-  const version = "coalesce((select version from published_state where singleton_key = 1), 0)";
-  const newPayload = `json_set(?, '$.targetVersion', ${version})`;
-  const mergedPayload =
-    input.retryOfBuildId === undefined
-      ? `case when json_type(payload_json, '$.retryOfBuildId') = 'text' then json_set(${newPayload}, '$.retryOfBuildId', json_extract(payload_json, '$.retryOfBuildId')) else ${newPayload} end`
-      : newPayload;
-  const mergedParams = input.retryOfBuildId === undefined ? [payload, payload] : [payload];
-  // When the enclosing mutation requires a rebuild, skip the insert only
-  // for pending work. A conflicting ID on other rows must abort the write.
-  const insert = requireEnqueue
-    ? "insert into outbox_events"
-    : "insert or ignore into outbox_events";
-  const skipPending = requireEnqueue
-    ? ` and not exists (select 1 from outbox_events where ${PENDING_SITE_BUILD_SQL})`
-    : "";
-  const coalesce = requireEnqueue ? "changes() = 0" : "id <> ?";
-  return [
+  return enqueueEvents([
     {
-      checkpoint: "build-outbox",
-      outbox: true,
-      sql: `${insert} (id, type, payload_json, attempts, available_at, created_at) select ?, 'site.build.requested', ${newPayload}, 0, ?, ? where ${guard.sql}${skipPending}`,
-      params: [
-        input.eventId,
-        payload,
-        input.requestedAt + SITE_BUILD_DEBOUNCE_MS,
-        input.requestedAt,
-        ...guard.params,
-      ],
+      type: SITE_BUILD_REQUESTED,
+      eventId: input.eventId,
+      payload: buildPayload(input),
+      guard,
+      requireEnqueue,
     },
-    {
-      outbox: true,
-      sql: `update outbox_events set payload_json = ${mergedPayload}, available_at = ? where ${PENDING_SITE_BUILD_SQL} and ${coalesce} and ${guard.sql}`,
-      params: [
-        ...mergedParams,
-        input.requestedAt + SITE_BUILD_DEBOUNCE_MS,
-        ...(requireEnqueue ? [] : [input.eventId]),
-        ...guard.params,
-      ],
-    },
-    {
-      slot: "queue",
-      sql: `select ? as event_id, (select id from outbox_events where ${PENDING_SITE_BUILD_SQL}) as pending_id, ${version} as version`,
-      params: [input.eventId],
-    },
-  ];
+  ]);
 }

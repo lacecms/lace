@@ -34,6 +34,7 @@
   "dependencies": {
     "@lacecms/config": "workspace:*",
     "@lacecms/content": "workspace:*",
+    "@lacecms/contracts": "workspace:*",
     "@lacecms/domain": "workspace:*"
   },
   "devDependencies": {

@@ -81,6 +81,8 @@ const allowedDependencies = new Map([
   ],
 ]);
 
+const contractsSubpathConsumers = new Set(["@lacecms/application", "@lacecms/db"]);
+const outboxContracts = "@lacecms/contracts/outbox";
 // Framework-neutral packages: every non-relative import must be listed here, which
 // rejects UI frameworks, Node built-ins, and other third-party modules.
 const externalImportAllowlist = new Map([
@@ -95,7 +97,10 @@ const externalImportAllowlist = new Map([
       "valibot",
     ]),
   ],
-  ["@lacecms/application", new Set(["@lacecms/domain", "@lacecms/config", "@lacecms/content"])],
+  [
+    "@lacecms/application",
+    new Set(["@lacecms/domain", "@lacecms/config", "@lacecms/content", outboxContracts]),
+  ],
   ["@lacecms/render", new Set(["@lacecms/content"])],
   ["@lacecms/sdk", new Set(["@lacecms/contracts", "valibot"])],
 ]);
@@ -959,7 +964,9 @@ export function checkBoundaries(rootDirectory = defaultRoot) {
           }
         }
         if (!memberNames.has(target)) continue;
-        if (!allowedDependencies.get(member.name)?.has(target)) {
+        const allowsOutbox =
+          contractsSubpathConsumers.has(member.name) && specifier === outboxContracts;
+        if (!allowsOutbox && !allowedDependencies.get(member.name)?.has(target)) {
           throw new Error(`forbidden dependency: ${member.name} -> ${target}`);
         }
         graph.get(member.name).add(target);

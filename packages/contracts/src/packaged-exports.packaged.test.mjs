@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { expect, test } from "vitest";
 
 test("packaged entry point keeps its public exports", async () => {
@@ -279,4 +280,28 @@ test("packaged entry point keeps its public exports", async () => {
     "validationError",
     "versionFromEntityTag",
   ]);
+});
+
+test("packaged outbox subpath resolves and loads independently", () => {
+  const output = execFileSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `
+      import { SITE_BUILD_REQUESTED, MEDIA_DELETE_REQUESTED, outboxEvents } from "@lacecms/contracts/outbox";
+      console.log(JSON.stringify({
+        resolved: import.meta.resolve("@lacecms/contracts/outbox"),
+        types: Object.keys(outboxEvents).sort(),
+        media: outboxEvents[MEDIA_DELETE_REQUESTED].decode({ mediaId: "media" }),
+      }));
+    `,
+    ],
+    { cwd: new URL("..", import.meta.url), encoding: "utf8" },
+  );
+  expect(JSON.parse(output)).toEqual({
+    resolved: new URL("../dist/outbox.js", import.meta.url).href,
+    types: ["media.delete.requested", "site.build.requested"],
+    media: { mediaId: "media" },
+  });
 });

@@ -1,3 +1,4 @@
+import { MEDIA_DELETE_REQUESTED, outboxEvents } from "@lacecms/contracts/outbox";
 import { mediaId, unixMilliseconds, normalizeBuildFailure } from "@lacecms/domain";
 import {
   defaultDispatcherRetryPolicy,
@@ -142,8 +143,6 @@ export class SiteBuildDispatcher {
   }
 }
 
-const MEDIA_DELETION_EVENT = "media.delete.requested";
-
 export interface MediaDeletionDispatcherLogger {
   error(entry: {
     readonly eventId: string;
@@ -159,12 +158,6 @@ export interface MediaDeletionDispatcherOptions {
   readonly random?: () => number;
   readonly storage: ObjectStorage;
   readonly work: DispatcherLeasePort & MediaDeletionDispatchPort;
-}
-
-function mediaIdFromPayload(payload: Record<string, unknown>): string | undefined {
-  return typeof payload.mediaId === "string" && payload.mediaId.length > 0
-    ? payload.mediaId
-    : undefined;
 }
 
 function sanitizedReason(_error: unknown): string {
@@ -184,7 +177,7 @@ export class MediaDeletionDispatcher {
   public async runOnce(limit = 10): Promise<void> {
     const claimedAt = this.options.clock.now();
     const leases = await this.options.work.claim({
-      eventTypes: [MEDIA_DELETION_EVENT],
+      eventTypes: [MEDIA_DELETE_REQUESTED],
       limit,
       now: claimedAt,
     });
@@ -194,8 +187,9 @@ export class MediaDeletionDispatcher {
   private async dispatchLease(
     lease: Awaited<ReturnType<DispatcherLeasePort["claim"]>>[number],
   ): Promise<void> {
-    const rawMediaId = mediaIdFromPayload(lease.event.payload);
-    if (rawMediaId === undefined) {
+    if (lease.event.type !== MEDIA_DELETE_REQUESTED) return;
+    const payload = outboxEvents[MEDIA_DELETE_REQUESTED].decode(lease.event.payload);
+    if (payload === null) {
       this.options.logger.error({
         eventId: lease.event.id,
         reason: "invalid_media_deletion_event",
@@ -207,7 +201,7 @@ export class MediaDeletionDispatcher {
       });
       return;
     }
-    const id = mediaId(rawMediaId);
+    const id = mediaId(payload.mediaId);
     const media = await this.options.work.loadDeletingMedia(id);
     if (media === null) {
       await this.options.work.complete({

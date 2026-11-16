@@ -39,3 +39,4 @@ An `amended` or `superseded` decision must identify its amendment or successor.
 | 0029 | [rc1 is the oldest supported state](0029-rc1-baseline.md) | amended | [0030](0030-rc2-oldest-supported.md) |
 | 0030 | [rc2 is the oldest supported release](0030-rc2-oldest-supported.md) | accepted | — |
 | 0031 | [Route-less collections](0031-route-less-collections.md) | accepted | — |
+| 0032 | [Share durable outbox contracts through a dedicated subpath](0032-outbox-contract-boundary.md) | accepted | — |

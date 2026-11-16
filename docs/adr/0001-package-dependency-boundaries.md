@@ -13,8 +13,9 @@ or infrastructure concerns leak into domain code.
 
 Use the architecture's directed package graph. `content` and `config` remain
 runtime-portable, `domain` has no framework or infrastructure imports, and
-`application` depends only on domain, content, and normalized configuration.
-`contracts` owns transport DTOs and is not an application dependency. Database,
+`application` depends on domain, content, normalized configuration and the
+portable outbox subpath under [ADR 0032](0032-outbox-contract-boundary.md).
+`contracts` owns transport DTOs, which remain outside application. Database,
 auth, server, platform, CLI, admin, and site packages use only their assigned
 imports. Packages expose explicit public entry points; imports through another
 package's source path are forbidden.

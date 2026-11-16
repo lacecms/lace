@@ -50,10 +50,10 @@ Dependency direction (`A -> B` means package A may import package B):
 ```text
 config       -> content
 domain       -> content
-application  -> domain, content, config
+application  -> domain, content, config, contracts/outbox
 contracts    -> domain, content
 mcp          -> application, contracts, domain
-db           -> application, domain
+db           -> application, domain, contracts/outbox
 auth         -> application, domain
 server       -> application, contracts, auth
 sdk          -> contracts
@@ -77,9 +77,9 @@ components directly.
 | `content` | Owns the portable shared vocabulary: slug identifiers, model kinds, canonical route rules, transport limits and object helpers. Other packages import or re-export these definitions under their existing public names; failure construction stays local to each layer. |
 | `content`, `config` | Stay runtime-portable and import no Node-only API. |
 | `domain` | Imports no framework or infrastructure package. |
-| `application` | May depend on domain rules, content validation and the normalized configuration, never on REST DTOs, Hono, Drizzle, Cloudflare or Node adapters, and never imports contracts or the MCP SDK. |
-| `contracts` | Defines transport DTOs and schemas; never an application-use-case dependency. |
-| `db` | Implements application persistence ports; may depend on Drizzle, domain and application. `@lacecms/db` is portable. `@lacecms/db/node` owns the Node SQLite repository and native transaction executor and accepts an open native connection. |
+| `application` | May depend on domain rules, content validation and the normalized configuration, never on REST DTOs, Hono, Drizzle, Cloudflare or Node adapters, or the MCP SDK. Its only contracts import is the portable `@lacecms/contracts/outbox` subpath for registered dispatch. |
+| `contracts` | Defines transport DTOs and schemas. The isolated `/outbox` entry owns durable event identities and payload schemas. |
+| `db` | Implements application persistence ports; may depend on Drizzle, domain, application and only the `@lacecms/contracts/outbox` subpath of contracts. `@lacecms/db` is portable. `@lacecms/db/node` owns the Node SQLite repository and native transaction executor and accepts an open native connection. |
 | `server` | May use Hono and contracts; receives infrastructure through construction, including an optional structural MCP handler from the platform composition root. |
 | `mcp` | Uses application operations and shared contracts, never server, auth, db, platform implementations, configuration loaders or Node-only APIs. REST and MCP share application discovery, authorization, reads and mutations; contracts own their common pure JSON projections and validation. |
 | `platform-*` | May depend on application ports and concrete vendor SDKs. |

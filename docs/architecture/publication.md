@@ -31,7 +31,8 @@ then ([ADR 0002](../adr/0002-d1-batches-and-node-transactions.md)):
 3. replaces the entry's route; a path collision rolls back everything;
 4. points `content_entries.published_snapshot_id` at the new snapshot;
 5. increments `published_state.version`;
-6. creates or coalesces the `site.build.requested` outbox event;
+6. uses the shared `enqueueEvents` compiler to create or coalesce the registered
+   build event with the version read after that increment;
 7. stores the idempotency result when a key was supplied;
 8. deletes the old published snapshot, whose blocks and references cascade.
 

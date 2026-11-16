@@ -1,4 +1,9 @@
-import { RuntimeConfigurationError } from "@lacecms/application";
+import {
+  MEDIA_DELETE_REQUESTED,
+  RuntimeConfigurationError,
+  SITE_BUILD_REQUESTED,
+  createOutboxDispatchers,
+} from "@lacecms/application";
 import { createNodeOAuthPersistence } from "../security/oauth.js";
 import { engineVersion } from "./release-version.js";
 import { NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
@@ -54,8 +59,8 @@ import { NodeFixedWindowRateLimiter, NodeSecurityService } from "../security/ser
 import { openNodeDatabase, type NodeDatabase } from "../database/connection.js";
 import { NodeSharpImageInspector } from "../media/image-inspector.js";
 import { NodeMinioObjectStorage, type NodeMinioSettings } from "../media/minio-storage.js";
-import { NodeMediaDeletionDispatcher } from "../media/media-deletion-dispatcher.js";
-import { NodeSiteBuildDispatcher } from "../builds/site-build-dispatcher.js";
+import type { NodeMediaDeletionDispatcher } from "../media/media-deletion-dispatcher.js";
+import type { NodeSiteBuildDispatcher } from "../builds/site-build-dispatcher.js";
 import {
   NodeBuilderSiteBuildTrigger,
   type NodeBuilderTriggerSettings,
@@ -467,26 +472,28 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
   );
   const cache = new NoopNodeCache();
   const storage = input.storage ?? new NodeMinioObjectStorage(input.settings.minio);
-  const deletionDispatcher = new NodeMediaDeletionDispatcher({
-    clock,
-    logger: {
-      error: (entry) => nodeOperationalLogger.error({ component: "media-deletion", ...entry }),
-    },
-    storage,
-    work: repository,
-  });
   const buildTrigger =
     input.buildTrigger ??
     (input.settings.builder === undefined
       ? new NoopNodeBuildTrigger()
       : new NodeBuilderSiteBuildTrigger(input.settings.builder));
-  const buildDispatcher = new NodeSiteBuildDispatcher({
-    clock,
-    logger: {
-      error: (entry) => nodeOperationalLogger.error({ component: "site-build", ...entry }),
+  const dispatchers = createOutboxDispatchers({
+    mediaDeletion: {
+      clock,
+      logger: {
+        error: (entry) => nodeOperationalLogger.error({ component: "media-deletion", ...entry }),
+      },
+      storage,
+      work: repository,
     },
-    trigger: buildTrigger,
-    work: repository,
+    siteBuild: {
+      clock,
+      logger: {
+        error: (entry) => nodeOperationalLogger.error({ component: "site-build", ...entry }),
+      },
+      trigger: buildTrigger,
+      work: repository,
+    },
   });
   const readiness = new NodeSqliteReadiness(database.connection);
   const mcpEnabled = input.settings.mcpEnabled ?? false;
@@ -554,8 +561,8 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     close: () => database.connection.close(),
     content,
     database,
-    deletionDispatcher,
-    buildDispatcher,
+    deletionDispatcher: dispatchers[MEDIA_DELETE_REQUESTED],
+    buildDispatcher: dispatchers[SITE_BUILD_REQUESTED],
     media,
     readiness,
     repository,

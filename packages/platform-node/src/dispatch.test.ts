@@ -154,6 +154,7 @@ test("dispatches media deletion with retry, terminal, and malformed-event bounda
   const completed: unknown[] = [];
   const failed: unknown[] = [];
   const deleted: string[] = [];
+  const logs: unknown[] = [];
   let now = unixMilliseconds(1_000);
   const lease = (payload: JsonObject, attempts = 0) => ({
     event: {
@@ -201,7 +202,7 @@ test("dispatches media deletion with retry, terminal, and malformed-event bounda
   };
   const dispatcher = new NodeMediaDeletionDispatcher({
     clock: { now: () => now },
-    logger: { error: () => {} },
+    logger: { error: (entry) => logs.push(entry) },
     random: () => 0.5,
     storage,
     work,
@@ -217,7 +218,9 @@ test("dispatches media deletion with retry, terminal, and malformed-event bounda
   await dispatcher.runOnce();
   expect(failed).toMatchObject([{ sanitizedError: "storage_unavailable", terminal: true }]);
 
-  work.claim = async () => [lease({}, 0)];
+  work.claim = async () => [lease({ mediaId: "private-media-id", requestedBy: false }, 0)];
   await dispatcher.runOnce();
   expect(completed).toHaveLength(2);
+  expect(failed).toHaveLength(1);
+  expect(logs.at(-1)).toEqual({ eventId: "event-0", reason: "invalid_media_deletion_event" });
 });

@@ -1,3 +1,4 @@
+import { SITE_BUILD_REQUESTED } from "@lacecms/contracts/outbox";
 import { DISPATCHER_LEASE_DURATION_MS } from "@lacecms/application";
 import type { SiteBuildProviderStage, TrackedSiteBuildOutcome } from "@lacecms/domain";
 import type { WritePlan, WritePlanGroup } from "../write-plan/plan.js";
@@ -15,13 +16,18 @@ import type { DueTrackedSiteBuildRow } from "./site-builds.js";
 export type BuildLeaseMiss = "lease" | "build";
 type Lease = { readonly leaseId: string; readonly now: number };
 const leaseSql =
-  "select id from outbox_events where locked_by = ? and type = 'site.build.requested' and processed_at is null and locked_at > ?";
+  "select id from outbox_events where locked_by = ? and type = ? and processed_at is null and locked_at > ?";
 export function renewSiteBuildPlan(input: Lease): WritePlanGroup {
   return {
     statements: [
       {
-        sql: "update outbox_events set locked_at = ? where locked_by = ? and type = 'site.build.requested' and processed_at is null and locked_at > ?",
-        params: [input.now, input.leaseId, input.now - DISPATCHER_LEASE_DURATION_MS],
+        sql: "update outbox_events set locked_at = ? where locked_by = ? and type = ? and processed_at is null and locked_at > ?",
+        params: [
+          input.now,
+          input.leaseId,
+          SITE_BUILD_REQUESTED,
+          input.now - DISPATCHER_LEASE_DURATION_MS,
+        ],
       },
     ],
   };
@@ -47,7 +53,11 @@ export function siteBuildOutcomePlan(
     outcome.providerBuildId !== undefined
   )
     assertProviderBuildId(outcome.providerBuildId);
-  const leaseParams = [input.leaseId, input.now - DISPATCHER_LEASE_DURATION_MS];
+  const leaseParams = [
+    input.leaseId,
+    SITE_BUILD_REQUESTED,
+    input.now - DISPATCHER_LEASE_DURATION_MS,
+  ];
   const id = `(${leaseSql})`;
   let update: string;
   let params: readonly unknown[];

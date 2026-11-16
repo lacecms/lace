@@ -776,6 +776,9 @@ importers:
       '@lacecms/content':
         specifier: workspace:*
         version: link:../content
+      '@lacecms/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@lacecms/domain':
         specifier: workspace:*
         version: link:../domain
@@ -996,6 +999,9 @@ importers:
       '@lacecms/content':
         specifier: workspace:*
         version: link:../content
+      '@lacecms/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@lacecms/domain':
         specifier: workspace:*
         version: link:../domain
