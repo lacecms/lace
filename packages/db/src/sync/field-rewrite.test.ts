@@ -1,5 +1,4 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite rows, branded snapshot fixtures and malformed projection inputs.
+import { strict as assert } from "node:assert";
 import { expect, test } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import { configurationSyncSnapshotRewriteStatements } from "./field-rewrite.js";
@@ -24,18 +23,17 @@ test("exact snapshot rewrite binds IDs/paths, preserves JSON types and other sou
     );
     expect(statements).toHaveLength(3);
     for (const statement of statements) database.prepare(statement.sql).run(...statement.params);
-    expect(
-      JSON.parse(
-        database.prepare("select fields_json from content_snapshots where id='s'").get()
-          .fields_json,
-      ),
-    ).toEqual(row.fields);
+    const fields = database
+      .prepare("select fields_json from content_snapshots where id='s'")
+      .get()?.fields_json;
+    assert(typeof fields === "string");
+    expect(JSON.parse(fields)).toEqual(row.fields);
     expect(
       database.prepare("select revision,updated_at from content_snapshots where id='s'").get(),
     ).toEqual({ revision: 7, updated_at: 42 });
     expect(
       database.prepare("select fields_json from content_snapshots where id='outside'").get()
-        .fields_json,
+        ?.fields_json,
     ).toBe("{}");
     expect(
       database

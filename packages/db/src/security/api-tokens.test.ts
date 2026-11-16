@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite rows, branded snapshot fixtures and malformed projection inputs.
 import { expect, test } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import { BUILD_TOKEN_KIND_SQL, importTokenUserInvalidationSql } from "./api-tokens.js";

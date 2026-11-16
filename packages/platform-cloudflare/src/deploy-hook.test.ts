@@ -1,17 +1,18 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy D1/Worker harnesses, binding fakes and recorded adapter calls.
+import { strict as assert } from "node:assert";
+import type { SiteBuildTrigger } from "@lacecms/application";
+import { siteBuildId } from "@lacecms/domain";
 import { expect, test } from "vitest";
 import { DEPLOY_HOOK_MAX_RESPONSE_BYTES, DeployHookSiteBuildTrigger } from "./index.js";
 
 const url = new URL("https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/hook-secret");
-const input = { buildId: "build-1", targetVersion: 3 };
+const input = { buildId: siteBuildId("build-1"), targetVersion: 3 };
 
-function trigger(respond, timeoutMs) {
-  const calls = [];
-  const adapter = new DeployHookSiteBuildTrigger({
+function trigger(respond: (init: RequestInit) => Response | Promise<Response>, timeoutMs?: number) {
+  const calls: { init: RequestInit; target: string }[] = [];
+  const adapter: SiteBuildTrigger = new DeployHookSiteBuildTrigger({
     fetch: async (target, init) => {
       calls.push({ init, target: String(target) });
-      return respond(init);
+      return respond(init ?? {});
     },
     ...(timeoutMs === undefined ? {} : { timeoutMs }),
     url,
@@ -25,6 +26,7 @@ test("sends one bodiless POST without following redirects", async () => {
   );
   expect(await adapter.trigger(input)).toEqual({ providerBuildId: "dep-1", status: "accepted" });
   expect(calls).toHaveLength(1);
+  assert(calls[0]);
   expect(calls[0].target).toBe(url.href);
   expect(calls[0].init).toMatchObject({ method: "POST", redirect: "manual" });
   expect(calls[0].init.body).toBeUndefined();
@@ -76,7 +78,7 @@ test("throttling, server errors, network failures, and timeouts are retryable", 
   const hanging = trigger(
     (init) =>
       new Promise((_resolve, reject) =>
-        init.signal.addEventListener("abort", () => reject(init.signal.reason)),
+        init.signal?.addEventListener("abort", () => reject(init.signal?.reason)),
       ),
     20,
   );
@@ -104,7 +106,7 @@ test("results never contain the hook URL and settings are validated", async () =
 });
 
 test("with tracking configured an identified acceptance is tracked, an anonymous one is not", async () => {
-  const tracked = (respond) =>
+  const tracked = (respond: () => Response): SiteBuildTrigger =>
     new DeployHookSiteBuildTrigger({ fetch: async () => respond(), tracked: true, url });
   expect(
     await tracked(() => Response.json({ result: { id: "dep-7" }, success: true })).trigger(input),

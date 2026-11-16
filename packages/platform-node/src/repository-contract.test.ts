@@ -1,5 +1,8 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite/product harnesses, branded values and partial runtime adapters.
+import Database from "better-sqlite3";
+import { contentModelKey } from "@lacecms/domain";
+import type { ListContentEntriesInput } from "@lacecms/application";
+import type { RepositoryContractRuntime } from "@lacecms/test-utils";
+import { contractSql } from "./test-support/contract-sql.js";
 import { afterEach, expect, test } from "vitest";
 import { NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -9,23 +12,13 @@ import { contentRepositoryContractCases } from "@lacecms/test-utils";
 import { openSqliteFixture } from "@lacecms/test-utils/sqlite";
 import { NodeContentRepository, migrateNodeDatabase, openNodeDatabase } from "./index.js";
 
-const cleanups = [];
+const cleanups: (() => void | Promise<void>)[] = [];
 
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-function sqlOver(connection) {
-  return {
-    all: async (sql, ...params) => connection.prepare(sql).all(...params),
-    get: async (sql, ...params) => connection.prepare(sql).get(...params),
-    run: async (sql, ...params) => {
-      connection.prepare(sql).run(...params);
-    },
-  };
-}
-
-function trackGuards(connection) {
+function trackGuards(connection: Database.Database) {
   cleanups.push(async () => {
     expect(connection.prepare("select count(*) as count from mutation_guards").get()).toEqual({
       count: 0,
@@ -33,8 +26,8 @@ function trackGuards(connection) {
   });
 }
 
-function observedConnection(connection) {
-  const statements = [];
+function observedConnection(connection: Database.Database) {
+  const statements: string[] = [];
   return {
     reads: {
       reset: () => {
@@ -45,28 +38,28 @@ function observedConnection(connection) {
     connection: new Proxy(connection, {
       get(target, property) {
         if (property === "prepare")
-          return (sql) => {
+          return (sql: string) => {
             const statement = target.prepare(sql);
             return new Proxy(statement, {
               get(value, key) {
                 if (key === "all" || key === "get")
-                  return (...args) => {
+                  return (...args: unknown[]) => {
                     statements.push(sql);
                     return value[key](...args);
                   };
-                return typeof value[key] === "function" ? value[key].bind(value) : value[key];
+                const member: unknown = Reflect.get(value, key);
+                return typeof member === "function" ? member.bind(value) : member;
               },
             });
           };
-        return typeof target[property] === "function"
-          ? target[property].bind(target)
-          : target[property];
+        const member: unknown = Reflect.get(target, property);
+        return typeof member === "function" ? member.bind(target) : member;
       },
     }),
   };
 }
 
-const runtimes = {
+const runtimes: Record<string, RepositoryContractRuntime> = {
   "file-backed SQLite": {
     listQueryLimits: NODE_LIST_QUERY_LIMITS,
     recordEvidence: (value) => console.log("Collection query SQLite file", JSON.stringify(value)),
@@ -74,7 +67,7 @@ const runtimes = {
       const directory = await mkdtemp(join(tmpdir(), "lace-contract-"));
       const databasePath = join(directory, "lace.sqlite");
       migrateNodeDatabase(databasePath);
-      const connections = [];
+      const connections: Database.Database[] = [];
       const connect = () => {
         const { connection } = openNodeDatabase(databasePath);
         connections.push(connection);
@@ -92,7 +85,7 @@ const runtimes = {
         reopen: (overrides = {}) =>
           new NodeContentRepository(connect(), options.resolveModel, { ...options, ...overrides }),
         repository: new NodeContentRepository(observed.connection, options.resolveModel, options),
-        sql: sqlOver(connection),
+        sql: contractSql(connection),
       };
     },
   },
@@ -112,7 +105,7 @@ const runtimes = {
             ...overrides,
           }),
         repository: new NodeContentRepository(observed.connection, options.resolveModel, options),
-        sql: sqlOver(connection),
+        sql: contractSql(connection),
       };
     },
   },
@@ -126,17 +119,24 @@ for (const [runtimeName, runtime] of Object.entries(runtimes)) {
 
 test("direct Node list reads retain their own policy and reject excess before SQL", async () => {
   let statements = 0;
-  const repository = new NodeContentRepository(
-    {
-      prepare() {
-        statements++;
-        throw new Error("SQL reached");
-      },
+  const connection = new Database(":memory:");
+  cleanups.push(() => {
+    connection.close();
+  });
+  const observed = new Proxy(connection, {
+    get(target, property) {
+      if (property === "prepare")
+        return () => {
+          statements++;
+          throw new Error("SQL reached");
+        };
+      const member: unknown = Reflect.get(target, property);
+      return typeof member === "function" ? member.bind(target) : member;
     },
-    () => undefined,
-  );
-  const input = {
-    modelKey: "posts",
+  });
+  const repository = new NodeContentRepository(observed, () => undefined);
+  const input: ListContentEntriesInput = {
+    modelKey: contentModelKey("posts"),
     listFields: [],
     limit: 5,
     sort: "title",

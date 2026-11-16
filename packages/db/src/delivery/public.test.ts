@@ -1,11 +1,16 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite rows, branded snapshot fixtures and malformed projection inputs.
+import { strict as assert } from "node:assert";
+import {
+  contentEntryId,
+  contentModelKey,
+  contentSnapshotId,
+  unixMilliseconds,
+} from "@lacecms/domain";
 import { expect, test } from "vitest";
 import { publicEntry } from "./public.js";
 import { storedSnapshots } from "../content/snapshots.js";
 
 test("maps stored block envelopes and drops hidden blocks from public entries", () => {
-  const snapshotRow = (id) => ({
+  const snapshotRow = (id: string) => ({
     created_at: 1,
     entry_id: "e1",
     fields_json: "{}",
@@ -19,7 +24,7 @@ test("maps stored block envelopes and drops hidden blocks from public entries", 
     updated_at: 1,
     updated_by: "editor",
   });
-  const blockRow = (key, overrides = {}) => ({
+  const blockRow = (key: string, overrides = {}) => ({
     anchor: null,
     block_key: key,
     block_type: "note",
@@ -41,7 +46,9 @@ test("maps stored block envelopes and drops hidden blocks from public entries", 
       blockRow("b2", { hidden: 1, position: 2 }),
     ],
   );
-  const blocks = snapshots.get("p1").blocks;
+  const snapshot = snapshots.get("p1");
+  assert(snapshot);
+  const blocks = snapshot.blocks;
   expect(blocks[0]).toEqual({
     anchor: "pricing",
     className: "wide",
@@ -55,13 +62,20 @@ test("maps stored block envelopes and drops hidden blocks from public entries", 
   });
   expect(blocks[1]).toMatchObject({ hidden: true, key: "b2", settings: {} });
   expect(blocks[1]).not.toHaveProperty("anchor");
-  const published = { ...snapshots.get("p1"), state: "published" };
+  const published = {
+    ...snapshot,
+    createdAt: unixMilliseconds(snapshot.createdAt),
+    updatedAt: unixMilliseconds(snapshot.updatedAt),
+    entryId: contentEntryId(snapshot.entryId),
+    id: contentSnapshotId(snapshot.id),
+    state: "published" as const,
+  };
   const projected = publicEntry({
     draft: { ...published, state: "draft" },
-    id: "e1",
-    model: { key: "home", kind: "page", path: "/" },
+    id: contentEntryId("e1"),
+    model: { key: contentModelKey("home"), kind: "page", path: "/" },
     published,
   });
-  expect(projected.published.blocks.map((block) => block.key)).toEqual(["b1"]);
+  expect(projected.published?.blocks.map((block) => block.key)).toEqual(["b1"]);
   expect(projected.draft.blocks.map((block) => block.key)).toEqual(["b1"]);
 });

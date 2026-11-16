@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite/product harnesses, branded values and partial runtime adapters.
 import { afterEach, expect, test, vi } from "vitest";
 import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -7,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertHostDatabaseSafe } from "./index.js";
 
-const roots = [];
+const roots: string[] = [];
 afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
@@ -18,7 +16,7 @@ async function fixture() {
   await mkdir(join(cwd, "data"));
   return { cwd, databasePath: join(cwd, "data/lace.sqlite"), inContainer: false };
 }
-const container = (mounts, overrides = {}) => ({
+const container = (mounts: unknown, overrides: object = {}) => ({
   running: true,
   service: "api",
   workingDirectory: "/opt/lace",
@@ -26,11 +24,11 @@ const container = (mounts, overrides = {}) => ({
   mounts,
   ...overrides,
 });
-const inspection = (mounts, overrides = {}) =>
-  vi.fn(async (args) =>
+const inspection = (mounts: unknown, overrides: object = {}) =>
+  vi.fn(async (args: readonly string[]) =>
     args[0] === "ps" ? "abcdef123456\n" : JSON.stringify(container(mounts, overrides)),
   );
-const bind = (Source, Destination = "/data") => ({ Type: "bind", Source, Destination });
+const bind = (Source: string, Destination = "/data") => ({ Type: "bind", Source, Destination });
 
 test("refuses matching storage, including symlink aliases, before a database exists", async () => {
   const input = await fixture();
@@ -104,8 +102,8 @@ test("a running source-only builder does not block the stopped database's mainte
     databasePaths: [null],
   });
   await expect(assertHostDatabaseSafe({ ...input, inspect })).resolves.toBeUndefined();
-  expect(inspect.mock.calls[1][0][2]).not.toContain("{{json .Config.Env}}");
-  expect(inspect.mock.calls[1][0][2]).toContain('"LACE_DATABASE_PATH"');
+  expect(inspect.mock.calls[1]?.[0][2]).not.toContain("{{json .Config.Env}}");
+  expect(inspect.mock.calls[1]?.[0][2]).toContain('"LACE_DATABASE_PATH"');
 });
 
 test("relative database paths use the container working directory and custom services are checked", async () => {
@@ -154,7 +152,7 @@ test("a directly mounted read-only database is still a matching consumer", async
 test("missing inspection records and duplicate container IDs fail closed", async () => {
   const input = await fixture();
   for (const inspect of [
-    async (args) => (args[0] === "ps" ? "abcdef123456\n" : ""),
+    async (args: readonly string[]) => (args[0] === "ps" ? "abcdef123456\n" : ""),
     async () => "abcdef123456\nabcdef123456\n",
   ])
     await expect(assertHostDatabaseSafe({ ...input, inspect })).rejects.toMatchObject({

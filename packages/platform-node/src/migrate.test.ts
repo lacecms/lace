@@ -1,5 +1,4 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite/product harnesses, branded values and partial runtime adapters.
+import { strict as assert } from "node:assert";
 import { existsSync, mkdirSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,7 +7,7 @@ import { expect, test, vi } from "vitest";
 import { migrateNodeDatabase, openNodeDatabase } from "./index.js";
 
 vi.mock("node:fs", async (importOriginal) => {
-  const actual = await importOriginal();
+  const actual = await importOriginal<typeof import("node:fs")>();
   return { ...actual, mkdirSync: vi.fn(actual.mkdirSync) };
 });
 
@@ -70,7 +69,7 @@ test("blocked parent stops migration without changing existing files", async () 
 
 test("parent created concurrently is accepted without replacement", async () => {
   const root = await mkdtemp(join(tmpdir(), "lace-race-migrate-"));
-  const actual = await vi.importActual("node:fs");
+  const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
   try {
     vi.mocked(mkdirSync).mockImplementationOnce((path, options) => {
       actual.mkdirSync(path, options);
@@ -126,6 +125,7 @@ test("a database migrated by an engine older than the baseline is refused unchan
       failure = error;
     }
     expect(failure).toBeInstanceOf(UnsupportedDatabaseError);
+    assert(failure instanceof UnsupportedDatabaseError);
     expect(failure.message).toMatch(/older than the baseline/u);
     expect(failure.message).toMatch(/recreate/u);
     expect(await readFile(path)).toEqual(before);

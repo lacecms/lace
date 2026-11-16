@@ -1,5 +1,7 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite/product harnesses, branded values and partial runtime adapters.
+import { strict as assert } from "node:assert";
+import type { Cache, SiteBuildTrigger, ObjectStorage } from "@lacecms/application";
+import { siteBuildId } from "@lacecms/domain";
+import { object } from "./test-support/json.js";
 import { expect, test } from "vitest";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,6 +10,7 @@ import { join } from "node:path";
 import {
   migrateNodeDatabase,
   NodeInfrastructureUnavailableError,
+  NodeEnvironmentError,
   NodePlaceholderObjectStorage,
   NoopNodeBuildTrigger,
   NoopNodeCache,
@@ -44,7 +47,11 @@ test.each([undefined, { engineVersion: "2.3.4-custom", openApiTitle: "Embedded" 
         LACE_PUBLIC_BASE_URL: "https://lace.test/",
       });
       const config = await defineConfig({ content: [] });
-      const runtime = createNodeRuntime({ config, settings, environment });
+      const runtime = createNodeRuntime({
+        config,
+        settings,
+        ...(environment === undefined ? {} : { environment }),
+      });
       try {
         expect((await runtime.app.request("/api/docs")).status).toBe(200);
         const response = await runtime.app.fetch(
@@ -53,7 +60,7 @@ test.each([undefined, { engineVersion: "2.3.4-custom", openApiTitle: "Embedded" 
         const manifest = JSON.parse(
           await readFile(new URL("../package.json", import.meta.url), "utf8"),
         );
-        expect((await response.json()).info.version).toBe(
+        expect(object(object(await response.json()).info).version).toBe(
           environment?.engineVersion ?? manifest.version,
         );
       } finally {
@@ -115,6 +122,7 @@ test("Node settings compose email providers with production restrictions", () =>
     expect(String(error)).toBe(
       "NodeEnvironmentError: Invalid Node environment: LACE_SMTP_PORT, LACE_SMTP_USER.",
     );
+    assert(error instanceof NodeEnvironmentError);
     expect(JSON.stringify(error.issues)).not.toContain(password);
   }
 });
@@ -178,15 +186,18 @@ test("uses configured public URLs and fails closed for placeholder infrastructur
   expect(nodePublicMediaUrl(settings, "media/one")).toBe(
     "https://lace.test/base/api/v1/public/media/media%2Fone",
   );
-  const storage = new NodePlaceholderObjectStorage(settings.publicBaseUrl);
+  const storage: ObjectStorage = new NodePlaceholderObjectStorage(settings.publicBaseUrl);
   await expect(storage.createReadUrl("media/one")).resolves.toBe(
     "https://lace.test/base/api/v1/public/media/media%2Fone",
   );
   await expect(storage.get("media/one")).rejects.toBeInstanceOf(NodeInfrastructureUnavailableError);
-  const cache = new NoopNodeCache();
+  const cache: Cache = new NoopNodeCache();
   await cache.set("derived", { value: 1 });
   await expect(cache.get("derived")).resolves.toBeNull();
-  await expect(new NoopNodeBuildTrigger().trigger({})).resolves.toEqual({
+  const trigger: SiteBuildTrigger = new NoopNodeBuildTrigger();
+  await expect(
+    trigger.trigger({ buildId: siteBuildId("test"), targetVersion: 1 }),
+  ).resolves.toEqual({
     status: "failed",
     reason: "trigger_unavailable",
   });
@@ -304,6 +315,7 @@ test("Node API docs flag accepts only exact string booleans without value disclo
       parseNodeRuntimeSettings({ ...env, LACE_API_DOCS_ENABLED: value });
       throw new Error("Expected invalid configuration");
     } catch (error) {
+      assert(error instanceof NodeEnvironmentError);
       expect(error.message).toBe("Invalid Node environment: LACE_API_DOCS_ENABLED.");
       expect(error.issues).toEqual([{ reason: "invalid", variable: "LACE_API_DOCS_ENABLED" }]);
     }

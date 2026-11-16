@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy D1/Worker harnesses, binding fakes and recorded adapter calls.
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { expect, test } from "vitest";
 import { migrationStatements, openLocalCloudflare } from "./test-support/d1-test-harness.js";
@@ -17,18 +15,18 @@ test("the baseline migration creates the seeded, constrained schema in one D1 ba
     const database = await miniflare.getD1Database("DB");
     const statements = await migrationStatements();
     await database.batch(statements.map((statement) => database.prepare(statement)));
-    const run = (sql, ...values) =>
+    const run = (sql: string, ...values: unknown[]) =>
       database
         .prepare(sql)
         .bind(...values)
         .run();
-    const rows = async (sql) => (await database.prepare(sql).all()).results;
+    const rows = async (sql: string) => (await database.prepare(sql).all()).results;
 
     expect(await rows("select * from content_link_state")).toEqual([
       { singleton_key: 1, revision: 0 },
     ]);
     const indexes = (await rows("select name from sqlite_master where type = 'index'")).map(
-      (row) => row.name,
+      (row: { name: unknown }) => row.name,
     );
     for (const name of [
       "setup_tokens_expiry_idx",
@@ -78,8 +76,9 @@ test("the baseline migration creates the seeded, constrained schema in one D1 ba
 test("D1 upgrade and account batches maintain content actor profiles atomically", async () => {
   const { database, dispose } = await openLocalCloudflare({ migrate: false });
   try {
-    const batch = (statements) => database.batch(statements.map((sql) => database.prepare(sql)));
-    const rows = async (sql) => (await database.prepare(sql).all()).results;
+    const batch = (statements: string[]) =>
+      database.batch(statements.map((sql) => database.prepare(sql)));
+    const rows = async (sql: string) => (await database.prepare(sql).all()).results;
     await batch(await migrationStatements((name) => name < "0002_"));
     await batch([
       "insert into user (id, name, email, created_at, updated_at) values ('editor', '   ', 'editor@lace.test', 1, 1)",

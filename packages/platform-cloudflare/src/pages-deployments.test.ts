@@ -1,19 +1,22 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy D1/Worker harnesses, binding fakes and recorded adapter calls.
+import { strict as assert } from "node:assert";
+import type { PagesDeploymentStatusReaderSettings } from "./deploy/pages-deployments.js";
 import { expect, test } from "vitest";
 import { PAGES_API_MAX_RESPONSE_BYTES, PagesDeploymentStatusReader } from "./index.js";
 
 const token = "pages-read-token-secret";
 const account = "0123456789abcdef0123456789abcdef";
 
-function reader(respond, options = {}) {
-  const calls = [];
+function reader(
+  respond: (init: RequestInit) => Response | Promise<Response>,
+  options: Partial<PagesDeploymentStatusReaderSettings> = {},
+) {
+  const calls: { init: RequestInit; target: string }[] = [];
   const adapter = new PagesDeploymentStatusReader({
     accountId: account,
     apiToken: token,
     fetch: async (target, init) => {
-      calls.push({ init, target: String(target) });
-      return respond(init);
+      calls.push({ init: init ?? {}, target: String(target) });
+      return respond(init ?? {});
     },
     projectName: "my-site",
     ...options,
@@ -21,7 +24,7 @@ function reader(respond, options = {}) {
   return { adapter, calls };
 }
 
-const deployment = (latestStage, extra = {}) =>
+const deployment = (latestStage: unknown, extra: object = {}) =>
   Response.json({
     errors: [],
     messages: [],
@@ -44,6 +47,7 @@ test("reads the exact deployment with a bearer token and no redirects", async ()
     stage: "deploy",
   });
   expect(calls).toHaveLength(1);
+  assert(calls[0]);
   expect(calls[0].target).toBe(
     `https://api.cloudflare.com/client/v4/accounts/${account}/pages/projects/my-site/deployments/dep-1`,
   );
@@ -57,13 +61,14 @@ test("reads the exact deployment with a bearer token and no redirects", async ()
     apiBaseUrl: new URL("http://127.0.0.1:9000/client/v4/"),
   });
   await stub.adapter.read("a/b");
+  assert(stub.calls[0]);
   expect(stub.calls[0].target).toBe(
     `http://127.0.0.1:9000/client/v4/accounts/${account}/pages/projects/my-site/deployments/a%2Fb`,
   );
 });
 
 test("stage results map to closed observations and only deploy success proves publication", async () => {
-  const cases = [
+  const cases: [unknown, object, unknown][] = [
     [{ name: "queued", status: "active" }, {}, { kind: "progress", stage: "queued" }],
     [{ name: "build", status: "idle" }, {}, { kind: "progress", stage: "build" }],
     [{ name: "build", status: "success" }, {}, { kind: "progress", stage: "build" }],
@@ -110,7 +115,7 @@ test("stage results map to closed observations and only deploy success proves pu
 });
 
 test("HTTP failures map to permission, missing, rejection or transient observations", async () => {
-  const cases = [
+  const cases: [() => Response, unknown][] = [
     [() => new Response("no", { status: 401 }), { kind: "forbidden" }],
     [() => new Response("no", { status: 403 }), { kind: "forbidden" }],
     [() => new Response("no", { status: 404 }), { kind: "not_found" }],
@@ -171,9 +176,9 @@ test("a hanging Pages request aborts within its configured deadline", async () =
   const { adapter } = reader(
     (init) =>
       new Promise((_resolve, reject) => {
-        init.signal.addEventListener("abort", () => {
+        init.signal?.addEventListener("abort", () => {
           aborted = true;
-          reject(init.signal.reason);
+          reject(init.signal?.reason);
         });
       }),
     { timeoutMs: 20 },

@@ -1,5 +1,5 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite/product harnesses, branded values and partial runtime adapters.
+import { actorId } from "@lacecms/domain";
+import { array, object, number, string } from "./test-support/json.js";
 import { expect, test } from "vitest";
 import { defineCollection, defineConfig } from "@lacecms/config";
 import { defineBlock, field } from "@lacecms/content";
@@ -8,7 +8,7 @@ import { openNodeTestRuntime } from "./test-support/node-runtime-harness.js";
 import { readCompleteBuildExport } from "@lacecms/test-utils";
 
 test("real API keeps incomplete drafts savable and metadata sync preserves public content", async () => {
-  const make = (placeholder) =>
+  const make = (placeholder: string) =>
     defineConfig({
       blocks: [
         defineBlock({
@@ -36,7 +36,13 @@ test("real API keeps incomplete drafts savable and metadata sync preserves publi
         }),
       ],
     });
-  const request = async (path, body, method = "POST", status = 200, headers = {}) => {
+  const request = async (
+    path: string,
+    body: unknown,
+    method = "POST",
+    status = 200,
+    headers = {},
+  ) => {
     const response = await harness.request(path, {
       method,
       headers,
@@ -45,12 +51,12 @@ test("real API keeps incomplete drafts savable and metadata sync preserves publi
     const json = await response.json();
     if (status === 200) expect(response.status, JSON.stringify(json)).toBeLessThan(300);
     else expect(response.status, JSON.stringify(json)).toBe(status);
-    return json;
+    return object(json);
   };
   const config = await make("First prompt");
   const harness = await openNodeTestRuntime(platform, {
     config,
-    actor: { id: "ce9a-admin", role: "admin" },
+    actor: { id: actorId("ce9a-admin"), role: "admin" },
   });
   expect(await harness.sync()).toBe(0);
   const created = await request("/api/v1/admin/models/posts/entries", {
@@ -59,20 +65,25 @@ test("real API keeps incomplete drafts savable and metadata sync preserves publi
     fields: {},
     blocks: [],
   });
-  const path = `/api/v1/admin/entries/${created.id}`;
+  const path = `/api/v1/admin/entries/${string(created.id)}`;
   const payload = { title: "Guidance", slug: "guidance", fields: { nested: {} }, blocks: [] };
   const partial = await request(
     `${path}/draft`,
-    { ...payload, expectedRevision: created.draft.revision },
+    { ...payload, expectedRevision: number(object(created.draft).revision) },
     "PUT",
   );
-  await request(`${path}/publish`, { expectedRevision: partial.draft.revision }, "POST", 422);
+  await request(
+    `${path}/publish`,
+    { expectedRevision: number(object(partial.draft).revision) },
+    "POST",
+    422,
+  );
   await request(
     `${path}/draft`,
     {
       ...payload,
       fields: { nested: { title: "Too long" } },
-      expectedRevision: partial.draft.revision,
+      expectedRevision: number(object(partial.draft).revision),
     },
     "PUT",
     422,
@@ -93,11 +104,11 @@ test("real API keeps incomplete drafts savable and metadata sync preserves publi
           settings: { tone: "normal" },
         },
       ],
-      expectedRevision: partial.draft.revision,
+      expectedRevision: number(object(partial.draft).revision),
     },
     "PUT",
   );
-  await request(`${path}/publish`, { expectedRevision: valid.draft.revision });
+  await request(`${path}/publish`, { expectedRevision: number(object(valid.draft).revision) });
   const before = await request(path, undefined, "GET");
   const token = await request("/api/v1/admin/api-tokens", { name: "CE9A build" });
   const readExport = async () =>
@@ -105,7 +116,7 @@ test("real API keeps incomplete drafts savable and metadata sync preserves publi
       await readCompleteBuildExport(
         (url, init) => harness.runtime.app.fetch(new Request(url, init)),
         "https://lace.test",
-        token.token,
+        string(token.token),
       )
     ).export;
   const exported = await readExport();
@@ -117,7 +128,10 @@ test("real API keeps incomplete drafts savable and metadata sync preserves publi
   expect(afterExport.entries).toEqual(exported.entries);
   expect(JSON.stringify(afterExport.entries)).not.toContain("placeholder");
   const metadata = await request("/api/v1/admin/content-models", undefined, "GET");
-  expect(metadata.items[0].fields.nested.fields.title.placeholder).toBe("Changed prompt");
+  expect(
+    object(object(object(object(object(array(metadata.items)[0]).fields).nested).fields).title)
+      .placeholder,
+  ).toBe("Changed prompt");
   // A failed optimistic save does not overwrite either snapshot.
   await request(`${path}/draft`, { ...payload, expectedRevision: 1 }, "PUT", 409);
   expect(await request(path, undefined, "GET")).toEqual(before);

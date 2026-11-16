@@ -1,5 +1,4 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite rows, branded snapshot fixtures and malformed projection inputs.
+import { DomainError } from "@lacecms/domain";
 import { expect, test } from "vitest";
 import { assertDraftPersistenceBounds } from "../content/snapshots.js";
 import { sqliteWriteError } from "./write-errors.js";
@@ -14,10 +13,11 @@ test("bounds drafts and maps SQLite constraint failures to stable codes", () => 
   expect(() => assertDraftPersistenceBounds([], Array.from({ length: 201 }))).toThrow(
     expect.objectContaining({ code: "CONTENT_INVALID_STATE" }),
   );
-  const mapped = (message, page = false) => {
+  const mapped = (message: string, page = false) => {
     try {
       sqliteWriteError(new Error(message), page, "Test");
     } catch (error) {
+      if (!(error instanceof DomainError)) throw error;
       return [error.code, error.message];
     }
   };

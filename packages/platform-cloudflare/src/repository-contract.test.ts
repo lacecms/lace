@@ -1,18 +1,18 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy D1/Worker harnesses, binding fakes and recorded adapter calls.
+import type { RepositoryContractRuntime } from "@lacecms/test-utils";
+import { contractSql } from "./test-support/contract-sql.js";
 import { afterEach, expect, test } from "vitest";
 import { contentRepositoryContractCases } from "@lacecms/test-utils";
 import { CLOUDFLARE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import { D1ContentRepository } from "./index.js";
 import { openLocalD1, countingD1 } from "./test-support/d1-test-harness.js";
 
-const cleanups = [];
+const cleanups: (() => void | Promise<void>)[] = [];
 
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-const runtime = {
+const runtime: RepositoryContractRuntime = {
   listQueryLimits: CLOUDFLARE_LIST_QUERY_LIMITS,
   recordEvidence: (value) => console.log("Collection query local D1", JSON.stringify(value)),
   async open(options) {
@@ -26,13 +26,11 @@ const runtime = {
         await dispose();
       }
     });
-    const bindAll = (sql, params) =>
-      params.length === 0 ? database.prepare(sql) : database.prepare(sql).bind(...params);
     const measured = countingD1(database);
-    const statements = [];
+    const statements: string[] = [];
     const binding = {
       ...measured.binding,
-      prepare: (sql) => {
+      prepare: (sql: string) => {
         statements.push(sql);
         return measured.binding.prepare(sql);
       },
@@ -53,13 +51,7 @@ const runtime = {
       reopen: (overrides = {}) =>
         new D1ContentRepository(database, options.resolveModel, { ...options, ...overrides }),
       repository: new D1ContentRepository(binding, options.resolveModel, options),
-      sql: {
-        all: async (sql, ...params) => (await bindAll(sql, params).all()).results,
-        get: async (sql, ...params) => (await bindAll(sql, params).first()) ?? undefined,
-        run: async (sql, ...params) => {
-          await bindAll(sql, params).run();
-        },
-      },
+      sql: contractSql(database),
     };
   },
 };

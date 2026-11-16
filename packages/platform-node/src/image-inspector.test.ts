@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite/product harnesses, branded values and partial runtime adapters.
 import { expect, test } from "vitest";
 import sharp from "sharp";
 import { animatedGifFixture } from "@lacecms/test-utils";
@@ -12,9 +10,9 @@ const fixtures = [
   ["image/webp", "webp"],
   ["image/avif", "avif"],
   ["image/gif", "gif"],
-];
+] as const;
 
-async function image(format) {
+async function image(format: (typeof fixtures)[number][1]) {
   return sharp({ create: { width: 3, height: 2, channels: 3, background: { r: 1, g: 2, b: 3 } } })
     [format]()
     .toBuffer();

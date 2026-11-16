@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite rows, branded snapshot fixtures and malformed projection inputs.
 import { expect, test } from "vitest";
 import { syncMigrationPage } from "./block-migration-scan.js";
 
@@ -40,7 +38,7 @@ test("maps migration scan rows into ordered entries", () => {
     2,
   );
   expect(page.next).toBe("e2");
-  expect(page.items[0].draft.blocks).toEqual([
+  expect(page.items[0]?.draft?.blocks).toEqual([
     {
       data: { a: 1 },
       hidden: false,
@@ -52,7 +50,7 @@ test("maps migration scan rows into ordered entries", () => {
     },
     { data: {}, hidden: true, key: "b2", position: 2, schemaVersion: 1, type: "hero" },
   ]);
-  expect(page.items[0].published.references).toEqual([
+  expect(page.items[0]?.published?.references).toEqual([
     { fieldPath: "image", mediaId: "m1", sourceKey: "b1" },
   ]);
   expect(page.items[1]).toEqual({

@@ -1,5 +1,5 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite/product harnesses, branded values and partial runtime adapters.
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import type { S3CommandClient } from "./media/minio-storage.js";
 import { expect, test } from "vitest";
 
 import { Readable } from "node:stream";
@@ -12,14 +12,17 @@ import {
 } from "./index.js";
 
 test("MinIO storage streams objects, distinguishes missing keys, and sanitizes failures", async () => {
-  const commands = [];
-  const client = {
+  const commands: {
+    command: object;
+    options: { readonly abortSignal?: AbortSignal } | undefined;
+  }[] = [];
+  const client: S3CommandClient = {
     send: async (command, options) => {
       commands.push({ command, options });
       if (command.constructor.name === "GetObjectCommand") {
         return { Body: Readable.from([Buffer.from("media-bytes")]) };
       }
-      if (command.constructor.name === "PutObjectCommand") {
+      if (command instanceof PutObjectCommand) {
         expect(command.input.Body).toEqual(Buffer.from([1, 2, 3]));
         expect(command.input.ContentLength).toBe(3);
       }
@@ -56,7 +59,10 @@ test("MinIO storage streams objects, distinguishes missing keys, and sanitizes f
   await expect(
     (async () => {
       const output = await storage.get("media/example");
-      return output === null ? undefined : Buffer.concat(await Array.fromAsync(output));
+      if (output === null) return undefined;
+      const chunks: Uint8Array[] = [];
+      for await (const chunk of output) chunks.push(chunk);
+      return Buffer.concat(chunks);
     })(),
   ).resolves.toEqual(Buffer.from("media-bytes"));
   await storage.delete("media/example");
@@ -66,7 +72,7 @@ test("MinIO storage streams objects, distinguishes missing keys, and sanitizes f
     "GetObjectCommand",
     "DeleteObjectCommand",
   ]);
-  expect(commands.every(({ options }) => options.abortSignal instanceof AbortSignal)).toBe(true);
+  expect(commands.every(({ options }) => options?.abortSignal instanceof AbortSignal)).toBe(true);
 
   const missing = new NodeMinioObjectStorage(
     {

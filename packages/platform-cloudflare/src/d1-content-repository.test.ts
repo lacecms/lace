@@ -1,5 +1,10 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy D1/Worker harnesses, binding fakes and recorded adapter calls.
+import { strict as assert } from "node:assert";
+import { opaqueCursor } from "@lacecms/application";
+import type { ListContentEntriesInput } from "@lacecms/application";
+import type { Actor, ContentBlock, ContentModelRoute, DraftMediaReference } from "@lacecms/domain";
+import type { JsonObject } from "@lacecms/content";
+import type { D1Database, D1PreparedStatement } from "./d1/database.js";
+import { array, string } from "./test-support/json.js";
 import { afterEach, expect, test } from "vitest";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import {
@@ -15,15 +20,15 @@ import {
 import { D1_MAX_BOUND_PARAMETERS, D1_QUERY_BUDGET, D1ContentRepository } from "./index.js";
 import { countingD1, openLocalD1 } from "./test-support/d1-test-harness.js";
 
-const editor = { id: actorId("editor"), role: "editor" };
-const posts = { key: contentModelKey("posts"), kind: "collection", route: "/blog/:slug" };
-const settings = { key: contentModelKey("settings"), kind: "global" };
-const models = new Map([
+const editor = { id: actorId("editor"), role: "editor" as const };
+const posts = { key: contentModelKey("posts"), kind: "collection" as const, route: "/blog/:slug" };
+const settings = { key: contentModelKey("settings"), kind: "global" as const };
+const models = new Map<string, ContentModelRoute>([
   [posts.key, posts],
   [settings.key, settings],
 ]);
-const resolveModel = (key) => models.get(key);
-const disposals = [];
+const resolveModel = (key: string) => models.get(key);
+const disposals: (() => Promise<void>)[] = [];
 
 afterEach(async () => {
   for (const dispose of disposals.splice(0)) await dispose();
@@ -42,16 +47,17 @@ async function open(options = {}) {
     counting,
     database,
     repository: new D1ContentRepository(counting.binding, resolveModel, options),
-    scalar: async (sql, ...params) =>
-      Object.values(
-        await (
-          params.length === 0 ? database.prepare(sql) : database.prepare(sql).bind(...params)
-        ).first(),
-      )[0],
+    scalar: async (sql: string, ...params: unknown[]) => {
+      const row = await (
+        params.length === 0 ? database.prepare(sql) : database.prepare(sql).bind(...params)
+      ).first();
+      assert(row);
+      return Object.values(row)[0];
+    },
   };
 }
 
-async function seedMedia(database, count) {
+async function seedMedia(database: D1Database, count: number) {
   const statements = Array.from({ length: count }, (_, index) =>
     database
       .prepare(
@@ -65,8 +71,24 @@ async function seedMedia(database, count) {
 }
 
 function draft(
-  id,
-  { blocks = [], model = posts, slug = id, title = id, updatedAt = 1, updatedBy = editor } = {},
+  id: string,
+  {
+    blocks = [],
+    fields = {},
+    model = posts,
+    slug = id,
+    title = id,
+    updatedAt = 1,
+    updatedBy = editor,
+  }: {
+    blocks?: readonly ContentBlock[];
+    fields?: JsonObject;
+    model?: ContentModelRoute;
+    slug?: string;
+    title?: string;
+    updatedAt?: number;
+    updatedBy?: Actor;
+  } = {},
 ) {
   const entryId = contentEntryId(id);
   return createContentEntry({
@@ -74,7 +96,7 @@ function draft(
       blocks,
       createdAt: unixMilliseconds(updatedAt),
       entryId,
-      fields: {},
+      fields,
       id: contentSnapshotId(`${id}-draft`),
       revision: 1,
       ...(model.kind === "collection" ? { slug } : {}),
@@ -88,8 +110,10 @@ function draft(
   });
 }
 
-function maximalDraft(label, count = 200) {
+function maximalDraft(label: string, count = 200) {
   const blocks = Array.from({ length: count }, (_, index) => ({
+    hidden: false,
+    settings: {},
     data: {
       images: [{ image: `media-${index}` }],
       tags: index < 100 ? [label, label] : [label],
@@ -111,15 +135,22 @@ function maximalDraft(label, count = 200) {
     references,
     internalLinks: blocks.map((block) => ({
       sourceKey: block.key,
-      area: "data",
+      area: "data" as const,
       pointer: "/url",
-      targetId: "post",
+      targetId: contentEntryId("post"),
       delivered: true,
     })),
   };
 }
 
-function saveInput(id, expectedRevision, at, blocks, mediaReferences, title = `Saved ${at}`) {
+function saveInput(
+  id: string,
+  expectedRevision: number,
+  at: number,
+  blocks: readonly ContentBlock[],
+  mediaReferences: readonly DraftMediaReference[],
+  title = `Saved ${at}`,
+) {
   return {
     entryId: contentEntryId(id),
     mutation: {
@@ -135,7 +166,7 @@ function saveInput(id, expectedRevision, at, blocks, mediaReferences, title = `S
   };
 }
 
-function publishInput(id, expectedRevision, at, snapshot) {
+function publishInput(id: string, expectedRevision: number, at: number, snapshot: string) {
   return {
     entryId: contentEntryId(id),
     expectedRevision,
@@ -173,16 +204,17 @@ test("saves a maximal draft in one batch within parameter and query budgets", as
   expect(counting.stats.maxParameters).toBeLessThanOrEqual(D1_MAX_BOUND_PARAMETERS);
   expect(counting.stats.maxBatchStatements).toBeLessThanOrEqual(40);
   expect(await scalar("select count(*) from content_entry_link_references")).toBe(200);
+  assert(result.entry);
   expect(result.entry.draft.revision).toBe(2);
   expect(result.entry.draft.blocks).toHaveLength(200);
-  expect(result.entry.draft.blocks[0].data).toEqual(saved.blocks[0].data);
+  expect(result.entry.draft.blocks[0]?.data).toEqual(saved.blocks[0]?.data);
   expect(
     result.entry.draft.blocks.reduce(
-      (sum, block) => sum + block.data.images.length + block.data.tags.length,
+      (sum, block) => sum + array(block.data.images).length + array(block.data.tags).length,
       0,
     ),
   ).toBe(500);
-  expect(result.entry.draft.blocks.at(-1).key).toBe("saved-199");
+  expect(result.entry.draft.blocks.at(-1)?.key).toBe("saved-199");
   expect(await scalar("select count(*) from content_blocks")).toBe(200);
   expect(
     await scalar("select count(*) from content_media_references where source_key like 'saved-%'"),
@@ -229,7 +261,9 @@ test("rolls back a chunked save when media in the last chunk is unavailable", as
     code: "CONTENT_INVALID_STATE",
     message: "Media is unavailable for reference.",
   });
-  const stored = (await repository.load({ entryId: contentEntryId("post") })).draft;
+  const loaded = await repository.load({ entryId: contentEntryId("post") });
+  assert(loaded);
+  const stored = loaded.draft;
   expect(stored.revision).toBe(1);
   expect(stored.blocks.map((block) => block.key)).toEqual(
     original.blocks.map((block) => block.key),
@@ -297,14 +331,14 @@ test("route conflict rolls back the in-batch removal of the entry's previous rou
 });
 
 test("an injected checkpoint fails inside the executed batch", async () => {
-  const batches = [];
+  const batches: number[] = [];
   const { counting, database, scalar } = await open();
   const binding = {
-    batch: (statements) => {
+    batch: (statements: D1PreparedStatement[]) => {
       batches.push(statements.length);
       return counting.binding.batch(statements);
     },
-    prepare: (sql) => counting.binding.prepare(sql),
+    prepare: (sql: string) => counting.binding.prepare(sql),
   };
   const repository = new D1ContentRepository(binding, resolveModel, {
     beforeMutation: (name) => {
@@ -337,9 +371,9 @@ test("the D1 adapter source imports no Node-only runtime module", async () => {
   for (const file of sources) {
     expect(await readFile(new URL(file, directory), "utf8"), file).not.toMatch(forbidden);
   }
-  async function productionFiles(directory) {
+  async function productionFiles(directory: URL): Promise<URL[]> {
     const entries = await readdir(directory, { withFileTypes: true });
-    const files = [];
+    const files: URL[] = [];
     for (const entry of entries) {
       if (["node.ts", "node-repository", "test-support"].includes(entry.name)) continue;
       const url = new URL(entry.name + (entry.isDirectory() ? "/" : ""), directory);
@@ -409,7 +443,7 @@ test("reads a full build-export page with two bounded batches", async () => {
       ...publishInput(id, 1, 2, `${id}-published`),
       publishedBy: publisher,
     });
-    expect(published.entry.published.updatedBy).toEqual(publisher);
+    expect(published.entry.published?.updatedBy).toEqual(publisher);
     expect(counting.stats.batches).toBe(1);
     expect(counting.stats.queries).toBeLessThanOrEqual(D1_QUERY_BUDGET);
     expect(counting.stats.maxParameters).toBeLessThanOrEqual(D1_MAX_BOUND_PARAMETERS);
@@ -425,7 +459,7 @@ test("reads a full build-export page with two bounded batches", async () => {
     publishedBy: globalAuthor,
   });
 
-  const list = { modelKey: posts.key, listFields: [], sort: "title", limit: 100 };
+  const list = { modelKey: posts.key, listFields: [], sort: "title" as const, limit: 100 };
   reset();
   const collectionPage = await repository.list(list);
   expect(new Set(collectionPage.items.map(({ updatedBy }) => updatedBy.displayName)).size).toBe(
@@ -434,6 +468,7 @@ test("reads a full build-export page with two bounded batches", async () => {
   expect(counting.stats.queries).toBe(2);
   expect(counting.stats.maxParameters).toBeLessThanOrEqual(D1_MAX_BOUND_PARAMETERS);
   reset();
+  assert(collectionPage.nextCursor);
   const next = await repository.list({ ...list, after: collectionPage.nextCursor });
   expect(next.items.map(({ updatedBy }) => updatedBy.displayName)).toEqual(["Author 100"]);
   expect(counting.stats.queries).toBeLessThanOrEqual(3);
@@ -446,6 +481,7 @@ test("reads a full build-export page with two bounded batches", async () => {
   expect(counting.stats.queries).toBe(1);
   expect(counting.stats.maxParameters).toBe(1);
   reset();
+  assert(media.nextCursor);
   const moreMedia = await repository.listMedia({
     sort: "createdAt",
     limit: 100,
@@ -469,15 +505,16 @@ test("reads a full build-export page with two bounded batches", async () => {
   expect(counting.stats.queries).toBeLessThanOrEqual(10);
   expect(counting.stats.maxParameters).toBeLessThanOrEqual(D1_MAX_BOUND_PARAMETERS);
   expect(first.entries).toHaveLength(100);
-  expect(first.entries[0].entry.published.blocks).toHaveLength(200);
-  expect(first.entries[0].media).toHaveLength(200);
+  expect(first.entries[0]?.entry.published?.blocks).toHaveLength(200);
+  expect(first.entries[0]?.media).toHaveLength(200);
   expect(first.entries.every((item) => item.internalLinks.length === 200)).toBe(true);
-  expect(first.entries[0].internalLinks.every((item) => item.targetId === "post-000")).toBe(true);
-  expect(new Set(first.entries.map(({ entry }) => entry.published.updatedBy.id)).size).toBe(100);
-  expect(first.globals.map(({ entry }) => entry.published.updatedBy)).toEqual([globalAuthor]);
+  expect(first.entries[0]?.internalLinks.every((item) => item.targetId === "post-000")).toBe(true);
+  expect(new Set(first.entries.map(({ entry }) => entry.published?.updatedBy.id)).size).toBe(100);
+  expect(first.globals?.map(({ entry }) => entry.published?.updatedBy)).toEqual([globalAuthor]);
 
   counting.stats.queries = 0;
   counting.stats.batches = 0;
+  assert(first.nextCursor);
   const last = await repository.exportBuildContentPage({ after: first.nextCursor, limit: 100 });
   expect(counting.stats.batches).toBe(2);
   expect(counting.stats.queries).toBeLessThanOrEqual(10);
@@ -494,7 +531,7 @@ test("fails a build-export page when a publication lands between its batches", a
   const other = new D1ContentRepository(database, resolveModel);
   const binding = counting.binding;
   let batches = 0;
-  let inject = async () => {};
+  let inject: () => Promise<unknown> = async () => {};
   const injecting = new D1ContentRepository(
     {
       ...binding,
@@ -551,7 +588,7 @@ test("link reads use bounded indexed statements without hydrating aggregates", a
   counting.stats.queries = 0;
   expect(
     await repository.readLinkImpact({
-      targetId: "post",
+      targetId: contentEntryId("post"),
       action: "delete",
       actorId: "admin",
       limit: 20,
@@ -560,15 +597,15 @@ test("link reads use bounded indexed statements without hydrating aggregates", a
   expect(counting.stats.queries).toBeLessThanOrEqual(5);
   counting.stats.queries = 0;
   await expect(
-    repository.listLinkTargets({ after: "invalid-cursor", limit: 20 }),
+    repository.listLinkTargets({ after: opaqueCursor("invalid-cursor"), limit: 20 }),
   ).rejects.toThrow();
   await expect(
     repository.readLinkImpact({
-      targetId: "post",
+      targetId: contentEntryId("post"),
       action: "delete",
       actorId: "admin",
       limit: 20,
-      after: "invalid-cursor",
+      after: opaqueCursor("invalid-cursor"),
     }),
   ).rejects.toThrow();
   expect(counting.stats.queries).toBe(0);
@@ -650,7 +687,7 @@ test("final removal guard rejects a source published after impact preflight", as
   expect(await repository.loadPublic("/blog/post")).not.toBeNull();
   expect(impact.hasPublishedUsages).toBe(true);
   expect(
-    (await database.prepare("select count(*) as count from mutation_guards").first()).count,
+    (await database.prepare("select count(*) as count from mutation_guards").first())?.count,
   ).toBe(0);
 });
 
@@ -691,15 +728,15 @@ test("high fan-out evidence keeps impact and picker indexed with bounded row wor
       )
       .bind(JSON.stringify(Array.from({ length: 199 }, (_, i) => i))),
   ]);
-  const sql = new Map();
+  const sql = new Map<string, unknown[]>();
   const binding = {
     ...counting.binding,
-    prepare: (query) => {
+    prepare: (query: string) => {
       const prepared = counting.binding.prepare(query);
       sql.set(query, []);
       return {
         ...prepared,
-        bind: (...params) => {
+        bind: (...params: unknown[]) => {
           sql.set(query, params);
           return prepared.bind(...params);
         },
@@ -707,8 +744,8 @@ test("high fan-out evidence keeps impact and picker indexed with bounded row wor
     },
   };
   const traced = new D1ContentRepository(binding, resolveModel);
-  const evidence = [];
-  const record = async (name, operation) => {
+  const evidence: { name: string; queries: number; rowsRead: number; rowsWritten: number }[] = [];
+  const record = async <T>(name: string, operation: () => Promise<T>): Promise<T> => {
     counting.stats.queries = counting.stats.rowsRead = counting.stats.rowsWritten = 0;
     const result = await operation();
     evidence.push({
@@ -723,9 +760,13 @@ test("high fan-out evidence keeps impact and picker indexed with bounded row wor
   const first = await record("impact-50-sources", () =>
     traced.readLinkImpact({ targetId: "target", action: "delete", actorId: "admin", limit: 50 }),
   );
+  assert(first.mode === "sources");
   expect(first.sources).toHaveLength(50);
   const dense = first.sources[0];
+  assert(dense);
   expect(dense.locations).toHaveLength(10);
+  const locationsAfter = dense.nextLocationsCursor;
+  assert(locationsAfter);
   await record("impact-50-locations", () =>
     traced.readLinkImpact({
       targetId: "target",
@@ -734,7 +775,7 @@ test("high fan-out evidence keeps impact and picker indexed with bounded row wor
       limit: 50,
       sourceEntryId: dense.entryId,
       snapshotId: dense.snapshotId,
-      locationsAfter: dense.nextLocationsCursor,
+      locationsAfter,
     }),
   );
   await record("picker-50-prefix", () =>
@@ -746,11 +787,11 @@ test("high fan-out evidence keeps impact and picker indexed with bounded row wor
       ...Array.from({ length: 199 }, (_, i) => `source-${String(i).padStart(4, "0")}`),
     ]),
   );
-  const plans = [];
+  const plans: string[] = [];
   for (const [query, binds] of sql) {
     const statement = database.prepare(`explain query plan ${query}`);
     const result = await (binds.length ? statement.bind(...binds) : statement).all();
-    plans.push(...result.results.map((row) => row.detail));
+    plans.push(...result.results.map((row) => string(row.detail)));
   }
   expect(plans.join("\n")).toContain("content_entry_link_references_target_idx");
   expect(plans.join("\n")).toContain("content_snapshots_title_prefix_idx");
@@ -778,6 +819,9 @@ test("direct D1 list reads enforce trusted LIKE policy before preparing SQL", as
   let statements = 0;
   const repository = new D1ContentRepository(
     {
+      batch: async () => {
+        throw new Error("unexpected batch");
+      },
       prepare() {
         statements++;
         throw new Error("unexpected SQL");
@@ -785,8 +829,8 @@ test("direct D1 list reads enforce trusted LIKE policy before preparing SQL", as
     },
     resolveModel,
   );
-  const input = {
-    modelKey: "posts",
+  const input: ListContentEntriesInput = {
+    modelKey: contentModelKey("posts"),
     listFields: [],
     limit: 5,
     sort: "title",

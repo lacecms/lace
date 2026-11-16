@@ -1,0 +1,10 @@
+## 1. Restore persistence and runtime test typechecking
+
+- [x] 1.1 Verify the apply checkout includes EX1B, EX1D and EX2D, and compare the checked-out baseline with the remaining directives in the three target packages. Type the listed `db` tests with the current statement, binding, row and port types and package-local SQLite fixtures. Remove their entries. Run `pnpm --filter @lacecms/db typecheck` and `pnpm --filter @lacecms/db test`, including the migration, schema drift and already-typed write-plan cases.
+- [x] 1.2 Type the listed `platform-node` tests using the existing Node fixtures. Keep the Node runtime harness for product tests and the migrated SQLite fixture for the in-memory repository contract variant. Remove their entries. Run `pnpm --filter @lacecms/platform-node typecheck` and `pnpm --filter @lacecms/platform-node test`, including both SQLite modes of the repository contract, the security contract and the actor-profile migration.
+- [x] 1.3 Type the listed `platform-cloudflare` tests using the existing D1 and Worker harnesses. Remove their entries. Run `pnpm --filter @lacecms/platform-cloudflare typecheck` and `pnpm --filter @lacecms/platform-cloudflare test`, including the local D1 repository and security contracts, actor-profile migration, already-typed sync batch cases and Worker query budgets.
+
+## 2. Verify session completion
+
+- [x] 2.1 Confirm the three packages have zero `@ts-nocheck` directives and baseline entries. Delete `scripts/test-typecheck-baseline.json` once the workspace inventory reaches zero. Update `DEVELOPMENT.md` to describe how the checker handles the absent file. Run `node scripts/check-boundaries.mjs` and confirm the published export declarations match the pre-session checkout, including the `@lacecms/db/node` subpath.
+- [x] 2.2 Run `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm exec openspec validate ex01c-type-db-and-platform-tests --type change --strict` and `pnpm spec:validate`. Record the workspace baseline count before and after EX1C in the roadmap progress log.

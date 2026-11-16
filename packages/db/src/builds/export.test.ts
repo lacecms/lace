@@ -1,5 +1,5 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite rows, branded snapshot fixtures and malformed projection inputs.
+import { strict as assert } from "node:assert";
+import type { SQLInputValue } from "node:sqlite";
 import { expect, test } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import {
@@ -28,7 +28,7 @@ test("build-export cursors round-trip and reject foreign or malformed values", (
     path: "",
     version: 0,
   });
-  const forged = (value) => encodeBase64Url(JSON.stringify(value));
+  const forged = (value: unknown) => encodeBase64Url(JSON.stringify(value));
   for (const value of [
     "not a cursor",
     "%%%",
@@ -87,7 +87,7 @@ test("build-export SQL measures stored bytes and reads a page by path range", ()
       ('a-p', 'k1', 'm', 'm1'), ('a-p', 'k2', 'm', 'm2'), ('b-p', 'k3', 'm', 'm3'),
       ('g-p', '$fields', 'x', 'm4'), ('draft-d', '$fields', 'x', 'm1');
   `);
-  const all = (sql, ...params) =>
+  const all = (sql: string, ...params: SQLInputValue[]) =>
     database
       .prepare(sql)
       .all(...params)
@@ -112,12 +112,18 @@ test("build-export SQL measures stored bytes and reads a page by path range", ()
   const linkedFields = '{"t":"é","url":"entry:b"}';
   database.prepare("update content_snapshots set fields_json=? where id='a-p'").run(linkedFields);
   const linked = all(BUILD_EXPORT_CANDIDATES_SQL, "", 1)[0];
+  assert(linked);
   expect(linked.stored_bytes).toBe(
     35 + Buffer.byteLength(linkedFields) - 10 + Buffer.byteLength(JSON.stringify(manifest)),
   );
   const publicRoute = all(buildExportPageSql(true).routes, "", "/a")[0];
+  assert(typeof publicRoute?.internal_links_json === "string");
   expect(JSON.parse(publicRoute.internal_links_json)).toEqual(manifest);
-  const range = buildExportPageRange("", candidates.slice(0, 3), 2, 7);
+  const typedCandidates = candidates.map(({ path, stored_bytes }) => {
+    assert(typeof path === "string" && typeof stored_bytes === "number");
+    return { path, stored_bytes };
+  });
+  const range = buildExportPageRange("", typedCandidates.slice(0, 3), 2, 7);
   expect(range).toEqual({
     after: "",
     afterRecord: ["", ""],
@@ -127,6 +133,7 @@ test("build-export SQL measures stored bytes and reads a page by path range", ()
   });
   const first = buildExportPageSql(true);
   expect(all(first.routes, range.after, range.last).map((row) => row.path)).toEqual(["/a", "/b"]);
+  assert(first.globals);
   expect(all(first.globals).map((row) => row.id)).toEqual(["g"]);
   expect(
     all(first.snapshots, range.after, range.last, ...noRecords)
