@@ -38,7 +38,12 @@ export function createActorContext(actors: ActorResolver) {
     return resolved;
   }
 
-  return Object.freeze({ actor, currentSessionId });
+  async function authenticate(context: ActorRequestContext, next: () => Promise<void>) {
+    await actor(context);
+    await next();
+  }
+
+  return Object.freeze({ actor, authenticate, currentSessionId });
 }
 
 export type ActorContext = ReturnType<typeof createActorContext>;

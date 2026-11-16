@@ -1,5 +1,6 @@
 import type { UnixMilliseconds } from "@lacecms/domain";
 import type { OpaqueTokenSecret, OpaqueTokenVerifier } from "../shared/brands.js";
+import type { CursorPage, CursorPageInput } from "../shared/pagination.js";
 
 /** Persistence receives only the derived verifier, never an opaque secret. */
 export interface OpaqueTokenHasher {
@@ -14,6 +15,11 @@ export interface ManagedUser {
   readonly email: string;
   readonly id: string;
   readonly role: SecurityRole;
+}
+
+export interface ManagedUserPage extends CursorPage<ManagedUser> {
+  readonly disabledCount: number;
+  readonly total: number;
 }
 
 export interface BuildTokenMetadata {
@@ -141,7 +147,7 @@ export interface AccountSecurityPort {
     readonly role: SecurityRole;
   }): Promise<CreateInvitationResult>;
   /** Unaccepted, unrevoked invitations, newest first, including expired ones. */
-  listInvitations(): Promise<readonly InvitationRecord[]>;
+  listInvitations(input: CursorPageInput): Promise<CursorPage<InvitationRecord>>;
   /** Null for an unknown, expired, revoked or accepted token. */
   inspectInvitation(input: {
     readonly now: UnixMilliseconds;
@@ -203,7 +209,7 @@ export interface AccountSecurityPort {
   }): Promise<{ readonly user: ManagedUser }>;
   /** Disabling also deletes every session of the user in the same operation. */
   disableUser(input: { readonly userId: string }): Promise<ManagedUser>;
-  listUsers(): Promise<readonly ManagedUser[]>;
+  listUsers(input: CursorPageInput): Promise<ManagedUserPage>;
   /** Disabling also deletes every session of the user in the same operation. */
   updateUser(input: {
     readonly role?: SecurityRole;

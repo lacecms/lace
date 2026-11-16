@@ -577,7 +577,7 @@ test("anonymous browser setup state survives bootstrap and stale clients stay cl
     ]);
     expect(stale.map((result) => result.response.status)).toEqual([404, 404]);
     expect((await json(value.server, "/api/v1/setup/state")).body).toEqual({ setupComplete: true });
-    expect(await value.runtime.security.listUsers()).toHaveLength(1);
+    expect((await value.runtime.security.listUsers({ limit: 50 })).items).toHaveLength(1);
     expect((await json(value.server, "/api/v1/admin/users")).response.status).toBe(401);
   } finally {
     await value.close();

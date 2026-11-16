@@ -1,6 +1,6 @@
 import { mediaId } from "../shared/application-input.js";
 import { invalid, notFound, response } from "../shared/http.js";
-import { mediaIdParams, pagination } from "../shared/request.js";
+import { cursorPageInput, mediaIdParams, pagination } from "../shared/request.js";
 import {
   authenticationFailure,
   authorizationFailure,
@@ -66,7 +66,7 @@ export function createMediaRoutes(routeContext: RouteContext) {
         const query = context.req.valid("query");
         const page = await media().list({
           actor: await actor(context),
-          ...pagination(context.req.raw),
+          ...cursorPageInput(query),
           ...(query.q === undefined || query.q.length === 0 ? {} : { q: query.q }),
           ...(query.sort === undefined ? {} : { sort: query.sort }),
           ...(query.type === undefined ? {} : { type: query.type }),

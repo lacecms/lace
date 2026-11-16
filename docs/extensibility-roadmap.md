@@ -92,7 +92,7 @@ from committed outbox work, and `401 AUTHENTICATION_REQUIRED`.
 | EX1 | Test foundation (from RF9C–RF9F) | L | EX1A → EX1B → EX1D; EX1C after EX2D | proposed |
 | EX2 | Shared write plans | L | EX2A → EX2B → EX2C → EX2D | done |
 | EX3 | Typed outbox events | M | EX3A → EX3B | in progress |
-| EX4 | Route policies and security use cases | L | EX4A → EX4B → EX4C → EX4D | in progress |
+| EX4 | Route policies and security use cases | L | EX4A → EX4B → EX4C → EX4D | done |
 | EX5 | Model kind descriptor | S | EX5A | planned |
 | EX6 | Trusted client identity and production Compose ingress | M | EX6A and EX6B independent | done |
 | EX7 | pnpm 12.21.0 toolchain | S | EX7A | planned |
@@ -318,9 +318,9 @@ Behavior-preserving.
 
 Behavior-touching, with delta specs for the affected REST contracts:
 
-- One optimistic-concurrency model: entry `GET` returns the ETag that
-  `If-Match` accepts; open question whether media and publication adopt the
-  same validator or keep theirs documented.
+- Entry `GET` returns the draft revision ETag that `If-Match` accepts.
+  Media metadata uses its monotonic `updatedAt` tag. Unpublish uses the
+  expected published snapshot ID so the command guards the observed publication.
 - One opaque cursor pagination for OAuth connections, users and invitations;
   builds paginate instead of the fixed cap.
 - REST and MCP parse `limit` through one shared schema.
@@ -401,6 +401,7 @@ recorded event.
 
 | Date | Session | Change | Status |
 | --- | --- | --- | --- |
+| 2026-11-16 | EX4D | [HTTP consistency](../openspec/changes/archive/2026-11-16-ex04d-http-consistency/) | done. Verified entry tags and protected cursor pages through Node/SQLite and Worker/local D1, 105-build traversal on both SQLite modes and local D1, and continuation recovery and refresh in Admin. OpenAPI, docs, typecheck, lint, format and strict OpenSpec validation passed. |
 | 2026-11-16 | EX4C | [Typed handlers](../openspec/changes/archive/2026-11-16-ex04c-typed-handlers/) | done. Production route `as never` casts fell from 24 after EX4B to zero, and the shared hook cast was removed. Hono client types passed against source and emitted declarations. The server suite, shared Node/SQLite and Worker/local D1 HTTP tests, and OpenAPI comparison passed. |
 | 2026-11-16 | EX4B | [Security use cases](../openspec/changes/archive/2026-11-16-ex04b-security-use-cases/) | done. Application use cases authorize account, user, token, settings, and build operations. Removed twelve route-level helper calls and the inline build-site permission check. Node/SQLite and Worker/local D1, the shared HTTP security scenarios, OpenAPI comparison, and MCP compatibility passed. |
 | 2026-11-16 | EX4A | [Route metadata](../openspec/changes/archive/2026-11-16-ex04a-route-metadata/) | done. The v1 mount uses declared body, credential and rate-limit policies and shares delegated scopes with MCP. Build export registers only with a verifier. Node/SQLite, Worker/local D1, the security boundary and MCP compatibility suites passed, and the checked-in OpenAPI matches the full composition. |

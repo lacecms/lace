@@ -1,4 +1,6 @@
 import type {
+  CursorPage,
+  CursorPageInput,
   OAuthAuthority,
   OAuthConnection,
   OAuthGrant,
@@ -6,6 +8,8 @@ import type {
   OAuthIssuancePersistence,
   OAuthPreparedToken,
 } from "@lacecms/application";
+import { encodeCursor, operationalCursor, operationalPage } from "../shared/cursors.js";
+import { assertPageSize } from "../shared/values.js";
 
 export interface OAuthSqlStatement {
   readonly sql: string;
@@ -328,28 +332,35 @@ export class SqlOAuthIssuancePersistence implements OAuthIssuancePersistence {
   }
   public async listConnections(
     userId: string,
-    after: string | undefined,
-    limit: number,
-  ): Promise<readonly OAuthConnection[]> {
-    if (!Number.isInteger(limit) || limit < 1 || limit > 50)
-      throw new TypeError("Invalid OAuth list limit.");
-    const sql =
-      after === undefined
-        ? "select g.*,c.name as client_name from oauth_grants g join oauth_clients c on c.client_id=g.client_id where g.user_id=? order by g.created_at,g.id limit ?"
-        : "select g.*,c.name as client_name from oauth_grants g join oauth_clients c on c.client_id=g.client_id where g.user_id=? and (g.created_at,g.id) > (select created_at,id from oauth_grants where id=? and user_id=?) order by g.created_at,g.id limit ?";
-    return (
-      await this.driver.rows(
-        sql,
-        after === undefined ? [userId, limit] : [userId, after, userId, limit],
-      )
-    ).map((row) => ({
-      ...grantRow(row),
-      clientName:
-        typeof row.client_name === "string" && row.client_name.trim().length > 0
-          ? row.client_name
-          : string(row, "client_id"),
-      ...(row.last_used_at === null ? {} : { lastUsedAt: Number(row.last_used_at) }),
-    }));
+    input: CursorPageInput,
+  ): Promise<CursorPage<OAuthConnection>> {
+    const limit = assertPageSize(input.limit);
+    const owner = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(userId));
+    const ownerKey = Array.from(new Uint8Array(owner), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+    const kind = `account-oauth-connections:${ownerKey}`;
+    const after = operationalCursor(input.after, kind);
+    const boundary = after === undefined ? "" : "and (g.created_at,g.id) > (?,?)";
+    const rows = await this.driver.rows(
+      `select g.*,c.name as client_name from oauth_grants g
+        join oauth_clients c on c.client_id=g.client_id
+        where g.user_id=? ${boundary} order by g.created_at,g.id limit ?`,
+      after === undefined ? [userId, limit + 1] : [userId, after.timestamp, after.id, limit + 1],
+    );
+    return operationalPage(
+      rows,
+      limit,
+      (row) => encodeCursor(kind, Number(row.created_at), string(row, "id")),
+      (row) => ({
+        ...grantRow(row),
+        clientName:
+          typeof row.client_name === "string" && row.client_name.trim().length > 0
+            ? row.client_name
+            : string(row, "client_id"),
+        ...(row.last_used_at === null ? {} : { lastUsedAt: Number(row.last_used_at) }),
+      }),
+    );
   }
   public async revokeConnection(userId: string, grantId: string, now: number): Promise<boolean> {
     const result = await this.driver.batch([

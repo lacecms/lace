@@ -1,9 +1,9 @@
-import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@lacecms/content";
 import * as v from "valibot";
 import {
   identifierSchema,
   expectedRevisionSchema,
   idempotencyKeySchema,
+  numericPageLimitSchema,
 } from "../shared/primitives.js";
 import { collectionFieldFiltersSchema } from "./collection-queries.js";
 import { contentEntryListQuerySchema } from "./entries.js";
@@ -16,10 +16,7 @@ export const mcpToolArgumentSchemas = Object.freeze({
     ...contentEntryListQuerySchema.entries,
     modelKey: identifierSchema,
     filters: v.optional(collectionFieldFiltersSchema),
-    limit: v.optional(
-      v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(MAX_PAGE_SIZE)),
-      DEFAULT_PAGE_SIZE,
-    ),
+    limit: numericPageLimitSchema,
   }),
   get_entry: v.strictObject({ entryId: identifierSchema }),
   publish_entry: v.strictObject({

@@ -1,15 +1,17 @@
 import { notFound, parse, response } from "../shared/http.js";
-import { optionalJsonBody } from "../shared/request.js";
+import { cursorPageInput, optionalJsonBody } from "../shared/request.js";
 import {
   authenticationFailure,
   authorizationFailure,
   describePolicy,
+  validate,
   validationFailure,
 } from "../shared/openapi.js";
 import {
   buildSiteSelectionSchema,
   buildRequestSchema,
   buildQueueReceiptSchema,
+  operationalPageQuerySchema,
   siteBuildRecordSchema,
   siteBuildListSchema,
   identifierSchemaPublic,
@@ -24,7 +26,7 @@ import { v1Routes } from "../routing/v1-routes.js";
 const routes = v1Routes.builds;
 
 export function createBuildRoutes(routeContext: RouteContext) {
-  const { actor } = routeContext.actors;
+  const { actor, authenticate } = routeContext.actors;
   const { builds, buildSite } = routeContext.capabilities;
   return new Hono()
     .on(
@@ -53,18 +55,24 @@ export function createBuildRoutes(routeContext: RouteContext) {
         responses: {
           200: {
             content: { "application/json": { schema: resolver(siteBuildListSchema) } },
-            description: "Recent site builds",
+            description: "A page of persisted site builds, newest first",
           },
           ...authenticationFailure(),
           ...authorizationFailure(),
+          ...validationFailure(),
         },
         summary: "List site builds",
         tags: ["admin"],
       }),
+      authenticate,
+      validate("query", operationalPageQuerySchema),
       async (context) => {
         const resolvedActor = await actor(context);
-        const items = await builds.list(resolvedActor);
-        return response(siteBuildListSchema, { items: items.map(toSiteBuildRecordDto) });
+        const page = await builds.list(resolvedActor, cursorPageInput(context.req.valid("query")));
+        return response(siteBuildListSchema, {
+          ...page,
+          items: page.items.map(toSiteBuildRecordDto),
+        });
       },
     )
     .on(

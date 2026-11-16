@@ -1,12 +1,12 @@
 import { entryId, snapshotId } from "../shared/application-input.js";
-import { bodyResponse, invalid, notFound, parse, response } from "../shared/http.js";
+import { bodyResponse, invalid, noStore, notFound, parse, response } from "../shared/http.js";
 import {
+  cursorPageInput,
   entryIdParams,
   modelKeyParams,
   optionalIdempotencyKey,
   optionalJsonBody,
   optionalRevision,
-  pagination,
   revision,
 } from "../shared/request.js";
 import { contentModel } from "../shared/content-config.js";
@@ -27,6 +27,7 @@ import {
   createContentEntryRequestSchema,
   deleteContentEntryRequestSchema,
   duplicateContentEntryRequestSchema,
+  entityTagForVersion,
   revertContentEntryRequestSchema,
   toUnpublishContentEntryResultDto,
   unpublishContentEntryRequestSchema,
@@ -54,6 +55,15 @@ import type { RouteContext } from "../composition/route-context.js";
 import { v1Routes } from "../routing/v1-routes.js";
 
 const routes = v1Routes.content;
+const draftTagSchema = { type: "string", pattern: '^"[0-9]+"$', example: '"7"' } as const;
+const draftIfMatch = {
+  description:
+    "Quoted draft revision returned by the entry read. It must agree with expectedRevision when both are supplied.",
+  in: "header",
+  name: "If-Match",
+  required: false,
+  schema: draftTagSchema,
+} as const;
 
 export function createContentRoutes(routeContext: RouteContext) {
   const { actor } = routeContext.actors;
@@ -137,7 +147,7 @@ export function createContentRoutes(routeContext: RouteContext) {
           actor: await actor(context),
           ...(filters === undefined ? {} : { filters }),
           modelKey,
-          ...pagination(context.req.raw),
+          ...cursorPageInput(query),
           ...(query.q === undefined || query.q.length === 0 ? {} : { q: query.q }),
           ...(query.slug === undefined ? {} : { slug: query.slug }),
           ...(query.sort === undefined ? {} : { sort: query.sort }),
@@ -294,6 +304,9 @@ export function createContentRoutes(routeContext: RouteContext) {
           200: {
             content: { "application/json": { schema: resolver(adminContentEntrySchema) } },
             description: "Content entry with its last editor",
+            headers: {
+              ETag: { description: "The quoted draft revision.", schema: draftTagSchema },
+            },
           },
           ...authenticationFailure(),
           ...authorizationFailure(),
@@ -309,15 +322,19 @@ export function createContentRoutes(routeContext: RouteContext) {
           actor: resolvedActor,
           entryId: entryId(context.req.valid("param").entryId),
         });
-        return projection === null
-          ? notFound()
-          : response(adminContentEntrySchema, toAdminEntryProjectionDto(projection));
+        if (projection === null) return notFound();
+        const entry = toAdminEntryProjectionDto(projection);
+        return response(adminContentEntrySchema, entry, 200, {
+          ...noStore,
+          etag: entityTagForVersion(entry.draft.revision),
+        });
       },
     )
     .on(
       routes.saveDraft.method,
       routes.saveDraft.path,
       describePolicy(routes.saveDraft, {
+        parameters: [draftIfMatch],
         requestBody: {
           content: { "application/json": { schema: resolver(saveDraftRequestSchema) } },
         },
@@ -355,6 +372,7 @@ export function createContentRoutes(routeContext: RouteContext) {
       routes.publishEntry.method,
       routes.publishEntry.path,
       describePolicy(routes.publishEntry, {
+        parameters: [draftIfMatch],
         requestBody: {
           content: { "application/json": { schema: resolver(publishContentEntryRequestSchema) } },
         },
@@ -446,6 +464,7 @@ export function createContentRoutes(routeContext: RouteContext) {
       routes.revertDraft.method,
       routes.revertDraft.path,
       describePolicy(routes.revertDraft, {
+        parameters: [draftIfMatch],
         description:
           "Replaces the draft with the current publication. Requires content:write and the expected draft revision.",
         requestBody: {
@@ -482,6 +501,7 @@ export function createContentRoutes(routeContext: RouteContext) {
       routes.duplicateEntry.method,
       routes.duplicateEntry.path,
       describePolicy(routes.duplicateEntry, {
+        parameters: [draftIfMatch],
         description:
           "Creates an unpublished copy of a collection entry's draft with a cleared slug. Requires content:write.",
         requestBody: {
@@ -519,6 +539,7 @@ export function createContentRoutes(routeContext: RouteContext) {
       routes.deleteEntry.method,
       routes.deleteEntry.path,
       describePolicy(routes.deleteEntry, {
+        parameters: [draftIfMatch],
         summary: "Delete content entry",
         tags: ["admin"],
         description:

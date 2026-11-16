@@ -7,6 +7,53 @@ import { actorId } from "@lacecms/domain";
 
 import { editor, fixture, json } from "../test-support/app-harness.js";
 
+test("entry detail returns a draft precondition without caching the publication", async () => {
+  const { app } = await fixture();
+  const draft = { blocks: [], fields: {}, slug: "post", title: "Post" };
+  const requestJson = (method: string, body: unknown, headers: Record<string, string> = {}) => ({
+    body: JSON.stringify(body),
+    headers: { "content-type": "application/json", ...headers },
+    method,
+  });
+  const created = await json(app, "/api/v1/admin/models/posts/entries", requestJson("POST", draft));
+  expect(created.response.status).toBe(201);
+  const path = `/api/v1/admin/entries/${created.body.id}`;
+  const { response, body } = await json(app, path);
+  const etag = response.headers.get("etag")!;
+  expect(etag).toBe(`"${body.draft.revision}"`);
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  expect(
+    (await json(app, `${path}/publish`, requestJson("POST", {}, { "if-match": etag }))).response
+      .status,
+  ).toBe(200);
+
+  const published = await json(app, path, { headers: { "if-none-match": etag } });
+  expect(published).toMatchObject({
+    body: { published: { state: "published" } },
+    response: { status: 200 },
+  });
+  expect(published.response.headers.get("etag")).toBe(etag);
+  expect(published.response.headers.get("cache-control")).toBe("no-store");
+
+  const save = (title: string) =>
+    json(app, `${path}/draft`, requestJson("PUT", { ...draft, title }, { "if-match": etag }));
+  expect((await save("Changed")).response.status).toBe(200);
+  expect(await save("Stale")).toMatchObject({
+    body: { error: { code: "CONTENT_REVISION_CONFLICT" } },
+    response: { status: 409 },
+  });
+  const updated = await json(app, path);
+  expect(updated.body.draft).toMatchObject({ revision: 2, title: "Changed" });
+  expect(updated.response.headers.get("etag")).toBe('"2"');
+
+  const missing = await json(app, "/api/v1/admin/entries/missing");
+  expect(missing.response.status).toBe(404);
+  expect(missing.response.headers.get("etag")).toBeNull();
+  const unauthorized = await json((await fixture({ actor: null })).app, path);
+  expect(unauthorized.response.status).toBe(401);
+  expect(unauthorized.response.headers.get("etag")).toBeNull();
+});
+
 test("content model discovery retains interleaved declaration order", async () => {
   const models = [
     definePage({ key: "zebra", path: "/zebra", version: 1 }),

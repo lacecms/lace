@@ -108,10 +108,9 @@ function memorySecurity() {
         };
       },
     ),
-    listInvitations: vi.fn<AccountUseCasesInput["security"]["listInvitations"]>(async () => [
-      invitation,
-      { ...invitation, expiresAt: unixMilliseconds(NOW - 1), id: "inv-old" },
-    ]),
+    listInvitations: vi.fn<AccountUseCasesInput["security"]["listInvitations"]>(async () => ({
+      items: [invitation, { ...invitation, expiresAt: unixMilliseconds(NOW - 1), id: "inv-old" }],
+    })),
     listSessions: vi.fn<AccountUseCasesInput["security"]["listSessions"]>(async ({ userId }) =>
       sessions.filter((session) => session.userId === userId),
     ),
@@ -134,9 +133,11 @@ function memorySecurity() {
     disableUser: () => {
       throw new Error("Unexpected disableUser");
     },
-    listUsers: vi.fn<AccountUseCasesInput["security"]["listUsers"]>(async () => [
-      { disabled: false, email: "editor@example.com", id: editor.id, role: "editor" },
-    ]),
+    listUsers: vi.fn<AccountUseCasesInput["security"]["listUsers"]>(async () => ({
+      items: [{ disabled: false, email: "editor@example.com", id: editor.id, role: "editor" }],
+      disabledCount: 0,
+      total: 1,
+    })),
     updateUser: vi.fn<AccountUseCasesInput["security"]["updateUser"]>(async () => null),
   };
 }
@@ -163,18 +164,22 @@ test("user administration checks session permission before delegating to the gua
   const delegated = attenuateActor(admin, { permissions: ["users:manage"], operations: [] });
   const update = { userId: editor.id, disabled: true };
   for (const actor of [editor, delegated]) {
-    await expect(accounts.listUsers(actor)).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
+    await expect(accounts.listUsers(actor, { limit: 50 })).rejects.toMatchObject({
+      code: "AUTHORIZATION_DENIED",
+    });
     await expect(accounts.updateUser(actor, update)).rejects.toMatchObject({
       code: "AUTHORIZATION_DENIED",
     });
-    await expect(accounts.listInvitations(actor)).rejects.toMatchObject({
+    await expect(accounts.listInvitations(actor, { limit: 50 })).rejects.toMatchObject({
       code: "AUTHORIZATION_DENIED",
     });
   }
   expect(security.listUsers).not.toHaveBeenCalled();
   expect(security.updateUser).not.toHaveBeenCalled();
   expect(security.listInvitations).not.toHaveBeenCalled();
-  await expect(accounts.listUsers(admin)).resolves.toMatchObject([{ id: editor.id }]);
+  await expect(accounts.listUsers(admin, { limit: 50 })).resolves.toMatchObject({
+    items: [{ id: editor.id }],
+  });
   await expect(accounts.updateUser(admin, update)).resolves.toBeNull();
   expect(security.updateUser).toHaveBeenCalledWith(update);
 });
@@ -192,7 +197,7 @@ test("bootstrap operations preserve the guarded inputs and outcomes", async () =
 test("session summary and self-service accept only a session actor", async () => {
   const { accounts, security } = useCases();
   const delegated = attenuateActor(editor, { permissions: ["content:read"], operations: [] });
-  const listConnections = vi.fn(async () => []);
+  const listConnections = vi.fn(async () => ({ items: [] }));
   const revokeConnection = vi.fn(async () => false);
   const connections = new OAuthConnectionUseCases({
     clock: { now: () => unixMilliseconds(NOW) },
@@ -232,7 +237,7 @@ describe("administrator invitations", () => {
     await expect(
       accounts.invite(editor, { email: "x@example.com", role: "viewer" }),
     ).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
-    await expect(accounts.listInvitations(editor)).rejects.toMatchObject({
+    await expect(accounts.listInvitations(editor, { limit: 50 })).rejects.toMatchObject({
       code: "AUTHORIZATION_DENIED",
     });
     await expect(accounts.resendInvitation(editor, "inv-1")).rejects.toMatchObject({
@@ -324,7 +329,7 @@ describe("administrator invitations", () => {
 
   test("listed invitations derive pending and expired states without tokens", async () => {
     const { accounts } = useCases();
-    const items = await accounts.listInvitations(admin);
+    const { items } = await accounts.listInvitations(admin, { limit: 50 });
     expect(items.map((item) => [item.id, item.state])).toEqual([
       ["inv-1", "pending"],
       ["inv-old", "expired"],

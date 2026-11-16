@@ -132,7 +132,12 @@ media and media tags, site builds, the session summary, users, invitations,
 settings status, build tokens, import tokens and the import-credential
 description.
 
-- The draft `PUT` takes `expectedRevision` plus the complete editable draft
+- Entry detail returns the quoted draft revision in `ETag` with
+  `Cache-Control: no-store`. Save, publish, revert, delete and duplicate
+  accept that tag through `If-Match`. A supplied body revision must agree
+  with the header. Media metadata uses its monotonic `updatedAt` tag.
+  Unpublish guards the observed publication with `expectedPublishedSnapshotId`.
+- The draft `PUT` takes a revision precondition plus the complete editable draft
   (title, slug, fields, ordered blocks and, for SEO-enabled models, `seo`),
   validates and persists it atomically, and returns the incremented revision.
   The admin edits blocks locally but saves through this aggregate endpoint.
@@ -153,6 +158,11 @@ description.
 - Import lookups are list parameters: exact draft `slug` on collection entry
   lists and `sha256` on media lists, both applied before paging and bound into
   continuation cursors.
+- Users, invitations and build history use bounded keyset pages with an
+  opaque `after` and an optional `nextCursor`. User pages also provide counts
+  over all accounts. MCP connections use the same page contract with cursors
+  scoped to the session owner. Admin entry and media lists, these operational
+  lists and MCP `list_entries` share the 1–100 page limit and default of 50.
 
 `lace import <dir>` is a client of these routes
 ([ADR 0017](../adr/0017-content-import-client.md),

@@ -370,7 +370,7 @@ export function accountSecurity(overrides: Partial<SecurityService> = {}) {
         token: opaqueTokenSecret(TOKEN),
         userId: "editor",
       }),
-      listInvitations: record("listInvitations", []),
+      listInvitations: record("listInvitations", { items: [] }),
       listSessions: record("listSessions", [
         { createdAt: unixMilliseconds(1), id: "s-current", lastActiveAt: unixMilliseconds(2) },
         {

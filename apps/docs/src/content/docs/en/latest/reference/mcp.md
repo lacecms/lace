@@ -55,6 +55,12 @@ The tool list shows only the tools the effective authority permits, and every ca
 | `save_draft`          | `content:write`   | `entryId`, `expectedRevision`, `title`, `fields`, `blocks`; optional `slug`, `seo`                  | Replace the complete draft at the expected revision. Never publishes or requests a build; a stale revision fails instead of overwriting.                                                   |
 | `publish_entry`       | `content:publish` | `entryId`, `expectedRevision`; optional `idempotencyKey`                                            | Publish the saved draft at that revision, with the same checks as Admin. Retry an uncertain call with the same key; a replay returns `publication: "replayed"` and does not publish again. |
 
+`list_entries` takes `limit` as a JSON integer from 1 to 100, with a
+default of 50. This is the same page-size rule as the admin entry REST
+list. An invalid limit produces a tool error with a validation issue at
+`/limit`. To continue, send the returned `nextCursor` as `after` with the
+same model and query.
+
 Hidden conditional fields keep their draft values, are not required for publication and are never published. Unpublishing, deletion, revert, duplication, media, users, settings and builds are not available through MCP for any role. Published content reaches the site with the next successful build.
 
 ## Responses and limits

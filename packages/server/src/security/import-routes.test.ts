@@ -54,6 +54,8 @@ test("import tokens reach allowlisted routes as their creator without a session"
   expect(entry.updatedBy).toMatchObject({ id: "admin" });
   const read = await call("GET", `/api/v1/admin/entries/${entry.id}`);
   expect(read.status).toBe(200);
+  expect(read.headers.get("etag")).toBe(`"${entry.draft.revision}"`);
+  expect(read.headers.get("cache-control")).toBe("no-store");
   const saved = await call("PUT", `/api/v1/admin/entries/${entry.id}/draft`, {
     blocks: [],
     expectedRevision: 1,

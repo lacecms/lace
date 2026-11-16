@@ -14,6 +14,29 @@ export const cases: RepositoryContractCase[] = [];
 const contract = registerContract(cases);
 
 contract(
+  "traverses build history beyond 100 rows in request-time and ID order",
+  async (runtime, expect) => {
+    const { repository, sql } = await runtime.open({ resolveModel: noModels });
+    const ids = Array.from(
+      { length: 105 },
+      (_, index) => `build-${String(index).padStart(3, "0")}`,
+    );
+    // A recursive insert seeds ties and long history without one D1 call per fixture row.
+    await sql.run(`
+    with recursive history(n) as (values(0) union all select n+1 from history where n<104)
+    insert into site_builds (id, reason, status, target_version, requested_by, requested_at)
+    select printf('build-%03d', n), 'manual', 'succeeded', 1, 'admin', n / 5 from history
+  `);
+    const first = await repository.listSiteBuilds({ limit: 100 });
+    expect(first.items.map((item) => item.id)).toEqual(ids.slice(5).reverse());
+    expect(first.nextCursor).toBeDefined();
+    const last = await repository.listSiteBuilds({ after: first.nextCursor!, limit: 5 });
+    expect(last.items.map((item) => item.id)).toEqual(ids.slice(0, 5).reverse());
+    expect(last).not.toHaveProperty("nextCursor");
+  },
+);
+
+contract(
   "coalesces manual build requests until claim and queues later work separately",
   async (runtime, expect) => {
     const { repository, sql } = await runtime.open({
@@ -212,7 +235,7 @@ contract(
         second.eventId,
       ),
     ).toEqual({ status: "failed", completed_at: 25_001, error: "trigger_unavailable" });
-    expect(await repository.listSiteBuilds(50)).toMatchObject([
+    expect((await repository.listSiteBuilds({ limit: 50 })).items).toMatchObject([
       {
         completedAt: 25_001,
         error: "trigger_unavailable",

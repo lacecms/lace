@@ -22,6 +22,7 @@ import type { SecurityRole, SensitiveRateLimiter } from "../ports/security.js";
 import type { OpaqueTokenSecret } from "../shared/brands.js";
 import { opaqueTokenSecret } from "../shared/brands.js";
 import { actorPermissions, requireSessionActor } from "../shared/permissions.js";
+import type { CursorPage, CursorPageInput } from "../shared/pagination.js";
 
 /** Invitations stay valid for 72 hours after issuance or resend. */
 export const INVITATION_TTL_MS = 72 * 60 * 60 * 1000;
@@ -208,9 +209,9 @@ export class AccountUseCases {
     return this.input.security.bootstrap({ ...input, token: opaqueTokenSecret(input.token) });
   }
 
-  public async listUsers(actor: Actor) {
+  public async listUsers(actor: Actor, input: CursorPageInput) {
     requireSessionActor(actor, "users:manage");
-    return this.input.security.listUsers();
+    return this.input.security.listUsers(input);
   }
 
   public async updateUser(actor: Actor, input: Parameters<AccountSecurityPort["updateUser"]>[0]) {
@@ -300,10 +301,14 @@ export class AccountUseCases {
     return this.sendInvitation(actor, created.invitation, created.token, now);
   }
 
-  public async listInvitations(actor: Actor): Promise<readonly InvitationView[]> {
+  public async listInvitations(
+    actor: Actor,
+    input: CursorPageInput,
+  ): Promise<CursorPage<InvitationView>> {
     requireSessionActor(actor, "users:manage");
     const now = this.now();
-    return (await this.input.security.listInvitations()).map((record) => this.view(record, now));
+    const page = await this.input.security.listInvitations(input);
+    return { ...page, items: page.items.map((record) => this.view(record, now)) };
   }
 
   public async resendInvitation(

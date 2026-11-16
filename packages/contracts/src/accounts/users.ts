@@ -1,5 +1,9 @@
 import * as v from "valibot";
-import { identifierSchema } from "../shared/primitives.js";
+import {
+  cursorPageSchema,
+  identifierSchema,
+  nonNegativeIntegerSchema,
+} from "../shared/primitives.js";
 
 export const roleSchema = v.picklist(["admin", "editor", "viewer"]);
 export const emailSchema = v.pipe(v.string(), v.email(), v.maxLength(320));
@@ -22,7 +26,11 @@ export const managedUserSchema = v.strictObject({
   id: identifierSchema,
   role: roleSchema,
 });
-export const managedUserListSchema = v.strictObject({ items: v.array(managedUserSchema) });
+export const managedUserListSchema = v.strictObject({
+  ...cursorPageSchema(managedUserSchema).entries,
+  disabledCount: nonNegativeIntegerSchema,
+  total: nonNegativeIntegerSchema,
+});
 export const permissionSchema = v.picklist([
   "content:read",
   "content:write",

@@ -1,5 +1,5 @@
 import { bodyResponse, noStore, notFound, parse, response } from "../shared/http.js";
-import { optionalJsonBody } from "../shared/request.js";
+import { cursorPageInput, optionalJsonBody } from "../shared/request.js";
 import {
   authenticationFailure,
   authorizationFailure,
@@ -11,6 +11,7 @@ import { invitationDto, invitationIssueDto, linkIssueDto } from "../shared/accou
 import {
   managedUserListSchema,
   managedUserSchema,
+  operationalPageQuerySchema,
   errorEnvelopeSchema,
   identifierSchemaPublic,
   userUpdateRequestSchema,
@@ -31,7 +32,7 @@ import { v1Routes } from "../routing/v1-routes.js";
 const routes = v1Routes.adminUsers;
 
 export function createAdminUserRoutes(routeContext: RouteContext) {
-  const { actor } = routeContext.actors;
+  const { actor, authenticate } = routeContext.actors;
   const { accounts, installedAccounts } = routeContext.capabilities;
   return new Hono()
     .on(
@@ -47,13 +48,18 @@ export function createAdminUserRoutes(routeContext: RouteContext) {
           },
           ...authenticationFailure(),
           ...authorizationFailure(),
+          ...validationFailure(),
         },
       }),
+      authenticate,
+      validate("query", operationalPageQuerySchema),
       async (context) => {
         const resolvedActor = await actor(context);
-        return response(managedUserListSchema, {
-          items: await installedAccounts().listUsers(resolvedActor),
-        });
+        const page = await installedAccounts().listUsers(
+          resolvedActor,
+          cursorPageInput(context.req.valid("query")),
+        );
+        return response(managedUserListSchema, page);
       },
     )
     .on(
@@ -69,11 +75,22 @@ export function createAdminUserRoutes(routeContext: RouteContext) {
           },
           ...authenticationFailure(),
           ...authorizationFailure(),
+          ...validationFailure(),
         },
       }),
+      authenticate,
+      validate("query", operationalPageQuerySchema),
       async (context) => {
-        const items = await accounts().listInvitations(await actor(context));
-        return response(invitationListSchema, { items: items.map(invitationDto) }, 200, noStore);
+        const page = await accounts().listInvitations(
+          await actor(context),
+          cursorPageInput(context.req.valid("query")),
+        );
+        return response(
+          invitationListSchema,
+          { ...page, items: page.items.map(invitationDto) },
+          200,
+          noStore,
+        );
       },
     )
     .on(

@@ -31,7 +31,10 @@ test("uses validated credentialed user, status, and token endpoints", async () =
         engineVersion: "0.1.0-alpha.4",
         ready: true,
       });
-    if (path.endsWith("/users")) return Response.json({ items: [account] });
+    if (path.includes("/users?after="))
+      return Response.json({ items: [], total: 1, disabledCount: 0 });
+    if (path.endsWith("/users"))
+      return Response.json({ items: [account], total: 1, disabledCount: 0, nextCursor: "next" });
     if (path.endsWith("/user-1")) return Response.json({ ...account, role: "admin" });
     if (path.endsWith("/api-tokens") && init?.method === "POST")
       return Response.json({ ...token, token: "secret" }, { status: 201 });
@@ -39,7 +42,14 @@ test("uses validated credentialed user, status, and token endpoints", async () =
     return Response.json({ ...token, revokedAt: "2026-09-21T00:00:00.000Z" });
   });
   const client = createAdminClient(fetcher as typeof fetch);
-  await expect(client.listUsers()).resolves.toEqual({ items: [account] });
+  await expect(client.listUsers()).resolves.toEqual({
+    items: [account],
+    nextCursor: "next",
+    total: 1,
+    disabledCount: 0,
+  });
+  await expect(client.listUsers("a&b")).resolves.toEqual({ items: [], total: 1, disabledCount: 0 });
+  expect(fetcher).toHaveBeenLastCalledWith("/api/v1/admin/users?after=a%26b", expect.anything());
   await expect(client.updateUser("user-1", { role: "admin" })).resolves.toMatchObject({
     role: "admin",
   });

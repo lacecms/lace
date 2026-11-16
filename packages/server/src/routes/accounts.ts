@@ -7,7 +7,7 @@ import {
   parse,
   response,
 } from "../shared/http.js";
-import { optionalJsonBody } from "../shared/request.js";
+import { cursorPageInput, optionalJsonBody } from "../shared/request.js";
 import {
   authenticationFailure,
   authorizationFailure,
@@ -339,7 +339,7 @@ export function createAccountRoutes(routeContext: RouteContext) {
 }
 
 function createOAuthConnectionRoutes(
-  { actors: { actor }, capabilities }: RouteContext,
+  { actors: { actor, authenticate }, capabilities }: RouteContext,
   connections: NonNullable<RouteContext["capabilities"]["oauthConnections"]>,
 ) {
   return new Hono()
@@ -349,22 +349,6 @@ function createOAuthConnectionRoutes(
       describePolicy(routes.connections, {
         summary: "List the signed-in user's MCP connections",
         tags: ["account"],
-        parameters: [
-          {
-            in: "query",
-            name: "after",
-            required: false,
-            schema: openApiParameterSchema(oauthConnectionListQuerySchema.entries.after),
-          },
-          {
-            in: "query",
-            name: "limit",
-            required: false,
-            schema: openApiParameterSchema(oauthConnectionListQuerySchema.entries.limit, {
-              errorMode: "ignore",
-            }),
-          },
-        ],
         responses: {
           200: {
             description: "Connections without credentials",
@@ -375,18 +359,19 @@ function createOAuthConnectionRoutes(
           ...validationFailure(),
         },
       }),
+      authenticate,
+      validate("query", oauthConnectionListQuerySchema),
       async (context) => {
         const resolvedActor = await actor(context);
-        const query = parse(oauthConnectionListQuerySchema, context.req.query());
-        const limit = query.limit === undefined ? 20 : Number(query.limit);
-        const items = await connections.list(resolvedActor, {
-          ...(query.after === undefined ? {} : { after: query.after }),
-          limit,
-        });
+        const page = await connections.list(
+          resolvedActor,
+          cursorPageInput(context.req.valid("query")),
+        );
         return response(
           oauthConnectionListSchema,
           {
-            items: items.map((item) => ({
+            ...page,
+            items: page.items.map((item) => ({
               id: item.id,
               clientName: item.clientName,
               scopes: [...item.scopes],
@@ -397,7 +382,6 @@ function createOAuthConnectionRoutes(
                 ? {}
                 : { lastUsedAt: toIsoTimestamp(item.lastUsedAt) }),
             })),
-            nextCursor: items.length === limit ? items.at(-1)!.id : null,
           },
           200,
           noStore,

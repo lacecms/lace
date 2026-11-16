@@ -10,8 +10,14 @@ export function buildsClient(fetcher: Fetcher) {
   return {
     loadBuildSite: async () =>
       parse(buildSiteSelectionSchema, await request(fetcher, "/api/v1/admin/build-site")),
-    listBuilds: async () =>
-      parse(siteBuildListSchema, await request(fetcher, "/api/v1/admin/site-builds")),
+    listBuilds: async (after?: string) =>
+      parse(
+        siteBuildListSchema,
+        await request(
+          fetcher,
+          `/api/v1/admin/site-builds${after === undefined ? "" : `?after=${encodeURIComponent(after)}`}`,
+        ),
+      ),
     getBuild: async (buildId: string) =>
       parse(
         siteBuildRecordSchema,

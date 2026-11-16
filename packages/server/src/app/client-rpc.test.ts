@@ -3,6 +3,9 @@ import type {
   BuildExportPageDto,
   BuildTokenCreatedDto,
   ErrorEnvelope,
+  ManagedUserListDto,
+  OAuthConnectionListDto,
+  SiteBuildListDto,
 } from "@lacecms/contracts";
 import type { saveDraftRequestSchema } from "@lacecms/contracts";
 import type { createLaceApp } from "@lacecms/server";
@@ -34,6 +37,22 @@ test("the mounted client infers validated requests and their JSON replies", () =
   type IssueToken = (typeof v1.admin)["api-tokens"]["$post"];
   expectTypeOf<Awaited<ReturnType<IssueToken>>["status"]>().toEqualTypeOf<201 | 422>();
   expectTypeOf<InferResponseType<IssueToken, 201>>().toEqualTypeOf<BuildTokenCreatedDto>();
+});
+
+test("protected cursor reads infer decimal query inputs and their paged DTOs", () => {
+  type Users = (typeof v1.admin.users)["$get"];
+  type Builds = (typeof v1.admin)["site-builds"]["$get"];
+  type Connections = (typeof v1.account)["mcp-connections"]["$get"];
+  expectTypeOf<NonNullable<InferRequestType<Users>["query"]>["limit"]>().toEqualTypeOf<
+    string | undefined
+  >();
+  expectTypeOf<NonNullable<InferRequestType<Builds>["query"]>["after"]>().toEqualTypeOf<
+    string | undefined
+  >();
+  expectTypeOf<InferResponseType<Users, 200>>().toEqualTypeOf<ManagedUserListDto>();
+  expectTypeOf<InferResponseType<Builds, 200>>().toEqualTypeOf<SiteBuildListDto>();
+  expectTypeOf<InferResponseType<Connections, 200>>().toEqualTypeOf<OAuthConnectionListDto>();
+  expectTypeOf<InferResponseType<Connections, 422>>().toEqualTypeOf<ErrorEnvelope>();
 });
 
 test("the mounted client keeps empty and binary replies separate from JSON", () => {

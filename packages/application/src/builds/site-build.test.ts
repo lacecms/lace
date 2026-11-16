@@ -34,7 +34,7 @@ test("site-build timing follows the fixed architecture defaults", () => {
 });
 
 test("site selection and history are available only to signed-in content readers", async () => {
-  const listSiteBuilds = vi.fn(async () => []);
+  const listSiteBuilds = vi.fn(async () => ({ items: [] }));
   const getSiteBuild = vi.fn(async () => null);
   const requestBuild = vi.fn(async () => ({
     eventId: dispatcherEventId("event"),
@@ -55,7 +55,7 @@ test("site selection and history are available only to signed-in content readers
   );
   const prepare = vi.fn(async () => "build-1");
   expect(() => readBuildSite(delegated, site)).toThrow(DomainError);
-  expect(() => useCases.list(delegated)).toThrow(DomainError);
+  expect(() => useCases.list(delegated, { limit: 50 })).toThrow(DomainError);
   expect(() => useCases.get(delegated, "build-1")).toThrow(DomainError);
   expect(() => useCases.retry(delegated, prepare)).toThrow(DomainError);
   for (const port of [listSiteBuilds, getSiteBuild, requestBuild, prepare])
@@ -63,7 +63,7 @@ test("site selection and history are available only to signed-in content readers
   for (const role of ["admin", "editor", "viewer"] as const) {
     const actor = { id: actorId(role), role };
     expect(readBuildSite(actor, site)).toEqual(site);
-    await expect(useCases.list(actor)).resolves.toEqual([]);
+    await expect(useCases.list(actor, { limit: 50 })).resolves.toEqual({ items: [] });
     await expect(useCases.get(actor, "build-1")).resolves.toBeNull();
   }
 });

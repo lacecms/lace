@@ -1233,12 +1233,11 @@
         "operationId": "getApiV1AccountMcpConnections",
         "parameters": [
           {
+            "description": "Opaque continuation from the preceding page of this list.",
             "in": "query",
             "name": "after",
-            "required": false,
             "schema": {
-              "$schema": "http://json-schema.org/draft-07/schema#",
-              "maxLength": 255,
+              "maxLength": 4096,
               "minLength": 1,
               "type": "string"
             }
@@ -1246,10 +1245,9 @@
           {
             "in": "query",
             "name": "limit",
-            "required": false,
             "schema": {
-              "$schema": "http://json-schema.org/draft-07/schema#",
-              "pattern": "^(?:[1-9]|[1-4][0-9]|50)$",
+              "default": "50",
+              "pattern": "^(?:[1-9]|[1-9][0-9]|100)$",
               "type": "string"
             }
           }
@@ -1312,19 +1310,12 @@
                       "type": "array"
                     },
                     "nextCursor": {
-                      "anyOf": [
-                        {
-                          "maxLength": 4096,
-                          "minLength": 1,
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "maxLength": 4096,
+                      "minLength": 1,
+                      "type": "string"
                     }
                   },
-                  "required": ["items", "nextCursor"],
+                  "required": ["items"],
                   "type": "object"
                 }
               }
@@ -2599,6 +2590,17 @@
         "operationId": "deleteApiV1AdminEntriesByEntryId",
         "parameters": [
           {
+            "description": "Quoted draft revision returned by the entry read. It must agree with expectedRevision when both are supplied.",
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "example": "\"7\"",
+              "pattern": "^\"[0-9]+\"$",
+              "type": "string"
+            }
+          },
+          {
             "in": "path",
             "name": "entryId",
             "required": true,
@@ -3109,7 +3111,17 @@
                 }
               }
             },
-            "description": "Content entry with its last editor"
+            "description": "Content entry with its last editor",
+            "headers": {
+              "ETag": {
+                "description": "The quoted draft revision.",
+                "schema": {
+                  "example": "\"7\"",
+                  "pattern": "^\"[0-9]+\"$",
+                  "type": "string"
+                }
+              }
+            }
           },
           "401": {
             "content": {
@@ -3158,6 +3170,17 @@
       "put": {
         "operationId": "putApiV1AdminEntriesByEntryIdDraft",
         "parameters": [
+          {
+            "description": "Quoted draft revision returned by the entry read. It must agree with expectedRevision when both are supplied.",
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "example": "\"7\"",
+              "pattern": "^\"[0-9]+\"$",
+              "type": "string"
+            }
+          },
           {
             "in": "path",
             "name": "entryId",
@@ -3760,6 +3783,17 @@
         "description": "Creates an unpublished copy of a collection entry's draft with a cleared slug. Requires content:write.",
         "operationId": "postApiV1AdminEntriesByEntryIdDuplicate",
         "parameters": [
+          {
+            "description": "Quoted draft revision returned by the entry read. It must agree with expectedRevision when both are supplied.",
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "example": "\"7\"",
+              "pattern": "^\"[0-9]+\"$",
+              "type": "string"
+            }
+          },
           {
             "in": "path",
             "name": "entryId",
@@ -4533,6 +4567,17 @@
         "operationId": "postApiV1AdminEntriesByEntryIdPublish",
         "parameters": [
           {
+            "description": "Quoted draft revision returned by the entry read. It must agree with expectedRevision when both are supplied.",
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "example": "\"7\"",
+              "pattern": "^\"[0-9]+\"$",
+              "type": "string"
+            }
+          },
+          {
             "in": "path",
             "name": "entryId",
             "required": true,
@@ -5060,6 +5105,17 @@
         "description": "Replaces the draft with the current publication. Requires content:write and the expected draft revision.",
         "operationId": "postApiV1AdminEntriesByEntryIdRevert",
         "parameters": [
+          {
+            "description": "Quoted draft revision returned by the entry read. It must agree with expectedRevision when both are supplied.",
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "example": "\"7\"",
+              "pattern": "^\"[0-9]+\"$",
+              "type": "string"
+            }
+          },
           {
             "in": "path",
             "name": "entryId",
@@ -6647,6 +6703,27 @@
     "/api/v1/admin/invitations": {
       "get": {
         "operationId": "getApiV1AdminInvitations",
+        "parameters": [
+          {
+            "description": "Opaque continuation from the preceding page of this list.",
+            "in": "query",
+            "name": "after",
+            "schema": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": "50",
+              "pattern": "^(?:[1-9]|[1-9][0-9]|100)$",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6696,6 +6773,11 @@
                         "type": "object"
                       },
                       "type": "array"
+                    },
+                    "nextCursor": {
+                      "maxLength": 4096,
+                      "minLength": 1,
+                      "type": "string"
                     }
                   },
                   "required": ["items"],
@@ -6724,6 +6806,16 @@
               }
             },
             "description": "Permission denied (AUTHORIZATION_DENIED)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The request did not satisfy the API contract (VALIDATION_FAILED)"
           }
         },
         "security": [
@@ -7528,6 +7620,7 @@
             "in": "query",
             "name": "limit",
             "schema": {
+              "default": "50",
               "pattern": "^(?:[1-9]|[1-9][0-9]|100)$",
               "type": "string"
             }
@@ -9040,6 +9133,7 @@
             "in": "query",
             "name": "limit",
             "schema": {
+              "default": "50",
               "pattern": "^(?:[1-9]|[1-9][0-9]|100)$",
               "type": "string"
             }
@@ -10160,6 +10254,27 @@
     "/api/v1/admin/site-builds": {
       "get": {
         "operationId": "getApiV1AdminSiteBuilds",
+        "parameters": [
+          {
+            "description": "Opaque continuation from the preceding page of this list.",
+            "in": "query",
+            "name": "after",
+            "schema": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": "50",
+              "pattern": "^(?:[1-9]|[1-9][0-9]|100)$",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -10261,6 +10376,11 @@
                       },
                       "maxItems": 100,
                       "type": "array"
+                    },
+                    "nextCursor": {
+                      "maxLength": 4096,
+                      "minLength": 1,
+                      "type": "string"
                     }
                   },
                   "required": ["items"],
@@ -10268,7 +10388,7 @@
                 }
               }
             },
-            "description": "Recent site builds"
+            "description": "A page of persisted site builds, newest first"
           },
           "401": {
             "content": {
@@ -10289,6 +10409,16 @@
               }
             },
             "description": "Permission denied (AUTHORIZATION_DENIED)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The request did not satisfy the API contract (VALIDATION_FAILED)"
           }
         },
         "security": [
@@ -10465,6 +10595,27 @@
     "/api/v1/admin/users": {
       "get": {
         "operationId": "getApiV1AdminUsers",
+        "parameters": [
+          {
+            "description": "Opaque continuation from the preceding page of this list.",
+            "in": "query",
+            "name": "after",
+            "schema": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": "50",
+              "pattern": "^(?:[1-9]|[1-9][0-9]|100)$",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -10472,6 +10623,10 @@
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "disabledCount": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
                     "items": {
                       "items": {
                         "additionalProperties": false,
@@ -10498,9 +10653,18 @@
                         "type": "object"
                       },
                       "type": "array"
+                    },
+                    "nextCursor": {
+                      "maxLength": 4096,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "total": {
+                      "minimum": 0,
+                      "type": "integer"
                     }
                   },
-                  "required": ["items"],
+                  "required": ["items", "disabledCount", "total"],
                   "type": "object"
                 }
               }
@@ -10526,6 +10690,16 @@
               }
             },
             "description": "Permission denied (AUTHORIZATION_DENIED)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The request did not satisfy the API contract (VALIDATION_FAILED)"
           }
         },
         "security": [

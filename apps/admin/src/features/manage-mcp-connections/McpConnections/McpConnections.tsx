@@ -1,10 +1,16 @@
 import type { OAuthConnectionDto } from "@lacecms/contracts";
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useSessionRecovery } from "../../../entities/session/index.js";
-import { adminQueryKeys, errorDescription, useAdminClient } from "../../../shared/api/index.js";
+import {
+  adminQueryKeys,
+  errorDescription,
+  useAdminClient,
+  useCursorList,
+} from "../../../shared/api/index.js";
 import { formatAbsoluteTime } from "../../../shared/lib/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
+import { CursorListActions } from "../../../shared/ui/CursorListActions/index.js";
 import {
   Dialog,
   DialogClose,
@@ -28,14 +34,10 @@ export function McpConnections() {
     queryKey: adminQueryKeys.accountCapabilities,
     queryFn: client.loadAccountCapabilities,
   });
-  const connections = useInfiniteQuery({
-    queryKey: adminQueryKeys.mcpConnections,
-    queryFn: ({ pageParam }) => client.listMcpConnections(pageParam),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  const connections = useCursorList(adminQueryKeys.mcpConnections, client.listMcpConnections, {
     enabled: capabilities.data?.mcpEnabled === true,
   });
-  useSessionRecovery(capabilities.error ?? connections.error);
+  useSessionRecovery(capabilities.error ?? connections.query.error);
   const revoke = useMutation({
     mutationFn: (id: string) => client.revokeMcpConnection(id),
     onSuccess: async () => {
@@ -53,7 +55,7 @@ export function McpConnections() {
         onRetry={() => void capabilities.refetch()}
       />
     );
-  const items = connections.data?.pages.flatMap((page) => page.items) ?? [];
+  const items = connections.query.data?.pages.flatMap((page) => page.items);
   return (
     <section
       aria-labelledby="mcp-connections-title"
@@ -67,85 +69,69 @@ export function McpConnections() {
           Assistants connected to your account. Revoking access also stops token renewal.
         </p>
       </div>
-      {connections.isPending ? (
+      {connections.query.isPending ? (
         <LoadingState label="Loading assistant connections" lines={2} />
-      ) : connections.error ? (
-        <ErrorState
-          title="Could not load connections"
-          description={errorDescription(connections.error)}
-          onRetry={() => void connections.refetch()}
-        />
-      ) : (
-        <>
-          {items.length === 0 ? (
-            <p className="m-0 text-sm text-muted-foreground">No assistant connections.</p>
-          ) : (
-            <ul className={listClass} aria-label="Assistant connections">
-              {items.map((item) => {
-                const inactive =
-                  item.revokedAt !== null || Date.parse(item.expiresAt) <= Date.now();
-                return (
-                  <li
-                    key={item.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
-                  >
-                    <div className="grid min-w-0 gap-1">
-                      <p className="m-0 break-words font-medium">{item.clientName}</p>
-                      <p className="m-0 text-sm text-muted-foreground">
-                        {item.scopes.includes("content:publish")
-                          ? "Read, edit drafts and Publish"
-                          : item.scopes.includes("content:write")
-                            ? "Read and edit drafts"
-                            : "Read content"}
-                        {inactive ? ` · ${item.revokedAt ? "Revoked" : "Expired"}` : ""}
-                      </p>
-                      <p className="m-0 text-xs text-muted-foreground">
-                        Connected{" "}
-                        <time dateTime={item.createdAt}>{formatAbsoluteTime(item.createdAt)}</time>{" "}
-                        · Expires{" "}
-                        <time dateTime={item.expiresAt}>{formatAbsoluteTime(item.expiresAt)}</time>
-                        {item.lastUsedAt ? (
-                          <>
-                            {" "}
-                            · Last used{" "}
-                            <time dateTime={item.lastUsedAt}>
-                              {formatAbsoluteTime(item.lastUsedAt)}
-                            </time>
-                          </>
-                        ) : null}
-                      </p>
-                    </div>
-                    {!inactive ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        aria-label={`Revoke ${item.clientName}`}
-                        onClick={() => {
-                          revoke.reset();
-                          setSelected(item);
-                        }}
-                      >
-                        Revoke
-                      </Button>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          {connections.hasNextPage ? (
-            <div>
-              <Button
-                variant="outline"
-                disabled={connections.isFetchingNextPage}
-                onClick={() => void connections.fetchNextPage()}
+      ) : null}
+      {items?.length === 0 ? (
+        <p className="m-0 text-sm text-muted-foreground">No assistant connections.</p>
+      ) : items === undefined ? null : (
+        <ul className={listClass} aria-label="Assistant connections">
+          {items.map((item) => {
+            const inactive = item.revokedAt !== null || Date.parse(item.expiresAt) <= Date.now();
+            return (
+              <li
+                key={item.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
               >
-                {connections.isFetchingNextPage ? "Loading…" : "Load more"}
-              </Button>
-            </div>
-          ) : null}
-        </>
+                <div className="grid min-w-0 gap-1">
+                  <p className="m-0 break-words font-medium">{item.clientName}</p>
+                  <p className="m-0 text-sm text-muted-foreground">
+                    {item.scopes.includes("content:publish")
+                      ? "Read, edit drafts and Publish"
+                      : item.scopes.includes("content:write")
+                        ? "Read and edit drafts"
+                        : "Read content"}
+                    {inactive ? ` · ${item.revokedAt ? "Revoked" : "Expired"}` : ""}
+                  </p>
+                  <p className="m-0 text-xs text-muted-foreground">
+                    Connected{" "}
+                    <time dateTime={item.createdAt}>{formatAbsoluteTime(item.createdAt)}</time> ·
+                    Expires{" "}
+                    <time dateTime={item.expiresAt}>{formatAbsoluteTime(item.expiresAt)}</time>
+                    {item.lastUsedAt ? (
+                      <>
+                        {" "}
+                        · Last used{" "}
+                        <time dateTime={item.lastUsedAt}>
+                          {formatAbsoluteTime(item.lastUsedAt)}
+                        </time>
+                      </>
+                    ) : null}
+                  </p>
+                </div>
+                {!inactive ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    aria-label={`Revoke ${item.clientName}`}
+                    onClick={() => {
+                      revoke.reset();
+                      setSelected(item);
+                    }}
+                  >
+                    Revoke
+                  </Button>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
       )}
+      <CursorListActions
+        list={connections}
+        errorTitle="Could not load connections"
+        label="Load more connections"
+      />
       <Dialog
         open={selected !== null}
         onOpenChange={(open) => {

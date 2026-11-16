@@ -3,22 +3,24 @@ import { admin, fixture, json } from "../test-support/app-harness.js";
 
 const lists = ["/api/v1/admin/models/posts/entries", "/api/v1/admin/media"] as const;
 
-test("admin entry and media lists refuse a page limit above 100 before any read", async () => {
+test("admin entry and media lists refuse an invalid page limit before any read", async () => {
   const { app, store } = await fixture();
   const entryReads = vi.spyOn(store, "list");
   const mediaReads = vi.spyOn(store, "listMedia");
   for (const path of lists)
-    for (const limit of ["101", "500"]) {
+    for (const limit of ["101", "500", "01", "1e1"]) {
       const result = await json(app, `${path}?limit=${limit}`);
       expect(result.response.status, `${path} ${limit}`).toBe(422);
       expect(result.body.error.code).toBe("VALIDATION_FAILED");
-      expect(
-        result.body.error.details.issues.map((issue: { path: string }) => issue.path),
-      ).toContain("/limit");
+      expect(result.body.error.details.issues.map((issue: { path: string }) => issue.path)).toEqual(
+        ["/limit"],
+      );
+      expect(JSON.stringify(result.body)).not.toContain(limit);
     }
   expect(entryReads).not.toHaveBeenCalled();
   expect(mediaReads).not.toHaveBeenCalled();
   for (const path of lists) {
+    expect((await json(app, `${path}?limit=1`)).response.status, path).toBe(200);
     expect((await json(app, `${path}?limit=100`)).response.status, path).toBe(200);
     expect((await json(app, path)).response.status, path).toBe(200);
   }

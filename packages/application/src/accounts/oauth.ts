@@ -1,6 +1,7 @@
 import type { Actor } from "@lacecms/domain";
 import type { Clock } from "../ports/infrastructure.js";
 import { requireSessionActor } from "../shared/permissions.js";
+import type { CursorPage, CursorPageInput } from "../shared/pagination.js";
 /** Portable durable OAuth lifecycle values. Provider SDK objects stay in auth. */
 export interface OAuthGrant {
   readonly id: string;
@@ -47,11 +48,7 @@ export interface OAuthConnection extends OAuthGrant {
   readonly lastUsedAt?: number;
 }
 export interface OAuthConnectionPort {
-  listConnections(
-    userId: string,
-    after: string | undefined,
-    limit: number,
-  ): Promise<readonly OAuthConnection[]>;
+  listConnections(userId: string, input: CursorPageInput): Promise<CursorPage<OAuthConnection>>;
   revokeConnection(userId: string, grantId: string, now: number): Promise<boolean>;
   invalidateUser(userId: string, now: number): Promise<void>;
 }
@@ -91,12 +88,9 @@ export class OAuthConnectionUseCases {
   public constructor(
     private readonly input: { readonly connections: OAuthConnectionPort; readonly clock: Clock },
   ) {}
-  public list(
-    actor: Actor,
-    query: { readonly after?: string; readonly limit: number },
-  ): Promise<readonly OAuthConnection[]> {
+  public list(actor: Actor, query: CursorPageInput): Promise<CursorPage<OAuthConnection>> {
     requireSessionActor(actor);
-    return this.input.connections.listConnections(actor.id, query.after, query.limit);
+    return this.input.connections.listConnections(actor.id, query);
   }
   public revoke(actor: Actor, connectionId: string): Promise<boolean> {
     requireSessionActor(actor);

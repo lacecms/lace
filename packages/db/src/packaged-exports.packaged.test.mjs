@@ -218,6 +218,8 @@ test("packaged entry point keeps its public exports", async () => {
     "publishedState",
     "purgeExpiredIdempotencyRecordsStatement",
     "rateLimitBuckets",
+    "readInvitationPage",
+    "readManagedUserPage",
     "rejectDraftWrite",
     "removalGuardResult",
     "renewSiteBuildPlan",

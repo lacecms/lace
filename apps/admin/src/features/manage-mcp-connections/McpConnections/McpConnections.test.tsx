@@ -13,7 +13,7 @@ const connection = {
   revokedAt: null,
 };
 test("disabled capability hides connections without querying their endpoint", async () => {
-  const list = vi.fn(async () => ({ items: [], nextCursor: null }));
+  const list = vi.fn(async () => ({ items: [] }));
   const capabilities = vi.fn(async () => ({ mcpEnabled: false }));
   renderInRouter(<McpConnections />, {
     client: stubClient({ loadAccountCapabilities: capabilities, listMcpConnections: list }),
@@ -31,7 +31,7 @@ test.each(["admin", "editor", "viewer"] as const)(
       sessionSource: staticSessionSource({ id: role, role }),
       client: stubClient({
         loadAccountCapabilities: async () => ({ mcpEnabled: true }),
-        listMcpConnections: async () => ({ items: [connection], nextCursor: null }),
+        listMcpConnections: async () => ({ items: [connection] }),
         revokeMcpConnection: revoke,
       }),
     });
@@ -60,7 +60,6 @@ test("failed revocation stays reviewable and succeeds on explicit retry", async 
       loadAccountCapabilities: async () => ({ mcpEnabled: true }),
       listMcpConnections: async () => ({
         items: [{ ...connection, revokedAt: revoked ? "2026-10-29T11:00:00.000Z" : null }],
-        nextCursor: null,
       }),
       revokeMcpConnection: revoke,
     }),
@@ -82,9 +81,37 @@ test("connections display the granted publication scope", async () => {
       loadAccountCapabilities: async () => ({ mcpEnabled: true }),
       listMcpConnections: async () => ({
         items: [{ ...connection, scopes: [...connection.scopes, "content:publish"] }],
-        nextCursor: null,
       }),
     }),
   });
   expect(await screen.findByText("Read, edit drafts and Publish")).toBeInTheDocument();
+});
+
+test("expired continuation keeps the first connection and can restart without the cursor", async () => {
+  const user = userEvent.setup();
+  const listMcpConnections = vi.fn(async (after?: string) => {
+    if (after !== undefined)
+      throw new AdminClientError({
+        code: "VALIDATION_FAILED",
+        message: "The request did not satisfy the API contract.",
+        status: 422,
+        issues: [
+          { path: "/after", code: "invalid_value", message: "The submitted value is invalid." },
+        ],
+      });
+    return { items: [connection], nextCursor: "expired-cursor" };
+  });
+  renderInRouter(<McpConnections />, {
+    client: stubClient({
+      loadAccountCapabilities: async () => ({ mcpEnabled: true }),
+      listMcpConnections,
+    }),
+  });
+  await user.click(await screen.findByRole("button", { name: "Load more connections" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("The continuation expired.");
+  expect(screen.getByText(connection.clientName)).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Load more connections" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Restart list" }));
+  expect(await screen.findByText(connection.clientName)).toBeInTheDocument();
+  expect(listMcpConnections.mock.calls).toEqual([[undefined], ["expired-cursor"], [undefined]]);
 });

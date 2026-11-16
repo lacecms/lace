@@ -1,0 +1,1 @@
+CREATE INDEX `invitations_pending_order_idx` ON `invitations` (`created_at`,`id`) WHERE "invitations"."accepted_at" is null and "invitations"."revoked_at" is null;

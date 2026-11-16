@@ -6,6 +6,7 @@ export const checkedInMigrations = Object.freeze([
   { createdAt: 1794149823599, name: "0000_baseline.sql" },
   { createdAt: 1794664775142, name: "0001_persistence_hygiene.sql" },
   { createdAt: 1794784462667, name: "0002_content_actor_profiles.sql" },
+  { createdAt: 1794864311984, name: "0003_invitation_pagination.sql" },
 ]);
 
 export interface AppliedMigration {

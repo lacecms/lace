@@ -7,6 +7,8 @@ import {
   managedUser,
   normalizedEmail,
   oauthUserInvalidationSql,
+  readInvitationPage,
+  readManagedUserPage,
   securityRole,
   userProfile,
 } from "@lacecms/db";
@@ -18,6 +20,7 @@ import {
   type AccountSecurityPort,
   type ChangePasswordResult,
   type CreateInvitationResult,
+  type CursorPageInput,
   type InvitationRecord,
   type IssuePasswordResetResult,
   type ManagedUser,
@@ -110,9 +113,11 @@ export class D1AccountSecurity implements UserProfileReader, AccountSecurityPort
     return row === null ? null : userProfile(row);
   }
 
-  public async listUsers(): Promise<readonly ManagedUser[]> {
-    const rows = await bindStatement(this.database, `${USER_COLUMNS_SQL} order by email`).all();
-    return rows.results.map((row) => managedUser(row));
+  private readonly readRows = async (sql: string, ...bindings: (string | number)[]) =>
+    (await bindStatement(this.database, sql, ...bindings).all()).results;
+
+  public listUsers(input: CursorPageInput) {
+    return readManagedUserPage(this.readRows, input);
   }
 
   public async updateUser(input: {
@@ -180,12 +185,8 @@ export class D1AccountSecurity implements UserProfileReader, AccountSecurityPort
     return Object.freeze({ invitation: await this.loadInvitation(id), status: "created", token });
   }
 
-  public async listInvitations(): Promise<readonly InvitationRecord[]> {
-    const rows = await bindStatement(
-      this.database,
-      `${INVITATION_COLUMNS_SQL} where i.accepted_at is null and i.revoked_at is null order by i.created_at desc, i.id desc`,
-    ).all();
-    return rows.results.map((row) => invitationRecord(row));
+  public listInvitations(input: CursorPageInput) {
+    return readInvitationPage(this.readRows, input);
   }
 
   public async inspectInvitation(input: {

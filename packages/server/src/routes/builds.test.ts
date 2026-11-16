@@ -10,7 +10,7 @@ test("admin build routes queue strict requests without running a trigger", async
   const builds = new SiteBuildUseCases({
     clock: { now: () => unixMilliseconds(1) },
     builds: {
-      listSiteBuilds: async () => [],
+      listSiteBuilds: async () => ({ items: [] }),
       getSiteBuild: async () => null,
       requestBuild: async (input) => {
         calls.push(input);
@@ -81,7 +81,7 @@ test.each([admin, editor, { id: actorId("viewer"), role: "viewer" as const }])(
     const builds = new SiteBuildUseCases({
       clock: { now: () => unixMilliseconds(1) },
       builds: {
-        listSiteBuilds: async () => [build],
+        listSiteBuilds: async () => ({ items: [build] }),
         getSiteBuild: async (id) => (id === build.id ? build : null),
         requestBuild: async () => ({
           coalesced: false,

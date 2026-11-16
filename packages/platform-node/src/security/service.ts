@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import {
   SENSITIVE_RATE_LIMIT_POLICIES,
   type AccountSecurityPort,
+  type CursorPageInput,
   type RateLimitDecision,
   type SecurityService,
   type SensitiveRateLimitOperation,
@@ -42,8 +43,8 @@ export class NodeSecurityService implements SecurityService {
   public readUserProfile(userId: string): ReturnType<UserProfileReader["readUserProfile"]> {
     return this.account.readUserProfile(userId);
   }
-  public listUsers(): ReturnType<AccountSecurityPort["listUsers"]> {
-    return this.account.listUsers();
+  public listUsers(input: CursorPageInput): ReturnType<AccountSecurityPort["listUsers"]> {
+    return this.account.listUsers(input);
   }
   public updateUser(
     input: Parameters<AccountSecurityPort["updateUser"]>[0],
@@ -60,8 +61,10 @@ export class NodeSecurityService implements SecurityService {
   ): ReturnType<AccountSecurityPort["createInvitation"]> {
     return this.account.createInvitation(input);
   }
-  public listInvitations(): ReturnType<AccountSecurityPort["listInvitations"]> {
-    return this.account.listInvitations();
+  public listInvitations(
+    input: CursorPageInput,
+  ): ReturnType<AccountSecurityPort["listInvitations"]> {
+    return this.account.listInvitations(input);
   }
   public inspectInvitation(
     input: Parameters<AccountSecurityPort["inspectInvitation"]>[0],

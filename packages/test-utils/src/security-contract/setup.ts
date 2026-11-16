@@ -73,7 +73,7 @@ export const cases: readonly SecurityContractCase[] = [
       await expect(
         harness.security.bootstrap({ email: "admin@lace.test", password, token: setup.token }),
       ).rejects.toMatchObject(setupNotFound);
-      expect(await harness.security.listUsers()).toEqual([user]);
+      expect((await harness.security.listUsers({ limit: 50 })).items).toEqual([user]);
       expect(await harness.security.readUserProfile(user.id)).toEqual({
         disabled: false,
         email: "admin@lace.test",
@@ -112,9 +112,9 @@ export const cases: readonly SecurityContractCase[] = [
       await expect(
         harness.security.bootstrap({ email: "late@lace.test", password, token: fresh.token }),
       ).rejects.toMatchObject(setupNotFound);
-      expect((await harness.security.listUsers()).map((value) => value.email)).toEqual([
-        "admin@lace.test",
-      ]);
+      expect(
+        (await harness.security.listUsers({ limit: 50 })).items.map((value) => value.email),
+      ).toEqual(["admin@lace.test"]);
       expect(
         await harness.sql.get(
           "select claimed_email_hash from setup_tokens where claimed_email_hash is not null and claimed_email_hash like '%@%'",

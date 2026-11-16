@@ -66,8 +66,14 @@ export function accountsClient(fetcher: Fetcher) {
           method: "PATCH",
         }),
       ),
-    listUsers: async () =>
-      parse(managedUserListSchema, await request(fetcher, "/api/v1/admin/users")),
+    listUsers: async (after?: string) =>
+      parse(
+        managedUserListSchema,
+        await request(
+          fetcher,
+          `/api/v1/admin/users${after === undefined ? "" : `?after=${encodeURIComponent(after)}`}`,
+        ),
+      ),
     signOutUser: async (userId: string) =>
       parse(
         sessionRevocationResultSchema,
@@ -86,8 +92,14 @@ export function accountsClient(fetcher: Fetcher) {
           {},
         ),
       ),
-    listInvitations: async () =>
-      parse(invitationListSchema, await request(fetcher, "/api/v1/admin/invitations")),
+    listInvitations: async (after?: string) =>
+      parse(
+        invitationListSchema,
+        await request(
+          fetcher,
+          `/api/v1/admin/invitations${after === undefined ? "" : `?after=${encodeURIComponent(after)}`}`,
+        ),
+      ),
     createInvitation: async (input: Parameters<AdminClient["createInvitation"]>[0]) =>
       parse(
         invitationIssueResultSchema,
@@ -144,7 +156,7 @@ export function accountsClient(fetcher: Fetcher) {
         oauthConnectionListSchema,
         await request(
           fetcher,
-          `/api/v1/account/mcp-connections${after ? `?after=${encodeURIComponent(after)}` : ""}`,
+          `/api/v1/account/mcp-connections${after === undefined ? "" : `?after=${encodeURIComponent(after)}`}`,
         ),
       ),
     revokeMcpConnection: async (id: string) => {

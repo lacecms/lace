@@ -16,7 +16,11 @@ interface Operation {
   }[];
   readonly responses?: Record<
     string,
-    { readonly description?: string; readonly content?: Record<string, { schema?: unknown }> }
+    {
+      readonly description?: string;
+      readonly content?: Record<string, { schema?: unknown }>;
+      readonly headers?: Record<string, { schema?: unknown }>;
+    }
   >;
   readonly security?: readonly Record<string, readonly string[]>[];
   readonly summary?: string;
@@ -35,7 +39,6 @@ interface Document {
 const HAND_PARSED = new Set([
   "DELETE /api/v1/account/sessions/:sessionId",
   "DELETE /api/v1/admin/invitations/:invitationId",
-  "GET /api/v1/account/mcp-connections",
   "GET /api/v1/admin/site-builds/:buildId",
   "GET /api/v1/public/build-export",
   "GET /api/v1/public/content/by-path",
@@ -150,6 +153,63 @@ test("every registered product route is documented as the server enforces it", a
       fail("public operation documents 401 or 403");
   }
   expect(violations).toEqual([]);
+});
+
+test("entry detail and draft mutations document the same revision tag", async () => {
+  const { doc } = await generated();
+  const path = "/api/v1/admin/entries/:entryId";
+  const tag = operationOf(doc, "GET", path)?.responses?.["200"]?.headers?.ETag?.schema;
+  expect(tag).toMatchObject({ type: "string", example: '"7"' });
+  for (const [method, suffix] of [
+    ["PUT", "/draft"],
+    ["POST", "/publish"],
+    ["POST", "/revert"],
+    ["POST", "/duplicate"],
+    ["DELETE", ""],
+  ] as const) {
+    expect(operationOf(doc, method, path + suffix)?.parameters).toContainEqual(
+      expect.objectContaining({ in: "header", name: "If-Match", required: false, schema: tag }),
+    );
+  }
+});
+
+test("protected list operations document the common pagination contract", async () => {
+  const { doc } = await generated();
+  for (const path of [
+    "/api/v1/admin/users",
+    "/api/v1/admin/invitations",
+    "/api/v1/admin/site-builds",
+    "/api/v1/account/mcp-connections",
+    "/api/v1/admin/models/:modelKey/entries",
+    "/api/v1/admin/media",
+  ]) {
+    const operation = operationOf(doc, "GET", path);
+    const after = operation?.parameters?.find((parameter) => parameter.name === "after");
+    const limit = operation?.parameters?.find((parameter) => parameter.name === "limit");
+    expect(after?.schema, path).toMatchObject({ type: "string", maxLength: 4096 });
+    expect(limit?.schema, path).toMatchObject({ type: "string", default: "50" });
+    const grammar = new RegExp(String(limit?.schema?.pattern), "u");
+    expect(["1", "100", "0", "101"].map((size) => grammar.test(size))).toEqual([
+      true,
+      true,
+      false,
+      false,
+    ]);
+    const page = resolved(
+      doc,
+      operation?.responses?.["200"]?.content?.["application/json"]?.schema,
+    );
+    expect(page.properties, path).toHaveProperty("nextCursor.type", "string");
+    expect(page.required, path).not.toContain("nextCursor");
+    expect(operation?.responses?.["422"], path).toBeDefined();
+    if (path === "/api/v1/admin/users") {
+      expect(page.required).toEqual(expect.arrayContaining(["items", "total", "disabledCount"]));
+    }
+  }
+  const disabled = await fixture();
+  const live = (await json(disabled.app, "/api/v1/openapi.json")).body as Document;
+  expect(live.paths).not.toHaveProperty("/api/v1/account/mcp-connections");
+  expect(live.paths).not.toHaveProperty("/api/v1/account/mcp-connections/{connectionId}/revoke");
 });
 
 test("token creation documents 201 with the one-time token value", async () => {

@@ -3,6 +3,7 @@ import { contentRepositoryContractCases } from "./registry.js";
 
 test("preserves every repository contract case in order", () => {
   expect(contentRepositoryContractCases.map((value) => value.name)).toEqual([
+    "traverses build history beyond 100 rows in request-time and ID order",
     "coalesces manual build requests until claim and queues later work separately",
     "retains the claimed target across both enqueue and claim orders",
     "build outcome transitions are lease guarded and reuse one history row",

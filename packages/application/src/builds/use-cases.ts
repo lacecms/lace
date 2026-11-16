@@ -8,6 +8,7 @@ import type {
 import type { Clock } from "../ports/infrastructure.js";
 import { siteBuildEvent } from "../ports/outbox.js";
 import { requireSessionActor } from "../shared/permissions.js";
+import type { CursorPageInput } from "../shared/pagination.js";
 
 interface BuildSiteIdentity {
   readonly id: string;
@@ -30,9 +31,9 @@ export class SiteBuildUseCases {
     },
   ) {}
 
-  public list(actor: Actor) {
+  public list(actor: Actor, input: CursorPageInput) {
     requireSessionActor(actor, "content:read");
-    return this.dependencies.builds.listSiteBuilds(50);
+    return this.dependencies.builds.listSiteBuilds(input);
   }
 
   public get(actor: Actor, buildId: string) {
