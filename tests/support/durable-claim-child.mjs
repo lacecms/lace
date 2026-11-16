@@ -5,6 +5,7 @@ import {
 } from "../../packages/platform-node/dist/index.js";
 import { D1ContentRepository } from "../../packages/platform-cloudflare/dist/index.js";
 import { openLocalCloudflare } from "../../packages/platform-cloudflare/src/test-support/d1-test-harness.ts";
+import { siteBuildEvent } from "../../packages/application/dist/index.js";
 
 const { kind, path, mode, oldLease } = JSON.parse(process.argv[2]);
 let repository, close;
@@ -23,6 +24,14 @@ try {
     await repository.requestBuild({
       requestedAt: 1,
       requestedBy: { id: "restart-admin", role: "admin" },
+      events: [
+        siteBuildEvent({
+          reason: "manual",
+          requestedAt: 1,
+          requestedBy: "restart-admin",
+          publishedSnapshotId: null,
+        }),
+      ],
     });
     const [lease] = await repository.claimSiteBuilds({ limit: 1, now: 5001 });
     if (!lease) throw new Error("durable claim missing");
