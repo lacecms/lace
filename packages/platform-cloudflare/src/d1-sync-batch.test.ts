@@ -1,13 +1,33 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy D1/Worker harnesses, binding fakes and recorded adapter calls.
 import assert from "node:assert/strict";
+import {
+  applyPreparedConfigurationSynchronization,
+  contentModelRoute,
+  prepareConfigurationSynchronization,
+} from "@lacecms/application";
+import type {
+  ApplyConfigurationSynchronizationInput,
+  ConfigurationSyncEntryMigration,
+  ConfigurationSyncSnapshotMigration,
+  ConfigurationSyncSnapshotRewrite,
+  PreparedConfigurationSynchronization,
+} from "@lacecms/application";
+import { defineCollection, defineConfig } from "@lacecms/config";
+import { field } from "@lacecms/content";
+import { unixMilliseconds } from "@lacecms/domain";
 import { test } from "vitest";
 import { configurationSyncSnapshotRewriteStatements } from "@lacecms/db";
-import { openLocalD1 } from "./test-support/d1-test-harness.js";
+import { D1ContentRepository } from "./index.js";
+import {
+  D1_MAX_BATCH_STATEMENTS,
+  D1_MAX_BOUND_PARAMETERS,
+  D1_QUERY_BUDGET,
+} from "./d1/database.js";
+import type { D1Database } from "./d1/database.js";
+import { countingD1, openLocalD1 } from "./test-support/d1-test-harness.js";
 test("bulk nested rewrites fit one guarded D1 batch and roll back failures", async () => {
   const { database: db, dispose } = await openLocalD1();
   const count = 251;
-  const writes = [];
+  const writes: ConfigurationSyncSnapshotRewrite[] = [];
   for (let index = 0; index < count; index++) {
     const items = Array.from({ length: 100 }, (_, i) => ({
       image: "media-probe",
@@ -30,7 +50,7 @@ test("bulk nested rewrites fit one guarded D1 batch and roll back failures", asy
     writes.push(row);
   }
   const guard = "exists (select 1 from mutation_guards where token = 'probe')";
-  function statements(expectedVersion, fail = false) {
+  function statements(expectedVersion: number, fail = false) {
     const sql = [
       db
         .prepare(
@@ -114,9 +134,13 @@ test("bulk nested rewrites fit one guarded D1 batch and roll back failures", asy
         "insert or ignore into published_state(singleton_key,version,updated_at) values(1,0,1)",
       )
       .run();
-    const version = await db
-      .prepare("select version from published_state where singleton_key=1")
-      .first("version");
+    const readVersion = () =>
+      db
+        .prepare("select version from published_state where singleton_key=1")
+        .first<{ version: number }>();
+    const versionRow = await readVersion();
+    assert.ok(versionRow);
+    const { version } = versionRow;
     const state = async () =>
       JSON.stringify(
         await db
@@ -127,21 +151,27 @@ test("bulk nested rewrites fit one guarded D1 batch and roll back failures", asy
       );
     const initial = await state();
     const stale = await db.batch(statements(version + 1));
-    assert.equal(stale[0].meta.changes, 0);
+    assert.equal(stale[0]?.meta.changes, 0);
     assert.equal(await state(), initial);
     await assert.rejects(() => db.batch(statements(version, true)));
     assert.equal(await state(), initial);
     const sql = statements(version);
     assert.ok(sql.length <= 15);
     const result = await db.batch(sql);
-    assert.equal(result[0].meta.changes, 1);
+    assert.equal(result[0]?.meta.changes, 1);
     const { results: snapshots } = await db
       .prepare(
         "select id,fields_json,revision,updated_by,updated_at from content_snapshots order by id",
       )
-      .all();
+      .all<{
+        id: string;
+        fields_json: string;
+        revision: number;
+        updated_by: string;
+        updated_at: number;
+      }>();
     for (const s of snapshots) {
-      assert.deepEqual(JSON.parse(s.fields_json), writes.find((w) => w.id === s.id).fields);
+      assert.deepEqual(JSON.parse(s.fields_json), writes.find((w) => w.id === s.id)?.fields);
       assert.equal(s.revision, 7);
       assert.equal(s.updated_by, "probe");
       assert.equal(s.updated_at, 1);
@@ -156,12 +186,7 @@ test("bulk nested rewrites fit one guarded D1 batch and roll back failures", asy
       { source_key: "$seo", n: count },
       { source_key: "block-kept", n: count },
     ]);
-    assert.equal(
-      await db
-        .prepare("select version from published_state where singleton_key=1")
-        .first("version"),
-      version + 1,
-    );
+    assert.deepEqual(await readVersion(), { version: version + 1 });
     const completed = await state();
     await db.batch(statements(version));
     assert.equal(await state(), completed);
@@ -172,17 +197,9 @@ test("bulk nested rewrites fit one guarded D1 batch and roll back failures", asy
 }, 30_000);
 
 test("D1 nested final guard rejects reference changes after its last reread", async () => {
-  const { defineConfig, defineCollection } = await import("@lacecms/config");
-  const { field } = await import("@lacecms/content");
-  const {
-    prepareConfigurationSynchronization,
-    applyPreparedConfigurationSynchronization,
-    contentModelRoute,
-  } = await import("@lacecms/application");
-  const { D1ContentRepository } = await import("./index.js");
   const { database, dispose } = await openLocalD1();
   let mutate = false;
-  const binding = {
+  const binding: D1Database = {
     prepare: (sql) => database.prepare(sql),
     async batch(statements) {
       if (mutate) {
@@ -194,7 +211,7 @@ test("D1 nested final guard rejects reference changes after its last reread", as
       return database.batch(statements);
     },
   };
-  const config = (version) =>
+  const config = (version: number) =>
     defineConfig({
       blocks: [],
       content: [
@@ -216,11 +233,19 @@ test("D1 nested final guard rejects reference changes after its last reread", as
     });
   const old = await config(1);
   const next = await config(2);
-  const repository = new D1ContentRepository(binding, () =>
-    contentModelRoute(old.runtime.content[0]),
+  let wakeups = 0;
+  const repository = new D1ContentRepository(
+    binding,
+    () => contentModelRoute(old.runtime.content[0]!),
+    {
+      onOutboxWork: () => wakeups++,
+    },
   );
   let id = 0;
-  const apply = async (configuration, prepared) =>
+  const apply = async (
+    configuration: Awaited<ReturnType<typeof config>>,
+    prepared?: PreparedConfigurationSynchronization,
+  ) =>
     applyPreparedConfigurationSynchronization({
       models: configuration.runtime.content,
       target: repository,
@@ -231,10 +256,11 @@ test("D1 nested final guard rejects reference changes after its last reread", as
           state: repository,
         })),
       ids: { next: () => `guard-${++id}` },
-      clock: { now: () => 5 },
+      clock: { now: () => unixMilliseconds(5) },
     });
   try {
     await apply(old);
+    assert.equal(wakeups, 1);
     await database
       .prepare(
         "insert into media(id,storage_key,filename,mime_type,size,metadata_json,status,created_by,created_at,updated_at) values('m','m','m','image/png',1,'{}','active','editor',1,1)",
@@ -259,30 +285,357 @@ test("D1 nested final guard rejects reference changes after its last reread", as
     const before = await database.prepare("select version from published_state").first();
     const events = await database.prepare("select count(*) n from outbox_events").first();
     mutate = true;
-    await assert.rejects(() => apply(next, prepared), /stale/);
+    await assert.rejects(() => apply(next, prepared), { code: "CONFIGURATION_SYNC_STALE" });
+    assert.equal(wakeups, 1);
     assert.equal(
-      (await database.prepare("select config_version from content_models").first()).config_version,
+      (await database.prepare("select config_version from content_models").first())?.config_version,
       1,
     );
-    assert.deepEqual(
-      JSON.parse(
-        (await database.prepare("select fields_json from content_snapshots").first()).fields_json,
-      ),
-      { profile: { name: "Keep" } },
-    );
+    const fields = () =>
+      database
+        .prepare("select fields_json from content_snapshots")
+        .first<{ fields_json: string }>();
+    assert.deepEqual(JSON.parse((await fields())?.fields_json ?? "null"), {
+      profile: { name: "Keep" },
+    });
     assert.deepEqual(await database.prepare("select version from published_state").first(), before);
     assert.deepEqual(
       await database.prepare("select count(*) n from outbox_events").first(),
       events,
     );
-    assert.equal((await database.prepare("select count(*) n from mutation_guards").first()).n, 0);
+    assert.deepEqual(await database.prepare("select count(*) n from mutation_guards").first(), {
+      n: 0,
+    });
     await apply(next);
-    assert.deepEqual(
-      JSON.parse(
-        (await database.prepare("select fields_json from content_snapshots").first()).fields_json,
-      ),
-      { profile: { title: "Keep" } },
+    assert.equal(wakeups, 2);
+    assert.deepEqual(JSON.parse((await fields())?.fields_json ?? "null"), {
+      profile: { title: "Keep" },
+    });
+  } finally {
+    await dispose();
+  }
+});
+
+async function reviewFinalSync(
+  repository: D1ContentRepository,
+  models: ApplyConfigurationSynchronizationInput["models"],
+): Promise<ApplyConfigurationSynchronizationInput> {
+  const { plan, storedModels, evidence } = await prepareConfigurationSynchronization({
+    models,
+    state: repository,
+  });
+  const appliedAt = unixMilliseconds(5);
+  return {
+    appliedAt,
+    evidence,
+    expectedStoredModels: storedModels,
+    models,
+    plan,
+    singletonEntries: [],
+  };
+}
+
+test("final sync keeps the 40-statement batch boundary including executor overhead", async () => {
+  const { database, dispose } = await openLocalD1();
+  const { binding, stats } = countingD1(database);
+  const { runtime } = await defineConfig({
+    content: Array.from({ length: 35 }, (_, index) =>
+      defineCollection({ key: `posts-${index}`, version: 1, blocks: [], fields: {} }),
+    ),
+  });
+  const repository = new D1ContentRepository(binding, () => undefined);
+  try {
+    const tooMany = await reviewFinalSync(repository, runtime.content);
+    await assert.rejects(() => repository.applyConfigurationSynchronization(tooMany), {
+      code: "CONTENT_INVALID_STATE",
+      message: "D1 mutation exceeds its statement budget.",
+    });
+    assert.equal(stats.batches, 0);
+    assert.deepEqual(await database.prepare("select count(*) n from content_models").first(), {
+      n: 0,
+    });
+    const atLimit = await reviewFinalSync(repository, runtime.content.slice(1));
+    const before = stats.queries;
+    assert.deepEqual(await repository.applyConfigurationSynchronization(atLimit), {
+      operations: atLimit.plan.operations,
+      status: "applied",
+      targetVersion: 1,
+    });
+    assert.equal(stats.batches, 1);
+    assert.equal(stats.maxBatchStatements, D1_MAX_BATCH_STATEMENTS);
+    assert.equal(stats.maxParameters, 13);
+    assert.ok(stats.maxParameters <= D1_MAX_BOUND_PARAMETERS);
+    assert.equal(stats.queries - before, 42);
+    assert.ok(stats.queries - before <= D1_QUERY_BUDGET);
+    assert.deepEqual(await database.prepare("select count(*) n from mutation_guards").first(), {
+      n: 0,
+    });
+  } finally {
+    await dispose();
+  }
+});
+
+test("a link lost after D1 preflight rejects the final batch and late failures leave no outbox work", async () => {
+  const { database, dispose } = await openLocalD1();
+  const original = await defineConfig({
+    content: [defineCollection({ key: "posts", route: "/blog/:slug", version: 1 })],
+  });
+  const changed = await defineConfig({
+    content: [
+      defineCollection({ key: "posts", label: "Articles", route: "/blog/:slug", version: 1 }),
+    ],
+  });
+  let dropRoute = false;
+  let failLate = false;
+  let wakeups = 0;
+  const binding: D1Database = {
+    prepare: (sql) => database.prepare(sql),
+    async batch(statements) {
+      if (dropRoute) {
+        dropRoute = false;
+        await database.prepare("delete from published_routes where entry_id='entry'").run();
+      }
+      return database.batch(statements);
+    },
+  };
+  const repository = new D1ContentRepository(
+    binding,
+    () => contentModelRoute(original.runtime.content[0]!),
+    {
+      beforeMutation(checkpoint) {
+        if (failLate && checkpoint === "build-outbox") throw new Error("late failure");
+      },
+      onOutboxWork: () => wakeups++,
+    },
+  );
+  try {
+    await repository.applyConfigurationSynchronization(
+      await reviewFinalSync(repository, original.runtime.content),
     );
+    assert.equal(wakeups, 1);
+    const route =
+      "insert into published_routes(path,entry_id,snapshot_id,updated_at) values('/blog/post','entry','live',1)";
+    await database.batch([
+      database.prepare(
+        "insert into content_entries(id,model_key,created_by,created_at,updated_at) values('entry','posts','editor',1,1)",
+      ),
+      database.prepare(
+        "insert into content_snapshots(id,entry_id,revision,title,fields_json,schema_version,created_at,updated_at,updated_by) values('live','entry',1,'Post','{}',1,1,1,'editor')",
+      ),
+      database.prepare("update content_entries set published_snapshot_id='live' where id='entry'"),
+      database.prepare(route),
+    ]);
+    const input: ApplyConfigurationSynchronizationInput = {
+      ...(await reviewFinalSync(repository, changed.runtime.content)),
+      linkRewrites: [
+        {
+          snapshotId: "live",
+          references: [
+            {
+              area: "fields",
+              delivered: true,
+              pointer: "/link",
+              sourceKey: "$fields",
+              targetId: "entry",
+            },
+          ],
+        },
+      ],
+    };
+    const state = () =>
+      database
+        .prepare(`select (select label from content_models) label,
+      (select version from published_state) version,
+      (select revision from content_link_state) graph,
+      (select count(*) from content_entry_link_references) links,
+      (select count(*) from mutation_guards) guards,
+      (select payload_json from outbox_events) outbox`)
+        .first();
+    const before = await state();
+    dropRoute = true;
+    await assert.rejects(() => repository.applyConfigurationSynchronization(input), {
+      code: "CONTENT_INVALID_STATE",
+      message: "Schema synchronization would introduce an unavailable internal link.",
+    });
+    assert.deepEqual(await state(), before);
+    assert.equal(wakeups, 1);
+    await database.prepare(route).run();
+    failLate = true;
+    await assert.rejects(() => repository.applyConfigurationSynchronization(input), {
+      code: "CONTENT_INVALID_STATE",
+    });
+    assert.deepEqual(await state(), before);
+    assert.equal(wakeups, 1);
+    failLate = false;
+    assert.deepEqual(await repository.applyConfigurationSynchronization(input), {
+      operations: input.plan.operations,
+      status: "applied",
+      targetVersion: 2,
+    });
+    assert.equal(wakeups, 2);
+    assert.deepEqual(
+      await database
+        .prepare("select field_path,delivered from content_entry_link_references")
+        .first(),
+      {
+        field_path: "/link",
+        delivered: 1,
+      },
+    );
+    assert.deepEqual(await database.prepare("select count(*) n from mutation_guards").first(), {
+      n: 0,
+    });
+  } finally {
+    await dispose();
+  }
+});
+
+function migrationUnit(entryId: string, size: number): ConfigurationSyncEntryMigration {
+  const snapshots = (["published", "draft"] as const).map(
+    (state): ConfigurationSyncSnapshotMigration => {
+      const snapshotId = `${entryId}-${state}`;
+      const blocks = Array.from({ length: size }, (_, index) => ({
+        key: `n${index}`,
+        expectedSchemaVersion: 1,
+        schemaVersion: 3,
+        data: {},
+        settings: {},
+      }));
+      return {
+        state,
+        snapshotId,
+        blocks,
+        expectedRevision: 1,
+        revision: 2,
+        references: blocks.map(({ key }) => ({
+          sourceKey: key,
+          fieldPath: "cover",
+          mediaId: "media",
+        })),
+      };
+    },
+  );
+  return { entryId, snapshots };
+}
+
+async function seedMigrationUnit(database: D1Database, unit: ConfigurationSyncEntryMigration) {
+  const ids = JSON.stringify(unit.snapshots.map(({ snapshotId }) => snapshotId));
+  await database.batch([
+    database
+      .prepare(
+        "insert into content_entries(id,model_key,created_by,created_at,updated_at) values(?,'posts','editor',1,1)",
+      )
+      .bind(unit.entryId),
+    database
+      .prepare(`insert into content_snapshots(id,entry_id,revision,title,fields_json,schema_version,created_at,updated_at,updated_by)
+      select value,?,1,'Post','{}',1,1,1,'editor' from json_each(?)`)
+      .bind(unit.entryId, ids),
+    database
+      .prepare(`update content_entries set published_snapshot_id=?, draft_snapshot_id=? where id=?`)
+      .bind(unit.snapshots[0]?.snapshotId, unit.snapshots[1]?.snapshotId, unit.entryId),
+    database
+      .prepare(`insert into content_blocks(snapshot_id,block_key,block_type,position,schema_version,data_json,created_at,updated_at)
+      select s.value,b.value,'note',b.key+1,1,'{}',1,1 from json_each(?) s,json_each(?) b`)
+      .bind(ids, JSON.stringify(unit.snapshots[0]?.blocks.map(({ key }) => key))),
+  ]);
+}
+
+test("D1 packs small migration units and resumes a split large unit before one final request", async () => {
+  const { database, dispose } = await openLocalD1();
+  const { binding: counted, stats } = countingD1(database);
+  const model = (version: number) =>
+    defineConfig({ content: [defineCollection({ key: "posts", version })] });
+  const original = await model(1);
+  const changed = await model(2);
+  const pending: string[] = [];
+  const batches: { size: number; states: string[] }[] = [];
+  let failDraft = false;
+  let draftWrites = 0;
+  let wakeups = 0;
+  const binding: D1Database = {
+    prepare: counted.prepare,
+    batch(statements) {
+      batches.push({ size: statements.length, states: pending.splice(0) });
+      return counted.batch(statements);
+    },
+  };
+  const repository = new D1ContentRepository(
+    binding,
+    () => contentModelRoute(original.runtime.content[0]!),
+    {
+      beforeMutation(checkpoint) {
+        if (!checkpoint.startsWith("sync.migration.")) return;
+        pending.push(checkpoint.replace("sync.migration.", ""));
+        if (failDraft && checkpoint === "sync.migration.draft" && ++draftWrites === 3)
+          throw new Error("interrupt the oversized unit before its draft commits");
+      },
+      onOutboxWork: () => wakeups++,
+    },
+  );
+  try {
+    await repository.applyConfigurationSynchronization(
+      await reviewFinalSync(repository, original.runtime.content),
+    );
+    const units = [
+      migrationUnit("small-a", 1),
+      migrationUnit("small-b", 1),
+      migrationUnit("big", 200),
+    ];
+    const bigDraft = units[2]!.snapshots[1]!;
+    await database
+      .prepare(`insert into media(id,storage_key,filename,mime_type,size,metadata_json,status,created_by,created_at,updated_at)
+      values('media','media','media','image/png',1,'{}','active','editor',1,1)`)
+      .run();
+    for (const unit of units) await seedMigrationUnit(database, unit);
+    batches.length = 0;
+    failDraft = true;
+    const migrate = (pendingUnits: readonly ConfigurationSyncEntryMigration[]) =>
+      repository.applyConfigurationSyncBlockMigrations({
+        modelKey: contentModelRoute(original.runtime.content[0]!).key,
+        migratedAt: unixMilliseconds(10),
+        units: pendingUnits,
+      });
+    await assert.rejects(() => migrate(units), { code: "CONTENT_INVALID_STATE" });
+    assert.deepEqual(
+      batches.map(({ states }) => states),
+      [["published", "draft", "published", "draft"], ["published"], ["draft"]],
+    );
+    assert.ok(batches.every(({ size }) => size <= D1_MAX_BATCH_STATEMENTS));
+    assert.equal(stats.maxParameters, 99);
+    assert.ok(stats.maxParameters <= D1_MAX_BOUND_PARAMETERS);
+    const unmigrated = () =>
+      database
+        .prepare(
+          "select snapshot_id,count(*) n from content_blocks where schema_version=1 group by snapshot_id",
+        )
+        .all();
+    assert.deepEqual((await unmigrated()).results, [{ snapshot_id: bigDraft.snapshotId, n: 200 }]);
+    assert.equal(wakeups, 1);
+    assert.deepEqual(await database.prepare("select version from published_state").first(), {
+      version: 1,
+    });
+    failDraft = false;
+    const before = stats.queries;
+    assert.deepEqual(await migrate([{ entryId: "big", snapshots: [bigDraft] }]), {
+      blocks: 200,
+      drafts: 1,
+      published: 0,
+    });
+    assert.equal((await unmigrated()).results.length, 0);
+    assert.ok(stats.queries - before <= D1_QUERY_BUDGET);
+    const final = await reviewFinalSync(repository, changed.runtime.content);
+    assert.deepEqual(await repository.applyConfigurationSynchronization(final), {
+      operations: final.plan.operations,
+      status: "applied",
+      targetVersion: 2,
+    });
+    assert.equal(wakeups, 2);
+    assert.deepEqual(await database.prepare("select count(*) n from outbox_events").first(), {
+      n: 1,
+    });
+    assert.deepEqual(await database.prepare("select count(*) n from mutation_guards").first(), {
+      n: 0,
+    });
   } finally {
     await dispose();
   }

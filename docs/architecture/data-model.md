@@ -27,7 +27,8 @@ the content tables ([ADR 0026](../adr/0026-code-defined-models-two-snapshots.md)
   `public_projection_source_hash` the full `projection_hash` it was computed
   for. A mismatched source invalidates the public baseline, including after an
   older binary changes the full projection during a rollback. Sync writes both
-  in its guarded final mutation
+  alongside the structure baseline in the shared final configuration-sync
+  plan, which also defines model creation, updates, renames and safe removal
   ([collection-query-options](../../openspec/specs/collection-query-options/spec.md)).
 
 ### 9.2 Content entries
@@ -39,6 +40,8 @@ published snapshot pointers, creator and timestamps.
   the first snapshot. Entry creation inserts the entry and its draft snapshot
   and assigns the pointer atomically; a committed entry without a draft is
   invalid. `published_snapshot_id` stays `NULL` until the first publication.
+  The final configuration-sync plan creates the initial draft and pointer
+  atomically with a new page or global model. New collections start empty.
 - The API sets `singleton_key = 1` for pages and globals and `NULL` for
   collection entries. Because SQLite allows many `NULL`s in a unique index, the
   partial unique index `content_entries_singleton_idx` on `model_key`
@@ -65,8 +68,9 @@ fields used for identity, routing, concurrency or common queries (`revision`,
 The draft is mutable. Editors cannot change a published snapshot: only the
 publish use case replaces it and only the unpublish use case removes it (§10).
 Configuration synchronization may rewrite its stored fields and blocks for a
-classified schema change (§8), advancing the published version atomically for
-field rewrites and after resumable block migrations (§4.7,
+classified schema change (§8). A shared final plan commits field and reference
+rewrites, baselines and any public version increment and build request together.
+Resumable block migration units commit before this final plan (§4.7,
 [ADR 0007](../adr/0007-schema-evolution-during-sync.md)). Reverting a draft
 sets the published snapshot's `revision` to the new draft revision without
 changing its content, so a draft equal to its publication is derived as
@@ -74,6 +78,14 @@ published ([ADR 0008](../adr/0008-entry-lifecycle-commands.md)).
 
 Holding both snapshots duplicates text intentionally; it fits the D1 free-plan
 limit because binaries are excluded, and pages are split into block rows.
+
+Content and media retain their original actor IDs without a foreign key to an
+account or profile. The security-owned `content_actor_profiles` table is keyed
+by actor ID and contains only the current display name and validated Lace role
+(§14). Reads use it for attribution. Missing or blank names resolve to
+`System` for `system:` IDs and `Unknown user` otherwise; missing roles resolve
+to `viewer`. Profile changes leave snapshots, public versions and build work
+unchanged.
 
 ### 9.4 Content blocks
 
@@ -110,6 +122,11 @@ replaces the fields and the complete ordered block list, increments
 never change while the revision does not; optimistic concurrency and the D1
 publication batch depend on this
 ([ADR 0002](../adr/0002-d1-batches-and-node-transactions.md)).
+
+Entry creation, guarded duplication and complete-draft save use shared ordered
+SQLite write plans. Their admission checks the relevant model, source and draft
+revision and active media in the same atomic unit as the writes. A typed guard
+miss leaves the entry and its block, media and link projections unchanged.
 
 ### 9.6 Published routes
 
@@ -159,6 +176,10 @@ held in validated JSON
   source keys.
 - Media referenced only by hidden values stay protected but are excluded from
   public delivery. Only `active` media may be selected.
+
+Shared `db` write plans define media creation, edits, deletion requests and
+lease-guarded deletion outcomes for both runtimes. Metadata, hashes and tags
+commit together; object upload and idempotent deletion remain external effects.
 
 The projection is the only source of media usage: an entry uses an item when
 its current draft or current published snapshot references it in an entry
@@ -265,6 +286,10 @@ event or extends its deadline, through `INSERT OR IGNORE` and a guarded update
 of the unlocked row. A claimed event is never modified; later publications
 create the next event, allowing at most one redundant build around a claim race
 and never skipping published state. Media-deletion events are never coalesced.
+Shared `db` plans define build and outbox transitions and the enqueue group.
+The request payload is constructed in JavaScript; the atomic SQL write fills
+the current target version and any inherited retry source. An explicit retry
+source takes precedence, and a claimed payload remains unchanged.
 
 ### 9.9 Referential actions
 
@@ -377,6 +402,11 @@ erDiagram
     text user_id FK
   }
   %% auth.ts
+  content_actor_profiles {
+    text actor_id PK
+    text display_name
+    text role
+  }
   user {
     text id PK
   }

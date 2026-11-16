@@ -1,5 +1,10 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite/product harnesses, branded values and partial runtime adapters.
+import type {
+  SiteBuildRequest,
+  DispatcherLeasePort,
+  MediaDeletionDispatchPort,
+  ObjectStorage,
+} from "@lacecms/application";
+import type { JsonObject } from "@lacecms/content";
 import { expect, test } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -24,10 +29,10 @@ test("site-build dispatcher bounds failures at eight attempts and handles trigge
     const database = openNodeDatabase(databasePath);
     try {
       const repository = new NodeContentRepository(database.connection, () => undefined);
-      const requestedBy = { id: actorId("admin"), role: "admin" };
+      const requestedBy = { id: actorId("admin"), role: "admin" as const };
       let now = 1;
       let outcome = "failed";
-      const calls = [];
+      const calls: SiteBuildRequest[] = [];
       const dispatcher = new NodeSiteBuildDispatcher({
         clock: { now: () => unixMilliseconds(now) },
         logger: { error: () => undefined },
@@ -146,11 +151,11 @@ test("site-build dispatcher bounds failures at eight attempts and handles trigge
 });
 
 test("dispatches media deletion with retry, terminal, and malformed-event boundaries", async () => {
-  const completed = [];
-  const failed = [];
-  const deleted = [];
+  const completed: unknown[] = [];
+  const failed: unknown[] = [];
+  const deleted: string[] = [];
   let now = unixMilliseconds(1_000);
-  const lease = (payload, attempts = 0) => ({
+  const lease = (payload: JsonObject, attempts = 0) => ({
     event: {
       attempts,
       availableAt: now,
@@ -161,11 +166,17 @@ test("dispatches media deletion with retry, terminal, and malformed-event bounda
     expiresAt: unixMilliseconds(now + 60_000),
     id: dispatcherLeaseId(`lease-${attempts}`),
   });
-  const work = {
+  const work: DispatcherLeasePort & MediaDeletionDispatchPort = {
     claim: async () => [lease({ mediaId: "media-1" })],
-    complete: async (input) => completed.push(input),
-    completeMediaDeletion: async (input) => completed.push(input),
-    failMediaDeletion: async (input) => failed.push(input),
+    complete: async (input) => {
+      completed.push(input);
+    },
+    completeMediaDeletion: async (input) => {
+      completed.push(input);
+    },
+    failMediaDeletion: async (input) => {
+      failed.push(input);
+    },
     loadDeletingMedia: async () => ({
       createdAt: now,
       createdBy: actorId("admin"),
@@ -175,20 +186,24 @@ test("dispatches media deletion with retry, terminal, and malformed-event bounda
       size: 1,
       status: "deleting",
       storageKey: "media/media-1",
+      tags: [],
       updatedAt: now,
     }),
     retry: async () => {},
+  };
+  const storage: ObjectStorage = {
+    createReadUrl: async () => "memory://object",
+    delete: async (key) => {
+      deleted.push(key);
+    },
+    get: async () => null,
+    put: async () => ({ contentType: "image/png", key: "unused", size: 0 }),
   };
   const dispatcher = new NodeMediaDeletionDispatcher({
     clock: { now: () => now },
     logger: { error: () => {} },
     random: () => 0.5,
-    storage: {
-      createReadUrl: async () => "memory://object",
-      delete: async (key) => deleted.push(key),
-      get: async () => null,
-      put: async () => ({ contentType: "image/png", key: "unused", size: 0 }),
-    },
+    storage,
     work,
   });
   await dispatcher.runOnce();
@@ -196,7 +211,7 @@ test("dispatches media deletion with retry, terminal, and malformed-event bounda
   expect(completed).toHaveLength(1);
 
   work.claim = async () => [lease({ mediaId: "media-1" }, 7)];
-  dispatcher["options"].storage.delete = async () => {
+  storage.delete = async () => {
     throw new Error("private storage detail");
   };
   await dispatcher.runOnce();

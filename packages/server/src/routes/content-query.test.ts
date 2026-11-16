@@ -106,8 +106,8 @@ test("content validation failures use the validation envelope with JSON Pointers
 });
 
 test("lists entries with filters, totals, and query-bound cursors", async () => {
-  const { app, store } = await fixture();
-  store.setActorDisplayNames({ admin: "admin@example.test" });
+  const { app, seedProfile } = await fixture();
+  seedProfile("admin", "admin@example.test", "admin");
   const post = (body: unknown) => ({
     body: JSON.stringify(body),
     headers: { "content-type": "application/json" },
@@ -175,7 +175,7 @@ test("lists entries with filters, totals, and query-bound cursors", async () => 
   expect(
     await json(app, `/api/v1/admin/models/posts/entries?sort=-title&limit=1&after=${cursor}`),
   ).toMatchObject({
-    body: { error: { code: "CONTENT_INVALID_STATE" } },
+    body: { error: { code: "VALIDATION_FAILED", details: { issues: [{ path: "/after" }] } } },
     response: { status: 422 },
   });
   expect((await json(app, "/api/v1/admin/models/missing/entries")).response.status).toBe(404);
@@ -183,8 +183,8 @@ test("lists entries with filters, totals, and query-bound cursors", async () => 
 
 test("admin entry responses name the last editor while public DTOs carry no editor names", async () => {
   const viewer: Actor = { id: actorId("viewer"), role: "viewer" };
-  const { app, store } = await fixture();
-  store.setActorDisplayNames({ admin: "admin@example.test" });
+  const { app, seedProfile } = await fixture();
+  seedProfile("admin", "admin@example.test", "admin");
   const post = (body: unknown) => ({
     body: JSON.stringify(body),
     headers: { "content-type": "application/json" },
@@ -219,7 +219,7 @@ test("admin entry responses name the last editor while public DTOs carry no edit
   });
 
   const viewerApp = await fixture({ actor: viewer });
-  viewerApp.store.setActorDisplayNames({ editor: "editor@example.test" });
+  viewerApp.seedProfile("editor", "editor@example.test", "editor");
   for (const [id, updatedBy, expected] of [
     ["by-editor", editor, "editor@example.test"],
     ["by-sync", { id: actorId("system:content-sync"), role: "admin" }, "System"],
@@ -392,15 +392,19 @@ test("configured query API validates JSON, limits and model permissions before l
       },
     }),
   ];
-  const { app, store } = await fixture({ models });
+  const reads: ListContentEntriesInput[] = [];
+  const { app } = await fixture({
+    models,
+    contentReads: {
+      async list(query) {
+        reads.push(query);
+        return { items: [], totals: { all: 0, changed: 0, draft: 0, published: 0 } };
+      },
+    },
+  });
   expect((await json(app, "/api/v1/admin/content-models")).body.items[0].listOptions).toEqual(
     models[0]?.listOptions,
   );
-  const reads: ListContentEntriesInput[] = [];
-  store.list = async (query) => {
-    reads.push(query);
-    return { items: [], totals: { all: 0, changed: 0, draft: 0, published: 0 } };
-  };
   const base = "/api/v1/admin/models/posts/entries?";
   const encode = (filters: unknown) => `filters=${encodeURIComponent(JSON.stringify(filters))}`;
   const valid = await json(
@@ -453,16 +457,20 @@ test("the entry-list API applies a collection's default sort when sort is omitte
       listOptions: { sortableFields: ["order"], defaultSort: "field:order" },
     }),
   ];
-  const { app, store } = await fixture({ models });
+  const reads: ListContentEntriesInput[] = [];
+  const { app } = await fixture({
+    models,
+    contentReads: {
+      async list(query) {
+        reads.push(query);
+        return { items: [], totals: { all: 0, changed: 0, draft: 0, published: 0 } };
+      },
+    },
+  });
   expect((await json(app, "/api/v1/admin/content-models")).body.items[0].listOptions).toEqual({
     sortableFields: ["order"],
     defaultSort: "field:order",
   });
-  const reads: ListContentEntriesInput[] = [];
-  store.list = async (query) => {
-    reads.push(query);
-    return { items: [], totals: { all: 0, changed: 0, draft: 0, published: 0 } };
-  };
   const base = "/api/v1/admin/models/projects/entries";
   expect((await json(app, base)).response.status).toBe(200);
   expect((await json(app, `${base}?sort=-updatedAt`)).response.status).toBe(200);
@@ -483,15 +491,20 @@ test("runtime search metadata and byte boundaries yield precise value-free API e
     { maxSearchLength: 200, maxLikePatternBytes: null },
     { maxSearchLength: 48, maxLikePatternBytes: 50 },
   ]) {
-    const { app, store, logs } = await fixture({ models, listQueryLimits });
+    const calls: ListContentEntriesInput[] = [];
+    const { app, logs } = await fixture({
+      models,
+      listQueryLimits,
+      contentReads: {
+        async list(input) {
+          calls.push(input);
+          return { items: [], totals: { all: 0, draft: 0, published: 0, changed: 0 } };
+        },
+      },
+    });
     expect((await json(app, "/api/v1/admin/content-models")).body.listQueryLimits).toEqual(
       listQueryLimits,
     );
-    const calls: ListContentEntriesInput[] = [];
-    store.list = async (input) => {
-      calls.push(input);
-      return { items: [], totals: { all: 0, draft: 0, published: 0, changed: 0 } };
-    };
     const path = "/api/v1/admin/models/posts/entries?";
     for (const value of ["a".repeat(48), "я".repeat(24), "%".repeat(24), "aя".repeat(16)]) {
       expect(

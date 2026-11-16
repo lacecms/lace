@@ -30,10 +30,17 @@ export const cases: readonly SecurityContractCase[] = [
         role: "editor",
       });
       expect(editor).toMatchObject({ disabled: false, email: "editor@lace.test", role: "editor" });
+      const profile = () =>
+        harness.sql.get(
+          "select display_name, role from content_actor_profiles where actor_id = ?",
+          editor.id,
+        );
+      expect(await profile()).toEqual({ display_name: "editor@lace.test", role: "editor" });
       expect(await harness.security.updateUser({ role: "viewer", userId: editor.id })).toEqual({
         ...editor,
         role: "viewer",
       });
+      expect(await profile()).toEqual({ display_name: "editor@lace.test", role: "viewer" });
       expect(await harness.security.updateUser({ userId: "missing", disabled: true })).toBeNull();
       await expect(harness.security.disableUser({ userId: "missing" })).rejects.toThrow();
       const second = await createUserByInvitation(harness.security, {

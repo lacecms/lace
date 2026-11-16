@@ -1,3 +1,4 @@
+import { NODE_LIST_QUERY_LIMITS as TEST_LIST_QUERY_LIMITS } from "@lacecms/content";
 import { expect, test } from "vitest";
 import {
   attenuateActor,
@@ -129,6 +130,7 @@ async function protectedPorts() {
   });
   const config = await defineConfig({ content: [] });
   const cases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     content,
     media,
     config: config.runtime,
@@ -254,6 +256,7 @@ test("browser deletion keeps unpublished-versus-published permission checks", as
         : {}),
     };
     const cases = new ContentUseCases({
+      listQueryLimits: TEST_LIST_QUERY_LIMITS,
       config: config.runtime,
       clock: { now: () => unixMilliseconds(1) },
       idGenerator: {
@@ -310,6 +313,7 @@ test("delegated writes store audit identity without reusable authority", async (
   let stored: ContentEntry | undefined;
   const writes: (CreateContentEntryInput | SaveCompleteDraftInput)[] = [];
   const cases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     config: config.runtime,
     clock: { now: () => unixMilliseconds(1) },
     idGenerator: { next: () => `id-${++sequence}` },

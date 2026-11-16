@@ -1,8 +1,6 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy D1/Worker harnesses, binding fakes and recorded adapter calls.
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { expect, test } from "vitest";
-import { migrationStatements } from "./test-support/d1-test-harness.js";
+import { migrationStatements, openLocalCloudflare } from "./test-support/d1-test-harness.js";
 
 test("the baseline migration creates the seeded, constrained schema in one D1 batch", async () => {
   const miniflare = new Miniflare(
@@ -17,18 +15,18 @@ test("the baseline migration creates the seeded, constrained schema in one D1 ba
     const database = await miniflare.getD1Database("DB");
     const statements = await migrationStatements();
     await database.batch(statements.map((statement) => database.prepare(statement)));
-    const run = (sql, ...values) =>
+    const run = (sql: string, ...values: unknown[]) =>
       database
         .prepare(sql)
         .bind(...values)
         .run();
-    const rows = async (sql) => (await database.prepare(sql).all()).results;
+    const rows = async (sql: string) => (await database.prepare(sql).all()).results;
 
     expect(await rows("select * from content_link_state")).toEqual([
       { singleton_key: 1, revision: 0 },
     ]);
     const indexes = (await rows("select name from sqlite_master where type = 'index'")).map(
-      (row) => row.name,
+      (row: { name: unknown }) => row.name,
     );
     for (const name of [
       "setup_tokens_expiry_idx",
@@ -49,6 +47,9 @@ test("the baseline migration creates the seeded, constrained schema in one D1 ba
     await run(
       "insert into user (id,name,email,email_verified,role,disabled,created_at,updated_at) values ('admin','Admin','admin@lace.test',1,'admin',0,1,1)",
     );
+    expect(await rows("select * from content_actor_profiles")).toEqual([
+      { actor_id: "admin", display_name: "Admin", role: "admin" },
+    ]);
     const invite =
       "insert into invitations (id,email,role,token_hash,invited_by,created_at,expires_at) values (?, 'new@lace.test','editor',?, 'admin',1,10)";
     await run(invite, "i1", "digest-1");
@@ -69,5 +70,67 @@ test("the baseline migration creates the seeded, constrained schema in one D1 ba
     expect(await rows("pragma foreign_key_check")).toEqual([]);
   } finally {
     await miniflare.dispose();
+  }
+});
+
+test("D1 upgrade and account batches maintain content actor profiles atomically", async () => {
+  const { database, dispose } = await openLocalCloudflare({ migrate: false });
+  try {
+    const batch = (statements: string[]) =>
+      database.batch(statements.map((sql) => database.prepare(sql)));
+    const rows = async (sql: string) => (await database.prepare(sql).all()).results;
+    await batch(await migrationStatements((name) => name < "0002_"));
+    await batch([
+      "insert into user (id, name, email, created_at, updated_at) values ('editor', '   ', 'editor@lace.test', 1, 1)",
+      "insert into content_models (key, kind, label, config_version, structure_hash, projection_hash, created_at, updated_at) values ('posts', 'collection', 'Posts', 1, 's', 'p', 1, 1)",
+      "insert into content_entries (id, model_key, created_by, created_at, updated_at) values ('entry', 'posts', 'editor', 1, 1)",
+      "insert into content_snapshots (id, entry_id, revision, title, fields_json, schema_version, updated_by, created_at, updated_at) values ('draft', 'entry', 1, 'Draft', '{}', 1, 'editor', 1, 1)",
+      "update content_entries set draft_snapshot_id = 'draft'",
+      "insert into media (id, storage_key, filename, mime_type, size, metadata_json, status, created_by, created_at, updated_at) values ('asset', 'key', 'image.png', 'image/png', 1, '{}', 'active', 'editor', 1, 1)",
+      "insert into published_state (singleton_key, version, updated_at) values (1, 4, 1)",
+      "insert into site_builds (id, reason, status, target_version, requested_by, requested_at) values ('build', 'manual', 'pending', 4, 'editor', 1)",
+      "insert into outbox_events (id, type, payload_json, available_at, created_at) values ('event', 'site.build.requested', '{}', 1, 1)",
+    ]);
+    const contentRows = () =>
+      Promise.all(
+        [
+          "content_entries",
+          "content_snapshots",
+          "media",
+          "published_state",
+          "site_builds",
+          "outbox_events",
+        ].map((table) => rows(`select * from ${table}`)),
+      );
+    const before = await contentRows();
+    await batch(await migrationStatements((name) => name === "0002_content_actor_profiles.sql"));
+    const profiles = () => rows("select * from content_actor_profiles order by actor_id");
+    expect(await profiles()).toEqual([{ actor_id: "editor", display_name: "   ", role: "viewer" }]);
+    await batch([
+      "insert into user (id, name, email, role, created_at, updated_at) values ('admin', 'Admin', 'admin@lace.test', 'admin', 1, 1)",
+      "update user set name = 'New Name', role = 'editor' where id = 'editor'",
+      "update user set disabled = 1 where id = 'editor'",
+    ]);
+    const current = [
+      { actor_id: "admin", display_name: "Admin", role: "admin" },
+      { actor_id: "editor", display_name: "New Name", role: "editor" },
+    ];
+    expect(await profiles()).toEqual(current);
+    await expect(
+      batch([
+        "update user set name = 'Rolled Back' where id = 'admin'",
+        "delete from user where id = 'editor'",
+        "update content_actor_profiles set role = 'owner'",
+      ]),
+    ).rejects.toThrow(/check/iu);
+    expect(await profiles()).toEqual(current);
+    await batch(["update user set id = 'renamed' where id = 'editor'"]);
+    expect(await profiles()).toEqual([current[0], { ...current[1], actor_id: "renamed" }]);
+    await batch(["delete from user where id = 'renamed'"]);
+    expect(await profiles()).toEqual([current[0]]);
+    expect(await contentRows()).toEqual(before);
+    expect(await rows("pragma foreign_key_check")).toEqual([]);
+  } finally {
+    await dispose();
   }
 });

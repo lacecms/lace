@@ -48,17 +48,30 @@
   },
   "packages/db": {
     "shared": [],
+    "write-plan": [],
     "schema": ["shared"],
     "security": ["shared"],
     "links": ["shared"],
-    "publication": ["links", "shared"],
-    "sync": ["links", "shared"],
-    "content": ["shared"],
-    "media": ["content", "shared"],
+    "publication": ["builds", "content", "links", "shared", "write-plan"],
+    "sync": ["content", "links", "shared", "write-plan"],
+    "content": ["links", "shared", "write-plan"],
+    "media": ["content", "shared", "write-plan"],
     "delivery": ["content", "media", "shared"],
-    "builds": ["content", "delivery", "media", "shared"],
-    "outbox": [],
-    "reads": ["builds", "content", "delivery", "links", "media", "shared"]
+    "builds": ["content", "delivery", "media", "shared", "write-plan"],
+    "outbox": ["shared", "write-plan"],
+    "reads": ["builds", "content", "delivery", "links", "media", "shared"],
+    "node-repository": [
+      "builds",
+      "content",
+      "links",
+      "media",
+      "outbox",
+      "publication",
+      "reads",
+      "shared",
+      "sync",
+      "write-plan"
+    ]
   },
   "packages/server": {
     "shared": [],
@@ -76,7 +89,6 @@
     "errors": [],
     "visibility": [],
     "filters": [],
-    "store": ["fixtures", "shared"],
     "repository-contract": ["delivery", "fixtures", "visibility"],
     "security-contract": ["repository-contract"]
   },
@@ -104,8 +116,7 @@
     "security": [],
     "media": [],
     "builds": [],
-    "repository": ["database"],
-    "runtime": ["builds", "database", "media", "repository", "security"]
+    "runtime": ["builds", "database", "media", "security"]
   },
   "packages/platform-cloudflare": {
     "d1": [],

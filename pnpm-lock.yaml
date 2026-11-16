@@ -999,13 +999,19 @@ importers:
       '@lacecms/domain':
         specifier: workspace:*
         version: link:../domain
+      '@types/better-sqlite3':
+        specifier: 'catalog:'
+        version: 9.6.0
       drizzle-orm:
         specifier: 'catalog:'
-        version: 0.45.2(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)(kysely@0.29.5)
+        version: 0.45.2(@types/better-sqlite3@9.6.0)(better-sqlite3@13.2.0)(kysely@0.29.5)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
         version: 24.10.1
+      better-sqlite3:
+        specifier: 'catalog:'
+        version: 13.2.0
       oxlint:
         specifier: 'catalog:'
         version: 1.81.0
@@ -1326,9 +1332,21 @@ importers:
         specifier: 'catalog:'
         version: 1.5.0(typescript@7.0.2)
     devDependencies:
+      '@lacecms/db':
+        specifier: workspace:*
+        version: link:../db
+      '@types/better-sqlite3':
+        specifier: 'catalog:'
+        version: 9.6.0
       '@types/node':
         specifier: 'catalog:'
         version: 24.10.1
+      better-sqlite3:
+        specifier: 'catalog:'
+        version: 13.2.0
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.2(@types/better-sqlite3@9.6.0)(better-sqlite3@13.2.0)(kysely@0.29.5)
       oxlint:
         specifier: 'catalog:'
         version: 1.81.0

@@ -1,5 +1,5 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite/product harnesses, branded values and partial runtime adapters.
+import type { SecurityContractRuntime } from "@lacecms/test-utils";
+import { contractSql } from "./test-support/contract-sql.js";
 import { afterEach, expect, test } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -13,13 +13,13 @@ import {
   openNodeDatabase,
 } from "./index.js";
 
-const cleanups = [];
+const cleanups: (() => void | Promise<void>)[] = [];
 
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-const runtime = {
+const runtime: SecurityContractRuntime = {
   async open() {
     const directory = await mkdtemp(join(tmpdir(), "lace-security-contract-"));
     const databasePath = join(directory, "lace.sqlite");
@@ -34,20 +34,16 @@ const runtime = {
       limiter: (secret) => new NodeFixedWindowRateLimiter(connection, secret),
       reopenSecurity: async () => {
         const reopened = openNodeDatabase(databasePath);
-        cleanups.push(async () => reopened.connection.close());
+        cleanups.push(() => {
+          reopened.connection.close();
+        });
         return new NodeSecurityService(reopened.connection, () => unixMilliseconds(now));
       },
       security: new NodeSecurityService(connection, () => unixMilliseconds(now)),
       setNow: (value) => {
         now = value;
       },
-      sql: {
-        all: async (sql, ...params) => connection.prepare(sql).all(...params),
-        get: async (sql, ...params) => connection.prepare(sql).get(...params),
-        run: async (sql, ...params) => {
-          connection.prepare(sql).run(...params);
-        },
-      },
+      sql: contractSql(connection),
     };
   },
 };

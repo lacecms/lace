@@ -1,5 +1,4 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite rows, branded snapshot fixtures and malformed projection inputs.
+import { mediaId } from "@lacecms/domain";
 import { expect, test } from "vitest";
 import { seoJson, storedSnapshot } from "./snapshots.js";
 
@@ -12,7 +11,7 @@ test("SEO groups round-trip through snapshot rows", () => {
     revision: 1,
     role: "editor",
     schema_version: 1,
-    seo_json: seoJson({ title: "Hello", noindex: true, image: "media-1" }),
+    seo_json: seoJson({ title: "Hello", noindex: true, image: mediaId("media-1") }),
     slug: null,
     title: "Hello",
     updated_at: 1,

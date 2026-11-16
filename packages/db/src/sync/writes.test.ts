@@ -1,5 +1,4 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite rows, branded snapshot fixtures and malformed projection inputs.
+import { strict as assert } from "node:assert";
 import { expect, test } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import { configurationSyncWriteStatements } from "./writes.js";
@@ -25,18 +24,20 @@ function syncWriteDatabase() {
       ('s1', 'i1', 'media', 'media-3'), ('s3', '$fields', 'm', 'media-1'),
       ('s3', 'q3', 'media', 'media-2');
   `);
-  const run = (write) => {
+  const run = (write: Parameters<typeof configurationSyncWriteStatements>[0]) => {
     for (const statement of configurationSyncWriteStatements(write, "posts")) {
       // Appending a guard condition, as the D1 batch does, must keep the statement valid.
       database.prepare(`${statement.sql} and ? = 1`).run(...statement.params, 1);
     }
   };
-  const fields = (id) =>
-    JSON.parse(
-      database.prepare("select fields_json from content_snapshots where id = ?").get(id)
-        .fields_json,
-    );
-  const all = (sql) =>
+  const fields = (id: string) => {
+    const value = database
+      .prepare("select fields_json from content_snapshots where id = ?")
+      .get(id)?.fields_json;
+    assert(typeof value === "string");
+    return JSON.parse(value);
+  };
+  const all = (sql: string) =>
     database
       .prepare(sql)
       .all()
@@ -127,7 +128,7 @@ test("the SEO removal write clears groups and SEO references of one model only",
   for (const statement of configurationSyncWriteStatements({ action: "remove-seo" }, "posts")) {
     database.prepare(`${statement.sql} and ? = 1`).run(...statement.params, 1);
   }
-  const rows = (sql) =>
+  const rows = (sql: string) =>
     database
       .prepare(sql)
       .all()

@@ -1,23 +1,23 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy D1/Worker harnesses, binding fakes and recorded adapter calls.
+import { strict as assert } from "node:assert";
+import type { ByteStream } from "@lacecms/application";
 import { afterEach, expect, test } from "vitest";
 import { MAX_MEDIA_BYTES } from "@lacecms/application";
 import { CloudflareObjectStorageError, CloudflareR2ObjectStorage } from "./index.js";
 import { openLocalCloudflare } from "./test-support/d1-test-harness.js";
 
-const cleanups = [];
+const cleanups: (() => void | Promise<void>)[] = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
 const settings = { publicBaseUrl: new URL("https://cms.example.test/base/"), timeoutMs: 1_000 };
 
-async function* chunks(...values) {
+async function* chunks(...values: Uint8Array[]) {
   for (const value of values) yield value;
 }
 
-async function collect(stream) {
-  const parts = [];
+async function collect(stream: ByteStream) {
+  const parts: number[] = [];
   for await (const chunk of stream) parts.push(...chunk);
   return new Uint8Array(parts);
 }
@@ -37,11 +37,16 @@ test("R2 storage round-trips objects, distinguishes missing and empty, and delet
       key: "media/one",
     }),
   ).resolves.toEqual({ contentType: "image/png", key: "media/one", size: 3 });
-  expect((await bucket.head("media/one")).httpMetadata.contentType).toBe("image/png");
-  expect(await collect(await storage.get("media/one"))).toEqual(new Uint8Array([1, 2, 3]));
+  expect(await bucket.head("media/one")).toMatchObject({
+    httpMetadata: { contentType: "image/png" },
+  });
+  const stored = await storage.get("media/one");
+  assert(stored);
+  expect(await collect(stored)).toEqual(new Uint8Array([1, 2, 3]));
   await storage.put({ body: chunks(), contentType: "image/png", key: "media/empty" });
   const empty = await storage.get("media/empty");
   expect(empty).not.toBeNull();
+  assert(empty);
   expect(await collect(empty)).toEqual(new Uint8Array());
   await expect(storage.get("media/missing")).resolves.toBeNull();
   await storage.delete("media/one");
@@ -87,9 +92,10 @@ test("R2 failures and timeouts are sanitized", async () => {
   ]) {
     const error = await operation().catch((value) => value);
     expect(error).toBeInstanceOf(CloudflareObjectStorageError);
+    assert(error instanceof CloudflareObjectStorageError);
     expect(error.message).toBe("Object storage operation failed.");
   }
-  const never = () => new Promise(() => {});
+  const never = () => new Promise<never>(() => {});
   const hanging = new CloudflareR2ObjectStorage(
     { delete: never, get: never, head: never, put: never },
     { ...settings, timeoutMs: 20 },
@@ -105,7 +111,7 @@ test("R2 failures and timeouts are sanitized", async () => {
     },
     { ...settings, timeoutMs: 20 },
   );
-  await expect(collect(await stalled.get("media/x"))).rejects.toBeInstanceOf(
-    CloudflareObjectStorageError,
-  );
+  const stalledStream = await stalled.get("media/x");
+  assert(stalledStream);
+  await expect(collect(stalledStream)).rejects.toBeInstanceOf(CloudflareObjectStorageError);
 });

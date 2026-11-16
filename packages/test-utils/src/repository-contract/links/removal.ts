@@ -51,6 +51,7 @@ contract(
     const { repository, sql } = await runtime.open({ resolveModel: resolveRoute });
     await seedModels(sql, "posts");
     const useCases = new ContentUseCases({
+      listQueryLimits: runtime.listQueryLimits,
       config: config.runtime,
       content: repository,
       media: repository,
@@ -351,6 +352,7 @@ contract(
     const first = await configuration(1);
     await sync(first, 1);
     const useCases = new ContentUseCases({
+      listQueryLimits: runtime.listQueryLimits,
       config: first.runtime,
       content: repository,
       media: repository,
@@ -560,6 +562,7 @@ contract(
       "select id from content_entries where model_key='settings'",
     );
     const useCases = new ContentUseCases({
+      listQueryLimits: runtime.listQueryLimits,
       config: config.runtime,
       content: repository,
       media: repository,

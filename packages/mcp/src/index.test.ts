@@ -1,3 +1,4 @@
+import { NODE_LIST_QUERY_LIMITS as TEST_LIST_QUERY_LIMITS } from "@lacecms/content";
 import * as v from "valibot";
 import {
   adminContentEntrySchema,
@@ -8,18 +9,15 @@ import {
 } from "@lacecms/contracts";
 import type { Actor, Permission, Role } from "@lacecms/domain";
 import type { McpToolCompletion } from "./index.js";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { createMcpContentHandler } from "./index.js";
 import { ContentUseCases } from "@lacecms/application";
-import { actorId, attenuateActor, unixMilliseconds } from "@lacecms/domain";
+import { actorId, attenuateActor, contentEntryId, unixMilliseconds } from "@lacecms/domain";
 import { defineConfig, defineCollection, defineGlobal, definePage } from "@lacecms/config";
 import { field } from "@lacecms/content";
-import {
-  InMemoryContentStore,
-  DeterministicClock,
-  DeterministicIdGenerator,
-} from "@lacecms/test-utils";
+import { DeterministicClock, DeterministicIdGenerator } from "@lacecms/test-utils";
+import { openConfiguredSqliteFixture, seedSqliteActorProfile } from "@lacecms/test-utils/sqlite";
 
 const clients: Client[] = [];
 afterEach(async () => {
@@ -47,8 +45,17 @@ async function fixture() {
       definePage({ key: "about", path: "/about", version: 1 }),
     ],
   });
-  const store = new InMemoryContentStore();
+  const outboxIds = new DeterministicIdGenerator("outbox");
+  const {
+    connection,
+    repository: store,
+    close,
+  } = openConfiguredSqliteFixture(config.runtime.content, {
+    nextId: () => outboxIds.next(),
+  });
+  onTestFinished(close);
   const content = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     config: config.runtime,
     content: store,
     media: store,
@@ -58,6 +65,7 @@ async function fixture() {
   const handler = createMcpContentHandler({ content, version: "0.0.0-test" });
   const events: McpToolCompletion[] = [];
   const connect = async (identity: Actor) => {
+    seedSqliteActorProfile(connection, identity.id, identity.id, identity.role);
     const client = new Client({ name: "lace-content-test", version: "0.0.0" });
     clients.push(client);
     await client.connect(
@@ -179,9 +187,9 @@ test("SDK calls preserve safe validation, known application, protocol and intern
   });
   expect(stale.isError).toBe(true);
   expect(errorPayload(stale).error.code).toBe("CONTENT_REVISION_CONFLICT");
-  f.content.loadAdminEntry = async () => {
-    throw new Error("SQL SELECT token=private-credential");
-  };
+  vi.spyOn(f.content, "loadAdminEntry").mockRejectedValueOnce(
+    new Error("SQL SELECT token=private-credential"),
+  );
   const internal = await client.callTool({ name: "get_entry", arguments: { entryId: created.id } });
   expect(errorPayload(internal).error).toEqual({
     code: "INTERNAL_ERROR",
@@ -241,6 +249,9 @@ test("publish tool shares publication, replay and guards while lifecycle bans re
   expect(published.publication).toBe("published");
   expect(published.build).toMatchObject({ status: "queued" });
   expect(published.entry.published).toBeDefined();
+  expect(await f.store.loadPublished({ entryId: contentEntryId(created.id) })).toMatchObject({
+    updatedBy: { id: identity.id, role: "admin" },
+  });
   const version = await f.store.publishedContentVersion();
   const replay = publishPayload(await client.callTool({ name: "publish_entry", arguments: args }));
   expect(replay).toEqual({
@@ -264,13 +275,14 @@ test("publish tool shares publication, replay and guards while lifecycle bans re
   });
   expect(blocked.isError).toBe(true);
   expect(errorPayload(blocked).error.code).toBe("CONTENT_ROUTE_CONFLICT");
+  const publish = vi.spyOn(f.content, "publish");
   for (const code of ["required", "internal_link_unavailable"]) {
     const { ContentValidationError } = await import("@lacecms/content");
-    f.content.publish = async () => {
-      throw new ContentValidationError([
+    publish.mockRejectedValueOnce(
+      new ContentValidationError([
         { code, path: ["fields", "link"], message: "Invalid destination." },
-      ]);
-    };
+      ]),
+    );
     const failure = await client.callTool({ name: "publish_entry", arguments: args });
     expect(failure.isError).toBe(true);
     expect(errorPayload(failure).error.code).toBe("VALIDATION_FAILED");
@@ -299,8 +311,17 @@ test("tools describe conditional fields and publish their projection", async () 
       }),
     ],
   });
-  const store = new InMemoryContentStore();
+  const outboxIds = new DeterministicIdGenerator("outbox");
+  const {
+    connection,
+    repository: store,
+    close,
+  } = openConfiguredSqliteFixture(config.runtime.content, {
+    nextId: () => outboxIds.next(),
+  });
+  onTestFinished(close);
   const content = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     config: config.runtime,
     content: store,
     media: store,
@@ -317,6 +338,7 @@ test("tools describe conditional fields and publish their projection", async () 
       operations: ["discoverModels", "list", "load", "create", "save", "publish"],
     },
   );
+  seedSqliteActorProfile(connection, identity.id, identity.id, identity.role);
   await client.connect(
     new StreamableHTTPClientTransport(new URL("https://lace.test/mcp"), {
       fetch: async (url, init) => {
@@ -378,10 +400,9 @@ test("MCP error matrix shares the classifier body without transport headers", as
   const { classifyError } = await import("@lacecms/contracts");
   const f = await fixture();
   const client = await f.connect(actor("admin", "admin", true));
+  const load = vi.spyOn(f.content, "loadAdminEntry");
   for (const c of errorMatrixCases) {
-    f.content.loadAdminEntry = async () => {
-      throw c.create();
-    };
+    load.mockRejectedValueOnce(c.create());
     const result = await client.callTool({
       name: "get_entry",
       arguments: { entryId: "matrix-entry" },

@@ -1,5 +1,6 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy D1/Worker harnesses, binding fakes and recorded adapter calls.
+import { strict as assert } from "node:assert";
+import type { CloudflareWorkerEnv } from "./runtime/settings.js";
+import { CloudflareEnvironmentError } from "./runtime/settings.js";
 import { expect, test } from "vitest";
 import { createCloudflareEmailSender, parseCloudflareSettings } from "./index.js";
 
@@ -11,7 +12,7 @@ const base = {
   MEDIA: { delete() {}, get() {}, head() {}, put() {} },
 };
 
-function failing(code) {
+function failing(code: string) {
   return {
     send: async () => {
       throw Object.assign(new Error(`${code}: ada@example.com refused`), { code });
@@ -20,9 +21,13 @@ function failing(code) {
 }
 
 test("sends structured messages through the binding with a named sender", async () => {
-  const sent = [];
+  const sent: unknown[] = [];
   const sender = createCloudflareEmailSender({
-    binding: { send: async (value) => sent.push(value) },
+    binding: {
+      send: async (value) => {
+        sent.push(value);
+      },
+    },
     from: "Lace CMS <cms@example.com>",
     timeoutMs: 1_000,
   });
@@ -55,7 +60,7 @@ test("maps every documented binding error code to a closed reason", async () => 
     E_SOMETHING_NEW: "unavailable",
   };
   for (const [code, reason] of Object.entries(expected)) {
-    const reports = [];
+    const reports: unknown[] = [];
     const sender = createCloudflareEmailSender({
       binding: failing(code),
       from: "cms@example.com",
@@ -77,10 +82,11 @@ test("bounds a hanging binding call", async () => {
   expect(await sender.send(message)).toEqual({ reason: "unavailable", status: "failed" });
 });
 
-function issues(env) {
+function issues(env: CloudflareWorkerEnv) {
   try {
     parseCloudflareSettings(env);
   } catch (error) {
+    assert(error instanceof CloudflareEnvironmentError);
     return error.issues.map((issue) => `${issue.reason}:${issue.variable}`);
   }
   return [];
@@ -97,7 +103,7 @@ test("settings compose email providers and require the EMAIL binding for cloudfl
   expect(issues({ ...cloudflare, EMAIL: { sendMail() {} } })).toEqual(["invalid:EMAIL"]);
   const binding = { send: async () => undefined };
   const parsed = parseCloudflareSettings({ ...cloudflare, EMAIL: binding });
-  expect(parsed.email.provider).toBe("cloudflare");
+  expect(parsed.email?.provider).toBe("cloudflare");
   expect(parsed.emailBinding).toBe(binding);
   expect(parseCloudflareSettings({ ...base, EMAIL: binding })).not.toHaveProperty("emailBinding");
   expect(
@@ -112,7 +118,7 @@ test("settings compose email providers and require the EMAIL binding for cloudfl
       LACE_EMAIL_FROM: "cms@example.com",
       LACE_EMAIL_PROVIDER: "log",
       LACE_ENVIRONMENT: "development",
-    }).email.provider,
+    }).email?.provider,
   ).toBe("log");
   const secret = "re_do_not_print_me";
   let failure;
@@ -127,6 +133,7 @@ test("settings compose email providers and require the EMAIL binding for cloudfl
   } catch (error) {
     failure = error;
   }
+  assert(failure instanceof CloudflareEnvironmentError);
   expect(failure.message).toContain("LACE_RESEND_API_BASE_URL");
   expect(JSON.stringify({ message: failure.message, issues: failure.issues })).not.toContain(
     secret,

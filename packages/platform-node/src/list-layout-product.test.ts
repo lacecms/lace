@@ -1,5 +1,5 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite/product harnesses, branded values and partial runtime adapters.
+import { actorId } from "@lacecms/domain";
+import { array, object, number, string } from "./test-support/json.js";
 import { expect, test } from "vitest";
 import { defineCollection, defineConfig } from "@lacecms/config";
 import { builtInBlocks, defineBlock, field, listLayoutSettings } from "@lacecms/content";
@@ -28,25 +28,24 @@ test("real API saves, publishes and validates Gallery layout scalars", async () 
   });
   const { runtime, request } = await openNodeTestRuntime(platform, {
     config,
-    actor: { id: "ce9b-admin", role: "admin" },
+    actor: { id: actorId("ce9b-admin"), role: "admin" },
     storage: new InMemoryObjectStorage(),
     sync: true,
   });
-  const call = async (path, body, method = "POST", status = 200) => {
+  const call = async (path: string, body: unknown, method = "POST", status = 200) => {
     const response = await request(path, {
       method,
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const data = await response.json();
     expect(response.status, JSON.stringify(data)).toBe(status);
-    return data;
+    return object(data);
   };
 
   const metadata = await call("/api/v1/admin/content-models", undefined, "GET");
-  expect(
-    metadata.items[0].blockDefinitions.find((b) => b.type === "gallery").settings.layoutMode
-      .presentation.choices,
-  ).toHaveLength(3);
+  const definitions = array(object(array(metadata.items)[0]).blockDefinitions);
+  const gallery = object(definitions.find((b) => object(b).type === "gallery"));
+  expect(object(object(object(gallery.settings).layoutMode).presentation).choices).toHaveLength(3);
   const png = await sharp({ create: { background: "white", channels: 3, width: 3, height: 2 } })
     .png()
     .toBuffer();
@@ -60,7 +59,7 @@ test("real API saves, publishes and validates Gallery layout scalars", async () 
     }),
   );
   expect(upload.status).toBe(201);
-  const media = await upload.json();
+  const media = object(await upload.json());
   const settings = {
     layoutMode: "flex-row",
     layoutWrap: false,
@@ -94,18 +93,21 @@ test("real API saves, publishes and validates Gallery layout scalars", async () 
     ],
   };
   const created = await call("/api/v1/admin/models/posts/entries", payload, "POST", 201);
-  const path = `/api/v1/admin/entries/${created.id}`;
+  const path = `/api/v1/admin/entries/${string(created.id)}`;
   const saved = await call(
     `${path}/draft`,
     {
       ...payload,
       blocks: [{ ...payload.blocks[0], settings: { ...settings, layoutMode: "grid" } }],
-      expectedRevision: created.draft.revision,
+      expectedRevision: number(object(created.draft).revision),
     },
     "PUT",
   );
-  expect(saved.draft.blocks[0].settings).toEqual({ ...settings, layoutMode: "grid" });
-  await call(`${path}/publish`, { expectedRevision: saved.draft.revision });
+  expect(object(array(object(saved.draft).blocks)[0]).settings).toEqual({
+    ...settings,
+    layoutMode: "grid",
+  });
+  await call(`${path}/publish`, { expectedRevision: number(object(saved.draft).revision) });
   for (const invalid of [
     { layoutMode: "bad" },
     { layoutWrap: "yes" },
@@ -117,22 +119,23 @@ test("real API saves, publishes and validates Gallery layout scalars", async () 
       {
         ...payload,
         blocks: [{ ...payload.blocks[0], settings: { ...settings, ...invalid } }],
-        expectedRevision: saved.draft.revision,
+        expectedRevision: number(object(saved.draft).revision),
       },
       "PUT",
       422,
     );
   }
-  const { entry: publicEntry } = await call(
-    "/api/v1/public/collections/posts/layouts",
-    undefined,
-    "GET",
-  );
-  expect(publicEntry.blocks[0].settings).toEqual({ ...settings, layoutMode: "grid" });
+  const publicResponse = await call("/api/v1/public/collections/posts/layouts", undefined, "GET");
+  const publicEntry = object(publicResponse.entry);
+  const publicBlock = object(array(publicEntry.blocks)[0]);
+  expect(publicBlock.settings).toEqual({ ...settings, layoutMode: "grid" });
   expect(JSON.stringify(publicEntry)).not.toMatch(/presentation|diagram|choices/);
   // SM5D: the video item's stale media is draft-only; images are published as images.
-  expect(publicEntry.blocks[0].data.images[0]).toMatchObject({ kind: "image", media: media.id });
-  expect(publicEntry.blocks[0].data.images[2]).toEqual({
+  expect(array(object(publicBlock.data).images)[0]).toMatchObject({
+    kind: "image",
+    media: media.id,
+  });
+  expect(array(object(publicBlock.data).images)[2]).toEqual({
     kind: "video",
     videoUrl: "https://vimeo.com/76979871",
     videoTitle: "Studio tour",
@@ -141,14 +144,14 @@ test("real API saves, publishes and validates Gallery layout scalars", async () 
     placement: "auto",
   });
   const duplicate = await call(`${path}/duplicate`, {}, "POST", 201);
-  expect(duplicate.draft.blocks[0].settings).toEqual(publicEntry.blocks[0].settings);
+  expect(object(array(object(duplicate.draft).blocks)[0]).settings).toEqual(publicBlock.settings);
   const token = await call("/api/v1/admin/api-tokens", { name: "LIST1 build" }, "POST", 201);
   const exported = (
     await readCompleteBuildExport(
       (url, init) => runtime.app.fetch(new Request(url, init)),
       "https://lace.test",
-      token.token,
+      string(token.token),
     )
   ).export;
-  expect(exported.entries[0].blocks[0].settings).toEqual(publicEntry.blocks[0].settings);
+  expect(exported.entries[0]?.blocks[0]?.settings).toEqual(publicBlock.settings);
 });

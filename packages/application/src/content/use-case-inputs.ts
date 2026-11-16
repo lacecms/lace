@@ -35,7 +35,7 @@ import type { OpaqueCursor } from "../shared/brands.js";
 import type { ContentLinkReadPort, LinkImpactAcknowledgment } from "../ports/links.js";
 
 export interface ContentUseCaseDependencies {
-  readonly listQueryLimits?: ListQueryLimits;
+  readonly listQueryLimits: ListQueryLimits;
   readonly clock: Clock;
   readonly config: RuntimeConfigProjection;
   readonly content: ContentEntryReadPort &

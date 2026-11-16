@@ -1,5 +1,5 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite rows, branded snapshot fixtures and malformed projection inputs.
+import { actorId, mediaId, unixMilliseconds } from "@lacecms/domain";
+import type { UpdateMediaMetadataInput } from "@lacecms/application";
 import { expect, test } from "vitest";
 import { mediaMetadata, mediaMetadataUpdateParams } from "./catalog.js";
 
@@ -35,17 +35,17 @@ test("maps descriptive media metadata and refuses inconsistent rows", () => {
       expect.objectContaining({ code: "CONTENT_INVALID_STATE" }),
     );
   }
-  const input = {
+  const input: UpdateMediaMetadataInput = {
     alt: "Bike",
     caption: null,
-    expectedUpdatedAt: 4,
+    expectedUpdatedAt: unixMilliseconds(4),
     focalPoint: { x: 0.25, y: 0.75 },
-    mediaId: "m-1",
-    requestedBy: { id: "editor", role: "editor" },
-    updatedAt: 5,
+    mediaId: mediaId("m-1"),
+    requestedBy: { id: actorId("editor"), role: "editor" },
+    updatedAt: unixMilliseconds(5),
   };
   expect(mediaMetadataUpdateParams(input)).toEqual(["Bike", null, 0.25, 0.75, 5, "m-1", 4]);
-  expect(() => mediaMetadataUpdateParams({ ...input, updatedAt: 4 })).toThrow(
+  expect(() => mediaMetadataUpdateParams({ ...input, updatedAt: unixMilliseconds(4) })).toThrow(
     expect.objectContaining({ code: "CONTENT_INVALID_STATE" }),
   );
 });

@@ -1,5 +1,6 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite/product harnesses, branded values and partial runtime adapters.
+import { strict as assert } from "node:assert";
+import type { ContentModelRoute, DraftMediaReference } from "@lacecms/domain";
+import { object } from "./test-support/json.js";
 import { expect, test } from "vitest";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -37,20 +38,24 @@ const minioEnvironment = Object.freeze({
   LACE_MINIO_TIMEOUT_MS: "1000",
 });
 
-const editor = { id: actorId("editor"), role: "editor" };
-const routes = new Map([
+const editor = { id: actorId("editor"), role: "editor" as const };
+const routes = new Map<string, ContentModelRoute>([
   ["posts", { key: contentModelKey("posts"), kind: "collection", route: "/blog/:slug" }],
   ["home", { key: contentModelKey("home"), kind: "page", path: "/" }],
 ]);
 
-function draftEntry(id, modelKey, updatedAt, title = id) {
+function draftEntry(id: string, modelKey: string, updatedAt: number, title = id) {
   const entryId = contentEntryId(id);
+  const model = routes.get(modelKey);
+  assert(model);
   return createContentEntry({
     id: entryId,
-    model: routes.get(modelKey),
+    model,
     draft: {
       blocks: [
         {
+          hidden: false,
+          settings: {},
           data: { image: "media-1", title },
           key: blockKey(`${id}-block`),
           position: 1000,
@@ -72,7 +77,7 @@ function draftEntry(id, modelKey, updatedAt, title = id) {
   });
 }
 
-function references(blockKeyValue) {
+function references(blockKeyValue: string): DraftMediaReference[] {
   return [
     { fieldPath: "image", mediaId: mediaId("media-1"), sourceKey: "$fields" },
     { fieldPath: "image", mediaId: mediaId("media-1"), sourceKey: blockKey(blockKeyValue) },
@@ -129,7 +134,7 @@ test("Node API does not migrate an outdated database on startup", async () => {
       const tables = runtime.database.connection
         .prepare("select name from sqlite_master where type = 'table'")
         .all();
-      expect(tables.some((row) => row.name === "__drizzle_migrations")).toBe(false);
+      expect(tables.some((row) => object(row).name === "__drizzle_migrations")).toBe(false);
     } finally {
       runtime.close();
     }
@@ -152,12 +157,13 @@ test("migrates an empty file, reopens with SQLite invariants, and enforces const
       const tableNames = database.connection
         .prepare("select name from sqlite_master where type = 'table'")
         .all()
-        .map(({ name }) => name);
+        .map((row) => object(row).name);
       expect(tableNames).toEqual(
         expect.arrayContaining([
           "content_models",
           "content_entries",
           "content_snapshots",
+          "content_actor_profiles",
           "outbox_events",
           "installation_state",
           "mutation_guards",
@@ -172,7 +178,7 @@ test("migrates an empty file, reopens with SQLite invariants, and enforces const
       const indexNames = database.connection
         .prepare("select name from sqlite_master where type = 'index'")
         .all()
-        .map(({ name }) => name);
+        .map((row) => object(row).name);
       expect(indexNames).toEqual(
         expect.arrayContaining([
           "content_entries_singleton_idx",
@@ -183,7 +189,7 @@ test("migrates an empty file, reopens with SQLite invariants, and enforces const
           "site_builds_history_idx",
         ]),
       );
-      const queryPlan = (sql, ...bindings) =>
+      const queryPlan = (sql: string, ...bindings: unknown[]) =>
         database.connection.prepare(`explain query plan ${sql}`).all(...bindings);
       expect(
         queryPlan("select * from content_blocks where snapshot_id = ? order by position", "x"),
@@ -386,7 +392,7 @@ test("bounds Node build-export queries and selects the entry-list index", async 
       for (const [id, at] of [
         ["post-a", 20],
         ["post-b", 21],
-      ]) {
+      ] as const) {
         await repository.create({
           entry: draftEntry(id, "posts", at),
           mediaReferences: references(`${id}-block`),
@@ -400,7 +406,7 @@ test("bounds Node build-export queries and selects the entry-list index", async 
         });
       }
       const prepare = database.connection.prepare.bind(database.connection);
-      const statements = [];
+      const statements: string[] = [];
       database.connection.prepare = (sql) => {
         statements.push(sql);
         return prepare(sql);
@@ -419,6 +425,7 @@ test("bounds Node build-export queries and selects the entry-list index", async 
       expect(statements.length).toBeLessThanOrEqual(10);
       expect(statements.join("\n")).not.toMatch(/ in \(\?/u);
       const mediaStatement = statements.find((sql) => sql.includes("public_snapshot_id"));
+      assert(mediaStatement);
       expect(
         database.connection
           .prepare(`explain query plan ${mediaStatement}`)
@@ -437,6 +444,7 @@ test("bounds Node build-export queries and selects the entry-list index", async 
       });
       database.connection.prepare = prepare;
       const listStatement = statements.find((sql) => sql.includes("sort_value"));
+      assert(listStatement);
       expect(
         database.connection
           .prepare(`explain query plan ${listStatement}`)
@@ -476,7 +484,7 @@ test("reads each Node build-export page from one snapshot despite concurrent com
       for (const [id, at] of [
         ["post-a", 20],
         ["post-b", 21],
-      ]) {
+      ] as const) {
         await repository.create({
           entry: draftEntry(id, "posts", at),
           mediaReferences: references(`${id}-block`),
@@ -537,6 +545,7 @@ test("reads each Node build-export page from one snapshot despite concurrent com
       writer.connection
         .prepare("update published_state set version = version + 1 where singleton_key = 1")
         .run();
+      assert(before.nextCursor);
       await expect(
         repository.exportBuildContentPage({ after: before.nextCursor, limit: 1 }),
       ).rejects.toMatchObject({

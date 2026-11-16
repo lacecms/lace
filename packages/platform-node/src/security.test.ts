@@ -1,5 +1,4 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite/product harnesses, branded values and partial runtime adapters.
+import { string, object } from "./test-support/json.js";
 import { expect, test } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -149,7 +148,7 @@ test("Node composition maps a Better Auth session into a protected actor", async
       }),
     );
     expect(signIn.status).toBe(200);
-    const cookie = signIn.headers.getSetCookie()[0].split(";")[0];
+    const cookie = string(signIn.headers.getSetCookie()[0]?.split(";")[0]);
     expect(
       (
         await runtime.app.fetch(
@@ -269,7 +268,7 @@ test("Better Auth rejects public enrollment and applies same-origin session poli
         method: "POST",
       }),
     );
-    const cookie = signIn.headers.getSetCookie()[0].split(";")[0];
+    const cookie = string(signIn.headers.getSetCookie()[0]?.split(";")[0]);
     expect(signIn.status).toBe(200);
     expect(signIn.headers.get("set-cookie")).toContain("Secure");
     const localBoundary = createBetterAuthBoundary({
@@ -288,7 +287,7 @@ test("Better Auth rejects public enrollment and applies same-origin session poli
     );
     expect(localSignIn.status).toBe(200);
     expect(localSignIn.headers.get("set-cookie")).toContain("better-auth.session_token");
-    const localCookie = localSignIn.headers.getSetCookie()[0].split(";")[0];
+    const localCookie = string(localSignIn.headers.getSetCookie()[0]?.split(";")[0]);
     await expect(
       localBoundary.actors.resolve(
         new Request("http://localhost:3000/api/v1/admin/content-models", {
@@ -395,7 +394,7 @@ test("auth boundary forwards only sign-in, sign-out and get-session to the provi
         "insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at) values ('a1', 'u1', 'credential', 'u1', ?, ?, ?)",
       )
       .run(await hashPassword("correct horse battery staple"), now, now);
-    const post = (path, body, cookie) =>
+    const post = (path: string, body: unknown, cookie?: string) =>
       boundary.fetch(
         new Request(`https://lace.test${path}`, {
           body: JSON.stringify(body),
@@ -412,7 +411,7 @@ test("auth boundary forwards only sign-in, sign-out and get-session to the provi
       password: "correct horse battery staple",
     });
     expect(signIn.status).toBe(200);
-    const cookie = signIn.headers.getSetCookie()[0].split(";")[0];
+    const cookie = string(signIn.headers.getSetCookie()[0]?.split(";")[0]);
     const before = database.connection.prepare("select password from account").get();
     for (const [path, body] of [
       ["/api/auth/sign-up/email", { email: "x@lace.test", name: "X", password: "x".repeat(16) }],
@@ -423,7 +422,7 @@ test("auth boundary forwards only sign-in, sign-out and get-session to the provi
       ["/api/auth/update-user", { name: "Mallory" }],
       ["/api/auth/request-password-reset", { email: "ada@lace.test" }],
       ["/api/auth/revoke-sessions", {}],
-    ]) {
+    ] as const) {
       const response = await post(path, body, cookie);
       expect(response.status, path).toBe(404);
       expect(await response.text()).toBe("");
@@ -442,7 +441,9 @@ test("auth boundary forwards only sign-in, sign-out and get-session to the provi
       new Request("https://lace.test/api/auth/get-session", { headers: { cookie } }),
     );
     expect(current.status).toBe(200);
-    const { id: sessionId } = database.connection.prepare("select id from session").get();
+    const sessionId = string(
+      object(database.connection.prepare("select id from session").get()).id,
+    );
     const prepare = database.connection.prepare.bind(database.connection);
     let sessionReads = 0;
     database.connection.prepare = (sql) => {

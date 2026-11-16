@@ -2,6 +2,12 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 
+test("the platform re-exports the compiled Node DB repository", async () => {
+  const { NodeContentRepository } = await import("@lacecms/db/node");
+  const platform = await import("../dist/index.js");
+  expect(platform.NodeContentRepository).toBe(NodeContentRepository);
+});
+
 test("packaged entry point keeps its public exports", async () => {
   expect(Object.keys(await import("../dist/index.js")).sort()).toEqual([
     "HostDatabaseSafetyError",

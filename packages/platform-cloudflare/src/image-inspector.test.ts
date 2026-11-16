@@ -1,5 +1,4 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy D1/Worker harnesses, binding fakes and recorded adapter calls.
+import type { MediaMimeType } from "@lacecms/application";
 import { expect, test } from "vitest";
 import sharp from "sharp";
 import { animatedGifFixture, gifFixture } from "@lacecms/test-utils";
@@ -7,16 +6,16 @@ import { WorkerImageInspector } from "./index.js";
 
 const inspector = new WorkerImageInspector();
 
-function base(width, height) {
+function base(width: number, height: number) {
   return sharp({ create: { background: { b: 3, g: 2, r: 1 }, channels: 3, height, width } });
 }
 
-async function sharpDimensions(bytes) {
+async function sharpDimensions(bytes: Uint8Array) {
   const metadata = await sharp(bytes).metadata();
   return metadata.autoOrient;
 }
 
-const cases = [
+const cases: [MediaMimeType, () => Promise<Uint8Array>][] = [
   ["image/png", () => base(3, 2).png().toBuffer()],
   ["image/png", () => base(400, 200).png().withMetadata({ orientation: 6 }).toBuffer()],
   ["image/jpeg", () => base(3, 2).jpeg().toBuffer()],
@@ -61,23 +60,23 @@ test("rejects mismatched, truncated, trailing, and corrupted images", async () =
     "image/png": new Uint8Array(await base(8, 8).png().toBuffer()),
     "image/webp": new Uint8Array(await base(8, 8).webp().toBuffer()),
   };
-  const rejected = (bytes, type) =>
+  const rejected = (bytes: Uint8Array, type: MediaMimeType) =>
     expect(inspector.inspect(bytes, type)).rejects.toMatchObject({
       code: "CONTENT_INVALID_STATE",
     });
-  for (const [type, bytes] of Object.entries(fixtures)) {
+  for (const [type, bytes] of Object.entries(fixtures) as [MediaMimeType, Uint8Array][]) {
     await rejected(new Uint8Array([...bytes, 0]), type);
     await rejected(bytes.slice(0, bytes.length - 1), type);
     await rejected(bytes.slice(0, Math.floor(bytes.length / 2)), type);
     await rejected(new Uint8Array(0), type);
-    for (const [other] of Object.entries(fixtures))
+    for (const [other] of Object.entries(fixtures) as [MediaMimeType, Uint8Array][])
       if (other !== type) await rejected(bytes, other);
   }
   const png = fixtures["image/png"].slice();
-  png[20] ^= 0xff;
+  png[20] = (png[20] ?? 0) ^ 0xff;
   await rejected(png, "image/png");
   const webp = fixtures["image/webp"].slice();
-  webp[4] ^= 0x01;
+  webp[4] = (webp[4] ?? 0) ^ 0x01;
   await rejected(webp, "image/webp");
 });
 

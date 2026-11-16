@@ -36,6 +36,10 @@
     "test:transit": {
       "dependsOn": ["^test:transit"]
     },
+    "@lacecms/db#test:transit": {
+      "dependsOn": ["^test:transit"],
+      "inputs": ["$TURBO_DEFAULT$", "drizzle/**"]
+    },
     "test": {
       "dependsOn": ["test:transit"],
       "outputs": []

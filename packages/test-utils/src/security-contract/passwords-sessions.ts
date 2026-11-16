@@ -158,6 +158,12 @@ export const cases: readonly SecurityContractCase[] = [
       expect(await harness.security.readUserProfile(admin.id)).toMatchObject({
         name: "Ada Lovelace",
       });
+      expect(
+        await harness.sql.get(
+          "select display_name, role from content_actor_profiles where actor_id = ?",
+          admin.id,
+        ),
+      ).toEqual({ display_name: "Ada Lovelace", role: "admin" });
       await expect(
         harness.security.updateDisplayName({ displayName: "Nobody", now, userId: "missing" }),
       ).resolves.toBe(false);

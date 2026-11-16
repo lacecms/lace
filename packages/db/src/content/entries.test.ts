@@ -1,10 +1,10 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite rows, branded snapshot fixtures and malformed projection inputs.
+import { contentModelKey } from "@lacecms/domain";
+import type { ListContentEntriesInput } from "@lacecms/application";
 import { expect, test } from "vitest";
 
 test("entry cursor identity binds canonical operands and effective capabilities", async () => {
   const { entryCursorKind } = await import("./entries.js");
-  const query = {
+  const query: NonNullable<ListContentEntriesInput["query"]> = {
     sortableFields: [{ key: "category", type: "select", options: ["b", "a"] }],
     filterableFields: [
       { key: "year", type: "number" },
@@ -16,12 +16,22 @@ test("entry cursor identity binds canonical operands and effective capabilities"
       { field: "category", op: "in", values: ["b", "a"] },
     ],
   };
-  const input = { modelKey: "posts", sort: "-updatedAt", limit: 1, listFields: [], query };
+  const input: ListContentEntriesInput = {
+    modelKey: contentModelKey("posts"),
+    sort: "-updatedAt",
+    limit: 1,
+    listFields: [],
+    query,
+  };
   const identity = await entryCursorKind(input);
-  const changed = (delta) => entryCursorKind({ ...input, query: { ...query, ...delta } });
+  const changed = (delta: Partial<NonNullable<ListContentEntriesInput["query"]>>) =>
+    entryCursorKind({ ...input, query: { ...query, ...delta } });
   expect(
     await changed({
-      filters: [{ ...query.filters[1], values: ["a", "b"] }, query.filters[0]],
+      filters: [
+        { field: "category", op: "in", values: ["a", "b"] },
+        { field: "year", op: "eq", value: 0 },
+      ],
       filterableFields: [...query.filterableFields].reverse(),
     }),
   ).toBe(identity);
@@ -38,7 +48,12 @@ test("entry cursor identity binds canonical operands and effective capabilities"
 test("cursor fingerprints expire across matching versions and runtime policy changes", async () => {
   const { entryCursorKind, decodeEntryCursor } = await import("./entries.js");
   const { encodeSortCursor } = await import("../shared/cursors.js");
-  const input = { modelKey: "posts", sort: "title", limit: 1, listFields: [] };
+  const input: ListContentEntriesInput = {
+    modelKey: contentModelKey("posts"),
+    sort: "title",
+    limit: 1,
+    listFields: [],
+  };
   const node = await entryCursorKind(input);
   const cloud = await entryCursorKind({
     ...input,

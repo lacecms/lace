@@ -21,6 +21,12 @@ narrow, and use cases depend only on the capabilities they call.
 `SecurityService` combines the account, session and token ports with
 `UserProfileReader`; runtime adapters implement the combined contract.
 
+The `ConfigurationSyncStateReadPort` and `ConfigurationSyncApplyPort` contracts
+live in `packages/application/src/configuration`. The application prepares
+the report for operator review, coordinates resumable block migrations and
+prepares a fresh report for final apply. The `db` package compiles the
+revalidated report into the ordered final write plan.
+
 Both runtimes compose the portable services in one place:
 `composeLaceServices` in `packages/server` receives the runtime adapters
 (repository, security, object storage, image inspector, clock, ids, list-query
@@ -29,9 +35,18 @@ authentication boundaries, optional MCP and OAuth adapters, HTTP settings) and
 returns the content, media, link, build, account and OAuth-connection use cases
 plus the complete `createLaceApp` input. `createNodeRuntime` and
 `createCloudflareRuntime` build adapters, dispatchers and process wiring only.
+Every content application composition supplies trusted list-query limits
+explicitly: Node uses 200 characters with no LIKE byte cap, and Cloudflare uses
+48 characters and a 50-byte escaped-pattern cap. Request and model configuration
+cannot override this policy; a missing policy fails construction.
 `LACE_API_DOCS_ENABLED` and `LACE_MCP_ENABLED` are parsed by one shared rule.
 Route modules receive actor resolution and the capabilities they call, never
 the raw application input, and depend on the narrow security ports.
+
+Node composition imports and exposes the repository from `@lacecms/db/node`
+and owns the connection lifecycle. D1 composition imports the portable
+`@lacecms/db` entry for shared SQL and uses its own guarded batch executor.
+These are the two production content repository implementations.
 
 ```mermaid
 flowchart TB
@@ -41,12 +56,14 @@ flowchart TB
   end
   subgraph nodePkg["@lacecms/platform-node"]
     nodeRuntime["createNodeRuntime"]
-    nodeRepo["NodeContentRepository<br/>(better-sqlite3 transactions)"]
     nodeSecurity["NodeSecurityService<br/>NodeFixedWindowRateLimiter"]
     minio["NodeMinioObjectStorage"]
     builder["NodeBuilderSiteBuildTrigger"]
     nodeDispatch["site-build and media-deletion dispatchers"]
     smtp["SMTP or Resend email"]
+  end
+  subgraph nodeDbPkg["@lacecms/db/node"]
+    nodeRepo["NodeContentRepository<br/>(better-sqlite3 transactions)"]
   end
   subgraph cfPkg["@lacecms/platform-cloudflare"]
     cfRuntime["createCloudflareRuntime"]
@@ -73,6 +90,7 @@ flowchart TB
   end
   nodeEntry --> nodeRuntime
   workerEntry --> cfRuntime
+  nodeRuntime --> nodeRepo
   nodeRuntime --> compose
   cfRuntime --> compose
   compose --> useCases
@@ -180,6 +198,13 @@ independent of page size; anchors are never resolved by per-entry reads or
 full JSON loads, and query counts distinguish first pages from anchored
 continuations.
 
+Collection summaries, media catalog reads, snapshot hydration and publication
+role reads resolve attribution with indexed access to the security-owned
+projection. Explicit editor descriptions use the same profile under the
+existing authorized read. The number of actors on a page adds no statements
+or binds to list and export queries, and publication keeps its existing
+transaction and D1 batch boundaries.
+
 Media tag filtering adds at most five indexed EXISTS lookups per candidate in
 the single list-page query. Tags are read with a bounded correlated projection,
 with no per-item round trips. Catalog pages use one indexed aggregate query
@@ -211,21 +236,27 @@ connections always keep foreign keys on.
 ### Runtime deltas
 
 Node SQLite and D1 share every row mapper, every identical read
-(`SqlContentReader`) and the configuration-sync and link statement builders.
-The write paths stay runtime-specific (interactive transactions versus guarded
-batches, [ADR 0002](../adr/0002-d1-batches-and-node-transactions.md)). Every
-remaining intentional difference is listed here; where it could be observable,
-a shared repository contract case pins the result.
+(`SqlContentReader`), block-migration and link statement builders, and ordered
+plans for entry, media, build, outbox and final configuration-sync mutations.
+Shared enqueue statements derive the target version and inherited retry
+lineage inside the atomic write, after any public-state bump. Typed admission,
+ordered statements, result slots, exact counts and outbox markers belong to
+the plan. Executors retain their runtime-specific transaction boundaries
+([ADR 0002](../adr/0002-d1-batches-and-node-transactions.md)). The table lists
+the runtime differences and how the repository contracts verify observable
+results.
 
 | Area | Node SQLite | D1 | Observable result pinned by |
 | --- | --- | --- | --- |
-| Build and dispatcher claims | select and lease update in one transaction | select, then one guarded batch | aligned: at most 10 site-build leases (`MAX_SITE_BUILD_CLAIMS_PER_CALL`, four D1 batch statements each) and 20 dispatcher leases (`MAX_DISPATCHER_CLAIMS_PER_CALL`) per call; site-build lease update guarded by the read `payload_json` on both; contract "caps site-build and dispatcher claims per call" |
-| Revision conflicts | `changes !== 1` on the guarded write | pre-check after replay, guarded batch, post-batch disambiguation | aligned precedence: replay → stale revision → link targets; contract cases for concurrent saves and stale publication |
-| Publication result | committed entry reloaded inside the transaction | pre-batch prediction, stored in the same batch as the idempotency record | returned entry, its replay and the unpublication result equal a later `load` |
-| `mutation_guards` | only an in-transaction dirty token for the shared sync link statements; inserted and deleted before commit | batch guard tokens for every guarded mutation | not observable |
+| Build and dispatcher claims | candidate read and lease updates in one transaction | bounded candidate read, then one guarded batch with independent candidate admissions | aligned: at most 10 site-build leases (`MAX_SITE_BUILD_CLAIMS_PER_CALL`, four D1 batch statements each) and 20 dispatcher leases (`MAX_DISPATCHER_CLAIMS_PER_CALL`) per call; site-build lease update guarded by the read `payload_json` on both; contract "caps site-build and dispatcher claims per call" |
+| Entry plan admission | predicate and diagnostics inside the write transaction | first guarded write and diagnostics inside one atomic batch | typed outcomes; replay → stale revision → link targets → route conflict; contract cases for concurrent saves and stale publication |
+| Publication result | materialized from the state read inside the transaction | pre-batch prediction, stored in the same batch as the idempotency record | returned entry, its replay and the unpublication result equal a later `load` |
+| `mutation_guards` | in-transaction dirty token for shared sync link statements | batch-unique guard tokens, removed inside the batch | no persistent plan token |
 | Build export page | both read groups in one read transaction | two `batch()` calls with a version re-read | contract build-export cases; Node one extra in-transaction version read |
 | Collection `list` and configuration-sync scans | numbered parameters, `NODE_LIST_QUERY_LIMITS` | positional parameters, `CLOUDFLARE_LIST_QUERY_LIMITS` | collection-query contract cases (§12 limits differ by design) |
+| Final configuration-sync apply | revalidates the report and reads recursive rewrite inputs inside the immediate write transaction | reads before one batch that guards every mutation on the stored summary and link predicates | shared plan preserves operation order, baselines, rewrites, stale and link errors, and commit-time build version |
+| Resumable block migrations | one transaction per entry unit | packs whole units into guarded batches and splits an oversized entry published snapshot first, draft second | committed units survive interruption and the final apply queues any rebuild |
 | Bind chunk for identifier lists | 200 | 100 (`D1_MAX_BOUND_PARAMETERS`) | not observable |
 | Superseded snapshots and idempotency expiry | one transaction | guarded batch | aligned: shared `deleteSupersededSnapshotsStatement`, live-record read and expired-record replacement, purge statement; contract retention cases |
-| Entry reload inside writes | synchronous loader inside publication transactions | awaited shared reader | covered by the publication result row |
-| Outbox wake-up | the dispatcher loop polls the outbox | the first committed outbox statement of a request registers one post-commit `waitUntil` pass | Worker tests count registered passes; scheduled dispatch recovers either way |
+| Entry reads for writes | synchronous loader inside publication transactions | awaited shared reader before the batch | covered by the publication result row |
+| Outbox wake-up | the dispatcher loop polls the outbox | a committed plan receipt reporting inserted or coalesced work registers one post-commit `waitUntil` pass per request | Worker tests count registered passes; scheduled dispatch recovers either way |

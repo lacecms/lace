@@ -49,7 +49,7 @@ import {
   type ServerLogger,
 } from "@lacecms/server";
 import { ulid } from "ulid";
-import { NodeContentRepository } from "../repository/repository.js";
+import { NodeContentRepository } from "@lacecms/db/node";
 import { NodeFixedWindowRateLimiter, NodeSecurityService } from "../security/service.js";
 import { openNodeDatabase, type NodeDatabase } from "../database/connection.js";
 import { NodeSharpImageInspector } from "../media/image-inspector.js";

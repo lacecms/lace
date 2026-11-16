@@ -6,10 +6,9 @@ hints, block migrations and refusal codes) is public:
 [Synchronize configuration](../apps/docs/src/content/docs/en/latest/content-modeling/synchronization.md). Accepted behavior lives in the
 `configuration-synchronization` and `schema-evolution` specs.
 
-Step 6A provides the portable, non-mutating decision layer for reconciling
-normalized `lace.config.ts` models with persisted model identities. It is shared
-application behavior; the executable `lace content sync` command and its
-atomic write path are introduced later.
+The application planner reconciles normalized `lace.config.ts` models with
+persisted model identities and produces the report reviewed by
+`lace content sync`.
 
 The planner emits operations in stable key order:
 
@@ -36,29 +35,26 @@ state, or enqueue a build.
 `renamedFrom` remains available only to the normalized runtime model for this
 planning step. It is excluded from public configuration projections and all
 identity hashes, so it can be removed after a rename has reached every
-environment without appearing as a structural content change. Session 6B will
-re-read and guard stored state transactionally before applying any approved
-plan; it does not perform automatic content migrations.
+environment without appearing as a structural content change.
 
 ## Atomic apply boundary
 
-Session 6B adds portable dry-run and guarded-apply contracts; the executable
-`lace content sync` CLI and the Cloudflare adapter are still deferred. A caller
-first reads persisted model summaries and renders the canonical plan. Apply
-then supplies that exact summary and approved plan to one specialized
-repository operation. The repository re-reads the summary and re-plans inside
-its write transaction, rejecting an invalid or stale plan without any writes.
-Reapplying unchanged configuration therefore becomes a valid no-op and neither
-advances the public version nor creates build work.
+Apply supplies the reviewed report and its stored model summary to the
+repository. Shared preflight re-reads and compares model identities, baseline
+evidence and snapshot fingerprints, and checks the canonical report against
+a fresh plan. Node performs preflight and recursive snapshot reads within
+its immediate write transaction. D1 reads before submitting one batch that
+guards every write on the stored summary and link availability. A fresh no-op
+returns without writes. Block migrations run as separate resumable units,
+followed by a fresh preparation of the final mutation.
 
 The atomic operation may create, update, explicitly rename, or safely remove
 model identities. A rename requires the plan's explicit `renamedFrom` evidence;
-the Node implementation updates the model key and relies on the database's
-foreign-key cascade for attached entries. Sync never transforms arbitrary
-content (it only backfills declared defaults, see below) or infers a
-replacement from an addition/removal pair.
+the shared SQL plan updates the model key in place and relies on the
+foreign-key cascade for attached entries. Recursive snapshot inputs are read
+using the former key. Rewrites address the configured key after the cascade.
 
-When sync creates a page model, it also creates exactly one incomplete draft
+When sync creates a page or global model, it also creates exactly one incomplete draft
 singleton in the same mutation. The draft uses normalized field defaults, no
 blocks, a `NULL` slug, `system:content-sync` audit values, and the configured
 label as title (falling back to the stable model key when label is absent).
@@ -70,7 +66,7 @@ create or coalesce one pending `site.build.requested` event for that version.
 Baseline-only recording and collection-query metadata updates with proven
 unchanged public identity change neither; unknown legacy public identity uses
 the conservative proof/fallback rules below. Any failed statement rolls back
-model identities, generated page drafts, identity baselines, public state and
+model identities, generated singleton drafts, identity baselines, public state and
 outbox work together.
 
 ## Schema evolution (CE1A, CE1B, CE1C)

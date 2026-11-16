@@ -1,5 +1,5 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite rows, branded snapshot fixtures and malformed projection inputs.
+import { blockKey, contentEntryId, mediaId } from "@lacecms/domain";
+import type { PublishedProjection } from "@lacecms/application";
 import { expect, test } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import {
@@ -10,25 +10,31 @@ import {
 } from "./projection.js";
 
 test("encodes and checks a conditional-field publication projection", () => {
-  const projection = {
+  const projection: PublishedProjection = {
     blocks: [
-      { key: "b1", data: { kind: "image" } },
-      { key: "b2", data: {} },
+      { key: blockKey("b1"), data: { kind: "image" } },
+      { key: blockKey("b2"), data: {} },
     ],
     fields: { kind: "image" },
     internalLinks: [
-      { sourceKey: "b1", area: "data", pointer: "/url", targetId: "t1", delivered: true },
+      {
+        sourceKey: blockKey("b1"),
+        area: "data",
+        pointer: "/url",
+        targetId: contentEntryId("t1"),
+        delivered: true,
+      },
     ],
     mediaReferences: [
-      { sourceKey: "$fields", fieldPath: "/media", mediaId: "m1" },
-      { sourceKey: "b2", fieldPath: "media", mediaId: "m2" },
+      { sourceKey: "$fields", fieldPath: "/media", mediaId: mediaId("m1") },
+      { sourceKey: blockKey("b2"), fieldPath: "media", mediaId: mediaId("m2") },
     ],
   };
   const rows = projectedPublicationRows(["b1", "b2"], projection);
   expect(JSON.parse(rows.fieldsJson)).toEqual({ kind: "image" });
   expect(JSON.parse(rows.blockDataJson)).toEqual([
-    { key: "b1", data: '{"kind":"image"}' },
-    { key: "b2", data: "{}" },
+    { key: blockKey("b1"), data: '{"kind":"image"}' },
+    { key: blockKey("b2"), data: "{}" },
   ]);
   expect(JSON.parse(rows.mediaReferencesJson)).toEqual([
     ["$fields", "/media", "m1"],
@@ -40,13 +46,15 @@ test("encodes and checks a conditional-field publication projection", () => {
   expect(() =>
     projectedPublicationRows(["b1", "b2"], {
       ...projection,
-      blocks: [...projection.blocks, projection.blocks[0]],
+      blocks: [...projection.blocks, projection.blocks[0]!],
     }),
   ).toThrow(/every draft block/u);
   expect(() =>
     projectedPublicationRows(["b1", "b2"], {
       ...projection,
-      mediaReferences: [{ sourceKey: "missing", fieldPath: "media", mediaId: "m1" }],
+      mediaReferences: [
+        { sourceKey: blockKey("missing"), fieldPath: "media", mediaId: mediaId("m1") },
+      ],
     }),
   ).toThrow(/media projection/u);
 
@@ -87,7 +95,7 @@ test("encodes and checks a conditional-field publication projection", () => {
     { source_key: "$fields", field_path: "/media", media_id: "m1", created_at: 9 },
     { source_key: "b2", field_path: "media", media_id: "m2", created_at: 9 },
   ]);
-  const invalid = (links) =>
+  const invalid = (links: readonly (readonly (string | number)[])[]) =>
     database
       .prepare(INVALID_PROJECTED_LINK_TARGETS_SQL)
       .all(JSON.stringify(links), "source", null)

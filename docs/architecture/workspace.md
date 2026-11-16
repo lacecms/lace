@@ -29,7 +29,7 @@ packages/
 ├── render/                    # framework-neutral block parsing, block map, rich-text description
 ├── astro/                     # Astro adapter: LaceBlocks, RichText, loader environment glue
 ├── platform-cloudflare/       # D1, R2, KV, Worker and deploy-hook adapters
-├── platform-node/             # SQLite, MinIO/S3, Node server adapters
+├── platform-node/             # SQLite lifecycle, MinIO/S3, Node server wiring
 ├── cli/                       # create, sync, migrate, upgrade, add block, import commands
 ├── create-lace/               # `create-lace` project generator and starter templates
 └── test-utils/                # factories, fixtures, and contract test suites
@@ -79,7 +79,7 @@ components directly.
 | `domain` | Imports no framework or infrastructure package. |
 | `application` | May depend on domain rules, content validation and the normalized configuration, never on REST DTOs, Hono, Drizzle, Cloudflare or Node adapters, and never imports contracts or the MCP SDK. |
 | `contracts` | Defines transport DTOs and schemas; never an application-use-case dependency. |
-| `db` | Implements application persistence ports; may depend on Drizzle, domain and application. |
+| `db` | Implements application persistence ports; may depend on Drizzle, domain and application. `@lacecms/db` is portable. `@lacecms/db/node` owns the Node SQLite repository and native transaction executor and accepts an open native connection. |
 | `server` | May use Hono and contracts; receives infrastructure through construction, including an optional structural MCP handler from the platform composition root. |
 | `mcp` | Uses application operations and shared contracts, never server, auth, db, platform implementations, configuration loaders or Node-only APIs. REST and MCP share application discovery, authorization, reads and mutations; contracts own their common pure JSON projections and validation. |
 | `platform-*` | May depend on application ports and concrete vendor SDKs. |
@@ -121,8 +121,10 @@ type-only imports, are forbidden. Tests and type tests sit beside their module;
 shared helpers live in `src/test-support/` and are TypeScript.
 `@lacecms/test-utils` owns the shared fixture layer (`fixtures/`: role actors, a
 delegated-actor builder and the `fakePort` typed partial fake); the packages it
-depends on (`content`, `domain`, `config`, `application`, `contracts`) keep
-package-local typed test-support. `apps/admin` keeps its section 17
+depends on (`content`, `domain`, `config`, `application`, `contracts`, `db`) keep
+package-local typed test-support. The source-only `@lacecms/test-utils/sqlite`
+entry owns the migrated SQLite fixture. The main entry and browser parity
+subpaths remain portable. `apps/admin` keeps its section 17
 layer/slice structure with the same size limit and no-cycle rule
 ([ADR 0020](../adr/0020-source-layout.md)).
 
@@ -213,7 +215,8 @@ The size guard covers workspace `src/` tests, including tests under `test-suppor
 | Level | Covers |
 | --- | --- |
 | Unit | Pure domain and application behavior: page cardinality, model validation, permission policies, route resolution, block ordering, optimistic concurrency, publication state transitions, outbox coalescing and retry decisions. |
-| Repository contract | One behavior suite in `packages/test-utils/src/repository-contract/` runs against Node SQLite (file-backed and in-memory) and local D1/Miniflare (per-case isolation and timeout), rather than an abstraction making the two Drizzle drivers look identical. Its index concatenates area cases in a fixed order pinned by a literal case-name test; adapters, assertions and the in-memory content store sit behind the test-utils public entry. |
+| Repository contract | One behavior suite in `packages/test-utils/src/repository-contract/` exercises the two production repositories on three targets: file-backed Node SQLite, in-memory Node SQLite and local D1/Miniflare. Each case has its own migrated database; the case-name test fixes the order. |
+| Persistence-backed source tests | Application scenarios downstream of `application`, REST and MCP use the production Node repository through `@lacecms/test-utils/sqlite`, with one fresh migrated `:memory:` connection per test. The in-memory Node contract target shares the fixture. Unit tests can use narrow port doubles, and external capabilities such as binary storage can use in-memory doubles. |
 | API integration | Authentication and authorization, REST schema validation, draft isolation, publish atomicity, route conflicts, media metadata and storage cleanup, idempotent publication, build-event recovery. |
 | Browser (Playwright) | The critical editor path: sign in; open a page or collection entry; add, edit and reorder blocks; save a draft; verify that an editor cannot publish; publish as an admin; observe build status. |
 | Build fixture | `apps/site`, the engine playground and integration fixture, is built in CI from a seeded API export so public contracts stay compatible with Astro generation. CI also generates and builds a project from the packed `create-lace` starter, and a parity test keeps starter, `apps/site` and `registry/` block sources identical. |

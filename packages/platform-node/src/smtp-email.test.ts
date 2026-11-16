@@ -1,27 +1,39 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite/product harnesses, branded values and partial runtime adapters.
+import { strict as assert } from "node:assert";
+import type { Server } from "node:net";
 import { createServer } from "node:net";
 import { afterEach, expect, test } from "vitest";
 import { createSmtpEmailSender } from "./index.js";
 
 const from = "Lace <cms@example.com>";
 const message = { subject: "Hello", text: "Body", to: "ada@example.com" };
-const servers = [];
+const servers: Server[] = [];
+type SenderOptions = Parameters<typeof createSmtpEmailSender>[0];
+type Report = Parameters<NonNullable<SenderOptions["report"]>>[0];
 
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map((server) => new Promise((done) => server.close(done))));
+  await Promise.all(
+    servers.splice(0).map((server) => new Promise<void>((done) => server.close(() => done()))),
+  );
 });
 
 /**
  * A minimal scripted SMTP server: `extensions` are advertised after EHLO and
  * `reply` may override the answer to any command.
  */
-async function smtpServer({ extensions = [], greet = true, reply = () => undefined } = {}) {
-  const received = { commands: [], data: "" };
+async function smtpServer({
+  extensions = [],
+  greet = true,
+  reply = () => undefined,
+}: {
+  extensions?: string[];
+  greet?: boolean;
+  reply?: (verb: string, line: string) => string | undefined;
+} = {}) {
+  const received: { commands: string[]; data: string } = { commands: [], data: "" };
   const server = createServer((socket) => {
     let buffer = "";
     let inData = false;
-    const send = (line) => socket.write(`${line}\r\n`);
+    const send = (line: string) => socket.write(`${line}\r\n`);
     if (greet) send("220 test.local ESMTP");
     socket.on("data", (chunk) => {
       buffer += chunk.toString("utf8");
@@ -32,12 +44,12 @@ async function smtpServer({ extensions = [], greet = true, reply = () => undefin
         if (inData) {
           if (line === ".") {
             inData = false;
-            send(reply("DATA_END") ?? "250 queued");
+            send(reply("DATA_END", line) ?? "250 queued");
           } else received.data += `${line}\n`;
           continue;
         }
         received.commands.push(line);
-        const verb = line.split(/[ :]/u)[0].toUpperCase();
+        const verb = (line.split(/[ :]/u)[0] ?? "").toUpperCase();
         const custom = reply(verb, line);
         if (custom !== undefined) {
           send(custom);
@@ -59,11 +71,17 @@ async function smtpServer({ extensions = [], greet = true, reply = () => undefin
     socket.on("error", () => undefined);
   });
   servers.push(server);
-  await new Promise((done) => server.listen(0, "127.0.0.1", done));
-  return { port: server.address().port, received };
+  await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+  const address = server.address();
+  assert(address && typeof address !== "string");
+  return { port: address.port, received };
 }
 
-function sender(port, overrides = {}, reports = []) {
+function sender(
+  port: number,
+  overrides: Partial<SenderOptions["settings"]> = {},
+  reports: Report[] = [],
+) {
   return createSmtpEmailSender({
     from,
     report: (entry) => reports.push(entry),
@@ -83,7 +101,7 @@ test("delivers plain SMTP when security is none", async () => {
 
 test("starttls refuses a server that does not offer STARTTLS", async () => {
   const server = await smtpServer();
-  const reports = [];
+  const reports: Report[] = [];
   expect(await sender(server.port, { security: "starttls" }, reports).send(message)).toEqual({
     reason: "unavailable",
     status: "failed",
@@ -97,7 +115,7 @@ test("maps a permanent recipient refusal to rejected", async () => {
   const server = await smtpServer({
     reply: (verb) => (verb === "RCPT" ? "550 5.1.1 mailbox unavailable" : undefined),
   });
-  const reports = [];
+  const reports: Report[] = [];
   expect(await sender(server.port, {}, reports).send(message)).toEqual({
     reason: "rejected",
     status: "failed",
@@ -110,7 +128,7 @@ test("maps authentication failures to unavailable without leaking credentials", 
     extensions: ["AUTH PLAIN LOGIN"],
     reply: (verb) => (verb === "AUTH" ? "535 5.7.8 authentication failed" : undefined),
   });
-  const reports = [];
+  const reports: Report[] = [];
   const result = await sender(
     server.port,
     { auth: { password: "hunter2-secret", user: "lace" } },

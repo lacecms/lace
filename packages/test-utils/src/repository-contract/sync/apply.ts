@@ -143,3 +143,34 @@ contract("allows only one independently prepared sync apply to commit", async (r
   expect(await count(harness.sql, "select count(*) as count from content_models")).toBe(1);
   expect(await count(harness.sql, "select count(*) as count from outbox_events")).toBe(1);
 });
+
+contract(
+  "rolls back model and singleton writes when sync fails after the public-state bump",
+  async (runtime, expect) => {
+    const models = [syncPage(), syncCollection()];
+    const { repository, sql, reopen } = await runtime.open({
+      nextId: sequence("outbox"),
+      resolveModel: syncResolver(models),
+    });
+    await applySync(repository, [syncCollection()], 10);
+    const before = await sql.all("select * from outbox_events");
+    const failing = reopen({
+      beforeMutation(checkpoint) {
+        if (checkpoint === "build-outbox") throw new Error("late sync failure");
+      },
+    });
+    await expect(applySync(failing, models, 11)).rejects.toMatchObject({
+      code: "CONTENT_INVALID_STATE",
+    });
+    expect(await sql.all("select key from content_models")).toEqual([{ key: "posts" }]);
+    expect(await count(sql, "select count(*) as count from content_entries")).toBe(0);
+    expect(await count(sql, "select count(*) as count from content_snapshots")).toBe(0);
+    expect(await sql.get("select version from published_state")).toEqual({ version: 1 });
+    expect(await sql.all("select * from outbox_events")).toEqual(before);
+    expect(await count(sql, "select count(*) as count from mutation_guards")).toBe(0);
+    await expect(applySync(repository, models, 12)).resolves.toMatchObject({
+      status: "applied",
+      targetVersion: 2,
+    });
+  },
+);

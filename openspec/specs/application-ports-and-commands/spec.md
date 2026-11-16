@@ -125,36 +125,6 @@ not process one event as separate successful work.
 - **WHEN** two dispatcher instances attempt to claim the same available event
 - **THEN** the lease capability grants it to at most one active lease until that lease expires or is completed
 
-### Requirement: In-memory parity doubles preserve content invariants
-
-The system SHALL provide in-memory application test doubles for the content,
-infrastructure, and dispatch capability contracts. The content double SHALL
-enforce page singleton cardinality, expected-revision conflicts, globally unique
-published routes, exactly one mutable draft per committed entry, and detached
-immutable publications. It SHALL make a complete draft save, a guarded
-publication, a guarded unpublication, a guarded draft revert, and a guarded
-duplicate creation appear atomically: failures SHALL leave all stored
-aggregates, routes, and public projections unchanged. Returned aggregates and
-projections SHALL be detached from future caller mutation.
-
-#### Scenario: A competing page creation is rejected
-- **WHEN** an in-memory content double receives a second successful-create request for the same page model
-- **THEN** it rejects the request with the stable page-cardinality conflict and retains the original entry unchanged
-
-#### Scenario: Publication retains the previous public value after a draft edit
-- **WHEN** an in-memory content double publishes an entry and subsequently saves a changed draft
-- **THEN** public reads and build export retain the detached published snapshot while the draft receives exactly one revision increment
-
-#### Scenario: A route conflict does not partially publish
-- **WHEN** guarded publication resolves to a route owned by another entry
-- **THEN** it rejects the request with the stable route-conflict failure and leaves the candidate draft, existing route owner, and all public projections unchanged
-
-#### Scenario: In-memory unpublication and revert match the adapters
-- **WHEN** an in-memory content double unpublishes an entry, or reverts a
-  changed draft
-- **THEN** public reads, the published-state version, the draft, and the
-  derived status match the SQL adapters' results for the same inputs
-
 ### Requirement: Portable security lifecycle commands preserve guarded outcomes
 The system SHALL expose portable, REST- and database-independent contracts for
 setup-credential issuance and claim/completion, user lifecycle administration,
@@ -321,8 +291,9 @@ error, carrying the expected and actual versions, when either of these holds:
 
 An invalid or foreign cursor SHALL fail as a validation failure. The
 published-state version read SHALL remain available separately, so a
-conditional export can be answered without reading a page. The in-memory
-parity double SHALL implement the same paging, budget and guard rules.
+conditional export can be answered without reading a page. Persistence-backed
+tests SHALL use the SQLite implementation of these paging, budget and guard
+rules.
 
 #### Scenario: A caller follows export pages
 - **WHEN** an application caller requests the first page with limit 2 for
@@ -335,3 +306,42 @@ parity double SHALL implement the same paging, budget and guard rules.
   advanced the published state to version 5
 - **THEN** the port fails with `BUILD_EXPORT_VERSION_CHANGED` carrying 4 and
   5, and returns no entries
+
+### Requirement: SQL-backed application fixtures preserve content invariants
+
+Persistence-backed application, REST and MCP tests SHALL use the production
+Node SQLite content repository against a fresh in-memory database initialized
+from the checked-in migrations. Each test SHALL start with isolated state and
+close its connection when it finishes. Portable unit tests MAY use narrow
+port doubles. Tests MAY continue to use in-memory infrastructure doubles for
+capabilities such as object storage and time. The test repository SHALL
+enforce page singleton cardinality, expected-revision conflicts, globally
+unique published routes, exactly one mutable draft per committed entry, and
+detached immutable publications. It SHALL make a complete draft save, a guarded
+publication, a guarded unpublication, a guarded draft revert, and a guarded
+duplicate creation appear atomically: failures SHALL leave all stored
+aggregates, routes, and public projections unchanged. Returned aggregates and
+projections SHALL be detached from future caller mutation.
+
+#### Scenario: A competing page creation is rejected
+- **WHEN** the test repository receives a second successful-create request for the same page model
+- **THEN** it rejects the request with the stable page-cardinality conflict and retains the original entry unchanged
+
+#### Scenario: Publication retains the previous public value after a draft edit
+- **WHEN** the test repository publishes an entry and subsequently saves a changed draft
+- **THEN** public reads and build export retain the detached published snapshot while the draft receives exactly one revision increment
+
+#### Scenario: A route conflict does not partially publish
+- **WHEN** guarded publication resolves to a route owned by another entry
+- **THEN** it rejects the request with the stable route-conflict failure and leaves the candidate draft, existing route owner, and all public projections unchanged
+
+#### Scenario: Unpublication and revert preserve the SQL lifecycle
+- **WHEN** the test repository unpublishes an entry or reverts a changed draft
+- **THEN** public reads, the published-state version, the draft and the derived
+  status agree with the shared repository contract
+
+#### Scenario: Persistence state is isolated between tests
+- **WHEN** separate fixtures reuse the same deterministic IDs for models,
+  entries, media and actors
+- **THEN** each fixture observes only its own commits, including outbox work
+  and publication versions, and resources from both fixtures are closed

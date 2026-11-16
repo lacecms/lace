@@ -1,12 +1,11 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite rows, branded snapshot fixtures and malformed projection inputs.
+import { strict as assert } from "node:assert";
 import { expect, test } from "vitest";
 import { readFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { checkedInMigrations } from "./migrations.js";
 
 test("checked-in migration inventory matches the Drizzle journal", async () => {
-  const journal = JSON.parse(
+  const journal: { entries: { when: number; tag: string }[] } = JSON.parse(
     await readFile(new URL("../../drizzle/meta/_journal.json", import.meta.url), "utf8"),
   );
   expect(checkedInMigrations).toEqual(
@@ -80,10 +79,12 @@ const persistenceIndexes = [
   "rate_limit_buckets_expiry_idx",
 ];
 
-const migrationSql = (name) => readFile(new URL(`../../drizzle/${name}`, import.meta.url), "utf8");
+const migrationSql = (name: string) =>
+  readFile(new URL(`../../drizzle/${name}`, import.meta.url), "utf8");
 
 test("a seeded baseline database migrates to 0001 with each index once and rows unchanged", async () => {
   const [baseline, ...forward] = checkedInMigrations;
+  assert(baseline);
   expect(forward.map((migration) => migration.name)).toContain("0001_persistence_hygiene.sql");
   const database = new DatabaseSync(":memory:");
   try {
@@ -130,12 +131,11 @@ test("a seeded baseline database migrates to 0001 with each index once and rows 
         names.filter((candidate) => candidate === name),
         name,
       ).toHaveLength(1);
-    expect(
-      database
-        .prepare("select sql from sqlite_master where name = 'api_tokens_active_lookup_idx'")
-        .get()
-        .sql.toLowerCase(),
-    ).toContain("revoked_at` is null");
+    const sql = database
+      .prepare("select sql from sqlite_master where name = 'api_tokens_active_lookup_idx'")
+      .get()?.sql;
+    assert(typeof sql === "string");
+    expect(sql.toLowerCase()).toContain("revoked_at` is null");
     expect(database.prepare("pragma foreign_key_check").all()).toEqual([]);
   } finally {
     database.close();

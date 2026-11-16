@@ -1,16 +1,15 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy D1/Worker harnesses, binding fakes and recorded adapter calls.
+import { array, object, string } from "./test-support/json.js";
 import { afterEach, expect, test, vi } from "vitest";
 import { writeFile } from "node:fs/promises";
 import sharp from "sharp";
 import { unixMilliseconds } from "@lacecms/domain";
-import config from "../../../lace.config.ts";
+import config from "../../../lace.config.js";
 import { createCloudflareWorker } from "./index.js";
 import { countingD1 } from "./test-support/d1-test-harness.js";
 import { animatedGifFixture, readCompleteBuildExport } from "@lacecms/test-utils";
 
 import { createWorkerFixture, origin, password } from "./test-support/worker-harness.js";
-const cleanups = [];
+const cleanups: Array<() => unknown> = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
   vi.unstubAllGlobals();
@@ -20,10 +19,14 @@ const workerFixture = (options = {}) =>
   createWorkerFixture(createCloudflareWorker, cleanups, options);
 
 /** Adapts the fixture's in-process Worker call to the shared export reader. */
-function exportFetch(fixture) {
-  return async (url, init) => {
+function exportFetch(fixture: Awaited<ReturnType<typeof workerFixture>>) {
+  return async (url: string, init?: RequestInit) => {
     const target = new URL(url);
-    const { body, response } = await fixture.call(`${target.pathname}${target.search}`, init);
+    const { body, response } = await fixture.call(`${target.pathname}${target.search}`, {
+      ...(init?.method === undefined ? {} : { method: init.method }),
+      ...(init?.headers === undefined ? {} : { headers: init.headers }),
+      ...(init?.body == null ? {} : { body: init.body }),
+    });
     return { headers: response.headers, json: async () => body, status: response.status };
   };
 }
@@ -34,7 +37,7 @@ async function png(width = 3, height = 2) {
     .toBuffer();
 }
 
-async function upload(fixture, name = "cover.png") {
+async function upload(fixture: Awaited<ReturnType<typeof workerFixture>>, name = "cover.png") {
   const form = new FormData();
   form.append("file", new Blob([await png()], { type: "image/png" }), name);
   return fixture.call("/api/v1/admin/media", { body: form, method: "POST" });
@@ -55,7 +58,7 @@ test("Worker composition serves setup, auth, R2 media, and publication from D1",
     ).response.status,
   ).toBe(404);
   const models = await fixture.call("/api/v1/admin/content-models");
-  expect(models.body.items.map((model) => model.key)).toEqual([
+  expect(array(object(models.body).items).map((model) => object(model).key)).toEqual([
     "home",
     "about",
     "posts",
@@ -67,9 +70,11 @@ test("Worker composition serves setup, auth, R2 media, and publication from D1",
   const uploaded = await upload(fixture);
   expect(uploaded.response.status).toBe(201);
   expect(uploaded.body).toMatchObject({ height: 2, mimeType: "image/png", width: 3 });
-  expect(await fixture.local.bucket.head(`media/${uploaded.body.id}`)).not.toBeNull();
+  expect(
+    await fixture.local.bucket.head(`media/${string(object(uploaded.body).id)}`),
+  ).not.toBeNull();
   const binary = await fixture.worker.fetch(
-    new Request(`${origin}/api/v1/public/media/${uploaded.body.id}`),
+    new Request(`${origin}/api/v1/public/media/${string(object(uploaded.body).id)}`),
     fixture.env,
     fixture.ctx,
   );
@@ -80,16 +85,22 @@ test("Worker composition serves setup, auth, R2 media, and publication from D1",
     method: "POST",
   });
   expect(created.response.status).toBe(201);
-  const published = await fixture.call(`/api/v1/admin/entries/${created.body.id}/publish`, {
-    json: { expectedRevision: 1 },
-    method: "POST",
-  });
+  const published = await fixture.call(
+    `/api/v1/admin/entries/${string(object(created.body).id)}/publish`,
+    {
+      json: { expectedRevision: 1 },
+      method: "POST",
+    },
+  );
   expect(published.response.status).toBe(200);
   expect(fixture.pending).toHaveLength(1);
-  const stale = await fixture.call(`/api/v1/admin/entries/${created.body.id}/publish`, {
-    json: { expectedRevision: 5 },
-    method: "POST",
-  });
+  const stale = await fixture.call(
+    `/api/v1/admin/entries/${string(object(created.body).id)}/publish`,
+    {
+      json: { expectedRevision: 5 },
+      method: "POST",
+    },
+  );
   expect(stale.response.status).toBe(409);
   expect(fixture.pending).toHaveLength(1);
   const publicEntry = await fixture.call("/api/v1/public/collections/posts/first");
@@ -109,19 +120,29 @@ test("Worker accepts an animated GIF into R2 and filters the library by GIF", as
   await fixture.signIn();
   expect((await upload(fixture)).response.status).toBe(201);
   const form = new FormData();
-  form.append("file", new Blob([animatedGifFixture()], { type: "image/png" }), "loop.gif");
+  form.append(
+    "file",
+    new Blob([new Uint8Array(animatedGifFixture())], { type: "image/png" }),
+    "loop.gif",
+  );
   const gif = await fixture.call("/api/v1/admin/media", { body: form, method: "POST" });
   expect(gif.response.status).toBe(201);
   expect(gif.body).toMatchObject({ height: 240, mimeType: "image/gif", width: 320 });
-  expect(await fixture.local.bucket.head(`media/${gif.body.id}`)).not.toBeNull();
+  expect(await fixture.local.bucket.head(`media/${string(object(gif.body).id)}`)).not.toBeNull();
   const broken = new FormData();
-  broken.append("file", new Blob([animatedGifFixture().slice(0, -1)]), "broken.gif");
+  broken.append(
+    "file",
+    new Blob([new Uint8Array(animatedGifFixture().slice(0, -1))]),
+    "broken.gif",
+  );
   expect(
     (await fixture.call("/api/v1/admin/media", { body: broken, method: "POST" })).response.status,
   ).toBe(422);
   const list = await fixture.call("/api/v1/admin/media?type=image%2Fgif");
   expect(list.response.status).toBe(200);
-  expect(list.body.items.map((item) => item.id)).toEqual([gif.body.id]);
+  expect(array(object(list.body).items).map((item) => object(item).id)).toEqual([
+    string(object(gif.body).id),
+  ]);
 });
 
 test("Worker/D1 compares strong and weak export validators through publication", async () => {
@@ -131,7 +152,7 @@ test("Worker/D1 compares strong and weak export validators through publication",
     json: { blocks: [], fields: { publishedAt: "2026-09-24" }, slug: "etag", title: "First" },
     method: "POST",
   });
-  const path = `/api/v1/admin/entries/${created.body.id}`;
+  const path = `/api/v1/admin/entries/${string(object(created.body).id)}`;
   expect(
     (await fixture.call(`${path}/publish`, { json: { expectedRevision: 1 }, method: "POST" }))
       .response.status,
@@ -206,7 +227,9 @@ test("Worker/D1 compares strong and weak export validators through publication",
   );
   expect(changed.export.version).toBe(fresh.export.version + 1);
   expect(changed.etag).toBe(`"${changed.export.version}"`);
-  expect(changed.export.entries.find((entry) => entry.id === created.body.id).title).toBe("Second");
+  expect(
+    changed.export.entries.find((entry) => entry.id === string(object(created.body).id))?.title,
+  ).toBe("Second");
   await fixture.settle();
 });
 
@@ -214,9 +237,9 @@ test("real Worker API retains created slugs and duplicate/conflict behavior", as
   const fixture = await workerFixture();
   await fixture.signIn();
   const metadata = await fixture.call("/api/v1/admin/content-models");
-  expect(metadata.body.items.find((item) => item.key === "posts").layout).toEqual(
-    config.runtime.content.find((item) => item.key === "posts").layout,
-  );
+  expect(
+    object(array(object(metadata.body).items).find((item) => object(item).key === "posts")).layout,
+  ).toEqual(config.runtime.content.find((item) => item.key === "posts")?.layout);
   const payload = {
     title: "Café & News",
     slug: "cafe-news",
@@ -228,41 +251,45 @@ test("real Worker API retains created slugs and duplicate/conflict behavior", as
     method: "POST",
   });
   expect(created.response.status).toBe(201);
-  expect(created.body.draft.slug).toBe("cafe-news");
-  const path = `/api/v1/admin/entries/${created.body.id}`;
+  expect(object(object(created.body).draft).slug).toBe("cafe-news");
+  const path = `/api/v1/admin/entries/${string(object(created.body).id)}`;
   const saved = await fixture.call(`${path}/draft`, {
     json: { ...payload, title: "Later", expectedRevision: 1 },
     method: "PUT",
   });
   expect(saved.response.status).toBe(200);
-  expect(saved.body.draft.slug).toBe("cafe-news");
+  expect(object(object(saved.body).draft).slug).toBe("cafe-news");
   const published = await fixture.call(`${path}/publish`, {
-    json: { expectedRevision: saved.body.draft.revision },
+    json: { expectedRevision: object(object(saved.body).draft).revision },
     method: "POST",
   });
   expect(published.response.status).toBe(200);
   const duplicate = await fixture.call(`${path}/duplicate`, { json: {}, method: "POST" });
   expect(duplicate.response.status).toBe(201);
-  expect(duplicate.body.draft.slug).toBeUndefined();
+  expect(object(object(duplicate.body).draft).slug).toBeUndefined();
   const second = await fixture.call("/api/v1/admin/models/posts/entries", {
     json: { ...payload, title: "Conflict" },
     method: "POST",
   });
   expect(second.response.status).toBe(201);
-  const conflict = await fixture.call(`/api/v1/admin/entries/${second.body.id}/publish`, {
-    json: { expectedRevision: 1 },
-    method: "POST",
-  });
-  expect(conflict.response.status).toBe(409);
-  expect((await fixture.call(`/api/v1/admin/entries/${second.body.id}`)).body.draft).toEqual(
-    second.body.draft,
+  const conflict = await fixture.call(
+    `/api/v1/admin/entries/${string(object(second.body).id)}/publish`,
+    {
+      json: { expectedRevision: 1 },
+      method: "POST",
+    },
   );
+  expect(conflict.response.status).toBe(409);
+  expect(
+    object((await fixture.call(`/api/v1/admin/entries/${string(object(second.body).id)}`)).body)
+      .draft,
+  ).toEqual(object(second.body).draft);
   const slugless = await fixture.call("/api/v1/admin/models/posts/entries", {
     json: { title: "Новости", fields: {}, blocks: [] },
     method: "POST",
   });
   expect(slugless.response.status).toBe(201);
-  expect(slugless.body.draft.slug).toBeUndefined();
+  expect(object(object(slugless.body).draft).slug).toBeUndefined();
   await fixture.settle();
 }, 30_000);
 
@@ -281,25 +308,35 @@ test("complete authenticated content invocations fit D1 limits with maximum inte
     json: { title: "Target", slug: "link-target", fields: {}, blocks: [] },
   });
   expect(target.response.status).toBe(201);
-  const targetPublication = await fixture.call(`/api/v1/admin/entries/${target.body.id}/publish`, {
-    method: "POST",
-    json: { expectedRevision: 1 },
-  });
+  const targetPublication = await fixture.call(
+    `/api/v1/admin/entries/${string(object(target.body).id)}/publish`,
+    {
+      method: "POST",
+      json: { expectedRevision: 1 },
+    },
+  );
   expect(targetPublication.response.status).toBe(200);
   await fixture.settle();
   const counted = countingD1(fixture.local.database);
   const env = { ...fixture.env, DB: counted.binding };
-  const measurements = [];
-  const invoke = async (name, path, method, json, expectedStatus, headers = {}) => {
+  const measurements: { name: string; queries: number; maxBatch: number; maxBinds: number }[] = [];
+  const invoke = async (
+    name: string,
+    path: string,
+    method: string,
+    json: unknown,
+    expectedStatus: number,
+    headers: Record<string, string> = {},
+  ) => {
     counted.stats.queries = 0;
     counted.stats.maxBatchStatements = 0;
     counted.stats.maxParameters = 0;
-    const pending = [];
+    const pending: Promise<unknown>[] = [];
     const response = await fixture.worker.fetch(
       new Request(`${origin}${path}`, {
         method,
         headers: {
-          cookie: fixture.cookie,
+          cookie: string(fixture.cookie),
           "content-type": "application/json",
           "cf-connecting-ip": "203.0.113.199",
           ...headers,
@@ -321,7 +358,7 @@ test("complete authenticated content invocations fit D1 limits with maximum inte
     expect(counted.stats.queries, name).toBeLessThanOrEqual(50);
     expect(counted.stats.maxBatchStatements, name).toBeLessThanOrEqual(40);
     expect(counted.stats.maxParameters, name).toBeLessThanOrEqual(100);
-    return text ? JSON.parse(text) : undefined;
+    return text ? object(JSON.parse(text)) : undefined;
   };
   const payload = {
     title: "Maximum links",
@@ -332,11 +369,11 @@ test("complete authenticated content invocations fit D1 limits with maximum inte
       type: "image",
       schemaVersion: 4,
       position: (index + 1) * 1000,
-      data: { media: id, link: `entry:${target.body.id}` },
+      data: { media: id, link: `entry:${string(object(target.body).id)}` },
     })),
   };
   const source = await invoke("create", "/api/v1/admin/models/notes/entries", "POST", payload, 201);
-  const path = `/api/v1/admin/entries/${source.id}`;
+  const path = `/api/v1/admin/entries/${string(object(source).id)}`;
   await invoke("save", `${path}/draft`, "PUT", { ...payload, expectedRevision: 1 }, 200);
   await invoke("stale-save", `${path}/draft`, "PUT", { ...payload, expectedRevision: 1 }, 409);
   const published = await invoke(
@@ -352,11 +389,11 @@ test("complete authenticated content invocations fit D1 limits with maximum inte
     "unpublish",
     `${path}/unpublish`,
     "POST",
-    { expectedPublishedSnapshotId: published.entry.published.id },
+    { expectedPublishedSnapshotId: string(object(object(object(published).entry).published).id) },
     200,
   );
   await invoke("delete", path, "DELETE", undefined, 204, {
-    "if-match": `"${reverted.draft.revision}"`,
+    "if-match": `"${object(object(reverted).draft).revision}"`,
   });
   if (process.env.LACE_CE10_EVIDENCE)
     await writeFile(

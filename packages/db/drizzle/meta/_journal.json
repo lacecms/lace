@@ -15,6 +15,13 @@
       "when": 1794664775142,
       "tag": "0001_persistence_hygiene",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794784462667,
+      "tag": "0002_content_actor_profiles",
+      "breakpoints": true
     }
   ]
 }

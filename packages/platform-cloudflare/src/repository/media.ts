@@ -1,8 +1,5 @@
-import { mediaTagInsert, normalizedMediaWriteTags } from "@lacecms/db";
-import { DISPATCHER_LEASE_DURATION_MS } from "@lacecms/application";
 import type {
   CreateMediaMetadataInput,
-  DispatcherLeaseId,
   MarkMediaForDeletionInput,
   MarkMediaForDeletionResult,
   MediaCommandPort,
@@ -11,45 +8,33 @@ import type {
   UpdateMediaMetadataResult,
 } from "@lacecms/application";
 import {
-  MEDIA_METADATA_UPDATE_SQL,
-  MEDIA_PUBLISHED_REFERENCE_SQL,
-  mediaMetadataUpdateParams,
+  createMediaWritePlan,
+  updateMediaWritePlan,
+  requestMediaDeletionWritePlan,
+  completeMediaDeletionWritePlan,
+  failMediaDeletionWritePlan,
   failure,
-  parseObject,
-  sanitizeDispatchError,
   sqliteWriteError,
 } from "@lacecms/db";
+import type { MediaDeletionMiss, WritePlan } from "@lacecms/db";
 import { DomainError } from "@lacecms/domain";
-import type { MediaMetadata, UnixMilliseconds } from "@lacecms/domain";
-import { GUARD_SQL } from "./batch.js";
-import type { Condition } from "./batch.js";
+import type { MediaMetadata } from "@lacecms/domain";
 import { D1RepositoryBase } from "./base.js";
+import { executeWritePlan, executeWritePlanGroup } from "./write-plan.js";
 
-/** D1 media metadata writes and the deletion workflow. */
+/** Media metadata writes and the deletion workflow. */
 export class D1MediaCommands
   extends D1RepositoryBase
   implements MediaCommandPort, Omit<MediaDeletionDispatchPort, "loadDeletingMedia">
 {
   public async createMedia(input: CreateMediaMetadataInput): Promise<MediaMetadata> {
     try {
-      const batch = this.batch();
-      batch.add(
-        "insert into media (id, storage_key, filename, mime_type, size, width, height, metadata_json, sha256, status, created_by, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, '{}', ?, 'active', ?, ?, ?)",
-        input.id,
-        input.storageKey,
-        input.filename,
-        input.mimeType,
-        input.size,
-        input.width,
-        input.height,
-        input.sha256 ?? null,
-        input.createdBy,
+      await executeWritePlan(
+        this.database,
+        createMediaWritePlan(input),
         input.createdAt,
-        input.createdAt,
+        this.options.beforeMutation,
       );
-      const insert = mediaTagInsert(input.id, normalizedMediaWriteTags(input.tags ?? []));
-      if (insert !== undefined) batch.add(insert.sql, ...insert.params);
-      await this.execute(batch, false);
     } catch (error) {
       sqliteWriteError(error, false, "D1");
     }
@@ -58,211 +43,117 @@ export class D1MediaCommands
     return media;
   }
 
+  public async updateMediaMetadata(
+    input: UpdateMediaMetadataInput,
+  ): Promise<UpdateMediaMetadataResult> {
+    const plan = updateMediaWritePlan(input, this.nextId());
+    let result: Awaited<ReturnType<typeof executeWritePlan<"inactive" | "conflict">>>;
+    try {
+      result = await executeWritePlan(
+        this.database,
+        plan,
+        input.updatedAt,
+        this.options.beforeMutation,
+      );
+    } catch (error) {
+      sqliteWriteError(error, false, "D1");
+    }
+    if (result.kind === "rejected") {
+      if (result.reason === "inactive") failure("Only active media can be edited.");
+      throw new DomainError("MEDIA_UPDATE_CONFLICT", "The media was modified by another request.");
+    }
+    if (result.committedOutboxWork) this.options.onOutboxWork?.();
+    const bumped = (result.slots.published?.[0] as { bumped: number } | undefined)?.bumped;
+    const media = await this.loadMedia(input.mediaId);
+    if (media === null) failure("Updated media could not be reloaded.");
+    const row = result.slots.queue?.[0] as
+      | { version: number; pending_id: string | null }
+      | undefined;
+    if (bumped === 1 && row?.pending_id == null) failure("Build request could not be queued.");
+    return bumped === 1 ? { media, targetVersion: row!.version } : { media };
+  }
+
   public async markForDeletion(
     input: MarkMediaForDeletionInput,
   ): Promise<MarkMediaForDeletionResult> {
-    return this.requestMediaDeletion(input, "active", "Media is not eligible for deletion.");
+    return this.requestDeletion(input, false);
   }
 
   public async retryDeletion(
     input: MarkMediaForDeletionInput,
   ): Promise<MarkMediaForDeletionResult> {
-    return this.requestMediaDeletion(input, "delete_failed", "Media deletion cannot be retried.");
+    return this.requestDeletion(input, true);
   }
 
-  public async completeMediaDeletion(input: {
-    readonly completedAt: UnixMilliseconds;
-    readonly leaseId: DispatcherLeaseId;
-    readonly mediaId: string;
-  }): Promise<void> {
-    const batch = this.batch();
-    const token = this.guard(batch, input.completedAt, {
-      params: [
-        input.leaseId,
-        input.completedAt - DISPATCHER_LEASE_DURATION_MS,
-        input.mediaId,
-        input.mediaId,
-      ],
-      sql: "exists (select 1 from outbox_events where locked_by = ? and type = 'media.delete.requested' and processed_at is null and locked_at > ? and case when json_valid(payload_json) then json_extract(payload_json, '$.mediaId') end = ?) and exists (select 1 from media m where m.id = ? and m.status = 'deleting' and not exists (select 1 from content_media_references r where r.media_id = m.id))",
-    });
-    batch.add(`delete from media_tags where media_id = ? and ${GUARD_SQL}`, input.mediaId, token);
-    batch.add(`delete from media where id = ? and ${GUARD_SQL}`, input.mediaId, token);
-    batch.add(
-      `update outbox_events set processed_at = ?, locked_at = null, locked_by = null where locked_by = ? and type = 'media.delete.requested' and ${GUARD_SQL}`,
-      input.completedAt,
-      input.leaseId,
-      token,
-    );
-    this.releaseGuard(batch, token);
-    const results = await this.execute(batch, false);
-    if (results[0]!.meta.changes !== 1) {
-      await this.requireLeasedMediaDeletionEvent(input.leaseId, input.completedAt, input.mediaId);
-      failure("Media deletion can no longer be finalized.");
-    }
-  }
-
-  public async failMediaDeletion(input: {
-    readonly failedAt: UnixMilliseconds;
-    readonly leaseId: DispatcherLeaseId;
-    readonly mediaId: string;
-    readonly sanitizedError: string;
-    readonly terminal: boolean;
-    readonly retryAt?: UnixMilliseconds;
-  }): Promise<void> {
-    const error = sanitizeDispatchError(input.sanitizedError);
-    const event = await this.requireLeasedMediaDeletionEvent(
-      input.leaseId,
-      input.failedAt,
-      input.mediaId,
-    );
-    const lease = {
-      params: [event.id, input.leaseId, input.failedAt - DISPATCHER_LEASE_DURATION_MS],
-      sql: "exists (select 1 from outbox_events where id = ? and locked_by = ? and processed_at is null and locked_at > ?)",
-    };
-    if (!input.terminal) {
-      const retried = await this.run(
-        `update outbox_events set attempts = attempts + 1, available_at = ?, locked_at = null, locked_by = null, last_error = ? where id = ? and locked_by = ? and processed_at is null and locked_at > ?`,
-        input.retryAt ?? input.failedAt,
-        error,
-        ...lease.params,
-      );
-      if (retried !== 1) failure("Dispatcher lease is missing or expired.");
-      return;
-    }
-    const batch = this.batch();
-    const token = this.guard(batch, input.failedAt, {
-      params: [...lease.params, input.mediaId],
-      sql: `${lease.sql} and exists (select 1 from media where id = ? and status = 'deleting')`,
-    });
-    batch.add(
-      `update media set status = 'delete_failed', last_error = ?, updated_at = ? where id = ? and ${GUARD_SQL}`,
-      error,
-      input.failedAt,
-      input.mediaId,
-      token,
-    );
-    batch.add(
-      `update outbox_events set attempts = attempts + 1, processed_at = ?, locked_at = null, locked_by = null, last_error = ? where id = ? and ${GUARD_SQL}`,
-      input.failedAt,
-      error,
-      event.id,
-      token,
-    );
-    this.releaseGuard(batch, token);
-    const results = await this.execute(batch, false);
-    if (results[0]!.meta.changes !== 1) {
-      await this.requireLeasedMediaDeletionEvent(input.leaseId, input.failedAt, input.mediaId);
-      failure("Media deletion can no longer be failed safely.");
-    }
-  }
-
-  public async updateMediaMetadata(
-    input: UpdateMediaMetadataInput,
-  ): Promise<UpdateMediaMetadataResult> {
-    const params = mediaMetadataUpdateParams(input);
-    const batch = this.batch();
-    const token = this.guard(batch, input.updatedAt, {
-      params: [input.mediaId, input.expectedUpdatedAt],
-      sql: "exists (select 1 from media where id = ? and status = 'active' and updated_at = ?)",
-    });
-    batch.checkpoint("media.metadata");
-    batch.add(`${MEDIA_METADATA_UPDATE_SQL} and ${GUARD_SQL}`, ...params, token);
-    if (input.tags !== undefined) {
-      batch.add(`delete from media_tags where media_id = ? and ${GUARD_SQL}`, input.mediaId, token);
-      const insert = mediaTagInsert(
-        input.mediaId,
-        normalizedMediaWriteTags(input.tags),
-        GUARD_SQL,
-        token,
-      );
-      if (insert !== undefined) batch.add(insert.sql, ...insert.params);
-    }
-    batch.checkpoint("media.tags");
-    const published: Condition = {
-      params: [token, input.mediaId],
-      sql: `${GUARD_SQL} and ${MEDIA_PUBLISHED_REFERENCE_SQL} and ${input.publishedEffect === false ? "0" : "1"}`,
-    };
-    const state = this.addPublicStateBump(batch, published, {
-      reason: "media_metadata",
-      requestedAt: input.updatedAt,
-      requestedBy: input.requestedBy.id,
-      snapshotId: null,
-    });
-    const outcome = batch.add(`select (${published.sql}) as bumped`, ...published.params);
-    this.releaseGuard(batch, token);
-    const results = await this.execute(batch, false);
-    if (results[0]!.meta.changes !== 1) {
-      const row = await this.first<{ readonly status: string }>(
-        "select status from media where id = ?",
-        input.mediaId,
-      );
-      if (row !== undefined && row.status !== "active") failure("Only active media can be edited.");
-      throw new DomainError("MEDIA_UPDATE_CONFLICT", "The media was modified by another request.");
-    }
-    const bumped = (results[outcome]!.results[0] as { readonly bumped: number } | undefined)
-      ?.bumped;
-    const media = await this.loadMedia(input.mediaId);
-    if (media === null) failure("Updated media could not be reloaded.");
-    return bumped === 1 ? { media, targetVersion: this.stateVersion(results, state) } : { media };
-  }
-
-  private async requestMediaDeletion(
+  private async requestDeletion(
     input: MarkMediaForDeletionInput,
-    expectedStatus: "active" | "delete_failed",
-    message: string,
+    retry: boolean,
   ): Promise<MarkMediaForDeletionResult> {
-    const batch = this.batch();
-    const token = this.guard(batch, input.requestedAt, {
-      params: [input.mediaId, expectedStatus],
-      sql: "exists (select 1 from media m where m.id = ? and m.status = ? and not exists (select 1 from content_media_references r where r.media_id = m.id))",
-    });
-    batch.checkpoint(expectedStatus === "active" ? "media.mark" : "media.retry");
-    batch.add(
-      `update media set status = 'deleting', ${expectedStatus === "active" ? "" : "last_error = null, "}updated_at = ? where id = ? and ${GUARD_SQL}`,
+    const result = await this.executeMediaPlan(
+      requestMediaDeletionWritePlan(input, this.nextId(), retry),
       input.requestedAt,
-      input.mediaId,
-      token,
     );
-    batch.checkpoint("media.outbox");
-    batch.addOutbox(
-      `insert into outbox_events (id, type, payload_json, attempts, available_at, created_at) select ?, 'media.delete.requested', ?, 0, ?, ? where ${GUARD_SQL}`,
-      this.nextId(),
-      JSON.stringify({ mediaId: input.mediaId, requestedBy: input.requestedBy.id }),
-      input.requestedAt,
-      input.requestedAt,
-      token,
-    );
-    this.releaseGuard(batch, token);
-    const results = await this.execute(batch, false);
-    if (results[0]!.meta.changes !== 1) {
-      const row = await this.first<{ readonly referenced: number; readonly status: string }>(
-        "select status, exists(select 1 from content_media_references where media_id = ?) as referenced from media where id = ?",
-        input.mediaId,
-        input.mediaId,
-      );
-      if (row?.status === expectedStatus && row.referenced === 1) {
+    if (result.kind === "rejected") {
+      if (result.reason === "in-use")
         throw new DomainError("MEDIA_IN_USE", "Media is still referenced by content.");
-      }
-      failure(message);
+      failure(retry ? "Media deletion cannot be retried." : "Media is not eligible for deletion.");
     }
     const media = await this.loadMedia(input.mediaId);
     if (media === null) failure("Media deletion mark could not be reloaded.");
     return { media, status: "deleting" };
   }
 
-  private async requireLeasedMediaDeletionEvent(
-    leaseId: string,
-    now: number,
-    mediaId: string,
-  ): Promise<{ readonly id: string }> {
-    const event = await this.first<{ readonly id: string; readonly payload_json: string }>(
-      "select id, payload_json from outbox_events where locked_by = ? and type = 'media.delete.requested' and processed_at is null and locked_at > ?",
-      leaseId,
-      now - DISPATCHER_LEASE_DURATION_MS,
+  public async completeMediaDeletion(input: {
+    readonly completedAt: number;
+    readonly leaseId: string;
+    readonly mediaId: string;
+  }): Promise<void> {
+    try {
+      const result = await executeWritePlanGroup(
+        this.database,
+        completeMediaDeletionWritePlan({ ...input, now: input.completedAt }),
+      );
+      const code = (result.slots.admission?.[0] as { outcome: number } | undefined)?.outcome;
+      if (code === undefined) throw new Error("Media deletion admission result is missing.");
+      if (code !== 1)
+        this.refuseLease(
+          code === 0 ? "lease" : code === 2 ? "mismatch" : "media",
+          "Media deletion can no longer be finalized.",
+        );
+    } catch (error) {
+      sqliteWriteError(error, false, "D1");
+    }
+  }
+
+  public async failMediaDeletion(input: {
+    readonly failedAt: number;
+    readonly leaseId: string;
+    readonly mediaId: string;
+    readonly sanitizedError: string;
+    readonly terminal: boolean;
+    readonly retryAt?: number;
+  }): Promise<void> {
+    const result = await this.executeMediaPlan(
+      failMediaDeletionWritePlan({ ...input, now: input.failedAt }),
+      input.failedAt,
     );
-    if (event === undefined) failure("Dispatcher lease is missing or expired.");
-    const payload = parseObject(event.payload_json, "Outbox payload");
-    if (payload.mediaId !== mediaId) failure("Dispatcher event does not match media.");
-    return event;
+    if (result.kind === "rejected")
+      this.refuseLease(result.reason, "Media deletion can no longer be failed safely.");
+  }
+
+  private async executeMediaPlan(plan: WritePlan<MediaDeletionMiss>, now: number) {
+    try {
+      const result = await executeWritePlan(this.database, plan, now, this.options.beforeMutation);
+      if (result.kind === "committed" && result.committedOutboxWork) this.options.onOutboxWork?.();
+      return result;
+    } catch (error) {
+      sqliteWriteError(error, false, "D1");
+    }
+  }
+
+  private refuseLease(reason: MediaDeletionMiss, message: string): never {
+    if (reason === "lease") failure("Dispatcher lease is missing or expired.");
+    if (reason === "mismatch") failure("Dispatcher event does not match media.");
+    failure(message);
   }
 }

@@ -1,5 +1,9 @@
-// Directory dependencies: shared ← schema, security, links; links ← publication, sync;
-// shared ← content ← media ← delivery ← builds; outbox; builds, links ← reads.
+// Directory dependencies: shared ← schema, security, links; links ← content, sync;
+// write-plan ← content, media, builds, publication, outbox, sync; content ← sync;
+// content ← media ← delivery ← builds; builds, content, links ← publication;
+// shared ← outbox; builds, links ← reads.
+// builds, content, links, media, outbox, publication, reads, shared, sync,
+// write-plan ← node-repository.
 export * from "./security/oauth.js";
 export * from "./security/api-tokens.js";
 export * from "./security/rows.js";
@@ -26,6 +30,9 @@ export * from "./sync/writes.js";
 export * from "./sync/block-migration-scan.js";
 export * from "./sync/block-migration-writes.js";
 export * from "./sync/field-rewrite.js";
+export { configurationSyncRecursiveScans } from "./sync/recursive-scans.js";
+export { prepareConfigurationSync } from "./sync/preflight.js";
+export { configurationSyncApplyResult, configurationSyncWritePlan } from "./sync/write-plan.js";
 export {
   PUBLIC_ROUTE_SQL,
   PUBLIC_GLOBAL_SQL,
@@ -39,9 +46,23 @@ export {
 export type { PublicRow, PublicGlobalRow } from "./delivery/public.js";
 export * from "./builds/site-builds.js";
 export * from "./builds/requests.js";
-export * from "./outbox/rows.js";
+export * from "./builds/write-plan.js";
+export {
+  buildEnqueueStatements,
+  buildRequestPayload,
+  PENDING_SITE_BUILD_SQL,
+  publicBuildStatements,
+} from "./write-plan/build-enqueue.js";
+export type { BuildEnqueueInput } from "./write-plan/build-enqueue.js";
+export * from "./builds/claim-write-plan.js";
+export * from "./builds/transition-write-plan.js";
+export type { OutboxRow } from "./shared/outbox-row.js";
+export { sanitizeDispatchError } from "./shared/dispatch-error.js";
+export * from "./outbox/write-plan.js";
 export * from "./builds/export.js";
 export * from "./media/tags.js";
+export * from "./media/write-plan.js";
+export * from "./media/deletion-write-plan.js";
 export {
   MEDIA_COLUMNS_SQL,
   MEDIA_TAGS_JSON_SQL,
@@ -59,11 +80,14 @@ export {
 } from "./media/catalog.js";
 export * from "./media/usage.js";
 export * from "./content/entries.js";
+export * from "./content/draft-write-plan.js";
 export * from "./content/blocks.js";
 export * from "./content/snapshots.js";
 export * from "./links/statements.js";
 export * from "./publication/projection.js";
 export * from "./publication/idempotency.js";
+export * from "./publication/write-plan.js";
+export * from "./publication/removal-write-plan.js";
 export * from "./links/reader.js";
 export * from "./reads/content-reader.js";
 
@@ -79,3 +103,12 @@ export {
   decodeSortCursor,
 } from "./shared/cursors.js";
 export type { DecodedCursor, DecodedSortCursor } from "./shared/cursors.js";
+
+export type {
+  WritePlan,
+  WritePlanGuard,
+  WritePlanGroup,
+  WritePlanResult,
+  WritePlanSql,
+  WritePlanStatement,
+} from "./write-plan/plan.js";

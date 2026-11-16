@@ -1,3 +1,4 @@
+import { seedSqliteMedia } from "@lacecms/test-utils/sqlite";
 import * as v from "valibot";
 import { buildExportFirstPageSchema, buildExportContinuationPageSchema } from "@lacecms/contracts";
 import type { JsonObject } from "@lacecms/content";
@@ -83,7 +84,11 @@ test("public collection slugs follow the full shared slug rule", async () => {
 });
 
 test("public responses return published entries with one resolved media dictionary", async () => {
-  const { app, store } = await fixture();
+  const {
+    app,
+    sqlite: { connection },
+    store,
+  } = await fixture();
   const media = (id: string, extra: Partial<MediaMetadata> = {}): MediaMetadata => ({
     createdAt: unixMilliseconds(1),
     createdBy: admin.id,
@@ -97,9 +102,9 @@ test("public responses return published entries with one resolved media dictiona
     updatedAt: unixMilliseconds(1),
     ...extra,
   });
-  store.registerMedia(media("shared", { alt: "Office", focalPoint: { x: 0.25, y: 0.4 } }));
-  store.registerMedia(media("only-a"));
-  store.registerMedia(media("draft-only"));
+  seedSqliteMedia(connection, media("shared", { alt: "Office", focalPoint: { x: 0.25, y: 0.4 } }));
+  seedSqliteMedia(connection, media("only-a"));
+  seedSqliteMedia(connection, media("draft-only"));
   for (const [id, ids] of [
     ["post-a", ["shared", "only-a"]],
     ["post-b", ["shared"]],
@@ -237,7 +242,12 @@ test.each([[[1000, 1000]], [[2000, 1000]], [[0, 1000]]])(
 );
 
 test("the export ETag follows its payload when publication races the version lookup", async () => {
-  const { app, store, content } = await fixture();
+  const { app, content } = await fixture({
+    exportBuildContentPage: (read) => async (input) => {
+      await publish();
+      return read(input);
+    },
+  });
   const entry = await content.create({
     actor: admin,
     blocks: [],
@@ -246,11 +256,7 @@ test("the export ETag follows its payload when publication races the version loo
     slug: "race",
     title: "Race",
   });
-  const original = store.exportBuildContentPage.bind(store);
-  store.exportBuildContentPage = async (input) => {
-    await content.publish({ actor: admin, entryId: entry.id, expectedRevision: 1 });
-    return original(input);
-  };
+  const publish = () => content.publish({ actor: admin, entryId: entry.id, expectedRevision: 1 });
   const result = await json(app, "/api/v1/public/build-export");
   expect(result.body.version).toBe(1);
   expect(result.response.headers.get("etag")).toBe('"1"');

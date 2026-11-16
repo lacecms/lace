@@ -3,7 +3,8 @@
   "compilerOptions": {
     "noEmit": true,
     "types": ["node"],
-    "customConditions": ["@lacecms/source"]
+    "customConditions": ["@lacecms/source"],
+    "rootDir": "../.."
   },
   "include": ["src/**/*.test.ts", "src/test-support/**/*.ts"],
   "exclude": []

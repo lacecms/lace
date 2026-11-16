@@ -1,10 +1,10 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite rows, branded snapshot fixtures and malformed projection inputs.
+import type { ConfigurationSyncSnapshotMigration } from "@lacecms/application";
+import type { ConfigurationSyncMigrationStatements } from "./block-migration-writes.js";
 import { expect, test } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import { configurationSyncMigrationStatements } from "./block-migration-writes.js";
 
-function migrationDatabase(blockCount) {
+function migrationDatabase(blockCount: number) {
   const database = new DatabaseSync(":memory:");
   database.exec(`
     create table content_entries (id text primary key, draft_snapshot_id text, published_snapshot_id text);
@@ -35,7 +35,11 @@ function migrationDatabase(blockCount) {
   return database;
 }
 
-function migration(state, blockCount, overrides = {}) {
+function migration(
+  state: "draft" | "published",
+  blockCount: number,
+  overrides: Partial<ConfigurationSyncSnapshotMigration> = {},
+): ConfigurationSyncSnapshotMigration {
   return {
     blocks: Array.from({ length: blockCount }, (_, index) => ({
       data: { cover: "m1", text: `t${index}` },
@@ -58,11 +62,11 @@ function migration(state, blockCount, overrides = {}) {
   };
 }
 
-function runMigration(database, statements) {
+function runMigration(database: DatabaseSync, statements: ConfigurationSyncMigrationStatements) {
   const guard = database
     .prepare(`select ${statements.guard.sql} as ok`)
     .get(...statements.guard.params);
-  if (guard.ok !== 1) return false;
+  if (guard?.ok !== 1) return false;
   for (const write of statements.writes) {
     // Appending a guard condition, as the D1 batch does, must keep the statement valid.
     database.prepare(`${write.sql} and ? = 1`).run(...write.params, 1);
@@ -112,12 +116,12 @@ test("block migration statements rewrite in place within the D1 parameter limit"
   expect(
     database
       .prepare("select count(*) as n from content_media_references where field_path = 'cover'")
-      .get().n,
+      .get()?.n,
   ).toBe(400);
   expect(
     database
       .prepare("select count(*) as n from content_media_references where field_path = 'image'")
-      .get().n,
+      .get()?.n,
   ).toBe(0);
   // Repeating the same unit fails its revision and block-version guards.
   expect(runMigration(database, draft)).toBe(false);
@@ -125,10 +129,10 @@ test("block migration statements rewrite in place within the D1 parameter limit"
 
 test("block migration guards check versions, current snapshots and the draft revision", () => {
   const database = migrationDatabase(2);
-  const guarded = (value) => {
+  const guarded = (value: ConfigurationSyncSnapshotMigration) => {
     const statements = configurationSyncMigrationStatements(value, 50, 99);
     return database.prepare(`select ${statements.guard.sql} as ok`).get(...statements.guard.params)
-      .ok;
+      ?.ok;
   };
   expect(guarded(migration("draft", 2))).toBe(1);
   expect(guarded(migration("draft", 2, { expectedRevision: 2 }))).toBe(0);

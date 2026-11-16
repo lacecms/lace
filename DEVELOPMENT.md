@@ -253,8 +253,9 @@ through it, and builds ignore it. `tsconfig.test.json` and
 typecheck reads sibling sources without a build, and they participate in package
 typechecking. Legacy test files
 that still carry `@ts-nocheck` are listed in `scripts/test-typecheck-baseline.json`;
-the boundary checker rejects new exceptions and stale entries, and test-support
-modules are always type-checked. Shared fixtures come from
+the boundary checker rejects new exceptions and stale entries. When the legacy
+inventory reaches zero, the baseline file is absent and the checker treats it as
+an empty list. Test-support modules are always type-checked. Shared fixtures come from
 `@lacecms/test-utils` (`admin`, `editor`, `viewer`, `testActor`,
 `delegatedActor`, `fakePort`) for packages above it in the graph; Node product
 tests open runtimes with `openNodeTestRuntime` from

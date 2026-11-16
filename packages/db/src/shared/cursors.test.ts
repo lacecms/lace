@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite rows, branded snapshot fixtures and malformed projection inputs.
 import { expect, test } from "vitest";
 import { decodeBase64Url, encodeBase64Url } from "./base64.js";
 import { decodeCursor, encodeCursor, encodeSortCursor } from "./cursors.js";

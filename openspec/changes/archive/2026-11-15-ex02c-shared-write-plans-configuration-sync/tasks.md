@@ -1,0 +1,20 @@
+## 1. Architecture
+
+- [x] 1.1 Update architecture §9.1–9.3 and §15–16, ADR 0002 and the internal synchronization note before changing the adapters. Record the shared final plan, Node's transactional reads, D1's guarded batch and the separate resumable migration phase. Review the documented boundaries against the accepted synchronization, schema-evolution and D1 requirements linked from the [proposal](proposal.md).
+
+## 2. Shared final write plan
+
+- [x] 2.1 Add shared preflight and write-plan construction in `packages/db/src/sync`. Verify freshness and canonical report equality, deterministic ordering, model create/update/rename/remove, both structure and public projection baselines, and draft-only singleton creation for pages and globals. Verify collections receive no draft and test valid no-op and unsafe inputs with the existing planner and repository fixtures. Keep public exports stable under the EX2A/EX2B adapter-helper convention and check built package exports.
+- [x] 2.2 Compose the existing recursive field/media, set-based hint/backfill/SEO and internal-link statements, including link-graph revision and token cleanup. Verify a rename reads by the former key and writes by the new key, recursive/default/hinted changes retain their order, and both published visibility and reference projections match the existing contract.
+- [x] 2.3 Extend or reuse the shared EX2B public-state and enqueue fragments for `configuration_sync`. Verify one commit-time version increment and one inserted or coalesced pending request, including reason, actor, null snapshot ID, debounce, retry lineage and the exact receipt. Verify no enqueue or version bump for baseline-only and trusted query-only changes, with one conservative rebuild when the legacy public projection is untrusted.
+
+## 3. Runtime integration
+
+- [x] 3.1 Wire Node to the common executor with revalidation and recursive snapshot reads in its write transaction. Verify fresh no-op, stale refusal, rename cascade, and rollback after a singleton, recursive rewrite or late public-state/outbox failure. Confirm the adapter contains no final `operation.action` dispatch or `content_models` mutation SQL.
+- [x] 3.2 Wire D1 to one guarded final plan with the existing stale/link error paths and post-commit outbox notification. Use actual local D1 to verify a change after the last preflight read, invalid-link classification, a late failure, token cleanup, one callback on committed insert or coalesce and zero on guard miss or rollback. Reuse and extend `d1-sync-batch.test.ts` where coverage is missing. Check compiled statement and bind counts at the existing supported batch boundary, including executor overhead and unchanged overflow handling. Confirm the adapter contains no final `operation.action` dispatch or `content_models` mutation SQL.
+- [x] 3.3 Verify the preceding block migration flow and the final plan work together through the existing migration contracts. Exercise interrupted runs, rerun with the earlier units already committed, one final build request and the existing migrated counts. Confirm D1 still packs whole units when they fit and uses its published-then-draft split for an oversized unit. Check the existing 100-bind, 40-statement and applicable 50-query limits.
+
+## 4. Session verification
+
+- [x] 4.1 Run the focused `db` sync, application configuration and operator sync suites, including CLI report and stale-code handling, then `pnpm --filter @lacecms/platform-node test src/repository-contract.test.ts` and `pnpm --filter @lacecms/platform-cloudflare test src/repository-contract.test.ts` with local D1. Use existing contract fixtures for collection query metadata, link races, nested/conditional media and baseline recovery. Keep any regression companions typed and colocated under the source-layout rules.
+- [x] 4.2 Record the final sync SQL and module changes against the EX2B measurements in the roadmap progress log. Run `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm exec openspec validate ex02c-shared-write-plans-configuration-sync --type change --strict` and `pnpm spec:validate`.

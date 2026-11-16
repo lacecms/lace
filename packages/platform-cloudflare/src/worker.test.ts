@@ -1,10 +1,12 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy D1/Worker harnesses, binding fakes and recorded adapter calls.
+import { strict as assert } from "node:assert";
+import { object, string } from "./test-support/json.js";
+import type { WorkerCallInit } from "./test-support/worker-harness.js";
+import type { WorkerOperationalLogger } from "./runtime/worker.js";
 import { afterEach, expect, test, vi } from "vitest";
 import { readFile } from "node:fs/promises";
 import sharp from "sharp";
 
-import config from "../../../lace.config.ts";
+import config from "../../../lace.config.js";
 import {
   CloudflareEnvironmentError,
   createCloudflareAdminAssets,
@@ -13,7 +15,7 @@ import {
 } from "./index.js";
 
 import { createWorkerFixture, origin, secret } from "./test-support/worker-harness.js";
-const cleanups = [];
+const cleanups: Array<() => unknown> = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
   vi.unstubAllGlobals();
@@ -31,7 +33,7 @@ async function png(width = 3, height = 2) {
     .toBuffer();
 }
 
-async function upload(fixture, name = "cover.png") {
+async function upload(fixture: Awaited<ReturnType<typeof workerFixture>>, name = "cover.png") {
   const form = new FormData();
   form.append("file", new Blob([await png()], { type: "image/png" }), name);
   return fixture.call("/api/v1/admin/media", { body: form, method: "POST" });
@@ -83,6 +85,7 @@ test("settings require D1, R2, auth secret, and public URL and name issues witho
     failure = error;
   }
   expect(failure).toBeInstanceOf(CloudflareEnvironmentError);
+  assert(failure instanceof CloudflareEnvironmentError);
   expect(failure.issues.map((issue) => issue.variable).sort()).toEqual([
     "CACHE",
     "DB",
@@ -99,11 +102,11 @@ test("settings require D1, R2, auth secret, and public URL and name issues witho
 });
 
 test("admin assets redirect, fall back to the SPA entry, and reject other methods", async () => {
-  const files = new Map([
+  const files = new Map<string, [string, string]>([
     ["/index.html", ["<!doctype html>", "text/html"]],
     ["/assets/app.js", ["console.log(1)", "text/javascript"]],
   ]);
-  const requested = [];
+  const requested: string[] = [];
   const assets = createCloudflareAdminAssets({
     fetch: async (request) => {
       const path = new URL(request.url).pathname;
@@ -138,7 +141,7 @@ test("only requests that committed outbox work register a post-commit pass", asy
   await fixture.signIn();
   fixture.pending.splice(0);
   /** Runs one request and returns how many passes it registered. */
-  const passes = async (path, init, status) => {
+  const passes = async (path: string, init: WorkerCallInit, status: number) => {
     const before = fixture.pending.length;
     const result = await fixture.call(path, init);
     expect(result.response.status).toBe(status);
@@ -148,7 +151,7 @@ test("only requests that committed outbox work register a post-commit pass", asy
     json: { blocks: [], fields: { publishedAt: "2026-09-24" }, slug: "queued", title: "Queued" },
     method: "POST",
   });
-  const path = `/api/v1/admin/entries/${created.body.id}`;
+  const path = `/api/v1/admin/entries/${string(object(created.body).id)}`;
   const draft = { blocks: [], fields: { publishedAt: "2026-09-24" }, slug: "queued" };
   expect(
     (
@@ -173,7 +176,11 @@ test("only requests that committed outbox work register a post-commit pass", asy
       await passes(
         `${path}/unpublish`,
         {
-          json: { expectedPublishedSnapshotId: published.result.body.entry.published.id },
+          json: {
+            expectedPublishedSnapshotId: object(
+              object(object(published.result.body).entry).published,
+            ).id,
+          },
           method: "POST",
         },
         200,
@@ -182,7 +189,13 @@ test("only requests that committed outbox work register a post-commit pass", asy
   ).toBe(1);
   const uploaded = await upload(fixture);
   expect(
-    (await passes(`/api/v1/admin/media/${uploaded.body.id}`, { method: "DELETE" }, 202)).passes,
+    (
+      await passes(
+        `/api/v1/admin/media/${string(object(uploaded.body).id)}`,
+        { method: "DELETE" },
+        202,
+      )
+    ).passes,
   ).toBe(1);
   await fixture.settle();
 
@@ -191,10 +204,10 @@ test("only requests that committed outbox work register a post-commit pass", asy
     json: { blocks: [], fields: { publishedAt: "2026-09-24" }, slug: "racing", title: "Racing" },
     method: "POST",
   });
-  const publishing = [];
-  const reading = [];
+  const publishing: Promise<unknown>[] = [];
+  const reading: Promise<unknown>[] = [];
   const [racingPublication, racingRead] = await Promise.all([
-    fixture.call(`/api/v1/admin/entries/${other.body.id}/publish`, {
+    fixture.call(`/api/v1/admin/entries/${string(object(other.body).id)}/publish`, {
       ctx: { waitUntil: (promise) => void publishing.push(promise) },
       json: { expectedRevision: 1 },
       method: "POST",
@@ -215,7 +228,7 @@ test("Worker metadata identifies the bundled platform release", async () => {
   const fixture = await workerFixture();
   const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
   const result = await fixture.call("/api/v1/openapi.json");
-  expect(result.body.info.version).toBe(manifest.version);
+  expect(object(object(result.body).info).version).toBe(manifest.version);
 });
 
 test("Worker readiness rejects a D1 database with a pending migration", async () => {
@@ -243,7 +256,7 @@ test("Worker readiness rejects a D1 database migrated before the baseline", asyn
 });
 
 test("invalid Worker settings return a sanitized 503 and log only variable names", async () => {
-  const logs = [];
+  const logs: Parameters<WorkerOperationalLogger["error"]>[0][] = [];
   const worker = createCloudflareWorker({
     config,
     operationalLogger: { error: (entry) => logs.push(entry) },
@@ -259,7 +272,11 @@ test("invalid Worker settings return a sanitized 503 and log only variable names
   await worker.scheduled({}, env, { waitUntil() {} });
   expect(logs).toHaveLength(2);
   expect(logs[0]).toMatchObject({ reason: "invalid_environment" });
-  expect(logs[0].variables.split(",").sort()).toEqual(["DB", "LACE_PUBLIC_BASE_URL", "MEDIA"]);
+  expect(string(logs[0]?.variables).split(",").sort()).toEqual([
+    "DB",
+    "LACE_PUBLIC_BASE_URL",
+    "MEDIA",
+  ]);
   expect(JSON.stringify(logs)).not.toContain("super-secret-value");
 });
 
@@ -317,7 +334,7 @@ test.each([
 
 test("Worker identity trusts only its ingress and ignores arbitrary provider/forwarding headers", async () => {
   const fixture = await workerFixture();
-  const make = (ip) =>
+  const make = (ip: string) =>
     new Request(`${origin}/api/v1/setup/admin`, {
       method: "POST",
       headers: {
@@ -355,15 +372,19 @@ test("Worker API docs flag validates exact string booleans without disclosing va
     expect(() => parseCloudflareSettings({ ...env, LACE_API_DOCS_ENABLED: value })).toThrow(
       "Invalid Cloudflare environment: LACE_API_DOCS_ENABLED.",
     );
-    const logs = [];
+    const logs: Parameters<WorkerOperationalLogger["error"]>[0][] = [];
     const worker = createCloudflareWorker({
       config,
       operationalLogger: { error: (entry) => logs.push(entry) },
     });
-    const response = await worker.fetch(new Request(`${origin}/api/docs`), {
-      ...env,
-      LACE_API_DOCS_ENABLED: value,
-    });
+    const response = await worker.fetch(
+      new Request(`${origin}/api/docs`),
+      {
+        ...env,
+        LACE_API_DOCS_ENABLED: value,
+      },
+      { waitUntil() {} },
+    );
     expect(response.status).toBe(503);
     expect(JSON.stringify(logs)).toContain("LACE_API_DOCS_ENABLED");
     expect(JSON.stringify(logs)).not.toContain("secret-docs-value");
@@ -402,15 +423,19 @@ test("Worker MCP flag shares exact parsing and sanitized 503 diagnostics", async
     expect(() => parseCloudflareSettings({ ...env, LACE_MCP_ENABLED: value })).toThrow(
       "Invalid Cloudflare environment: LACE_MCP_ENABLED.",
     );
-    const logs = [];
+    const logs: Parameters<WorkerOperationalLogger["error"]>[0][] = [];
     const worker = createCloudflareWorker({
       config,
       operationalLogger: { error: (event) => logs.push(event) },
     });
-    const response = await worker.fetch(new Request(`${origin}/mcp`), {
-      ...env,
-      LACE_MCP_ENABLED: value,
-    });
+    const response = await worker.fetch(
+      new Request(`${origin}/mcp`),
+      {
+        ...env,
+        LACE_MCP_ENABLED: value,
+      },
+      { waitUntil() {} },
+    );
     expect(response.status).toBe(503);
     expect(JSON.stringify(logs)).toContain("LACE_MCP_ENABLED");
     expect(JSON.stringify(logs)).not.toContain("private-value");

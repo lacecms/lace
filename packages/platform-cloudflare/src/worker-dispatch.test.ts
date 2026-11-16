@@ -1,5 +1,4 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy D1/Worker harnesses, binding fakes and recorded adapter calls.
+import { array, object, string } from "./test-support/json.js";
 import { afterEach, expect, test, vi } from "vitest";
 
 import sharp from "sharp";
@@ -9,7 +8,7 @@ import { SCHEDULED_MEDIA_DELETION_CLAIMS, createCloudflareWorker } from "./index
 import { countingD1 } from "./test-support/d1-test-harness.js";
 
 import { createWorkerFixture, secret } from "./test-support/worker-harness.js";
-const cleanups = [];
+const cleanups: Array<() => unknown> = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
   vi.unstubAllGlobals();
@@ -24,7 +23,7 @@ async function png(width = 3, height = 2) {
     .toBuffer();
 }
 
-async function upload(fixture, name = "cover.png") {
+async function upload(fixture: Awaited<ReturnType<typeof workerFixture>>, name = "cover.png") {
   const form = new FormData();
   form.append("file", new Blob([await png()], { type: "image/png" }), name);
   return fixture.call("/api/v1/admin/media", { body: form, method: "POST" });
@@ -38,7 +37,7 @@ test("scheduled and post-commit dispatch recover builds and media deletions", as
     method: "POST",
   });
   // The request ends without its post-commit pass: only the scheduled run recovers it.
-  await fixture.call(`/api/v1/admin/entries/${created.body.id}/publish`, {
+  await fixture.call(`/api/v1/admin/entries/${string(object(created.body).id)}/publish`, {
     json: { expectedRevision: 1 },
     method: "POST",
   });
@@ -49,22 +48,24 @@ test("scheduled and post-commit dispatch recover builds and media deletions", as
   await fixture.worker.scheduled({}, fixture.env, fixture.ctx);
   expect(fixture.triggers).toHaveLength(1);
   const builds = await fixture.call("/api/v1/admin/site-builds");
-  expect(builds.body.items[0]).toMatchObject({ status: "succeeded" });
+  expect(array(object(builds.body).items)[0]).toMatchObject({ status: "succeeded" });
 
   const uploaded = await upload(fixture);
-  const deleted = await fixture.call(`/api/v1/admin/media/${uploaded.body.id}`, {
+  const deleted = await fixture.call(`/api/v1/admin/media/${string(object(uploaded.body).id)}`, {
     method: "DELETE",
   });
   expect(deleted.response.status).toBeGreaterThanOrEqual(200);
   expect(deleted.response.status).toBeLessThan(300);
   expect(fixture.pending).toHaveLength(1);
   await fixture.settle();
-  expect(await fixture.local.bucket.head(`media/${uploaded.body.id}`)).toBeNull();
-  expect((await fixture.call(`/api/v1/admin/media/${uploaded.body.id}`)).response.status).toBe(404);
+  expect(await fixture.local.bucket.head(`media/${string(object(uploaded.body).id)}`)).toBeNull();
+  expect(
+    (await fixture.call(`/api/v1/admin/media/${string(object(uploaded.body).id)}`)).response.status,
+  ).toBe(404);
 
   const failing = await upload(fixture, "second.png");
   await fixture.runtime.repository.markForDeletion({
-    mediaId: mediaId(failing.body.id),
+    mediaId: mediaId(string(object(failing.body).id)),
     requestedAt: unixMilliseconds(Date.now()),
     requestedBy: { id: actorId("admin"), role: "admin" },
   });
@@ -72,7 +73,7 @@ test("scheduled and post-commit dispatch recover builds and media deletions", as
     throw new Error(`boom ${secret}`);
   };
   await fixture.worker.scheduled({}, fixture.env, fixture.ctx);
-  expect(await fixture.local.bucket.head(`media/${failing.body.id}`)).toBeNull();
+  expect(await fixture.local.bucket.head(`media/${string(object(failing.body).id)}`)).toBeNull();
   expect(fixture.logs).toContainEqual({
     component: "dispatch",
     dispatcher: "site-build",
@@ -126,9 +127,9 @@ test("a scheduled run with many pending deletions stays within 50 D1 queries", a
   const ids = [];
   for (let index = 0; index < SCHEDULED_MEDIA_DELETION_CLAIMS + 3; index += 1) {
     const uploaded = await upload(fixture, `bulk-${index}.png`);
-    ids.push(uploaded.body.id);
+    ids.push(string(object(uploaded.body).id));
     await fixture.runtime.repository.markForDeletion({
-      mediaId: mediaId(uploaded.body.id),
+      mediaId: mediaId(string(object(uploaded.body).id)),
       requestedAt: unixMilliseconds(Date.now()),
       requestedBy: { id: actorId("admin"), role: "admin" },
     });
@@ -154,9 +155,10 @@ test("a scheduled run with many pending deletions stays within 50 D1 queries", a
 
 test("a configured deploy hook receives scheduled builds and records untracked acceptance", async () => {
   const hook = "https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/hook-secret";
-  const calls = [];
-  vi.stubGlobal("fetch", async (target, init) => {
-    calls.push({ body: init.body, method: init.method, target: String(target) });
+  const calls: { body: BodyInit | null | undefined; method: string | undefined; target: string }[] =
+    [];
+  vi.stubGlobal("fetch", async (target: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ body: init?.body, method: init?.method, target: String(target) });
     return Response.json({ result: { id: "dep-42" }, success: true });
   });
   const fixture = await workerFixture({
@@ -168,7 +170,7 @@ test("a configured deploy hook receives scheduled builds and records untracked a
     json: { blocks: [], fields: { publishedAt: "2026-09-24" }, slug: "hooked", title: "Hooked" },
     method: "POST",
   });
-  await fixture.call(`/api/v1/admin/entries/${created.body.id}/publish`, {
+  await fixture.call(`/api/v1/admin/entries/${string(object(created.body).id)}/publish`, {
     json: { expectedRevision: 1 },
     method: "POST",
   });
@@ -178,7 +180,10 @@ test("a configured deploy hook receives scheduled builds and records untracked a
   await fixture.worker.scheduled({}, fixture.env, fixture.ctx);
   expect(calls).toEqual([{ body: undefined, method: "POST", target: hook }]);
   const builds = await fixture.call("/api/v1/admin/site-builds");
-  expect(builds.body.items[0]).toMatchObject({ providerBuildId: "dep-42", status: "accepted" });
+  expect(array(object(builds.body).items)[0]).toMatchObject({
+    providerBuildId: "dep-42",
+    status: "accepted",
+  });
   expect(JSON.stringify(builds.body)).not.toContain("hook-secret");
   expect(JSON.stringify(fixture.logs)).not.toContain("hook-secret");
 });
@@ -191,7 +196,10 @@ test("without a deploy hook, dispatch records a sanitized trigger-unavailable fa
   fixture.advance(6_000);
   await fixture.worker.scheduled({}, fixture.env, fixture.ctx);
   const builds = await fixture.call("/api/v1/admin/site-builds");
-  expect(builds.body.items[0]).toMatchObject({ error: "trigger_unavailable", status: "pending" });
+  expect(array(object(builds.body).items)[0]).toMatchObject({
+    error: "trigger_unavailable",
+    status: "pending",
+  });
 });
 
 test("Worker history and detail preserve source diagnostics", async () => {
@@ -204,12 +212,14 @@ test("Worker history and detail preserve source diagnostics", async () => {
   fixture.advance(6000);
   await fixture.worker.scheduled({}, fixture.env, fixture.ctx);
   const builds = await fixture.call("/api/v1/admin/site-builds");
-  expect(builds.body.items[0]).toMatchObject({
-    id: receipt.body.eventId,
+  expect(array(object(builds.body).items)[0]).toMatchObject({
+    id: string(object(receipt.body).eventId),
     status: "pending",
     error: "source_symlink",
     errorPath: "src/linked.astro",
   });
-  const detail = await fixture.call(`/api/v1/admin/site-builds/${receipt.body.eventId}`);
+  const detail = await fixture.call(
+    `/api/v1/admin/site-builds/${string(object(receipt.body).eventId)}`,
+  );
   expect(detail.body).toMatchObject({ error: "source_symlink", errorPath: "src/linked.astro" });
 });

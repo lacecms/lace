@@ -90,6 +90,47 @@ contract(
 );
 
 contract(
+  "retains the claimed target across both enqueue and claim orders",
+  async (runtime, expect) => {
+    const { repository, sql } = await runtime.open({
+      nextId: sequence("race-build"),
+      resolveModel: noModels,
+    });
+    await sql.run(
+      "insert into published_state (singleton_key, version, updated_at) values (1, 1, 1)",
+    );
+    const first = await repository.requestBuild({
+      requestedAt: unixMilliseconds(1),
+      requestedBy: admin,
+    });
+    await sql.run("update published_state set version = 2 where singleton_key = 1");
+    const coalesced = await repository.requestBuild({
+      requestedAt: unixMilliseconds(2),
+      requestedBy: admin,
+    });
+    expect(coalesced).toEqual({ coalesced: true, eventId: first.eventId, targetVersion: 2 });
+    const [claim] = await repository.claimSiteBuilds({ limit: 1, now: unixMilliseconds(5_002) });
+    expect(claim!.targetVersion).toBe(2);
+    await sql.run("update published_state set version = 3 where singleton_key = 1");
+    const next = await repository.requestBuild({
+      requestedAt: unixMilliseconds(5_003),
+      requestedBy: admin,
+    });
+    expect(next.coalesced).toBe(false);
+    expect(next.targetVersion).toBe(3);
+    const events = await sql.all<{ id: string; payload_json: string }>(
+      "select id, payload_json from outbox_events order by created_at",
+    );
+    expect(events.map((event) => [event.id, JSON.parse(event.payload_json).targetVersion])).toEqual(
+      [
+        [first.eventId, 2],
+        [next.eventId, 3],
+      ],
+    );
+  },
+);
+
+contract(
   "build outcome transitions are lease guarded and reuse one history row",
   async (runtime, expect) => {
     const { repository, sql } = await runtime.open({ resolveModel: noModels });
@@ -250,8 +291,51 @@ contract(
         retryOfBuildId: first.eventId as never,
       }),
     ).rejects.toThrow("can be retried");
+    await sql.run("update site_builds set status = 'failed' where id = ?", first.eventId);
+    const overridden = await repository.requestBuild({
+      requestedAt: unixMilliseconds(25_006),
+      requestedBy: admin,
+      retryOfBuildId: first.eventId as never,
+    });
+    expect(overridden).toEqual({ coalesced: true, eventId: retry.eventId, targetVersion: 9 });
+    const updated = await sql.get<{ payload_json: string; available_at: number }>(
+      "select payload_json, available_at from outbox_events where id = ?",
+      retry.eventId,
+    );
+    expect(JSON.parse(updated!.payload_json).retryOfBuildId).toBe(first.eventId);
+    expect(updated!.available_at).toBe(30_006);
+    expect(
+      await count(
+        sql,
+        "select count(*) as count from outbox_events where processed_at is null and locked_at is null",
+      ),
+    ).toBe(1);
   },
 );
+
+contract("rolls back a build outcome when the event update fails late", async (runtime, expect) => {
+  const { repository, sql } = await runtime.open({
+    nextId: sequence("late-build"),
+    resolveModel: noModels,
+  });
+  const queued = await repository.requestBuild({
+    requestedAt: unixMilliseconds(1),
+    requestedBy: admin,
+  });
+  const [lease] = await repository.claimSiteBuilds({ limit: 1, now: unixMilliseconds(5_001) });
+  await sql.run(
+    "create trigger reject_build_completion before update on outbox_events when old.id = 'late-build-1' begin select raise(abort, 'late failure'); end",
+  );
+  await expect(
+    repository.recordSiteBuildSuccess({ leaseId: lease!.id, now: unixMilliseconds(5_002) }),
+  ).rejects.toThrow();
+  expect(
+    await sql.get("select status, completed_at from site_builds where id = ?", queued.eventId),
+  ).toEqual({ status: "running", completed_at: null });
+  expect(
+    await sql.get("select locked_by, processed_at from outbox_events where id = ?", queued.eventId),
+  ).toEqual({ locked_by: lease!.id, processed_at: null });
+});
 
 contract(
   "provider acceptance, tracked outcomes and retry sources never overstate publication",
@@ -425,10 +509,11 @@ contract(
 contract(
   "tracking checks are leased, provider guarded and record stages without touching other builds",
   async (runtime, expect) => {
-    const { repository, sql } = await runtime.open({
+    const harness = await runtime.open({
       nextId: sequence("track"),
       resolveModel: noModels,
     });
+    const { repository, sql } = harness;
     let clock = 0;
     const track = async (providerBuildId: string) => {
       clock += 10_000;
@@ -564,7 +649,7 @@ contract(
       providerBuildId: "dep-a",
       reason: "tracking_timeout",
     });
-    await repository.completeTrackedSiteBuild({
+    await harness.reopen().completeTrackedSiteBuild({
       buildId: a.buildId,
       now: unixMilliseconds(later + 1),
       outcome: "unknown",
@@ -773,6 +858,60 @@ contract(
       await sql.get("select status, last_error from media where id = 'media-terminal'"),
     ).toEqual({ last_error: null, status: "deleting" });
     await expect(repository.loadDeletingMedia(mediaId("missing"))).resolves.toBeNull();
+  },
+);
+
+contract(
+  "preserves recovered media and lease when stale or late finalization fails",
+  async (runtime, expect) => {
+    const { repository, sql } = await runtime.open({
+      nextId: sequence("media-lease"),
+      resolveModel: noModels,
+    });
+    await seedMedia(sql, "rollback-media", "deleting");
+    await sql.run("insert into media_tags (media_id, tag) values ('rollback-media', 'kept')");
+    await sql.run(
+      "insert into outbox_events (id, type, payload_json, attempts, available_at, created_at) values ('rollback-event', 'media.delete.requested', ?, 0, 1, 1)",
+      JSON.stringify({ mediaId: "rollback-media" }),
+    );
+    const claim = async (now: number) =>
+      (
+        await repository.claim({
+          eventTypes: ["media.delete.requested"],
+          limit: 1,
+          now: unixMilliseconds(now),
+        })
+      )[0]!;
+    const old = await claim(1);
+    const current = await claim(60_001);
+    await expect(
+      repository.completeMediaDeletion({
+        completedAt: unixMilliseconds(60_002),
+        leaseId: old.id,
+        mediaId: mediaId("rollback-media"),
+      }),
+    ).rejects.toThrow();
+    await sql.run(
+      "create trigger reject_complete before update on outbox_events when old.id = 'rollback-event' begin select raise(abort, 'late failure'); end",
+    );
+    await expect(
+      repository.completeMediaDeletion({
+        completedAt: unixMilliseconds(60_002),
+        leaseId: current.id,
+        mediaId: mediaId("rollback-media"),
+      }),
+    ).rejects.toThrow();
+    expect(await sql.get("select status from media where id = 'rollback-media'")).toEqual({
+      status: "deleting",
+    });
+    expect(await sql.all("select tag from media_tags where media_id = 'rollback-media'")).toEqual([
+      { tag: "kept" },
+    ]);
+    expect(
+      await sql.get(
+        "select locked_by, processed_at from outbox_events where id = 'rollback-event'",
+      ),
+    ).toEqual({ locked_by: current.id, processed_at: null });
   },
 );
 

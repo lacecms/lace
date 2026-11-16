@@ -1,4 +1,4 @@
-import { expect } from "vitest";
+import { expect, onTestFinished } from "vitest";
 import { createLaceApp } from "../index.js";
 import {
   AccountUseCases,
@@ -9,12 +9,11 @@ import {
   unconfiguredEmailSender,
 } from "@lacecms/application";
 import { defineCollection, defineConfig, definePage } from "@lacecms/config";
-import { defineBlock, field } from "@lacecms/content";
+import { defineBlock, field, NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
 import { unixMilliseconds } from "@lacecms/domain";
 import {
   DeterministicClock,
   DeterministicIdGenerator,
-  InMemoryContentStore,
   InMemoryObjectStorage,
   admin,
   delegatedActor,
@@ -22,12 +21,15 @@ import {
   fakePort,
   testActor,
 } from "@lacecms/test-utils";
+import { openConfiguredSqliteFixture, seedSqliteActorProfile } from "@lacecms/test-utils/sqlite";
 
 import type { LaceAppInput } from "../index.js";
 import type { Actor, Role } from "@lacecms/domain";
 import type {
   ImportTokenCapabilities,
   ImportTokenMetadata,
+  ContentEntryReadPort,
+  PublicContentReadPort,
   SecurityService,
 } from "@lacecms/application";
 
@@ -63,6 +65,10 @@ type FixtureOptions = Partial<
   sessionId?: string;
   linkReads?: ConstructorParameters<typeof ContentLinkUseCases>[0];
   listQueryLimits?: ConstructorParameters<typeof ContentUseCases>[0]["listQueryLimits"];
+  contentReads?: Partial<Pick<ContentEntryReadPort, "load" | "list">>;
+  exportBuildContentPage?: (
+    read: PublicContentReadPort["exportBuildContentPage"],
+  ) => PublicContentReadPort["exportBuildContentPage"];
 };
 
 export { admin, editor };
@@ -92,6 +98,8 @@ export async function fixture({
   defer,
   linkReads,
   listQueryLimits,
+  contentReads,
+  exportBuildContentPage,
   importActors,
 }: FixtureOptions = {}) {
   const config = await defineConfig({
@@ -116,13 +124,32 @@ export async function fixture({
       }),
     ],
   });
-  const store = new InMemoryContentStore();
+  const outboxIds = new DeterministicIdGenerator("outbox");
+  const sqlite = openConfiguredSqliteFixture(config.runtime.content, {
+    nextId: () => outboxIds.next(),
+  });
+  const { repository: store } = sqlite;
+  onTestFinished(sqlite.close);
+  const seedProfile = (id: string, displayName: string, role: Role) =>
+    seedSqliteActorProfile(sqlite.connection, id, displayName, role);
+  for (const role of ["admin", "editor", "viewer"] as const) seedProfile(role, "", role);
+  if (actor !== null) seedProfile(actor.id, "", actor.role);
   const storage = new InMemoryObjectStorage();
   const content = new ContentUseCases({
-    ...(listQueryLimits === undefined ? {} : { listQueryLimits }),
+    listQueryLimits: listQueryLimits ?? NODE_LIST_QUERY_LIMITS,
     clock: new DeterministicClock(unixMilliseconds(1)),
     config: config.runtime,
-    content: store,
+    content:
+      contentReads === undefined
+        ? store
+        : new Proxy(store, {
+            get(target, key, receiver) {
+              if ((key === "list" || key === "load") && contentReads[key] !== undefined)
+                return contentReads[key];
+              const value: unknown = Reflect.get(target, key, receiver);
+              return typeof value === "function" ? value.bind(target) : value;
+            },
+          }),
     idGenerator: new DeterministicIdGenerator("server"),
     media: store,
   });
@@ -142,6 +169,8 @@ export async function fixture({
     storage,
   });
   let exportLoads = 0;
+  const exportPage = store.exportBuildContentPage.bind(store);
+  const readExportPage = exportBuildContentPage?.(exportPage) ?? exportPage;
   const securityPort =
     security === undefined ? undefined : fakePort<SecurityService>("SecurityService", security);
   const app = createLaceApp({
@@ -156,19 +185,7 @@ export async function fixture({
     adminAssets: { fetch: async () => new Response("admin-shell") },
     config,
     content,
-    links: new ContentLinkUseCases(
-      linkReads ?? {
-        listLinkTargets: async () => ({ items: [] }),
-        resolveLinkTargets: async (ids) =>
-          Object.fromEntries(ids.map((id) => [id, { id, state: "missing" }])),
-        readLinkImpact: async () => ({
-          mode: "sources",
-          sources: [],
-          receipt: "receipt",
-          hasPublishedUsages: false,
-        }),
-      },
-    ),
+    links: new ContentLinkUseCases(linkReads ?? store),
     ...(buildSite === undefined ? {} : { buildSite }),
     ...(builds === undefined ? {} : { builds }),
     ...(securityPort === undefined
@@ -197,7 +214,7 @@ export async function fixture({
     publicContent: {
       exportBuildContentPage: async (input) => {
         exportLoads += 1;
-        return store.exportBuildContentPage(input);
+        return readExportPage(input);
       },
       listPublic: store.listPublic.bind(store),
       listPublicRecords: store.listPublicRecords.bind(store),
@@ -211,7 +228,17 @@ export async function fixture({
     readiness: { isReady: async () => ready },
     requestIds: { next: () => `request-${logs.length + 1}` },
   });
-  return { app, content, exportLoads: () => exportLoads, logs, media, storage, store };
+  return {
+    app,
+    content,
+    exportLoads: () => exportLoads,
+    logs,
+    media,
+    seedProfile,
+    sqlite,
+    storage,
+    store,
+  };
 }
 
 export async function json(app: App, path: string, init?: RequestInit) {

@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite rows, branded snapshot fixtures and malformed projection inputs.
 import { expect, test } from "vitest";
 import { readFile } from "node:fs/promises";
 
@@ -28,8 +26,9 @@ test("site-build status SQL mirrors the portable vocabulary", async () => {
     status: "deployed",
     target_version: 1,
   };
-  expect(() => siteBuildRecord(row)).toThrow(
+  // This deliberately invalid persisted status exercises row validation.
+  expect(() => siteBuildRecord(row as Parameters<typeof siteBuildRecord>[0])).toThrow(
     expect.objectContaining({ code: "CONTENT_INVALID_STATE" }),
   );
-  expect(siteBuildRecord({ ...row, status: "accepted" }).status).toBe("accepted");
+  expect(siteBuildRecord({ ...row, status: "accepted" as const }).status).toBe("accepted");
 });

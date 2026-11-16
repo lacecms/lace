@@ -256,7 +256,21 @@ contract(
       ),
     ).toBe(true);
 
-    await expect(syncNotes(repository, v3, 30)).resolves.toMatchObject({ status: "applied" });
+    const remaining = interrupted.blocks.filter(
+      (row) => row.block_type === "note" && row.schema_version === 1,
+    );
+    const drafts = new Set(
+      remaining
+        .filter((row) => String(row.snapshot_id).endsWith("-draft"))
+        .map((row) => row.snapshot_id),
+    );
+    const published = new Set(
+      remaining.map((row) => row.snapshot_id).filter((id) => !drafts.has(id)),
+    );
+    await expect(syncNotes(repository, v3, 30)).resolves.toMatchObject({
+      status: "applied",
+      migrated: { blocks: remaining.length, drafts: drafts.size, published: published.size },
+    });
     const resumed = await noteState(sql);
     expect(resumed.blocks.filter((row) => row.block_type === "note")).toEqual(
       resumed.blocks

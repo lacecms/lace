@@ -1,16 +1,14 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite rows, branded snapshot fixtures and malformed projection inputs.
 import { expect, test } from "vitest";
 
 test("media tag SQL binds canonical sets, literal prefix ranges, and cursors", async () => {
   const { mediaTagFilters, mediaTagCatalogQuery } = await import("./tags.js");
   const { mediaCursorKind } = await import("./catalog.js");
   const { encodeSortCursor } = await import("../shared/cursors.js");
-  expect(mediaCursorKind({ sort: "filename", tags: [" B ", "a", "a"] })).toBe(
-    mediaCursorKind({ sort: "filename", tags: ["a", "b"] }),
+  expect(mediaCursorKind({ sort: "filename", limit: 20, tags: [" B ", "a", "a"] })).toBe(
+    mediaCursorKind({ sort: "filename", limit: 20, tags: ["a", "b"] }),
   );
-  expect(mediaCursorKind({ sort: "filename", tags: ["a"] })).not.toBe(
-    mediaCursorKind({ sort: "filename", tags: ["b"] }),
+  expect(mediaCursorKind({ sort: "filename", limit: 20, tags: ["a"] })).not.toBe(
+    mediaCursorKind({ sort: "filename", limit: 20, tags: ["b"] }),
   );
   expect(mediaTagFilters(["B", "a"]).bindings).toEqual(["a", "b"]);
   expect(mediaTagFilters(["B", "a"]).conditions).toHaveLength(2);

@@ -1,3 +1,4 @@
+import { seedSqliteMedia } from "@lacecms/test-utils/sqlite";
 import * as v from "valibot";
 import { contentModelListSchema, buildExportSchema } from "@lacecms/contracts";
 import type { JsonObject } from "@lacecms/content";
@@ -26,8 +27,11 @@ test("globals are read by model key and refused as routed or deletable entries",
       version: 1,
     }),
   ];
-  const { app, store } = await fixture({ maxBodyBytes: 4096, models });
-  store.registerMedia({
+  const {
+    app,
+    sqlite: { connection },
+  } = await fixture({ maxBodyBytes: 4096, models });
+  seedSqliteMedia(connection, {
     createdAt: unixMilliseconds(1),
     createdBy: admin.id,
     filename: "logo.png",
@@ -293,9 +297,13 @@ test("SEO values travel through admin, public and export contracts", async () =>
       version: 1,
     }),
   ];
-  const { app, store } = await fixture({ maxBodyBytes: 8192, models });
+  const {
+    app,
+    sqlite: { connection },
+    store,
+  } = await fixture({ maxBodyBytes: 8192, models });
   for (const id of ["share", "other"]) {
-    store.registerMedia({
+    seedSqliteMedia(connection, {
       createdAt: unixMilliseconds(1),
       createdBy: admin.id,
       filename: `${id}.png`,
@@ -446,9 +454,12 @@ test("block envelopes travel through admin, public and export contracts", async 
     defineCollection({ blocks: ["panel"], key: "posts", route: "/blog/:slug", version: 1 }),
     defineGlobal({ blocks: ["panel"], key: "settings", version: 1 }),
   ];
-  const { app, store } = await fixture({ blocks: [panel], maxBodyBytes: 8192, models });
+  const {
+    app,
+    sqlite: { connection },
+  } = await fixture({ blocks: [panel], maxBodyBytes: 8192, models });
   for (const id of ["shown", "secret"]) {
-    store.registerMedia({
+    seedSqliteMedia(connection, {
       createdAt: unixMilliseconds(1),
       createdBy: admin.id,
       filename: `${id}.png`,

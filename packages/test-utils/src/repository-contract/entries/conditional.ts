@@ -103,6 +103,7 @@ async function conditionalPublicationHarness(
   await seedMedia(sql, "media-block-hidden");
   const useCases = (content: ContractRepository = repository, at = 10) =>
     new ContentUseCases({
+      listQueryLimits: runtime.listQueryLimits,
       config: config.runtime,
       content,
       media: repository,
@@ -420,6 +421,7 @@ contract(
       expect(synced.published!.fields, parity.name).toEqual(expected);
       expect(synced.draft.fields, parity.name).toEqual(values);
       const useCases = new ContentUseCases({
+        listQueryLimits: runtime.listQueryLimits,
         config: v2.runtime,
         content: repository,
         media: repository,

@@ -1,15 +1,19 @@
+import { NODE_LIST_QUERY_LIMITS as TEST_LIST_QUERY_LIMITS } from "@lacecms/content";
 import { admin, editor } from "../fixtures/actors.js";
 import type { ContentBlock, ContentBlockInput, ContentModelRoute } from "@lacecms/domain";
 import type { JsonObject } from "@lacecms/content";
 import type { NormalizedContentModel, RuntimeConfigProjection } from "@lacecms/config";
 import type { CompleteDraftInput } from "@lacecms/application";
 import { expect } from "vitest";
+import type { NodeContentRepository } from "@lacecms/db/node";
+import type { Database } from "better-sqlite3";
 import {
-  DeterministicClock,
-  DeterministicIdGenerator,
-  InMemoryContentStore,
-  InMemoryObjectStorage,
-} from "../index.js";
+  applicationSqlite,
+  persistedMediaReferences,
+  requestedMediaDeletions,
+} from "./application-sqlite.js";
+import { seedSqliteMedia } from "./sqlite.js";
+import { DeterministicClock, DeterministicIdGenerator, InMemoryObjectStorage } from "../index.js";
 import {
   actorId,
   blockKey,
@@ -118,7 +122,7 @@ export function savedMutation(revision: number, title: string, slug: string) {
   };
 }
 
-export async function lifecycleFixture() {
+export async function lifecycleFixture({ seedModels = true } = {}) {
   const config = await defineConfig({
     blocks: [
       defineBlock({
@@ -145,7 +149,7 @@ export async function lifecycleFixture() {
       }),
     ],
   });
-  const store = new InMemoryContentStore();
+  const { store } = applicationSqlite(config.runtime.content, seedModels);
   for (const id of ["media-1", "media-2", "media-3"]) {
     await store.createMedia({
       createdAt: unixMilliseconds(1),
@@ -160,6 +164,7 @@ export async function lifecycleFixture() {
     });
   }
   const useCases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     clock: new DeterministicClock(unixMilliseconds(10)),
     config: config.runtime,
     content: store,
@@ -187,7 +192,7 @@ export async function lifecycleFixture() {
 
 export async function syncedGlobal(
   config: Pick<RuntimeConfigProjection, "content">,
-  store: InMemoryContentStore,
+  store: NodeContentRepository,
 ) {
   const prepared = await prepareConfigurationSynchronization({
     models: config.content,
@@ -258,8 +263,10 @@ export function imageBlock(key: string, type: string, position: number, image: s
   };
 }
 
-export function seedMediaCatalog(store: InMemoryContentStore) {
-  store.setActorDisplayNames({ editor: "Ada" });
+export function seedMediaCatalog(connection: Database) {
+  connection
+    .prepare("update content_actor_profiles set display_name = ? where actor_id = ?")
+    .run("Ada", "editor");
   for (const [id, filename, mimeType, size, createdAt, createdBy] of [
     ["m-a", "Cover.png", "image/png", 30, 10, "editor"],
     ["m-b", "cover-2.jpg", "image/jpeg", 10, 11, "gone"],
@@ -267,7 +274,7 @@ export function seedMediaCatalog(store: InMemoryContentStore) {
     ["m-d", "banner.png", "image/png", 20, 12, "editor"],
     ["m-e", "cover.png", "image/png", 30, 10, "editor"],
   ] as const) {
-    store.registerMedia({
+    seedSqliteMedia(connection, {
       createdAt: unixMilliseconds(createdAt),
       createdBy: actorId(createdBy),
       filename,
@@ -308,7 +315,7 @@ export async function seoConfig({ posts = {}, notes = {} } = {}) {
 
 export async function seoFixture(prefix = "seo") {
   const config = await seoConfig();
-  const store = new InMemoryContentStore();
+  const { connection, store } = applicationSqlite(config.runtime.content, false);
   for (const id of ["media-1", "media-2"]) {
     await store.createMedia({
       createdAt: unixMilliseconds(1),
@@ -323,6 +330,7 @@ export async function seoFixture(prefix = "seo") {
     });
   }
   const useCases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     clock: new DeterministicClock(unixMilliseconds(10)),
     config: config.runtime,
     content: store,
@@ -342,7 +350,13 @@ export async function seoFixture(prefix = "seo") {
     return prepared;
   };
   await sync(config.runtime.content);
-  return { config, store, sync, useCases };
+  return {
+    config,
+    store,
+    sync,
+    useCases,
+    mediaReferences: (id: string) => persistedMediaReferences(connection, id),
+  };
 }
 
 export const seoPost = (title: string, slug: string, seo?: unknown) => ({
@@ -370,7 +384,7 @@ export async function envelopeFixture(prefix = "envelope") {
       defineCollection({ blocks: ["panel"], key: "posts", route: "/blog/:slug", version: 1 }),
     ],
   });
-  const store = new InMemoryContentStore();
+  const { connection, store } = applicationSqlite(config.runtime.content, false);
   for (const id of ["media-1", "media-2"]) {
     await store.createMedia({
       createdAt: unixMilliseconds(1),
@@ -385,6 +399,7 @@ export async function envelopeFixture(prefix = "envelope") {
     });
   }
   const useCases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     clock: new DeterministicClock(unixMilliseconds(10)),
     config: config.runtime,
     content: store,
@@ -402,7 +417,11 @@ export async function envelopeFixture(prefix = "envelope") {
     prepared,
     target: store,
   });
-  return { store, useCases };
+  return {
+    store,
+    useCases,
+    mediaReferences: (id: string) => persistedMediaReferences(connection, id),
+  };
 }
 
 export const panel = (
@@ -457,7 +476,7 @@ export async function detachFixture() {
       }),
     ],
   });
-  const store = new InMemoryContentStore();
+  const { connection, store } = applicationSqlite(config.runtime.content);
   for (const id of ["media-1", "media-2"]) {
     await store.createMedia({
       createdAt: unixMilliseconds(1),
@@ -472,6 +491,7 @@ export async function detachFixture() {
     });
   }
   const content = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     clock: new DeterministicClock(unixMilliseconds(10)),
     config: config.runtime,
     content: store,
@@ -505,7 +525,15 @@ export async function detachFixture() {
     schemaVersion: 1,
     type: "asset",
   });
-  return { asset, content, create, media, mediaDependencies, store };
+  return {
+    asset,
+    content,
+    create,
+    media,
+    mediaDependencies,
+    store,
+    deletionRequests: () => requestedMediaDeletions(connection),
+  };
 }
 
 /** Assert a test fixture or lookup exists and narrow it for subsequent assertions. */

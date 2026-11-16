@@ -1,11 +1,12 @@
-// Directory dependencies: database ← repository; builds, media, security;
-// builds, database, media, repository, security ← runtime.
+// Directory dependencies: builds, database, media, security ← runtime.
 export * from "./security/oauth.js";
 export { checkedInMigrations, uncheckedD1Migrations, uncheckedNodeMigrations } from "@lacecms/db";
 
 export const packageName = "@lacecms/platform-node";
 
-export * from "./repository/repository.js";
+export { NodeContentRepository } from "@lacecms/db/node";
+export type { ContentModelResolver, NodeRepositoryOptions } from "@lacecms/db/node";
+export { nodeContentRepository } from "./database/repository.js";
 export * from "./runtime/content-sync.js";
 export * from "./media/image-inspector.js";
 export * from "./media/minio-storage.js";

@@ -269,7 +269,7 @@ contract(
         listFields: ["flag", "number"],
         limit: 1,
         sort: sort as never,
-        query: resolveCollectionQuery(model, sort, filters)!,
+        query: resolveCollectionQuery(model, sort, filters, runtime.listQueryLimits)!,
         ...other,
       });
     const fold = (value: string) => value.replace(/[A-Z]/gu, (letter) => letter.toLowerCase());
@@ -474,6 +474,7 @@ contract(
       });
     const lister = async (defaultSort?: "field:order" | "-field:order") =>
       new ContentUseCases({
+        listQueryLimits: runtime.listQueryLimits,
         clock: { now: () => unixMilliseconds(50) },
         config: (await configFor(defaultSort)).runtime,
         content: repository,
@@ -549,7 +550,7 @@ contract(
         sort: sort as never,
         listFields: [],
         limit: 1,
-        query: resolveCollectionQuery(model, sort, [])!,
+        query: resolveCollectionQuery(model, sort, [], runtime.listQueryLimits)!,
         ...(after ? { after: after as never } : {}),
         ...(status ? { status } : {}),
       });
@@ -654,7 +655,7 @@ contract(
         listFields: [],
         limit,
         sort: sort as never,
-        query: resolveCollectionQuery(model, sort, filters)!,
+        query: resolveCollectionQuery(model, sort, filters, runtime.listQueryLimits)!,
         ...(after ? { after: after as never } : {}),
         ...(q ? { q } : {}),
       });
@@ -753,7 +754,7 @@ contract(
         limit: 5,
         // Direct callers cannot relax an adapter's own policy.
         listQueryLimits: NODE_LIST_QUERY_LIMITS,
-        query: resolveCollectionQuery(model, "title", filters)!,
+        query: resolveCollectionQuery(model, "title", filters, NODE_LIST_QUERY_LIMITS)!,
         ...(q ? { q } : {}),
       });
     for (const value of terms.slice(0, -1)) {

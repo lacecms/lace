@@ -53,6 +53,7 @@ contract(
     await repository.publish(publish("target", 1, 2));
     const service = (content = repository) =>
       new ContentUseCases({
+        listQueryLimits: runtime.listQueryLimits,
         clock: { now: () => unixMilliseconds(10) },
         config: config.runtime,
         content,
@@ -390,6 +391,7 @@ contract(
       mediaReferences: [],
     });
     const useCases = new ContentUseCases({
+      listQueryLimits: runtime.listQueryLimits,
       config: config.runtime,
       content: repository,
       media: repository,
@@ -505,6 +507,7 @@ contract(
       return statuses;
     };
     const raceUseCases = new ContentUseCases({
+      listQueryLimits: runtime.listQueryLimits,
       config: config.runtime,
       content: racePort,
       media: repository,

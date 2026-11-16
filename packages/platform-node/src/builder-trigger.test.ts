@@ -1,12 +1,14 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy SQLite/product harnesses, branded values and partial runtime adapters.
+import { strict as assert } from "node:assert";
+import { siteBuildId, unixMilliseconds } from "@lacecms/domain";
+import { dispatcherEventId, dispatcherLeaseId } from "@lacecms/application";
+import type { SiteBuildDispatchPort, SiteBuildWorkLease } from "@lacecms/application";
 import { expect, test } from "vitest";
 import { NodeBuilderSiteBuildTrigger, NodeSiteBuildDispatcher } from "./index.js";
 
 const secret = "s".repeat(32);
-const input = { buildId: "build-1", targetVersion: 8 };
+const input = { buildId: siteBuildId("build-1"), targetVersion: 8 };
 
-function trigger(fetch) {
+function trigger(fetch: typeof globalThis.fetch) {
   return new NodeBuilderSiteBuildTrigger({
     baseUrl: new URL("http://builder:8788/"),
     secret,
@@ -14,10 +16,48 @@ function trigger(fetch) {
   });
 }
 
+function lease(attempts: number): SiteBuildWorkLease {
+  return {
+    id: dispatcherLeaseId("lease"),
+    buildId: siteBuildId("build"),
+    targetVersion: 1,
+    expiresAt: unixMilliseconds(1000),
+    event: {
+      attempts,
+      availableAt: unixMilliseconds(0),
+      id: dispatcherEventId("event"),
+      payload: {},
+      type: "site-build",
+    },
+  };
+}
+function workPort(overrides: Partial<SiteBuildDispatchPort>): SiteBuildDispatchPort {
+  const unexpected = async (): Promise<never> => {
+    throw new Error("Unexpected dispatch operation");
+  };
+  return {
+    claimSiteBuilds: unexpected,
+    renewSiteBuildLease: unexpected,
+    recordSiteBuildAccepted: unexpected,
+    recordSiteBuildTracking: unexpected,
+    recordSiteBuildSuccess: unexpected,
+    recordSiteBuildFailure: unexpected,
+    completeTrackedSiteBuild: unexpected,
+    claimTrackedSiteBuildChecks: unexpected,
+    recordTrackedSiteBuildCheck: unexpected,
+    ...overrides,
+  };
+}
+
 test("sends only build identity and version with dedicated auth", async () => {
-  const calls = [];
+  const calls: { url: string; body: unknown; auth: string | null }[] = [];
   const adapter = trigger(async (url, init) => {
-    calls.push({ url: String(url), body: JSON.parse(init.body), auth: init.headers.authorization });
+    assert(typeof init?.body === "string");
+    calls.push({
+      url: String(url),
+      body: JSON.parse(init.body),
+      auth: new Headers(init.headers).get("authorization"),
+    });
     return Response.json({ status: "succeeded", log: "Static build succeeded." });
   });
   expect(await adapter.trigger(input)).toEqual({ status: "succeeded" });
@@ -30,7 +70,11 @@ test("maps fixed failures and treats malformed or unavailable responses as retry
   expect(
     await trigger(async () =>
       Response.json(
-        { status: "failed", reason: "build_failed", log: "Static build failed: build_failed." },
+        {
+          status: "failed" as const,
+          reason: "build_failed",
+          log: "Static build failed: build_failed.",
+        },
         { status: 503 },
       ),
     ).trigger(input),
@@ -56,10 +100,8 @@ test("dispatcher renews a long trigger and discards a result after lease loss", 
   for (const ownsLease of [true, false]) {
     let renewals = 0;
     let successes = 0;
-    const work = {
-      claimSiteBuilds: async () => [
-        { id: "lease", buildId: "build", targetVersion: 1, event: { attempts: 0 } },
-      ],
+    const work = workPort({
+      claimSiteBuilds: async () => [lease(0)],
       renewSiteBuildLease: async () => {
         renewals += 1;
         return ownsLease;
@@ -67,9 +109,9 @@ test("dispatcher renews a long trigger and discards a result after lease loss", 
       recordSiteBuildSuccess: async () => {
         successes += 1;
       },
-    };
+    });
     const dispatcher = new NodeSiteBuildDispatcher({
-      clock: { now: () => Date.now() },
+      clock: { now: () => unixMilliseconds(Date.now()) },
       logger: { error: () => undefined },
       leaseRenewIntervalMs: 5,
       trigger: {
@@ -145,24 +187,24 @@ test("cancels oversized response before buffering it", async () => {
 test("portable dispatcher preserves reason/path for pending and terminal attempts", async () => {
   for (const attempts of [0, 7]) {
     for (const result of [
-      { status: "failed", reason: "source_symlink", path: "src/linked.astro" },
-      { status: "failed", reason: "source_missing", path: "/host/private" },
-      { status: "failed", reason: "install_failed", path: "src/file" },
-      { status: "failed", reason: "secret=unknown", path: "src/file" },
+      { status: "failed" as const, reason: "source_symlink", path: "src/linked.astro" },
+      { status: "failed" as const, reason: "source_missing", path: "/host/private" },
+      { status: "failed" as const, reason: "install_failed", path: "src/file" },
+      { status: "failed" as const, reason: "secret=unknown", path: "src/file" },
     ]) {
-      const failures = [];
-      const logs = [];
+      const failures: Parameters<SiteBuildDispatchPort["recordSiteBuildFailure"]>[0][] = [];
+      const logs: { buildId: string; reason: string }[] = [];
       const dispatcher = new NodeSiteBuildDispatcher({
-        clock: { now: () => 100 },
+        clock: { now: () => unixMilliseconds(100) },
         logger: { error: (value) => logs.push(value) },
         random: () => 0,
         trigger: { trigger: async () => result },
-        work: {
-          claimSiteBuilds: async () => [
-            { id: "lease", buildId: "build", targetVersion: 1, event: { attempts } },
-          ],
-          recordSiteBuildFailure: async (value) => failures.push(value),
-        },
+        work: workPort({
+          claimSiteBuilds: async () => [lease(attempts)],
+          recordSiteBuildFailure: async (value) => {
+            failures.push(value);
+          },
+        }),
       });
       await dispatcher.runOnce();
       const reason = result.reason === "secret=unknown" ? "provider_failed" : result.reason;

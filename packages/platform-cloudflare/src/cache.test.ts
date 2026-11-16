@@ -1,10 +1,8 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy D1/Worker harnesses, binding fakes and recorded adapter calls.
 import { afterEach, expect, test } from "vitest";
 import { CloudflareKvCache, NoopCloudflareCache } from "./index.js";
 import { openLocalCloudflare } from "./test-support/d1-test-harness.js";
 
-const cleanups = [];
+const cleanups: (() => void | Promise<void>)[] = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });

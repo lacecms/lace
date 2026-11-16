@@ -1,9 +1,9 @@
-// @ts-nocheck
-// TODO(rf2): Type legacy D1/Worker harnesses, binding fakes and recorded adapter calls.
+import { strict as assert } from "node:assert";
+import { array, object, number, string } from "./test-support/json.js";
 import { afterEach, expect, test, vi } from "vitest";
 
 import { unixMilliseconds } from "@lacecms/domain";
-import config from "../../../lace.config.ts";
+import config from "../../../lace.config.js";
 import {
   CloudflareEnvironmentError,
   SCHEDULED_TRACKING_CHECKS,
@@ -13,7 +13,7 @@ import {
 import { countingD1 } from "./test-support/d1-test-harness.js";
 
 import { createWorkerFixture, origin, secret } from "./test-support/worker-harness.js";
-const cleanups = [];
+const cleanups: Array<() => unknown> = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
   vi.unstubAllGlobals();
@@ -37,10 +37,19 @@ const pagesEnv = {
 
 /** A controlled Cloudflare: a deploy hook returning queued IDs and a Pages deployments API. */
 function cloudflareStub() {
-  const state = { calls: [], deployments: new Map(), hookIds: [] };
-  vi.stubGlobal("fetch", async (target, init) => {
+  type Stage = [string, string, Record<string, unknown>?];
+  const state: {
+    calls: { authorization: string | null; method: string | undefined; url: string }[];
+    deployments: Map<string, (number | Stage)[]>;
+    hookIds: string[];
+  } = { calls: [], deployments: new Map(), hookIds: [] };
+  vi.stubGlobal("fetch", async (target: RequestInfo | URL, init?: RequestInit) => {
     const url = String(target);
-    state.calls.push({ authorization: init.headers?.authorization, method: init.method, url });
+    state.calls.push({
+      authorization: new Headers(init?.headers).get("authorization"),
+      method: init?.method,
+      url,
+    });
     if (url === trackedHook) {
       const id = state.hookIds.shift();
       return Response.json(
@@ -50,7 +59,7 @@ function cloudflareStub() {
     const match = /\/accounts\/([^/]+)\/pages\/projects\/([^/]+)\/deployments\/([^/]+)$/u.exec(url);
     if (match === null || match[1] !== pagesAccount || match[2] !== "my-site")
       return new Response("unexpected", { status: 418 });
-    const id = decodeURIComponent(match[3]);
+    const id = decodeURIComponent(string(match[3]));
     const behavior = state.deployments.get(id);
     const next = Array.isArray(behavior)
       ? behavior.length > 1
@@ -88,9 +97,10 @@ async function trackedFixture(env = {}) {
     await fixture.settle();
     fixture.advance(6_000);
     await run();
-    return (await fixture.call("/api/v1/admin/site-builds")).body.items[0];
+    return object(array(object((await fixture.call("/api/v1/admin/site-builds")).body).items)[0]);
   };
-  const build = async (id) => (await fixture.call(`/api/v1/admin/site-builds/${id}`)).body;
+  const build = async (id: string) =>
+    object((await fixture.call(`/api/v1/admin/site-builds/${id}`)).body);
   return { ...fixture, build, dispatch, run };
 }
 
@@ -109,7 +119,7 @@ test("Pages tracking settings are all-or-none, bounded and never echoed", () => 
     projectName: "my-site",
     timeoutMs: 3_600_000,
   });
-  expect(tracked.pagesTracking.apiBaseUrl.href).toBe("https://api.cloudflare.com/client/v4/");
+  expect(tracked.pagesTracking?.apiBaseUrl.href).toBe("https://api.cloudflare.com/client/v4/");
   const development = parseCloudflareSettings({
     ...base,
     ...pagesEnv,
@@ -117,13 +127,14 @@ test("Pages tracking settings are all-or-none, bounded and never echoed", () => 
     LACE_PAGES_API_BASE_URL: "http://127.0.0.1:9100/client/v4/",
     LACE_PAGES_TRACKING_TIMEOUT_MINUTES: "1440",
   });
-  expect(development.pagesTracking.timeoutMs).toBe(86_400_000);
-  expect(development.pagesTracking.apiBaseUrl.href).toBe("http://127.0.0.1:9100/client/v4/");
-  const issues = (env) => {
+  expect(development.pagesTracking?.timeoutMs).toBe(86_400_000);
+  expect(development.pagesTracking?.apiBaseUrl.href).toBe("http://127.0.0.1:9100/client/v4/");
+  const issues = (env: object) => {
     try {
       parseCloudflareSettings({ ...base, ...env });
     } catch (error) {
       expect(error).toBeInstanceOf(CloudflareEnvironmentError);
+      assert(error instanceof CloudflareEnvironmentError);
       expect(JSON.stringify(error.issues)).not.toContain(pagesToken);
       expect(error.message).not.toContain(pagesToken);
       return error.issues.map((issue) => `${issue.variable}:${issue.reason}`).sort();
@@ -186,10 +197,13 @@ test("tracked Pages deployments reach proven outcomes from the exact deployment"
   expect(ok.providerCheckedAt).toBeTypeOf("string");
   fixture.advance(31_000);
   await fixture.run();
-  expect(await fixture.build(ok.id)).toMatchObject({ providerStage: "build", status: "running" });
+  expect(await fixture.build(string(ok.id))).toMatchObject({
+    providerStage: "build",
+    status: "running",
+  });
   fixture.advance(31_000);
   await fixture.run();
-  const succeeded = await fixture.build(ok.id);
+  const succeeded = await fixture.build(string(ok.id));
   expect(succeeded).toMatchObject({ providerStage: "deploy", status: "succeeded" });
   expect(succeeded).not.toHaveProperty("error");
   expect(succeeded.completedAt).toBeTypeOf("string");
@@ -209,11 +223,11 @@ test("tracked Pages deployments reach proven outcomes from the exact deployment"
   const pagesCalls = stub.calls.filter((call) => call.method === "GET");
   expect(pagesCalls.every((call) => call.authorization === `Bearer ${pagesToken}`)).toBe(true);
   const hookCalls = stub.calls.filter((call) => call.method === "POST");
-  expect(hookCalls.every((call) => call.authorization === undefined)).toBe(true);
+  expect(hookCalls.every((call) => call.authorization === null)).toBe(true);
   const attempts = await fixture.local.database
     .prepare("select max(attempts) as attempts from outbox_events")
     .first();
-  expect(attempts.attempts).toBe(0);
+  expect(attempts?.attempts).toBe(0);
   const stored = JSON.stringify(
     (await fixture.local.database.prepare("select * from site_builds").all()).results,
   );
@@ -240,26 +254,34 @@ test("transient outages back off, parallel builds stay separate and late results
   expect(a).toMatchObject({ providerBuildId: "dep-a", status: "running" });
   expect(a).not.toHaveProperty("providerStage");
   expect(b).toMatchObject({ providerBuildId: "dep-b", providerStage: "build", status: "running" });
-  const due = async (id) =>
-    (
-      await fixture.local.database
-        .prepare("select provider_check_after from site_builds where id = ?")
-        .bind(id)
-        .first()
-    ).provider_check_after;
-  const firstDue = await due(a.id);
+  const due = async (id: string) =>
+    number(
+      object(
+        await fixture.local.database
+          .prepare("select provider_check_after from site_builds where id = ?")
+          .bind(id)
+          .first(),
+      ).provider_check_after,
+    );
+  const firstDue = await due(string(a.id));
   fixture.advance(31_000);
   await fixture.run();
   // A's second outage waits longer than its first; B finished independently.
-  expect(await fixture.build(b.id)).toMatchObject({
+  expect(await fixture.build(string(b.id))).toMatchObject({
     providerBuildId: "dep-b",
     status: "succeeded",
   });
-  expect(await fixture.build(a.id)).toMatchObject({ providerBuildId: "dep-a", status: "running" });
-  expect((await due(a.id)) - firstDue).toBeGreaterThan(31_000);
+  expect(await fixture.build(string(a.id))).toMatchObject({
+    providerBuildId: "dep-a",
+    status: "running",
+  });
+  expect((await due(string(a.id))) - firstDue).toBeGreaterThan(31_000);
   fixture.advance(120_000);
   await fixture.run();
-  expect(await fixture.build(a.id)).toMatchObject({ providerStage: "deploy", status: "succeeded" });
+  expect(await fixture.build(string(a.id))).toMatchObject({
+    providerStage: "deploy",
+    status: "succeeded",
+  });
 
   const slow = await fixture.dispatch();
   expect(slow).toMatchObject({ providerStage: "deploy", status: "running" });
@@ -267,7 +289,7 @@ test("transient outages back off, parallel builds stay separate and late results
     fixture.advance(60_000);
     await fixture.run();
   }
-  expect(await fixture.build(slow.id)).toMatchObject({
+  expect(await fixture.build(string(slow.id))).toMatchObject({
     error: "tracking_timeout",
     providerStage: "deploy",
     status: "unknown",
@@ -277,7 +299,7 @@ test("transient outages back off, parallel builds stay separate and late results
   fixture.advance(600_000);
   await fixture.run();
   expect(stub.calls.length).toBe(callsAtTimeout);
-  expect(await fixture.build(slow.id)).toMatchObject({
+  expect(await fixture.build(string(slow.id))).toMatchObject({
     error: "tracking_timeout",
     status: "unknown",
   });
@@ -309,7 +331,7 @@ test("tracking survives Worker restarts, ignores hooks without IDs and ends when
   });
   const restartedEnv = { ...fixture.env };
   await restarted.scheduled({}, restartedEnv, fixture.ctx);
-  expect(await fixture.build(tracked.id)).toMatchObject({
+  expect(await fixture.build(string(tracked.id))).toMatchObject({
     providerStage: "deploy",
     status: "succeeded",
   });
@@ -323,13 +345,13 @@ test("tracking survives Worker restarts, ignores hooks without IDs and ends when
   const orphan = await fixture.dispatch();
   expect(orphan.status).toBe("running");
   const untracked = { ...fixture.env };
-  for (const name of Object.keys(pagesEnv))
+  for (const name of Object.keys(pagesEnv) as (keyof typeof pagesEnv)[])
     if (name !== "LACE_DEPLOY_HOOK_URL") delete untracked[name];
   fixture.advance(31_000);
   const before = stub.calls.length;
   await fixture.run(untracked);
   expect(stub.calls.length).toBe(before);
-  expect(await fixture.build(orphan.id)).toMatchObject({
+  expect(await fixture.build(string(orphan.id))).toMatchObject({
     error: "tracking_unconfigured",
     status: "unknown",
   });
@@ -363,9 +385,9 @@ test("a scheduled run with many due tracked builds stays within 50 D1 queries", 
   expect(stub.calls.filter((call) => call.method === "GET").length - before).toBe(
     SCHEDULED_TRACKING_CHECKS,
   );
-  const history = (await fixture.call("/api/v1/admin/site-builds")).body.items;
-  expect(history.filter((build) => build.status === "succeeded")).toHaveLength(
+  const history = array(object((await fixture.call("/api/v1/admin/site-builds")).body).items);
+  expect(history.filter((build) => object(build).status === "succeeded")).toHaveLength(
     SCHEDULED_TRACKING_CHECKS,
   );
-  expect(history.filter((build) => build.status === "running")).toHaveLength(3);
+  expect(history.filter((build) => object(build).status === "running")).toHaveLength(3);
 });

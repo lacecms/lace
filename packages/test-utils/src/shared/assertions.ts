@@ -1,11 +1,5 @@
 import type { ByteStream } from "@lacecms/application";
 
-declare const TextEncoder: new () => { encode(input: string): Uint8Array };
-
-export function utf8Length(value: string): number {
-  return new TextEncoder().encode(value).length;
-}
-
 /** Reusable assertion primitive for persistence adapters with injectable write checkpoints. */
 export async function assertAtomicCheckpoints(input: {
   readonly checkpoints: readonly string[];

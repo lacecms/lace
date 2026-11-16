@@ -20,8 +20,10 @@ unfinished block can be published hidden; it is copied into the published
 snapshot but never delivered (§12). One guarded transaction or D1 atomic batch
 then ([ADR 0002](../adr/0002-d1-batches-and-node-transactions.md)):
 
-1. inserts the new snapshot with `INSERT ... SELECT` only if the entry still
-   points to the validated draft at `expectedDraftRevision`;
+1. admits the shared write plan only if the validated draft and revision still
+   match, delivered links are valid, the route is available and no live
+   idempotency result takes precedence; then inserts the snapshot with
+   `INSERT ... SELECT` from that draft;
 2. copies blocks and media-reference rows set-based, conditional on the new
    snapshot; when conditional-field rules apply, it writes the supplied
    published projection and checks its delivered internal links instead
@@ -33,12 +35,18 @@ then ([ADR 0002](../adr/0002-d1-batches-and-node-transactions.md)):
 7. stores the idempotency result when a key was supplied;
 8. deletes the old published snapshot, whose blocks and references cascade.
 
-A zero-row snapshot insert returns `CONTENT_REVISION_CONFLICT` and makes every
-conditional statement a no-op. Every draft mutation bumps the same revision, so
+A typed admission miss leaves every dependent write a no-op. Live idempotency
+results take precedence, followed by stale revision, invalid delivered links
+and route conflicts. Every draft mutation bumps the same revision, so
 a validated candidate cannot be published after a concurrent change. The port
 models atomic publication explicitly rather than assuming that D1 supports an
 interactive transaction callback; Node may use a SQLite transaction, D1 uses
 guarded batches.
+
+Publication, unpublication and deletion share their ordered statements,
+including public-state and build work, with runtime-specific executors. A
+receipt reports outbox work only after the atomic unit commits; replays,
+guard misses, draft-only mutations and rollbacks report none.
 
 The draft stays in place: after publication, draft and published hold
 equivalent data as independent records.

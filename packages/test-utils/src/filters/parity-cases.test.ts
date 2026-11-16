@@ -1,10 +1,11 @@
+import { NODE_LIST_QUERY_LIMITS as TEST_LIST_QUERY_LIMITS } from "@lacecms/content";
 import { expect, test } from "vitest";
 import { defineCollection, defineConfig } from "@lacecms/config";
 import { CollectionQueryValidationError, ContentUseCases } from "@lacecms/application";
 import { field } from "@lacecms/content";
 import { actorId, unixMilliseconds } from "@lacecms/domain";
 import { DeterministicClock, DeterministicIdGenerator } from "../adapters/fakes.js";
-import { InMemoryContentStore } from "../store/in-memory-content-store.js";
+import { applicationSqlite } from "../test-support/application-sqlite.js";
 import {
   filterParityCases,
   filterParityFields,
@@ -24,8 +25,9 @@ async function applicationAccepts(): Promise<(filter: unknown) => Promise<boolea
       }),
     ],
   });
-  const store = new InMemoryContentStore();
+  const { store } = applicationSqlite(config.runtime.content);
   const useCases = new ContentUseCases({
+    listQueryLimits: TEST_LIST_QUERY_LIMITS,
     clock: new DeterministicClock(unixMilliseconds(1)),
     config: config.runtime,
     content: store,

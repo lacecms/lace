@@ -55,6 +55,12 @@ export const cases: readonly SecurityContractCase[] = [
       expect(user).toMatchObject({ disabled: false, email: "admin@lace.test", role: "admin" });
       expect(
         await harness.sql.get(
+          "select display_name, role from content_actor_profiles where actor_id = ?",
+          user.id,
+        ),
+      ).toEqual({ display_name: "admin@lace.test", role: "admin" });
+      expect(
+        await harness.sql.get(
           "select setup_completed_at, setup_admin_user_id from installation_state",
         ),
       ).toEqual({ setup_admin_user_id: user.id, setup_completed_at: SECURITY_CONTRACT_EPOCH });

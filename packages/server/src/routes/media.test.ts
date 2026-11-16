@@ -1,5 +1,7 @@
+import { seedSqliteMedia } from "@lacecms/test-utils/sqlite";
 import * as v from "valibot";
-import { mediaListSchema, adminContentEntrySchema } from "@lacecms/contracts";
+import { mediaDetailSchema, mediaListSchema, adminContentEntrySchema } from "@lacecms/contracts";
+import { MAX_MEDIA_USAGE_ENTRIES } from "@lacecms/content";
 import type { Actor } from "@lacecms/domain";
 import { expect, test } from "vitest";
 
@@ -17,6 +19,27 @@ import {
   uploadImage,
   jsonRequest,
 } from "../test-support/app-harness.js";
+
+test("media detail bounds persisted usage without truncating its total", async () => {
+  const { app, content } = await fixture();
+  const image = await uploadImage(app, "shared.png");
+  for (let index = 0; index <= MAX_MEDIA_USAGE_ENTRIES; index += 1) {
+    await content.create({
+      actor: admin,
+      blocks: [],
+      fields: { image: image.id },
+      modelKey: "posts",
+      slug: `post-${index}`,
+      title: `Post ${index}`,
+    });
+  }
+  const { body, response } = await json(app, `/api/v1/admin/media/${image.id}`);
+  expect(response.status).toBe(200);
+  const detail = v.parse(mediaDetailSchema, body);
+  expect(detail.usageCount).toBe(MAX_MEDIA_USAGE_ENTRIES + 1);
+  expect(detail.usage).toHaveLength(MAX_MEDIA_USAGE_ENTRIES);
+  expect(new Set(detail.usage.map(({ entryId }) => entryId)).size).toBe(MAX_MEDIA_USAGE_ENTRIES);
+});
 
 test("bodyless media lifecycle requests reach the use case without bypassing body limits elsewhere", async () => {
   const { app } = await fixture();
@@ -282,8 +305,12 @@ test("allows viewers to list media but not mutate it", async () => {
 });
 
 test("accepts an authorized retry only for terminal media deletion failures", async () => {
-  const { app, storage, store } = await fixture();
-  store.registerMedia({
+  const {
+    app,
+    storage,
+    sqlite: { connection },
+  } = await fixture();
+  seedSqliteMedia(connection, {
     createdAt: unixMilliseconds(1),
     createdBy: actorId("admin"),
     filename: "failed.png",
@@ -304,7 +331,14 @@ test("accepts an authorized retry only for terminal media deletion failures", as
       )
     ).json(),
   ).toMatchObject({ status: "deleting" });
-  expect(store.mediaDeletionRequests).toEqual(["failed-media"]);
+  expect(
+    connection
+      .prepare(
+        "select json_extract(payload_json, '$.mediaId') from outbox_events where type = 'media.delete.requested'",
+      )
+      .pluck()
+      .all(),
+  ).toEqual(["failed-media"]);
   await expect(
     app.fetch(
       new Request("https://lace.test/api/v1/admin/media/failed-media/retry-deletion", {
@@ -316,8 +350,12 @@ test("accepts an authorized retry only for terminal media deletion failures", as
 });
 
 test("lists media with filters and bound cursors and exposes details with usage", async () => {
-  const { app, store } = await fixture();
-  store.setActorDisplayNames({ admin: "Ada" });
+  const {
+    app,
+    sqlite: { connection },
+    seedProfile,
+  } = await fixture();
+  seedProfile("admin", "Ada", "admin");
   const upload = async (filename: string) => {
     const form = new FormData();
     form.append(
@@ -417,7 +455,14 @@ test("lists media with filters and bound cursors and exposes details with usage"
   expect(await refused.json()).toEqual({
     error: { code: "MEDIA_IN_USE", message: "The media is still used by content." },
   });
-  expect(store.mediaDeletionRequests).toEqual([]);
+  expect(
+    connection
+      .prepare(
+        "select json_extract(payload_json, '$.mediaId') from outbox_events where type = 'media.delete.requested'",
+      )
+      .pluck()
+      .all(),
+  ).toEqual([]);
   const accepted = await app.fetch(
     new Request(`https://lace.test/api/v1/admin/media/${banner.id}`, { method: "DELETE" }),
   );
@@ -519,7 +564,10 @@ test("removing a media block from a draft releases the media only after republic
 });
 
 test("detach=drafts clears draft-only usage before deletion and rejects other values", async () => {
-  const { app, store } = await fixture({
+  const {
+    app,
+    sqlite: { connection },
+  } = await fixture({
     actor: editor,
     blocks: mediaBlocks,
     maxBodyBytes: 8192,
@@ -583,14 +631,28 @@ test("detach=drafts clears draft-only usage before deletion and rejects other va
     {},
     { images: [{ caption: "One" }, { image: other.id }] },
   ]);
-  expect(store.mediaDeletionRequests).toEqual([image.id]);
+  expect(
+    connection
+      .prepare(
+        "select json_extract(payload_json, '$.mediaId') from outbox_events where type = 'media.delete.requested'",
+      )
+      .pluck()
+      .all(),
+  ).toEqual([image.id]);
   expect((await json(app, `/api/v1/admin/media/${other.id}`)).body.usageCount).toBe(1);
 });
 
 test("media metadata route updates with If-Match, returns ETags, and queues builds for published media", async () => {
   let current: Actor | null = admin;
   const viewer: Actor = { id: actorId("viewer"), role: "viewer" };
-  const { app, store } = await fixture({ maxBodyBytes: 8192, resolveActor: async () => current });
+  const {
+    app,
+    sqlite: { connection },
+    store,
+  } = await fixture({
+    maxBodyBytes: 8192,
+    resolveActor: async () => current,
+  });
   const upload = async (filename: string) => {
     const form = new FormData();
     form.append(
@@ -652,7 +714,14 @@ test("media metadata route updates with If-Match, returns ETags, and queues buil
   const nextTag = updated.headers.get("etag");
   expect(nextTag).not.toBe(tag);
   expect(nextTag).toBe(`"${Date.parse(updatedBody.media.updatedAt)}"`);
-  expect(store.mediaMetadataBuildRequests).toEqual([version + 1]);
+  expect(
+    connection
+      .prepare(
+        "select json_extract(payload_json, '$.targetVersion') from outbox_events where type = 'site.build.requested' and json_extract(payload_json, '$.reason') = 'media_metadata'",
+      )
+      .pluck()
+      .all(),
+  ).toEqual([version + 1]);
 
   const stale = await patch(cover.id, { alt: "Stale" }, tag);
   expect(stale.status).toBe(409);
