@@ -1,4 +1,5 @@
 import { readAllBuildContentPages } from "../../delivery/build-export.js";
+import { siteBuildEvent } from "@lacecms/application";
 
 import {
   blockKey,
@@ -254,6 +255,14 @@ contract(
         "delete",
         () =>
           repository.delete({
+            events: [
+              siteBuildEvent({
+                reason: "publication",
+                requestedAt: 6,
+                requestedBy: editor.id,
+                publishedSnapshotId: "e-published",
+              }),
+            ],
             deletedAt: unixMilliseconds(6),
             deletedBy: editor,
             entryId: contentEntryId("e"),

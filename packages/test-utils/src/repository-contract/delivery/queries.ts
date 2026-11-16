@@ -432,6 +432,7 @@ contract(
     await repository.delete({
       entryId: lastId,
       expectedRevision: last!.draft.revision,
+      events: [],
       deletedAt: unixMilliseconds(5),
       deletedBy: editor,
     });

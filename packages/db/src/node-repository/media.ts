@@ -40,7 +40,10 @@ export class NodeMediaCommands
   public async updateMediaMetadata(
     input: UpdateMediaMetadataInput,
   ): Promise<UpdateMediaMetadataResult> {
-    const plan = updateMediaWritePlan(input, this.nextId());
+    const plan = updateMediaWritePlan(
+      input,
+      input.events.map(() => this.nextId()),
+    );
     let result: Awaited<ReturnType<typeof executeWritePlan<"inactive" | "conflict">>>;
     try {
       result = executeWritePlan(this.connection, plan, this.options.beforeMutation);
@@ -79,7 +82,11 @@ export class NodeMediaCommands
     retry: boolean,
   ): Promise<MarkMediaForDeletionResult> {
     const result = await this.executeMediaPlan(
-      requestMediaDeletionWritePlan(input, this.nextId(), retry),
+      requestMediaDeletionWritePlan(
+        input,
+        input.events.map(() => this.nextId()),
+        retry,
+      ),
       input.requestedAt,
     );
     if (result.kind === "rejected") {

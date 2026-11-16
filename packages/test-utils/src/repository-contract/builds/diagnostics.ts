@@ -8,6 +8,18 @@ const contract = registerContract(cases);
 contract("build diagnostics persist safely across recovery and retry", async (runtime, expect) => {
   const { repository, sql, reopen } = await runtime.open({ resolveModel: noModels });
   const request = await repository.requestBuild({
+    events: [
+      {
+        type: "site.build.requested" as const,
+        requestedAt: unixMilliseconds(1),
+        payload: {
+          reason: "manual",
+          requestedAt: unixMilliseconds(1),
+          requestedBy: admin.id,
+          publishedSnapshotId: null,
+        },
+      },
+    ],
     requestedAt: unixMilliseconds(1),
     requestedBy: admin,
   });
@@ -50,9 +62,21 @@ contract("build diagnostics persist safely across recovery and retry", async (ru
     terminal: true,
   });
   const newRequest = await repository.requestBuild({
+    events: [
+      {
+        type: "site.build.requested" as const,
+        requestedAt: unixMilliseconds(7000),
+        payload: {
+          reason: "retry",
+          requestedAt: unixMilliseconds(7000),
+          requestedBy: admin.id,
+          publishedSnapshotId: null,
+          retryOfBuildId: lease!.buildId,
+        },
+      },
+    ],
     requestedAt: unixMilliseconds(7000),
     requestedBy: admin,
-    retryOfBuildId: lease!.buildId,
   });
   const [newLease] = await repository.claimSiteBuilds({ limit: 1, now: unixMilliseconds(12000) });
   await repository.recordSiteBuildSuccess({ leaseId: newLease!.id, now: unixMilliseconds(12001) });

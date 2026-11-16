@@ -77,7 +77,7 @@ components directly.
 | `content` | Owns the portable shared vocabulary: slug identifiers, model kinds, canonical route rules, transport limits and object helpers. Other packages import or re-export these definitions under their existing public names; failure construction stays local to each layer. |
 | `content`, `config` | Stay runtime-portable and import no Node-only API. |
 | `domain` | Imports no framework or infrastructure package. |
-| `application` | May depend on domain rules, content validation and the normalized configuration, never on REST DTOs, Hono, Drizzle, Cloudflare or Node adapters, or the MCP SDK. Its only contracts import is the portable `@lacecms/contracts/outbox` subpath for registered dispatch. |
+| `application` | May depend on domain rules, content validation and the normalized configuration, never on REST DTOs, Hono, Drizzle, Cloudflare or Node adapters, or the MCP SDK. Its only contracts import is the portable `@lacecms/contracts/outbox` subpath for registered event requests and dispatch. Use cases supply request-owned event data on portable mutation commands. |
 | `contracts` | Defines transport DTOs and schemas. The isolated `/outbox` entry owns durable event identities and payload schemas. |
 | `db` | Implements application persistence ports; may depend on Drizzle, domain, application and only the `@lacecms/contracts/outbox` subpath of contracts. `@lacecms/db` is portable. `@lacecms/db/node` owns the Node SQLite repository and native transaction executor and accepts an open native connection. |
 | `server` | May use Hono and contracts; receives infrastructure through construction, including an optional structural MCP handler from the platform composition root. |

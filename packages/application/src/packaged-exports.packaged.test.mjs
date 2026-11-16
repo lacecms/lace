@@ -143,6 +143,7 @@ test("packaged entry point keeps its public exports", async () => {
     "sanitizeMediaFilename",
     "selectBuildExportPage",
     "sendTestEmail",
+    "siteBuildEvent",
     "siteBuildRetryPolicy",
     "summarizeUserAgent",
     "testEmailTemplate",

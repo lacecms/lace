@@ -36,9 +36,9 @@ export interface BuildQueueReceipt {
 }
 
 export interface EnqueueSiteBuildInput {
+  readonly events: readonly import("./outbox.js").OutboxEventRequest[];
   readonly requestedAt: UnixMilliseconds;
   readonly requestedBy: Actor;
-  readonly retryOfBuildId?: SiteBuildId;
 }
 
 export interface SiteBuildCommandPort {

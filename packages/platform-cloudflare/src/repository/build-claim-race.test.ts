@@ -10,6 +10,18 @@ test("a coalesce before the claim batch invalidates the observed payload and dea
     const actor = { id: actorId("admin"), role: "admin" as const };
     const repository = new D1ContentRepository(database, () => undefined);
     const first = await repository.requestBuild({
+      events: [
+        {
+          type: "site.build.requested" as const,
+          requestedAt: unixMilliseconds(1),
+          payload: {
+            reason: "manual",
+            requestedAt: unixMilliseconds(1),
+            requestedBy: actor.id,
+            publishedSnapshotId: null,
+          },
+        },
+      ],
       requestedAt: unixMilliseconds(1),
       requestedBy: actor,
     });
@@ -23,6 +35,18 @@ test("a coalesce before the claim batch invalidates the observed payload and dea
         if (racing) {
           racing = false;
           await repository.requestBuild({
+            events: [
+              {
+                type: "site.build.requested" as const,
+                requestedAt: unixMilliseconds(5_002),
+                payload: {
+                  reason: "manual",
+                  requestedAt: unixMilliseconds(5_002),
+                  requestedBy: actor.id,
+                  publishedSnapshotId: null,
+                },
+              },
+            ],
             requestedAt: unixMilliseconds(5_002),
             requestedBy: actor,
           });

@@ -43,7 +43,12 @@ import type { Clock, IdGenerator } from "../ports/infrastructure.js";
 
 import { contentSyncActor, copyStoredModel } from "./model-state.js";
 import { compareByKey } from "./diagnostics.js";
-import { planConfigurationSynchronization, planConfigurationSyncScans } from "./plan.js";
+import {
+  configurationSyncAdvancesPublicState,
+  planConfigurationSynchronization,
+  planConfigurationSyncScans,
+} from "./plan.js";
+import { siteBuildEvent } from "../ports/outbox.js";
 import { renderConfigurationSyncPlanJson, reportConfigurationSynchronization } from "./report.js";
 function registryError(message: string): never {
   throw new DomainError("CONTENT_INVALID_STATE", message);
@@ -424,6 +429,16 @@ async function applyFinalMutation(
     );
   }
   return input.target.applyConfigurationSynchronization({
+    events: configurationSyncAdvancesPublicState(prepared.plan)
+      ? [
+          siteBuildEvent({
+            reason: "configuration_sync",
+            requestedAt: appliedAt,
+            requestedBy: "system:content-sync",
+            publishedSnapshotId: null,
+          }),
+        ]
+      : [],
     linkRewrites: await configurationSyncLinkRewrites({
       models: input.models,
       plan: prepared.plan,

@@ -12,9 +12,10 @@ import {
   heroEntry,
   save,
   publish,
+  references,
   registerContract,
 } from "../shared.js";
-import { changedPost, seedPublishedLifecycle } from "../entries/fixtures.js";
+import { changedPost, seedPublishedLifecycle, unpublishCommand } from "../entries/fixtures.js";
 
 export const cases: RepositoryContractCase[] = [];
 const contract = registerContract(cases);
@@ -24,6 +25,40 @@ export const MEDIA_METADATA_CHECKPOINTS = Object.freeze([
   "public-state",
   "build-outbox",
 ]);
+
+contract("uses published reachability at the metadata write", async (runtime, expect) => {
+  const { repository, sql } = await runtime.open({ resolveModel: resolveRoute });
+  await seedModels(sql, "posts");
+  await seedMedia(sql, "media-1");
+  await repository.create({
+    entry: heroEntry("race", "posts", 1),
+    mediaReferences: references("race-block"),
+  });
+  const beforePublication = metadataUpdate("media-1", 1, 10, { alt: "appeared" });
+  await repository.publish(publish("race", 1, 2, "race-published"));
+  const beforeVersion = await repository.publishedContentVersion();
+  const appeared = await repository.updateMediaMetadata(beforePublication);
+  expect(appeared).toMatchObject({
+    media: { alt: "appeared", updatedAt: 10 },
+    targetVersion: beforeVersion + 1,
+  });
+  expect(await repository.publishedContentVersion()).toBe(beforeVersion + 1);
+  expect((await pendingBuilds(sql))[0]).toMatchObject({
+    reason: "media_metadata",
+    requestedAt: 10,
+    targetVersion: beforeVersion + 1,
+  });
+
+  const beforeRemoval = metadataUpdate("media-1", 10, 11, { alt: "disappeared" });
+  await repository.unpublish(unpublishCommand("race", "race-published", 20));
+  const versionAfterRemoval = await repository.publishedContentVersion();
+  const queued = await pendingBuilds(sql);
+  const disappeared = await repository.updateMediaMetadata(beforeRemoval);
+  expect(disappeared.media).toMatchObject({ alt: "disappeared", updatedAt: 11 });
+  expect(disappeared).not.toHaveProperty("targetVersion");
+  expect(await repository.publishedContentVersion()).toBe(versionAfterRemoval);
+  expect(await pendingBuilds(sql)).toEqual(queued);
+});
 
 contract(
   "updates media metadata and requests a build only for published usage",

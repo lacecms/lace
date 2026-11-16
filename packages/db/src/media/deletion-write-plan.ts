@@ -2,14 +2,14 @@ import { MEDIA_DELETE_REQUESTED } from "@lacecms/contracts/outbox";
 import { DISPATCHER_LEASE_DURATION_MS } from "@lacecms/application";
 import type { MarkMediaForDeletionInput } from "@lacecms/application";
 import { sanitizeDispatchError } from "../shared/dispatch-error.js";
-import { enqueueEvents } from "../write-plan/enqueue-events.js";
+import { bindEventRequest, enqueueEvents } from "../write-plan/enqueue-events.js";
 import type { WritePlan, WritePlanGroup } from "../write-plan/plan.js";
 
 export type MediaDeletionMiss = "in-use" | "ineligible" | "lease" | "mismatch" | "media";
 
 export function requestMediaDeletionWritePlan(
   input: MarkMediaForDeletionInput,
-  eventId: string,
+  eventIds: readonly string[],
   retry: boolean,
 ): WritePlan<MediaDeletionMiss> {
   const status = retry ? "delete_failed" : "active";
@@ -35,15 +35,11 @@ export function requestMediaDeletionWritePlan(
         params: [input.requestedAt, input.mediaId, ...guard.params],
         expectedChanges: 1,
       },
-      ...enqueueEvents([
-        {
-          type: MEDIA_DELETE_REQUESTED,
-          eventId,
-          guard,
-          requestedAt: input.requestedAt,
-          payload: { mediaId: input.mediaId, requestedBy: input.requestedBy.id },
-        },
-      ]),
+      ...enqueueEvents(
+        input.events.map((event, index) =>
+          bindEventRequest(event, eventIds[index]!, guard, false, "media.outbox"),
+        ),
+      ),
     ],
   };
 }

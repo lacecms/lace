@@ -1,6 +1,7 @@
 import { mediaId, unixMilliseconds } from "@lacecms/domain";
 import {
   type RepositoryContractCase,
+  buildRequest,
   admin,
   noModels,
   sequence,
@@ -19,14 +20,8 @@ contract(
       nextId: sequence("build-event"),
       resolveModel: noModels,
     });
-    const first = await repository.requestBuild({
-      requestedAt: unixMilliseconds(100),
-      requestedBy: admin,
-    });
-    const second = await repository.requestBuild({
-      requestedAt: unixMilliseconds(200),
-      requestedBy: admin,
-    });
+    const first = await repository.requestBuild(buildRequest(unixMilliseconds(100), admin));
+    const second = await repository.requestBuild(buildRequest(unixMilliseconds(200), admin));
     expect(first).toMatchObject({ coalesced: false, targetVersion: 0 });
     expect(second).toMatchObject({ coalesced: true, eventId: first.eventId });
     expect(
@@ -48,10 +43,7 @@ contract(
     expect(await repository.claimSiteBuilds({ limit: 1, now: unixMilliseconds(5_201) })).toEqual(
       [],
     );
-    const next = await repository.requestBuild({
-      requestedAt: unixMilliseconds(5_201),
-      requestedBy: admin,
-    });
+    const next = await repository.requestBuild(buildRequest(unixMilliseconds(5_201), admin));
     expect(next).toMatchObject({ coalesced: false, targetVersion: 0 });
     expect(next.eventId).not.toBe(first.eventId);
     expect(
@@ -99,23 +91,14 @@ contract(
     await sql.run(
       "insert into published_state (singleton_key, version, updated_at) values (1, 1, 1)",
     );
-    const first = await repository.requestBuild({
-      requestedAt: unixMilliseconds(1),
-      requestedBy: admin,
-    });
+    const first = await repository.requestBuild(buildRequest(unixMilliseconds(1), admin));
     await sql.run("update published_state set version = 2 where singleton_key = 1");
-    const coalesced = await repository.requestBuild({
-      requestedAt: unixMilliseconds(2),
-      requestedBy: admin,
-    });
+    const coalesced = await repository.requestBuild(buildRequest(unixMilliseconds(2), admin));
     expect(coalesced).toEqual({ coalesced: true, eventId: first.eventId, targetVersion: 2 });
     const [claim] = await repository.claimSiteBuilds({ limit: 1, now: unixMilliseconds(5_002) });
     expect(claim!.targetVersion).toBe(2);
     await sql.run("update published_state set version = 3 where singleton_key = 1");
-    const next = await repository.requestBuild({
-      requestedAt: unixMilliseconds(5_003),
-      requestedBy: admin,
-    });
+    const next = await repository.requestBuild(buildRequest(unixMilliseconds(5_003), admin));
     expect(next.coalesced).toBe(false);
     expect(next.targetVersion).toBe(3);
     const events = await sql.all<{ id: string; payload_json: string }>(
@@ -135,7 +118,7 @@ contract(
   async (runtime, expect) => {
     const { repository, sql } = await runtime.open({ resolveModel: noModels });
     const queue = async (at: number) =>
-      repository.requestBuild({ requestedAt: unixMilliseconds(at), requestedBy: admin });
+      repository.requestBuild(buildRequest(unixMilliseconds(at), admin));
     const claim = async (at: number) =>
       (await repository.claimSiteBuilds({ limit: 1, now: unixMilliseconds(at) }))[0]!;
     const first = await queue(1);
@@ -261,16 +244,13 @@ contract(
     await sql.run(
       "insert into published_state (singleton_key, version, updated_at) values (1, 9, 25002)",
     );
-    const retry = await repository.requestBuild({
-      requestedAt: unixMilliseconds(25_003),
-      requestedBy: admin,
-      retryOfBuildId: second.eventId as never,
-    });
+    const retry = await repository.requestBuild(
+      buildRequest(unixMilliseconds(25_003), admin, second.eventId as never),
+    );
     expect(retry).toMatchObject({ coalesced: false, targetVersion: 9 });
-    const coalescedRetry = await repository.requestBuild({
-      requestedAt: unixMilliseconds(25_004),
-      requestedBy: admin,
-    });
+    const coalescedRetry = await repository.requestBuild(
+      buildRequest(unixMilliseconds(25_004), admin),
+    );
     expect(coalescedRetry).toMatchObject({ coalesced: true, eventId: retry.eventId });
     const payload = await sql.get<{ payload_json: string }>(
       "select payload_json from outbox_events where id = ?",
@@ -285,18 +265,14 @@ contract(
       targetVersion: 9,
     });
     await expect(
-      repository.requestBuild({
-        requestedAt: unixMilliseconds(25_005),
-        requestedBy: admin,
-        retryOfBuildId: first.eventId as never,
-      }),
+      repository.requestBuild(
+        buildRequest(unixMilliseconds(25_005), admin, first.eventId as never),
+      ),
     ).rejects.toThrow("can be retried");
     await sql.run("update site_builds set status = 'failed' where id = ?", first.eventId);
-    const overridden = await repository.requestBuild({
-      requestedAt: unixMilliseconds(25_006),
-      requestedBy: admin,
-      retryOfBuildId: first.eventId as never,
-    });
+    const overridden = await repository.requestBuild(
+      buildRequest(unixMilliseconds(25_006), admin, first.eventId as never),
+    );
     expect(overridden).toEqual({ coalesced: true, eventId: retry.eventId, targetVersion: 9 });
     const updated = await sql.get<{ payload_json: string; available_at: number }>(
       "select payload_json, available_at from outbox_events where id = ?",
@@ -318,10 +294,7 @@ contract("rolls back a build outcome when the event update fails late", async (r
     nextId: sequence("late-build"),
     resolveModel: noModels,
   });
-  const queued = await repository.requestBuild({
-    requestedAt: unixMilliseconds(1),
-    requestedBy: admin,
-  });
+  const queued = await repository.requestBuild(buildRequest(unixMilliseconds(1), admin));
   const [lease] = await repository.claimSiteBuilds({ limit: 1, now: unixMilliseconds(5_001) });
   await sql.run(
     "create trigger reject_build_completion before update on outbox_events when old.id = 'late-build-1' begin select raise(abort, 'late failure'); end",
@@ -347,10 +320,7 @@ contract(
     let clock = 0;
     const dispatch = async () => {
       clock += 10_000;
-      const request = await repository.requestBuild({
-        requestedAt: unixMilliseconds(clock),
-        requestedBy: admin,
-      });
+      const request = await repository.requestBuild(buildRequest(unixMilliseconds(clock), admin));
       clock += 5_000;
       const [lease] = await repository.claimSiteBuilds({ limit: 1, now: unixMilliseconds(clock) });
       expect(lease!.buildId).toBe(request.eventId);
@@ -480,11 +450,7 @@ contract(
 
     for (const source of [owned.buildId, "missing"])
       await expect(
-        repository.requestBuild({
-          requestedAt: unixMilliseconds(clock),
-          requestedBy: admin,
-          retryOfBuildId: source as never,
-        }),
+        repository.requestBuild(buildRequest(unixMilliseconds(clock), admin, source as never)),
       ).rejects.toThrow("can be retried");
     const unprocessed = await count(
       sql,
@@ -492,11 +458,9 @@ contract(
     );
     expect(unprocessed).toBe(0);
     for (const source of [bare, lost, skipped, broken]) {
-      const receipt = await repository.requestBuild({
-        requestedAt: unixMilliseconds(clock),
-        requestedBy: admin,
-        retryOfBuildId: source.buildId,
-      });
+      const receipt = await repository.requestBuild(
+        buildRequest(unixMilliseconds(clock), admin, source.buildId),
+      );
       expect(receipt.eventId).not.toBe(source.buildId);
     }
     expect(await status(bare.buildId)).toMatchObject({ status: "accepted" });
@@ -517,7 +481,7 @@ contract(
     let clock = 0;
     const track = async (providerBuildId: string) => {
       clock += 10_000;
-      await repository.requestBuild({ requestedAt: unixMilliseconds(clock), requestedBy: admin });
+      await repository.requestBuild(buildRequest(unixMilliseconds(clock), admin));
       clock += 5_000;
       const [lease] = await repository.claimSiteBuilds({ limit: 1, now: unixMilliseconds(clock) });
       await repository.recordSiteBuildTracking({
@@ -536,7 +500,7 @@ contract(
     const b = await track("dep-b");
     // A running build still owned by dispatch is never offered for checks.
     clock += 10_000;
-    await repository.requestBuild({ requestedAt: unixMilliseconds(clock), requestedBy: admin });
+    await repository.requestBuild(buildRequest(unixMilliseconds(clock), admin));
     clock += 5_000;
     const [owned] = await repository.claimSiteBuilds({ limit: 1, now: unixMilliseconds(clock) });
     await sql.run(
@@ -704,7 +668,7 @@ contract(
     ] as const;
     for (const [outcome, reason, stored] of cases) {
       clock += 10_000;
-      await repository.requestBuild({ requestedAt: unixMilliseconds(clock), requestedBy: admin });
+      await repository.requestBuild(buildRequest(unixMilliseconds(clock), admin));
       clock += 5_000;
       const [lease] = await repository.claimSiteBuilds({ limit: 1, now: unixMilliseconds(clock) });
       await repository.recordSiteBuildTracking({
@@ -850,6 +814,13 @@ contract(
       await sql.get("select status, last_error from media where id = 'media-terminal'"),
     ).toEqual({ last_error: "endpoint secret", status: "delete_failed" });
     await repository.retryDeletion({
+      events: [
+        {
+          type: "media.delete.requested" as const,
+          requestedAt: unixMilliseconds(7),
+          payload: { mediaId: mediaId("media-terminal"), requestedBy: admin.id },
+        },
+      ],
       mediaId: mediaId("media-terminal"),
       requestedAt: unixMilliseconds(7),
       requestedBy: admin,

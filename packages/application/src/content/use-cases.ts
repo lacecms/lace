@@ -52,6 +52,7 @@ import type {
   ContentEntryStatus,
 } from "../ports/content.js";
 import type { PublicationIdempotencyKey } from "../shared/brands.js";
+import { siteBuildEvent } from "../ports/outbox.js";
 import { validateDraft } from "./draft-validation.js";
 import { publishedProjection } from "./publication-projection.js";
 
@@ -340,16 +341,26 @@ export class ContentUseCases {
         "CONTENT_REVISION_CONFLICT",
         "The draft revision no longer matches the expected revision.",
       );
+    const publishedAt = this.dependencies.clock.now();
+    const publishedSnapshotId = contentSnapshotId(this.dependencies.idGenerator.next());
     const result = await this.dependencies.content.publish({
+      events: [
+        siteBuildEvent({
+          reason: "publication",
+          requestedAt: publishedAt,
+          requestedBy: input.actor.id,
+          publishedSnapshotId,
+        }),
+      ],
       entryId: entry.id,
       expectedRevision: input.expectedRevision,
       ...(projection === undefined ? {} : { projection }),
       ...(input.idempotencyKey === undefined
         ? {}
         : { idempotency: await this.idempotency(input, draft) }),
-      publishedAt: this.dependencies.clock.now(),
+      publishedAt,
       publishedBy: auditActor(input.actor),
-      publishedSnapshotId: contentSnapshotId(this.dependencies.idGenerator.next()),
+      publishedSnapshotId,
     });
     return {
       build:
@@ -386,12 +397,21 @@ export class ContentUseCases {
     if (idempotency === undefined) {
       requirePublishedSnapshot(entry, input.expectedPublishedSnapshotId);
     }
+    const unpublishedAt = this.dependencies.clock.now();
     const result = await this.dependencies.content.unpublish({
+      events: [
+        siteBuildEvent({
+          reason: "publication",
+          requestedAt: unpublishedAt,
+          requestedBy: input.actor.id,
+          publishedSnapshotId: input.expectedPublishedSnapshotId,
+        }),
+      ],
       entryId: entry.id,
       expectedPublishedSnapshotId: input.expectedPublishedSnapshotId,
       ...(input.linkImpact === undefined ? {} : { linkImpact: input.linkImpact }),
       ...(idempotency === undefined ? {} : { idempotency }),
-      unpublishedAt: this.dependencies.clock.now(),
+      unpublishedAt,
       unpublishedBy: auditActor(input.actor),
     });
     return {
@@ -516,8 +536,20 @@ export class ContentUseCases {
     const entry = await this.entry(input.entryId);
     assertCollectionEntryOperation(entry, "delete");
     if (entry.published !== undefined) requirePermission(input.actor, "content:publish");
+    const deletedAt = this.dependencies.clock.now();
     await this.dependencies.content.delete({
-      deletedAt: this.dependencies.clock.now(),
+      events:
+        entry.published === undefined
+          ? []
+          : [
+              siteBuildEvent({
+                reason: "publication",
+                requestedAt: deletedAt,
+                requestedBy: input.actor.id,
+                publishedSnapshotId: entry.published.id,
+              }),
+            ],
+      deletedAt,
       ...(input.linkImpact === undefined ? {} : { linkImpact: input.linkImpact }),
       deletedBy: auditActor(input.actor),
       entryId: entry.id,

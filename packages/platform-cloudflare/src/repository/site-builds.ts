@@ -35,14 +35,10 @@ export class D1SiteBuilds
   implements SiteBuildCommandPort, SiteBuildDispatchPort
 {
   public async requestBuild(input: EnqueueSiteBuildInput): Promise<BuildQueueReceipt> {
-    const plan = requestBuildWritePlan({
-      eventId: this.nextId(),
-      reason: input.retryOfBuildId === undefined ? "manual" : "retry",
-      requestedAt: input.requestedAt,
-      requestedBy: input.requestedBy.id,
-      snapshotId: null,
-      ...(input.retryOfBuildId === undefined ? {} : { retryOfBuildId: input.retryOfBuildId }),
-    });
+    const plan = requestBuildWritePlan(
+      input,
+      input.events.map(() => this.nextId()),
+    );
     const result = await executeWritePlan(
       this.database,
       plan,

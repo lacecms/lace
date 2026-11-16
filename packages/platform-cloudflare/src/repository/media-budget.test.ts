@@ -30,7 +30,7 @@ test("twenty-tag creation and replacement stay within D1 batch limits", async ()
       alt: null,
       caption: null,
       focalPoint: null,
-      publishedEffect: false,
+      events: [],
       tags: tags.map((tag) => `${tag}-new`),
     });
     expect(counted.stats.maxParameters).toBeLessThanOrEqual(100);

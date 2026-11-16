@@ -2,7 +2,8 @@ import { withPublishedProjection } from "@lacecms/application";
 import type { PublishContentEntryCommand } from "@lacecms/application";
 import { contentPublicPath, DomainError } from "@lacecms/domain";
 import type { ContentEntry } from "@lacecms/domain";
-import { publicBuildStatements } from "../write-plan/build-enqueue.js";
+import { publicStateIncrementStatement } from "../write-plan/build-enqueue.js";
+import { enqueueRequests } from "../write-plan/enqueue-events.js";
 import { BLOCK_COPY_COLUMNS_SQL } from "../content/blocks.js";
 import {
   deleteSupersededSnapshotsStatement,
@@ -75,7 +76,7 @@ export function publishWritePlan(
   input: PublishContentEntryCommand,
   entry: ContentEntry,
   committed: ContentEntry,
-  eventId: string,
+  eventIds: readonly string[],
 ): WritePlan<PublicationGuardMiss> {
   const path = contentPublicPath(entry.model, entry.draft.slug);
   const projected =
@@ -233,12 +234,15 @@ export function publishWritePlan(
         expectedChanges: 1,
       });
       s.push(
-        ...publicBuildStatements(condition, {
-          eventId,
-          requestedAt: input.publishedAt,
-          requestedBy: input.publishedBy.id,
-          snapshotId: snapshot,
-        }),
+        publicStateIncrementStatement(condition, input.publishedAt),
+        ...enqueueRequests(input.events, eventIds, condition).filter(
+          (statement) => statement.slot !== "queue",
+        ),
+        {
+          slot: "build",
+          sql: "select coalesce((select version from published_state where singleton_key=1),0) as version",
+          params: [],
+        },
       );
       if (idem !== undefined) {
         const expired = deleteExpiredIdempotencyRecordStatement(

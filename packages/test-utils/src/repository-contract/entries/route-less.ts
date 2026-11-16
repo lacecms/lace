@@ -1,5 +1,5 @@
 import { readAllBuildContentPages } from "../../delivery/build-export.js";
-import { prepareConfigurationSynchronization } from "@lacecms/application";
+import { prepareConfigurationSynchronization, siteBuildEvent } from "@lacecms/application";
 import {
   blockKey,
   contentEntryId,
@@ -82,21 +82,71 @@ contract(
         "select count(*) as count from outbox_events where type = 'site.build.requested' and processed_at is null",
       ),
     ).toBe(1);
+    expect(
+      JSON.parse(
+        (await sql.get<{ payload_json: string }>("select payload_json from outbox_events"))!
+          .payload_json,
+      ),
+    ).toMatchObject({
+      reason: "publication",
+      requestedAt: 50,
+      requestedBy: editor.id,
+      publishedSnapshotId: "t-c-published",
+      targetVersion: 4,
+    });
     const loaded = await repository.load({ entryId: contentEntryId("t-a") });
     expect(loaded).toMatchObject({ model: { key: "testimonials", kind: "collection" } });
     expect(loaded!.model).not.toHaveProperty("route");
     expect(loaded!.published).not.toHaveProperty("slug");
 
+    await repository.publish({
+      ...publish("t-draft", 1, 60, "t-draft-published"),
+      events: [
+        siteBuildEvent({
+          reason: "publication",
+          requestedAt: 61,
+          requestedBy: "supplied-actor",
+          publishedSnapshotId: "supplied-snapshot",
+        }),
+      ],
+    });
+    expect(
+      JSON.parse(
+        (await sql.get<{ payload_json: string }>("select payload_json from outbox_events"))!
+          .payload_json,
+      ),
+    ).toMatchObject({
+      requestedAt: 61,
+      requestedBy: "supplied-actor",
+      publishedSnapshotId: "supplied-snapshot",
+      targetVersion: 5,
+    });
+
     await repository.unpublish(unpublishCommand("t-a", "t-a-published", 100));
-    expect(await version()).toBe(5);
+    expect(await version()).toBe(6);
+    expect(
+      JSON.parse(
+        (await sql.get<{ payload_json: string }>("select payload_json from outbox_events"))!
+          .payload_json,
+      ),
+    ).toMatchObject({
+      reason: "publication",
+      requestedAt: 100,
+      requestedBy: "admin",
+      publishedSnapshotId: "t-a-published",
+      targetVersion: 6,
+    });
+    const queued = await sql.all("select * from outbox_events");
     expect(await count(sql, "select count(*) as count from published_routes")).toBe(1);
     await repository.delete({
+      events: [],
       deletedAt: unixMilliseconds(101),
       deletedBy: editor,
       entryId: contentEntryId("t-a"),
       expectedRevision: 1,
     });
     expect(await repository.load({ entryId: contentEntryId("t-a") })).toBeNull();
+    expect(await sql.all("select * from outbox_events")).toEqual(queued);
   },
 );
 

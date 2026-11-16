@@ -12,6 +12,7 @@ import type {
   PublishedSnapshot,
   UnixMilliseconds,
 } from "@lacecms/domain";
+import type { OutboxEventRequest } from "./outbox.js";
 import type {
   InternalLinkReference,
   PublicInternalLinkReference,
@@ -178,6 +179,7 @@ export interface SaveCompleteDraftInput {
 }
 
 export interface PublishContentEntryCommand {
+  readonly events: readonly OutboxEventRequest[];
   readonly entryId: ContentEntryId;
   readonly expectedRevision: number;
   readonly idempotency?: PublicationIdempotency;
@@ -209,6 +211,7 @@ export interface PublicationIdempotency {
 }
 
 export interface DeleteContentEntryInput {
+  readonly events: readonly OutboxEventRequest[];
   readonly linkImpact?: LinkImpactAcknowledgment;
   readonly deletedAt: UnixMilliseconds;
   readonly deletedBy: Actor;
@@ -218,6 +221,7 @@ export interface DeleteContentEntryInput {
 }
 
 export interface UnpublishContentEntryCommand {
+  readonly events: readonly OutboxEventRequest[];
   readonly linkImpact?: LinkImpactAcknowledgment;
   readonly entryId: ContentEntryId;
   readonly expectedPublishedSnapshotId: ContentSnapshotId;

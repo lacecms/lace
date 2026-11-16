@@ -1,4 +1,5 @@
 import { mediaId, unixMilliseconds } from "@lacecms/domain";
+import { siteBuildEvent } from "@lacecms/application";
 import { type ContractSql, editor } from "../shared.js";
 import { lifecycleState } from "../entries/fixtures.js";
 
@@ -13,6 +14,14 @@ export function metadataUpdate(
   } = {},
 ) {
   return {
+    events: [
+      siteBuildEvent({
+        reason: "media_metadata",
+        requestedAt: updatedAt,
+        requestedBy: editor.id,
+        publishedSnapshotId: null,
+      }),
+    ],
     alt: values.alt ?? null,
     caption: values.caption ?? null,
     expectedUpdatedAt: unixMilliseconds(expectedUpdatedAt),

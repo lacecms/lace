@@ -1,3 +1,4 @@
+import { siteBuildEvent } from "@lacecms/application";
 import {
   applicationSqlite,
   repositorySqlite,
@@ -104,6 +105,14 @@ test("enforces singleton, revision, route, and immutable-publication boundaries 
     mutation: savedMutation(1, "Published", "first"),
   });
   await store.publish({
+    events: [
+      siteBuildEvent({
+        reason: "publication",
+        requestedAt: unixMilliseconds(4),
+        requestedBy: admin.id,
+        publishedSnapshotId: contentSnapshotId("post-a-published"),
+      }),
+    ],
     entryId: contentEntryId("post-a"),
     expectedRevision: 2,
     publishedAt: unixMilliseconds(4),
@@ -133,6 +142,14 @@ test("enforces singleton, revision, route, and immutable-publication boundaries 
   });
   await expect(
     store.publish({
+      events: [
+        siteBuildEvent({
+          reason: "publication",
+          requestedAt: unixMilliseconds(4),
+          requestedBy: admin.id,
+          publishedSnapshotId: contentSnapshotId("post-b-published"),
+        }),
+      ],
       entryId: contentEntryId("post-b"),
       expectedRevision: 2,
       publishedAt: unixMilliseconds(4),
@@ -156,6 +173,14 @@ test("replays matching idempotent publications without changing public content",
     entry: entry({ id: "post-idempotent", model, slug: "first" }),
   });
   const input = {
+    events: [
+      siteBuildEvent({
+        reason: "publication",
+        requestedAt: unixMilliseconds(2),
+        requestedBy: admin.id,
+        publishedSnapshotId: contentSnapshotId("post-idempotent-published"),
+      }),
+    ],
     entryId: contentEntryId("post-idempotent"),
     expectedRevision: 1,
     idempotency: {
@@ -418,6 +443,14 @@ test("runs the authorized SQLite content lifecycle with validation and isolated 
     if (publishDuringDelete) {
       publishDuringDelete = false;
       await store.publish({
+        events: [
+          siteBuildEvent({
+            reason: "publication",
+            requestedAt: unixMilliseconds(11),
+            requestedBy: admin.id,
+            publishedSnapshotId: contentSnapshotId("raced-post-published"),
+          }),
+        ],
         entryId: racedPost.id,
         expectedRevision: 1,
         publishedAt: unixMilliseconds(11),

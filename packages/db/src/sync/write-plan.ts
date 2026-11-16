@@ -8,12 +8,11 @@ import type {
   ConfigurationSyncPlan,
   ConfigurationSyncSnapshotRewrite,
 } from "@lacecms/application";
+import { SITE_BUILD_REQUESTED } from "@lacecms/contracts/outbox";
 import { COMMIT_SYNC_LINK_GRAPH_SQL, syncInternalLinkStatements } from "../links/statements.js";
 import type { LinkSqlStatement } from "../links/statements.js";
-import {
-  buildEnqueueStatements,
-  publicStateIncrementStatement,
-} from "../write-plan/build-enqueue.js";
+import { publicStateIncrementStatement } from "../write-plan/build-enqueue.js";
+import { enqueueRequests } from "../write-plan/enqueue-events.js";
 import { failure } from "../shared/failures.js";
 import type {
   WritePlan,
@@ -41,6 +40,7 @@ export function configurationSyncWritePlan(
   report: ConfigurationSyncPlan,
   options: SyncWritePlanOptions,
 ): WritePlan<"guard-miss"> & { readonly linkChecks: readonly LinkSqlStatement[] } {
+  validateConfigurationSyncEvents(input, report);
   const { storedStateJson, linkDirtyToken, rewrites } = options;
   const expected = new Map(input.expectedStoredModels.map((model) => [model.key, model]));
   const models = new Map(input.models.map((model) => [model.key, model]));
@@ -115,15 +115,10 @@ export function configurationSyncWritePlan(
       if (configurationSyncAdvancesPublicState(report)) {
         writes.push(
           publicStateIncrementStatement(guard, input.appliedAt),
-          ...buildEnqueueStatements(
+          ...enqueueRequests(
+            input.events,
+            input.events.map(() => options.nextEventId()),
             guard,
-            {
-              eventId: options.nextEventId(),
-              reason: "configuration_sync",
-              requestedAt: input.appliedAt,
-              requestedBy: "system:content-sync",
-              snapshotId: null,
-            },
             true,
           ),
         );
@@ -131,6 +126,27 @@ export function configurationSyncWritePlan(
       return writes;
     },
   };
+}
+
+export function validateConfigurationSyncEvents(
+  input: ApplyConfigurationSynchronizationInput,
+  report: ConfigurationSyncPlan,
+): void {
+  const builds = input.events.filter((event) => event.type === SITE_BUILD_REQUESTED);
+  const required = configurationSyncAdvancesPublicState(report);
+  const event = builds[0];
+  if (
+    builds.length !== (required ? 1 : 0) ||
+    (event !== undefined &&
+      (event.payload.reason !== "configuration_sync" ||
+        event.payload.requestedAt !== input.appliedAt ||
+        event.requestedAt !== input.appliedAt ||
+        event.payload.requestedBy !== "system:content-sync" ||
+        event.payload.publishedSnapshotId !== null ||
+        event.payload.retryOfBuildId !== undefined))
+  ) {
+    failure("Synchronization event requests do not match the reviewed plan.");
+  }
 }
 
 /** Sync rewrite fragments end in a WHERE clause. */

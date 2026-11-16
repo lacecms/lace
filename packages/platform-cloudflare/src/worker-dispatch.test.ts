@@ -65,6 +65,16 @@ test("scheduled and post-commit dispatch recover builds and media deletions", as
 
   const failing = await upload(fixture, "second.png");
   await fixture.runtime.repository.markForDeletion({
+    events: [
+      {
+        type: "media.delete.requested" as const,
+        requestedAt: unixMilliseconds(Date.now()),
+        payload: {
+          mediaId: mediaId(string(object(failing.body).id)),
+          requestedBy: { id: actorId("admin"), role: "admin" }.id,
+        },
+      },
+    ],
     mediaId: mediaId(string(object(failing.body).id)),
     requestedAt: unixMilliseconds(Date.now()),
     requestedBy: { id: actorId("admin"), role: "admin" },
@@ -129,6 +139,16 @@ test("a scheduled run with many pending deletions stays within 50 D1 queries", a
     const uploaded = await upload(fixture, `bulk-${index}.png`);
     ids.push(string(object(uploaded.body).id));
     await fixture.runtime.repository.markForDeletion({
+      events: [
+        {
+          type: "media.delete.requested" as const,
+          requestedAt: unixMilliseconds(Date.now()),
+          payload: {
+            mediaId: mediaId(string(object(uploaded.body).id)),
+            requestedBy: { id: actorId("admin"), role: "admin" }.id,
+          },
+        },
+      ],
       mediaId: mediaId(string(object(uploaded.body).id)),
       requestedAt: unixMilliseconds(Date.now()),
       requestedBy: { id: actorId("admin"), role: "admin" },

@@ -1,6 +1,5 @@
-import { SITE_BUILD_DEBOUNCE_MS } from "@lacecms/application";
+import { SITE_BUILD_DEBOUNCE_MS, type OutboxEventRequest } from "@lacecms/application";
 import {
-  MEDIA_DELETE_REQUESTED,
   SITE_BUILD_REQUESTED,
   outboxEvents,
   type OutboxEnqueuePayload,
@@ -11,6 +10,35 @@ import type { WritePlanGuard, WritePlanStatement } from "./plan.js";
 
 export const PENDING_SITE_BUILD_SQL = `type = '${SITE_BUILD_REQUESTED}' and processed_at is null and locked_at is null`;
 
+/** Bind persistence-owned values without adding them to the portable request. */
+export function bindEventRequest(
+  request: OutboxEventRequest,
+  eventId: string,
+  guard: WritePlanGuard,
+  requireEnqueue = false,
+  checkpoint?: string,
+): EnqueueEvent {
+  if (request.type === SITE_BUILD_REQUESTED) {
+    return { ...request, eventId, guard, requireEnqueue };
+  }
+  return { ...request, eventId, guard, ...(checkpoint === undefined ? {} : { checkpoint }) };
+}
+
+export function enqueueRequests(
+  requests: readonly OutboxEventRequest[],
+  eventIds: readonly string[],
+  guard: WritePlanGuard,
+  requireEnqueue = false,
+): readonly WritePlanStatement[] {
+  if (requests.length !== eventIds.length)
+    throw new Error("Event ID count does not match requests");
+  return enqueueEvents(
+    requests.map((request, index) =>
+      bindEventRequest(request, eventIds[index]!, guard, requireEnqueue),
+    ),
+  );
+}
+
 type EnqueueEvent = {
   [Type in RegisteredOutboxType]: {
     readonly type: Type;
@@ -19,36 +47,26 @@ type EnqueueEvent = {
     readonly payload: OutboxEnqueuePayload<Type>;
   } & (Type extends typeof SITE_BUILD_REQUESTED
     ? { readonly requireEnqueue: boolean }
-    : { readonly requestedAt: number });
+    : { readonly requestedAt: number; readonly checkpoint?: string });
 }[RegisteredOutboxType];
 
 /** Validate request-owned fields and compile event writes into the producer's atomic plan. */
 export function enqueueEvents(events: readonly EnqueueEvent[]): readonly WritePlanStatement[] {
   return events.flatMap((event): readonly WritePlanStatement[] => {
-    switch (event.type) {
-      case SITE_BUILD_REQUESTED:
-        return enqueueBuild(event);
-      case MEDIA_DELETE_REQUESTED: {
-        const payload = outboxEvents[event.type].parseEnqueue(event.payload);
-        const at = unixMilliseconds(event.requestedAt);
-        return [
-          {
-            checkpoint: "media.outbox",
-            outbox: true,
-            sql: `insert into outbox_events (id, type, payload_json, attempts, available_at, created_at) select ?, ?, ?, 0, ?, ? where ${event.guard.sql}`,
-            params: [
-              event.eventId,
-              event.type,
-              JSON.stringify(payload),
-              at,
-              at,
-              ...event.guard.params,
-            ],
-            expectedChanges: 1,
-          },
-        ];
-      }
+    if (event.type === SITE_BUILD_REQUESTED) {
+      return enqueueBuild(event);
     }
+    const payload = outboxEvents[event.type].parseEnqueue(event.payload);
+    const at = unixMilliseconds(event.requestedAt);
+    return [
+      {
+        ...(event.checkpoint === undefined ? {} : { checkpoint: event.checkpoint }),
+        outbox: true,
+        sql: `insert into outbox_events (id, type, payload_json, attempts, available_at, created_at) select ?, ?, ?, 0, ?, ? where ${event.guard.sql}`,
+        params: [event.eventId, event.type, JSON.stringify(payload), at, at, ...event.guard.params],
+        expectedChanges: 1,
+      },
+    ];
   });
 }
 

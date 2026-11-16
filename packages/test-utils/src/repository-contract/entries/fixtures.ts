@@ -6,6 +6,7 @@ import {
   unixMilliseconds,
 } from "@lacecms/domain";
 import type { ContentBlock } from "@lacecms/domain";
+import { siteBuildEvent } from "@lacecms/application";
 import {
   type ContractRepository,
   type ContractSql,
@@ -42,6 +43,14 @@ export async function lifecycleState(sql: ContractSql) {
 
 export function unpublishCommand(entryIdValue: string, expected: string, at: number) {
   return {
+    events: [
+      siteBuildEvent({
+        reason: "publication",
+        requestedAt: at,
+        requestedBy: admin.id,
+        publishedSnapshotId: expected,
+      }),
+    ],
     entryId: contentEntryId(entryIdValue),
     expectedPublishedSnapshotId: contentSnapshotId(expected),
     unpublishedAt: unixMilliseconds(at),

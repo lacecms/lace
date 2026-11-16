@@ -293,8 +293,11 @@ event or extends its deadline, through `INSERT OR IGNORE` and a guarded update
 of the unlocked row. A claimed event is never modified; later publications
 create the next event, allowing at most one redundant build around a claim race
 and never skipping published state. Media-deletion events are never coalesced.
-Shared `db` plans compile every event write through `enqueueEvents`. It
-validates the request fields before execution. The atomic SQL fills the build
+Use cases supply registered event requests with their mutation commands;
+persistence retains admission, guards and atomic enqueue. A public-state
+increment is a separate write and does not implicitly enqueue work. Shared
+`db` plans compile every event write through `enqueueEvents`. It validates
+the request fields before execution. The atomic SQL fills the build
 target version (zero without a state row) and any valid pending retry source.
 An explicit retry source takes precedence, coalescing keeps the pending ID and
 attempt count, and a claimed payload remains unchanged. Media deletion and

@@ -220,6 +220,13 @@ contract(
     await repository.publish(publish("nested", 1, 3, "nested-publication"));
     await expect(
       repository.markForDeletion({
+        events: [
+          {
+            type: "media.delete.requested" as const,
+            requestedAt: unixMilliseconds(3),
+            payload: { mediaId: mediaId("nested-drop"), requestedBy: editor.id },
+          },
+        ],
         mediaId: mediaId("nested-drop"),
         requestedBy: editor,
         requestedAt: unixMilliseconds(3),
@@ -267,6 +274,13 @@ contract(
     expect(await count(sql, "select count(*) as count from outbox_events")).toBe(1);
     await expect(
       repository.markForDeletion({
+        events: [
+          {
+            type: "media.delete.requested" as const,
+            requestedAt: unixMilliseconds(6),
+            payload: { mediaId: mediaId("nested-drop"), requestedBy: editor.id },
+          },
+        ],
         mediaId: mediaId("nested-drop"),
         requestedBy: editor,
         requestedAt: unixMilliseconds(6),

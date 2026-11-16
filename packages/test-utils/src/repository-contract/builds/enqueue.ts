@@ -16,6 +16,34 @@ import {
 export const cases: RepositoryContractCase[] = [];
 const contract = registerContract(cases);
 
+contract("rolls back media deletion at the enqueue checkpoint", async (runtime, expect) => {
+  const { repository, sql } = await runtime.open({
+    resolveModel: noModels,
+    beforeMutation: (checkpoint) => {
+      if (checkpoint === "media.outbox") throw new Error("injected");
+    },
+  });
+  await seedMedia(sql, "rollback", "active");
+  await expect(
+    repository.markForDeletion({
+      mediaId: mediaId("rollback"),
+      requestedAt: unixMilliseconds(3),
+      requestedBy: admin,
+      events: [
+        {
+          type: MEDIA_DELETE_REQUESTED,
+          requestedAt: 3,
+          payload: { mediaId: "rollback", requestedBy: admin.id },
+        },
+      ],
+    }),
+  ).rejects.toThrow();
+  expect(await sql.get("select status from media where id = 'rollback'")).toEqual({
+    status: "active",
+  });
+  expect(await sql.all("select * from outbox_events")).toEqual([]);
+});
+
 contract(
   "validates and atomically enqueues distinct media deletions and retries",
   async (runtime, expect) => {
@@ -28,6 +56,13 @@ contract(
     await seedMedia(sql, "retry", "delete_failed");
 
     const request = (id: string, at: number) => ({
+      events: [
+        {
+          type: "media.delete.requested" as const,
+          requestedAt: unixMilliseconds(at),
+          payload: { mediaId: mediaId(id), requestedBy: admin.id },
+        },
+      ],
       mediaId: mediaId(id),
       requestedAt: unixMilliseconds(at),
       requestedBy: admin,
@@ -40,10 +75,35 @@ contract(
 
     const invalidActor = { ...admin, id: "" as typeof admin.id };
     await expect(
-      repository.markForDeletion({ ...request("first", 1), requestedBy: invalidActor }),
+      repository.markForDeletion({
+        ...request("first", 1),
+        requestedBy: invalidActor,
+        events: [
+          {
+            type: MEDIA_DELETE_REQUESTED,
+            requestedAt: 1,
+            payload: { mediaId: "first", requestedBy: invalidActor.id },
+          },
+        ],
+      }),
     ).rejects.toThrow();
     await expect(
-      repository.requestBuild({ requestedAt: unixMilliseconds(1), requestedBy: invalidActor }),
+      repository.requestBuild({
+        events: [
+          {
+            type: "site.build.requested" as const,
+            requestedAt: unixMilliseconds(1),
+            payload: {
+              reason: "manual",
+              requestedAt: unixMilliseconds(1),
+              requestedBy: invalidActor.id,
+              publishedSnapshotId: null,
+            },
+          },
+        ],
+        requestedAt: unixMilliseconds(1),
+        requestedBy: invalidActor,
+      }),
     ).rejects.toThrow();
     expect(await media("first")).toEqual({ status: "active" });
     expect(await events()).toEqual([]);
@@ -86,6 +146,18 @@ contract("coalesces a valid build over unusable pending retry lineage", async (r
   });
   const request = (at: number) =>
     repository.requestBuild({
+      events: [
+        {
+          type: "site.build.requested" as const,
+          requestedAt: unixMilliseconds(at),
+          payload: {
+            reason: "manual",
+            requestedAt: unixMilliseconds(at),
+            requestedBy: admin.id,
+            publishedSnapshotId: null,
+          },
+        },
+      ],
       requestedAt: unixMilliseconds(at),
       requestedBy: admin,
     });

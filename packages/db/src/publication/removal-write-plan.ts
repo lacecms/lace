@@ -7,7 +7,8 @@ import type {
 } from "@lacecms/application";
 import { DomainError } from "@lacecms/domain";
 import type { ContentEntry } from "@lacecms/domain";
-import { publicBuildStatements } from "../write-plan/build-enqueue.js";
+import { publicStateIncrementStatement } from "../write-plan/build-enqueue.js";
+import { enqueueRequests } from "../write-plan/enqueue-events.js";
 import { unpublicationScope } from "../content/snapshots.js";
 import { LINK_IMPACT_EVIDENCE_SQL, linkRemovalCondition } from "../links/reader.js";
 import type { ImpactEvidenceRow } from "../links/reader.js";
@@ -132,7 +133,7 @@ function guardParts(input: RemovalInput, replay?: { scope: string; key: string; 
 export function unpublishWritePlan(
   input: UnpublishContentEntryCommand,
   entry: ContentEntry | null,
-  eventId: string,
+  eventIds: readonly string[],
 ): WritePlan<RemovalMiss> {
   const idem = input.idempotency;
   const scope = idem === undefined ? undefined : unpublicationScope(input.entryId, idem.actorId);
@@ -173,12 +174,15 @@ export function unpublishWritePlan(
           params: [input.unpublishedAt, input.entryId, ...g.params],
           expectedChanges: 1,
         },
-        ...publicBuildStatements(g, {
-          eventId,
-          requestedAt: input.unpublishedAt,
-          requestedBy: input.unpublishedBy.id,
-          snapshotId: input.expectedPublishedSnapshotId,
-        }),
+        publicStateIncrementStatement(g, input.unpublishedAt),
+        ...enqueueRequests(input.events, eventIds, g).filter(
+          (statement) => statement.slot !== "queue",
+        ),
+        {
+          slot: "build",
+          sql: "select coalesce((select version from published_state where singleton_key=1),0) as version",
+          params: [],
+        },
       ];
       if (idem !== undefined) {
         const expired = deleteExpiredIdempotencyRecordStatement(
@@ -217,7 +221,7 @@ export function unpublishWritePlan(
 export function deleteEntryWritePlan(
   input: DeleteContentEntryInput,
   draftId: string | null,
-  eventId: string,
+  eventIds: readonly string[],
 ): WritePlan<RemovalMiss> {
   const expectedPublished = input.expectedPublishedSnapshotId ?? null;
   const removal: RemovalInput = {
@@ -239,15 +243,17 @@ export function deleteEntryWritePlan(
           sql: `delete from published_routes where entry_id=? and ${g.sql}`,
           params: [input.entryId, ...g.params],
         });
-        s.push(
-          ...publicBuildStatements(g, {
-            eventId,
-            requestedAt: input.deletedAt,
-            requestedBy: input.deletedBy.id,
-            snapshotId: expectedPublished,
-          }),
-        );
+        s.push(publicStateIncrementStatement(g, input.deletedAt), {
+          slot: "build",
+          sql: "select coalesce((select version from published_state where singleton_key=1),0) as version",
+          params: [],
+        });
       }
+      s.push(
+        ...enqueueRequests(input.events, eventIds, g).filter(
+          (statement) => statement.slot !== "queue",
+        ),
+      );
       s.push(
         {
           sql: `${BUMP_INTERNAL_LINK_GRAPH_SQL} and ${g.sql}`,

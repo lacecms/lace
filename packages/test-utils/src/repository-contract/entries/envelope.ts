@@ -211,6 +211,13 @@ contract(
     // Hidden blocks stay stored, so their media stays protected and listed.
     await expect(
       repository.markForDeletion({
+        events: [
+          {
+            type: "media.delete.requested" as const,
+            requestedAt: unixMilliseconds(5),
+            payload: { mediaId: mediaId("media-2"), requestedBy: editor.id },
+          },
+        ],
         mediaId: mediaId("media-2"),
         requestedAt: unixMilliseconds(5),
         requestedBy: editor,
@@ -463,6 +470,13 @@ contract(
     expect(
       (
         await repository.markForDeletion({
+          events: [
+            {
+              type: "media.delete.requested" as const,
+              requestedAt: unixMilliseconds(12),
+              payload: { mediaId: mediaId("hidden"), requestedBy: editor.id },
+            },
+          ],
           mediaId: mediaId("hidden"),
           requestedBy: editor,
           requestedAt: unixMilliseconds(12),

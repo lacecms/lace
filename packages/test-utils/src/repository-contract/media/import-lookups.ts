@@ -53,12 +53,19 @@ contract(
       ...metadataUpdate("hash-a", 3, 10),
       alt: "Alt",
       tags: ["x"],
-      publishedEffect: false,
+      events: [],
     });
     expect((await repository.loadMediaCatalogItem("hash-a"))!.media.sha256).toBe(hash);
 
     // Only active items match; deleting items and legacy rows never do.
     await repository.markForDeletion({
+      events: [
+        {
+          type: "media.delete.requested" as const,
+          requestedAt: unixMilliseconds(11),
+          payload: { mediaId: mediaId("hash-c"), requestedBy: editor.id },
+        },
+      ],
       mediaId: mediaId("hash-c"),
       requestedAt: unixMilliseconds(11),
       requestedBy: editor,

@@ -1,3 +1,4 @@
+import { siteBuildEvent } from "@lacecms/application";
 import { repositorySqlite, pendingBuildVersions } from "../test-support/application-sqlite.js";
 import type { ListMediaInput, MediaSort, OpaqueCursor } from "@lacecms/application";
 import { present } from "../test-support/fixtures.js";
@@ -78,6 +79,14 @@ test("updates media metadata in SQLite and requests a build only for published u
     mediaReferences: [{ fieldPath: "cover", mediaId: mediaId("m-a"), sourceKey: "$fields" }],
   });
   await store.publish({
+    events: [
+      siteBuildEvent({
+        reason: "publication",
+        requestedAt: unixMilliseconds(30),
+        requestedBy: editor.id,
+        publishedSnapshotId: contentSnapshotId("e-pub-published"),
+      }),
+    ],
     entryId: published.id,
     expectedRevision: 1,
     publishedAt: unixMilliseconds(30),
@@ -156,6 +165,13 @@ test("updates media metadata in SQLite and requests a build only for published u
   });
   expect(await store.publishedContentVersion()).toBe(version + 2);
   await store.markForDeletion({
+    events: [
+      {
+        type: "media.delete.requested" as const,
+        requestedAt: unixMilliseconds(600),
+        payload: { mediaId: mediaId("m-b"), requestedBy: editor.id },
+      },
+    ],
     mediaId: mediaId("m-b"),
     requestedAt: unixMilliseconds(600),
     requestedBy: editor,
@@ -170,6 +186,14 @@ test("updates media metadata in SQLite and requests a build only for published u
   ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
   await expect(
     store.updateMediaMetadata({
+      events: [
+        siteBuildEvent({
+          reason: "media_metadata",
+          requestedAt: unixMilliseconds(601),
+          requestedBy: editor.id,
+          publishedSnapshotId: null,
+        }),
+      ],
       alt: "x",
       caption: null,
       expectedUpdatedAt: unixMilliseconds(600),

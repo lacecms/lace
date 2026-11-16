@@ -1,4 +1,5 @@
 import { seedSqliteMedia } from "@lacecms/test-utils/sqlite";
+import { siteBuildEvent } from "@lacecms/application";
 import * as v from "valibot";
 import { buildExportFirstPageSchema, buildExportContinuationPageSchema } from "@lacecms/contracts";
 import type { JsonObject } from "@lacecms/content";
@@ -134,6 +135,14 @@ test("public responses return published entries with one resolved media dictiona
       })),
     });
     await store.publish({
+      events: [
+        siteBuildEvent({
+          reason: "publication",
+          requestedAt: 2,
+          requestedBy: admin.id,
+          publishedSnapshotId: `${id}-published`,
+        }),
+      ],
       entryId: contentEntryId(id),
       expectedRevision: 1,
       publishedAt: unixMilliseconds(2),

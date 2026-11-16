@@ -402,6 +402,13 @@ contract(
     });
     await expect(
       repository.markForDeletion({
+        events: [
+          {
+            type: "media.delete.requested" as const,
+            requestedAt: unixMilliseconds(2),
+            payload: { mediaId: mediaId("media-1"), requestedBy: editor.id },
+          },
+        ],
         mediaId: mediaId("media-1"),
         requestedAt: unixMilliseconds(2),
         requestedBy: editor,

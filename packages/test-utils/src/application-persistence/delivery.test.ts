@@ -1,3 +1,4 @@
+import { siteBuildEvent } from "@lacecms/application";
 import { applicationSqlite, repositorySqlite } from "../test-support/application-sqlite.js";
 import { seedSqliteMedia } from "../test-support/sqlite.js";
 import { present } from "../test-support/fixtures.js";
@@ -133,6 +134,14 @@ test("SQLite public reads expose published values and published media only", asy
     ],
   });
   await store.publish({
+    events: [
+      siteBuildEvent({
+        reason: "publication",
+        requestedAt: unixMilliseconds(2),
+        requestedBy: editor.id,
+        publishedSnapshotId: contentSnapshotId("post-published"),
+      }),
+    ],
     entryId: contentEntryId("post"),
     expectedRevision: 1,
     publishedAt: unixMilliseconds(2),
@@ -181,6 +190,14 @@ test("pages the SQLite build export by path, limit, byte budget and version", as
     });
     revisionTime += 1;
     await store.publish({
+      events: [
+        siteBuildEvent({
+          reason: "publication",
+          requestedAt: unixMilliseconds(revisionTime),
+          requestedBy: admin.id,
+          publishedSnapshotId: contentSnapshotId(`${id}-published`),
+        }),
+      ],
       entryId: contentEntryId(id),
       expectedRevision: 2,
       publishedAt: unixMilliseconds(revisionTime),

@@ -103,7 +103,12 @@ export class NodeEntryCommands extends NodeRepositoryBase implements ContentEntr
             .prepare("select role from content_actor_profiles where actor_id = ?")
             .get(input.publishedBy.id) as { role: string } | undefined;
           committed = publicationResultEntry(entry, input, role?.role);
-          return publishWritePlan(input, entry, committed, this.nextId());
+          return publishWritePlan(
+            input,
+            entry,
+            committed,
+            input.events.map(() => this.nextId()),
+          );
         },
         this.options.beforeMutation,
       );
@@ -137,7 +142,11 @@ export class NodeEntryCommands extends NodeRepositoryBase implements ContentEntr
         this.connection,
         () => {
           entry = this.loadEntry(input.entryId);
-          return unpublishWritePlan(input, entry, this.nextId());
+          return unpublishWritePlan(
+            input,
+            entry,
+            input.events.map(() => this.nextId()),
+          );
         },
         this.options.beforeMutation,
       );
@@ -229,7 +238,11 @@ export class NodeEntryCommands extends NodeRepositoryBase implements ContentEntr
         this.connection,
         () => {
           const entry = this.entryRow(input.entryId);
-          return deleteEntryWritePlan(input, entry?.draft_snapshot_id ?? null, this.nextId());
+          return deleteEntryWritePlan(
+            input,
+            entry?.draft_snapshot_id ?? null,
+            input.events.map(() => this.nextId()),
+          );
         },
         this.options.beforeMutation,
       );

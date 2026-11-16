@@ -1,3 +1,4 @@
+import { siteBuildEvent } from "@lacecms/application";
 import type {
   SiteBuildRequest,
   DispatcherLeasePort,
@@ -55,6 +56,14 @@ test("site-build dispatcher bounds failures at eight attempts and handles trigge
         work: repository,
       });
       const failed = await repository.requestBuild({
+        events: [
+          siteBuildEvent({
+            reason: "manual",
+            requestedAt: now,
+            requestedBy: requestedBy.id,
+            publishedSnapshotId: null,
+          }),
+        ],
         requestedAt: unixMilliseconds(now),
         requestedBy,
       });
@@ -79,6 +88,14 @@ test("site-build dispatcher bounds failures at eight attempts and handles trigge
       now = 10_000;
       outcome = "succeeded";
       const success = await repository.requestBuild({
+        events: [
+          siteBuildEvent({
+            reason: "manual",
+            requestedAt: now,
+            requestedBy: requestedBy.id,
+            publishedSnapshotId: null,
+          }),
+        ],
         requestedAt: unixMilliseconds(now),
         requestedBy,
       });
@@ -93,6 +110,14 @@ test("site-build dispatcher bounds failures at eight attempts and handles trigge
       now = 20_000;
       outcome = "accepted";
       const accepted = await repository.requestBuild({
+        events: [
+          siteBuildEvent({
+            reason: "manual",
+            requestedAt: now,
+            requestedBy: requestedBy.id,
+            publishedSnapshotId: null,
+          }),
+        ],
         requestedAt: unixMilliseconds(now),
         requestedBy,
       });
@@ -106,6 +131,14 @@ test("site-build dispatcher bounds failures at eight attempts and handles trigge
 
       now = 30_000;
       const thrown = await repository.requestBuild({
+        events: [
+          siteBuildEvent({
+            reason: "manual",
+            requestedAt: now,
+            requestedBy: requestedBy.id,
+            publishedSnapshotId: null,
+          }),
+        ],
         requestedAt: unixMilliseconds(now),
         requestedBy,
       });

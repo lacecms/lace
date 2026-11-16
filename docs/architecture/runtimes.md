@@ -240,13 +240,15 @@ connections always keep foreign keys on.
 Node SQLite and D1 share every row mapper, every identical read
 (`SqlContentReader`), block-migration and link statement builders, and ordered
 plans for entry, media, build, outbox and final configuration-sync mutations.
-One shared enqueue compiler validates request fields and derives the build
+Use cases supply request-owned event data through portable commands. Persistence
+binds admission guards and commits enqueue with the mutation. One shared enqueue
+compiler validates request fields and derives the build
 target version and inherited retry lineage inside the atomic write, after any
 public-state bump. Registry decoding precedes dispatch. An invalid known
 candidate uses a guarded retirement statement matching the observed raw
 payload and claim eligibility. Typed admission,
 ordered statements, result slots, exact counts and outbox markers belong to
-the plan. Executors retain their runtime-specific transaction boundaries
+the plan. Only committed inserts or coalesces trigger dispatch. Executors retain their runtime-specific transaction boundaries
 ([ADR 0002](../adr/0002-d1-batches-and-node-transactions.md)). The table lists
 the runtime differences and how the repository contracts verify observable
 results.
