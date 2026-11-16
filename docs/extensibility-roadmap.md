@@ -89,9 +89,9 @@ from committed outbox work, and `401 AUTHENTICATION_REQUIRED`.
 
 | Step | Topic | Size | Sessions | Status |
 | --- | --- | :---: | --- | --- |
-| EX1 | Test foundation (from RF9C–RF9F) | L | EX1A → EX1B → EX1D; EX1C after EX2D | proposed |
+| EX1 | Test foundation (from RF9C–RF9F) | L | EX1A → EX1B → EX1D; EX1C after EX2D | done |
 | EX2 | Shared write plans | L | EX2A → EX2B → EX2C → EX2D | done |
-| EX3 | Typed outbox events | M | EX3A → EX3B | in progress |
+| EX3 | Typed outbox events | M | EX3A → EX3B | done |
 | EX4 | Route policies and security use cases | L | EX4A → EX4B → EX4C → EX4D | done |
 | EX5 | Model kind descriptor | S | EX5A | planned |
 | EX6 | Trusted client identity and production Compose ingress | M | EX6A and EX6B independent | done |
@@ -413,6 +413,7 @@ recorded event.
 | 2026-11-15 | EX2B | [Shared media, build and outbox write plans](../openspec/changes/archive/2026-11-15-ex02b-shared-write-plans-media-builds-outbox/) | done: Node/D1 write SQL counts 79/84 → 48/58; shared `db` count 88 → 111 using the same §3 counting pattern. Runtime repository modules remain 9/11; five shared plan modules cover media creation and edits, deletion, generic outbox, build claims and build transitions. Mixed scheduled dispatch of five media deletions, five provider checks and one build stays within 50 D1 queries. |
 | 2026-11-15 | EX2A | [Shared entry write plans](../openspec/changes/archive/2026-11-15-ex02a-shared-write-plans-entries/) | done: Node/D1 write SQL counts 97/99 → 79/84; shared `db` count 88 (the §3 baseline records 60; the same current counting pattern finds 63 at that commit). Runtime repository modules 8/10 → 9/11 with the two executors; entry-command modules 488/659 → 241/262 lines. Five entry commands now share plans, and application compositions require explicit list limits. |
 | 2026-11-15 | EX1D | [Type CLI, generator and app tests](../openspec/changes/archive/2026-11-15-ex01d-type-cli-generator-and-app-tests/) | done: restored typechecking for 29 source test files and retained the remaining baseline |
+| 2026-11-15 | EX1B | [Type core package tests](../openspec/changes/archive/2026-11-15-ex01b-type-core-package-tests/) | done: restored typechecking for the eight core packages and verified their tests, typechecks and public declarations. |
 | 2026-11-15 | EX1A | [Test size ceiling](../openspec/changes/archive/2026-11-15-ex01a-test-size-ceiling/) | done: workspace test files above 1,000 lines fell from 8 to 0; standalone OAuth/MCP fixture remains outside the guard |
 | 2026-11-15 | EX6A | [Preserve trusted client identity](../openspec/changes/archive/2026-11-15-ex06a-preserve-trusted-client-identity/) | done: request identity survives body replacement on Node and Worker |
 | 2026-11-15 | EX6B | [Restrict production Compose ingress](../openspec/changes/archive/2026-11-15-ex06b-restrict-production-compose-ingress/) | done: production reaches the private API through loopback Nginx; development retains a separate loopback API port |

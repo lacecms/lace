@@ -7,6 +7,7 @@ test("preserves every security contract case in order", () => {
     "setup credential completes bootstrap once and is stored only as a digest",
     "unknown, expired, and foreign-email setup credentials change nothing",
     "an interrupted bootstrap resumes for the same email without a second administrator",
+    "operational account pages are ordered, bounded and include global totals",
     "user management keeps one active administrator under concurrency",
     "invitations conflict with accounts and active invitations and are digest-only",
     "invitation acceptance creates exactly one account, even concurrently",
