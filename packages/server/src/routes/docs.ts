@@ -17,12 +17,12 @@ import { outerRoutes } from "../routing/outer-routes.js";
 import { API_V1, v1Routes } from "../routing/v1-routes.js";
 import { withRoutePolicy } from "../routing/route-matching.js";
 
+type ValibotVendorConverter = NonNullable<Parameters<typeof loadVendor>[1]["toJSONSchema"]>;
+
 loadVendor("valibot", {
-  toJSONSchema: ((
-    schema: Parameters<typeof toJsonSchema>[0],
-    config: Parameters<typeof toJsonSchema>[1],
-  ) =>
-    toJsonSchema(schema, {
+  // The registry dispatches this converter only for Valibot schemas.
+  toJSONSchema: (schema, config) =>
+    toJsonSchema(schema as Parameters<typeof toJsonSchema>[0], {
       ...config,
       overrideSchema: ({ valibotSchema }) => {
         const name =
@@ -39,7 +39,7 @@ loadVendor("valibot", {
                     : undefined;
         return name === undefined ? undefined : { $ref: `#/components/schemas/${name}` };
       },
-    })) as never,
+    }) as Awaited<ReturnType<ValibotVendorConverter>>,
 });
 
 /** The shared failure body (ADR 0019), referenced by every documented error response. */

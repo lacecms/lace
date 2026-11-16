@@ -1,16 +1,19 @@
+import { mountOptionalRoutes } from "../routing/optional-routes.js";
 import {
+  bodyResponse,
   AuthorizationError,
   noStore,
   notFound,
   parse,
   response,
-  validationHook,
 } from "../shared/http.js";
 import { optionalJsonBody } from "../shared/request.js";
 import {
   authenticationFailure,
   authorizationFailure,
   describePolicy,
+  openApiParameterSchema,
+  validate,
   validationFailure,
 } from "../shared/openapi.js";
 import {
@@ -34,221 +37,313 @@ import {
   sessionRevocationResultSchema,
   sessionRevokeRequestSchema,
 } from "@lacecms/contracts";
-import { toJsonSchema } from "@valibot/to-json-schema";
 import { Hono } from "hono";
-import { resolver, validator } from "hono-openapi";
-import * as v from "valibot";
+import { resolver } from "hono-openapi";
 import type { RouteContext } from "../composition/route-context.js";
 import { v1Routes } from "../routing/v1-routes.js";
 
 const routes = v1Routes.accounts;
 
-export function registerAccountRoutes(app: Hono, routeContext: RouteContext): void {
+export function createAccountRoutes(routeContext: RouteContext) {
   const { actor, currentSessionId } = routeContext.actors;
   const { capabilities } = routeContext;
   const { accounts, deferTask, sessionSummary } = capabilities;
-  app.on(
-    routes.inspectInvitation.method,
-    routes.inspectInvitation.path,
-    describePolicy(routes.inspectInvitation, {
-      summary: "Inspect an invitation token",
-      tags: ["account"],
-      responses: {
-        200: {
-          content: { "application/json": { schema: resolver(invitationInspectResultSchema) } },
-          description: "Invited email, role and expiry",
+  const accountRoutes = new Hono()
+    .on(
+      routes.inspectInvitation.method,
+      routes.inspectInvitation.path,
+      describePolicy(routes.inspectInvitation, {
+        summary: "Inspect an invitation token",
+        tags: ["account"],
+        responses: {
+          200: {
+            content: { "application/json": { schema: resolver(invitationInspectResultSchema) } },
+            description: "Invited email, role and expiry",
+          },
+          410: {
+            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+            description: "Unknown, expired, revoked or accepted invitation",
+          },
+          ...validationFailure(),
         },
-        410: {
-          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-          description: "Unknown, expired, revoked or accepted invitation",
-        },
-        ...validationFailure(),
+      }),
+      validate("json", invitationInspectRequestSchema),
+      async (context) => {
+        const body = context.req.valid("json");
+        const found = await accounts().inspectInvitation(body);
+        return response(
+          invitationInspectResultSchema,
+          { email: found.email, expiresAt: toIsoTimestamp(found.expiresAt), role: found.role },
+          200,
+          noStore,
+        );
       },
-    }),
-    validator("json", invitationInspectRequestSchema, validationHook),
-    async (context) => {
-      const body = context.req.valid("json") as v.InferOutput<
-        typeof invitationInspectRequestSchema
-      >;
-      const found = await accounts().inspectInvitation(body);
-      return response(
-        invitationInspectResultSchema,
-        { email: found.email, expiresAt: toIsoTimestamp(found.expiresAt), role: found.role },
-        200,
-        noStore,
-      );
-    },
-  );
-  app.on(
-    routes.acceptInvitation.method,
-    routes.acceptInvitation.path,
-    describePolicy(routes.acceptInvitation, {
-      summary: "Accept an invitation by choosing a password",
-      tags: ["account"],
-      responses: {
-        201: {
-          content: { "application/json": { schema: resolver(invitationAcceptResultSchema) } },
-          description: "Account created; sign in with the returned email",
+    )
+    .on(
+      routes.acceptInvitation.method,
+      routes.acceptInvitation.path,
+      describePolicy(routes.acceptInvitation, {
+        summary: "Accept an invitation by choosing a password",
+        tags: ["account"],
+        responses: {
+          201: {
+            content: { "application/json": { schema: resolver(invitationAcceptResultSchema) } },
+            description: "Account created; sign in with the returned email",
+          },
+          409: {
+            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+            description: "An account for the address already exists",
+          },
+          410: {
+            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+            description: "Unknown, expired, revoked or accepted invitation",
+          },
+          ...validationFailure(),
         },
-        409: {
-          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-          description: "An account for the address already exists",
-        },
-        410: {
-          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-          description: "Unknown, expired, revoked or accepted invitation",
-        },
-        ...validationFailure(),
+      }),
+      validate("json", invitationAcceptRequestSchema),
+      async (context) => {
+        const body = context.req.valid("json");
+        return response(
+          invitationAcceptResultSchema,
+          await accounts().acceptInvitation({
+            ...(body.displayName === undefined ? {} : { displayName: body.displayName }),
+            password: body.password,
+            token: body.token,
+          }),
+          201,
+          noStore,
+        );
       },
-    }),
-    validator("json", invitationAcceptRequestSchema, validationHook),
-    async (context) => {
-      const body = context.req.valid("json") as v.InferOutput<typeof invitationAcceptRequestSchema>;
-      return response(
-        invitationAcceptResultSchema,
-        await accounts().acceptInvitation({
-          ...(body.displayName === undefined ? {} : { displayName: body.displayName }),
-          password: body.password,
-          token: body.token,
-        }),
-        201,
-        noStore,
-      );
-    },
-  );
-  app.on(
-    routes.requestReset.method,
-    routes.requestReset.path,
-    describePolicy(routes.requestReset, {
-      summary: "Request a password reset link",
-      tags: ["account"],
-      responses: {
-        202: { description: "Accepted; identical whether or not the address has an account" },
-        ...validationFailure(),
-      },
-    }),
-    validator("json", passwordResetRequestSchema, validationHook),
-    async (context) => {
-      const body = context.req.valid("json") as v.InferOutput<typeof passwordResetRequestSchema>;
-      await accounts().requestPasswordReset({ defer: deferTask(context), email: body.email });
-      return new Response(null, { headers: noStore, status: 202 });
-    },
-  );
-  app.on(
-    routes.confirmReset.method,
-    routes.confirmReset.path,
-    describePolicy(routes.confirmReset, {
-      summary: "Choose a new password with a reset token",
-      tags: ["account"],
-      responses: {
-        204: { description: "Password replaced and every session ended" },
-        410: {
-          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-          description: "Unknown, expired, consumed or superseded reset link",
+    )
+    .on(
+      routes.requestReset.method,
+      routes.requestReset.path,
+      describePolicy(routes.requestReset, {
+        summary: "Request a password reset link",
+        tags: ["account"],
+        responses: {
+          202: { description: "Accepted; identical whether or not the address has an account" },
+          ...validationFailure(),
         },
-        ...validationFailure(),
+      }),
+      validate("json", passwordResetRequestSchema),
+      async (context) => {
+        const body = context.req.valid("json");
+        await accounts().requestPasswordReset({ defer: deferTask(context), email: body.email });
+        return bodyResponse(null, 202, noStore);
       },
-    }),
-    validator("json", passwordResetConfirmRequestSchema, validationHook),
-    async (context) => {
-      const body = context.req.valid("json") as v.InferOutput<
-        typeof passwordResetConfirmRequestSchema
-      >;
-      await accounts().confirmPasswordReset(body);
-      return new Response(null, { headers: noStore, status: 204 });
-    },
-  );
+    )
+    .on(
+      routes.confirmReset.method,
+      routes.confirmReset.path,
+      describePolicy(routes.confirmReset, {
+        summary: "Choose a new password with a reset token",
+        tags: ["account"],
+        responses: {
+          204: { description: "Password replaced and every session ended" },
+          410: {
+            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+            description: "Unknown, expired, consumed or superseded reset link",
+          },
+          ...validationFailure(),
+        },
+      }),
+      validate("json", passwordResetConfirmRequestSchema),
+      async (context) => {
+        const body = context.req.valid("json");
+        await accounts().confirmPasswordReset(body);
+        return bodyResponse(null, 204, noStore);
+      },
+    )
+    .on(
+      routes.profile.method,
+      routes.profile.path,
+      describePolicy(routes.profile, {
+        summary: "Change the signed-in user's display name",
+        tags: ["account"],
+        responses: {
+          200: {
+            content: { "application/json": { schema: resolver(adminSessionSchema) } },
+            description: "Updated session summary",
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          ...validationFailure(),
+        },
+      }),
+      validate("json", accountProfileUpdateRequestSchema),
+      async (context) => {
+        const resolvedActor = await actor(context);
+        const body = context.req.valid("json");
+        await accounts().updateDisplayName(resolvedActor, body.displayName);
+        return sessionSummary(resolvedActor);
+      },
+    )
+    .on(
+      routes.password.method,
+      routes.password.path,
+      describePolicy(routes.password, {
+        summary: "Change the signed-in user's password",
+        tags: ["account"],
+        responses: {
+          200: {
+            content: { "application/json": { schema: resolver(sessionRevocationResultSchema) } },
+            description: "Password changed; count of other sessions ended",
+          },
+          400: {
+            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+            description: "The current password is incorrect (INVALID_CREDENTIALS)",
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          ...validationFailure(),
+        },
+      }),
+      validate("json", accountPasswordChangeRequestSchema),
+      async (context) => {
+        const resolvedActor = await actor(context);
+        const body = context.req.valid("json");
+        return response(
+          sessionRevocationResultSchema,
+          await accounts().changePassword(resolvedActor, await currentSessionId(context), {
+            currentPassword: body.currentPassword,
+            defer: deferTask(context),
+            newPassword: body.newPassword,
+            signOutOtherSessions: body.signOutOtherSessions,
+          }),
+        );
+      },
+    )
+    .on(
+      routes.capabilities.method,
+      routes.capabilities.path,
+      describePolicy(routes.capabilities, {
+        summary: "Read account capabilities",
+        tags: ["account"],
+        responses: {
+          200: {
+            description: "Successful response",
+            content: { "application/json": { schema: resolver(accountCapabilitiesSchema) } },
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+        },
+      }),
+      async (context) => {
+        return response(
+          accountCapabilitiesSchema,
+          capabilities.accountCapabilities(await actor(context)),
+          200,
+          noStore,
+        );
+      },
+    );
+  return mountOptionalRoutes(
+    accountRoutes,
+    capabilities.mcpEnabled && capabilities.oauthConnections
+      ? createOAuthConnectionRoutes(routeContext, capabilities.oauthConnections)
+      : undefined,
+  )
+    .on(
+      routes.sessions.method,
+      routes.sessions.path,
+      describePolicy(routes.sessions, {
+        summary: "List the signed-in user's sessions",
+        tags: ["account"],
+        responses: {
+          200: {
+            content: { "application/json": { schema: resolver(accountSessionListSchema) } },
+            description: "Sessions without tokens or IP addresses",
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+        },
+      }),
+      async (context) => {
+        const resolvedActor = await actor(context);
+        const items = await accounts().listSessions(resolvedActor, await currentSessionId(context));
+        return response(
+          accountSessionListSchema,
+          {
+            items: items.map((item) => ({
+              browser: item.browser,
+              createdAt: toIsoTimestamp(item.createdAt),
+              current: item.current,
+              id: item.id,
+              lastActiveAt: toIsoTimestamp(item.lastActiveAt),
+              os: item.os,
+            })),
+          },
+          200,
+          noStore,
+        );
+      },
+    )
+    .on(
+      routes.revokeSession.method,
+      routes.revokeSession.path,
+      describePolicy(routes.revokeSession, {
+        summary: "End another session of the signed-in user",
+        tags: ["account"],
+        responses: {
+          204: { description: "Session ended" },
+          404: {
+            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+            description: "No such session for this user",
+          },
+          409: {
+            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+            description: "The current session is ended by signing out instead",
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          ...validationFailure(),
+        },
+      }),
+      async (context) => {
+        const resolvedActor = await actor(context);
+        const sessionId = parse(identifierSchemaPublic, context.req.param("sessionId"));
+        await accounts().deleteSession(resolvedActor, await currentSessionId(context), sessionId);
+        return bodyResponse(null, 204);
+      },
+    )
+    .on(
+      routes.revokeOtherSessions.method,
+      routes.revokeOtherSessions.path,
+      describePolicy(routes.revokeOtherSessions, {
+        summary: "End every other session of the signed-in user",
+        tags: ["account"],
+        requestBody: {
+          content: { "application/json": { schema: resolver(sessionRevokeRequestSchema) } },
+        },
+        responses: {
+          200: {
+            content: { "application/json": { schema: resolver(sessionRevocationResultSchema) } },
+            description: "Count of sessions ended",
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          ...validationFailure(),
+        },
+      }),
+      async (context) => {
+        const resolvedActor = await actor(context);
+        parse(sessionRevokeRequestSchema, await optionalJsonBody(context.req.raw));
+        return response(
+          sessionRevocationResultSchema,
+          await accounts().deleteOtherSessions(resolvedActor, await currentSessionId(context)),
+        );
+      },
+    );
+}
 
-  app.on(
-    routes.profile.method,
-    routes.profile.path,
-    describePolicy(routes.profile, {
-      summary: "Change the signed-in user's display name",
-      tags: ["account"],
-      responses: {
-        200: {
-          content: { "application/json": { schema: resolver(adminSessionSchema) } },
-          description: "Updated session summary",
-        },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
-        ...validationFailure(),
-      },
-    }),
-    validator("json", accountProfileUpdateRequestSchema, validationHook),
-    async (context) => {
-      const resolvedActor = await actor(context);
-      const body = context.req.valid("json") as v.InferOutput<
-        typeof accountProfileUpdateRequestSchema
-      >;
-      await accounts().updateDisplayName(resolvedActor, body.displayName);
-      return sessionSummary(resolvedActor);
-    },
-  );
-  app.on(
-    routes.password.method,
-    routes.password.path,
-    describePolicy(routes.password, {
-      summary: "Change the signed-in user's password",
-      tags: ["account"],
-      responses: {
-        200: {
-          content: { "application/json": { schema: resolver(sessionRevocationResultSchema) } },
-          description: "Password changed; count of other sessions ended",
-        },
-        400: {
-          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-          description: "The current password is incorrect (INVALID_CREDENTIALS)",
-        },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
-        ...validationFailure(),
-      },
-    }),
-    validator("json", accountPasswordChangeRequestSchema, validationHook),
-    async (context) => {
-      const resolvedActor = await actor(context);
-      const body = context.req.valid("json") as v.InferOutput<
-        typeof accountPasswordChangeRequestSchema
-      >;
-      return response(
-        sessionRevocationResultSchema,
-        await accounts().changePassword(resolvedActor, await currentSessionId(context), {
-          currentPassword: body.currentPassword,
-          defer: deferTask(context),
-          newPassword: body.newPassword,
-          signOutOtherSessions: body.signOutOtherSessions,
-        }),
-      );
-    },
-  );
-  app.on(
-    routes.capabilities.method,
-    routes.capabilities.path,
-    describePolicy(routes.capabilities, {
-      summary: "Read account capabilities",
-      tags: ["account"],
-      responses: {
-        200: {
-          description: "Successful response",
-          content: { "application/json": { schema: resolver(accountCapabilitiesSchema) } },
-        },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
-      },
-    }),
-    async (context) => {
-      return response(
-        accountCapabilitiesSchema,
-        capabilities.accountCapabilities(await actor(context)),
-        200,
-        noStore,
-      );
-    },
-  );
-  if (capabilities.mcpEnabled && capabilities.oauthConnections) {
-    const connections = capabilities.oauthConnections;
-    app.on(
+function createOAuthConnectionRoutes(
+  { actors: { actor }, capabilities }: RouteContext,
+  connections: NonNullable<RouteContext["capabilities"]["oauthConnections"]>,
+) {
+  return new Hono()
+    .on(
       routes.connections.method,
       routes.connections.path,
       describePolicy(routes.connections, {
@@ -259,15 +354,15 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
             in: "query",
             name: "after",
             required: false,
-            schema: toJsonSchema(oauthConnectionListQuerySchema.entries.after) as never,
+            schema: openApiParameterSchema(oauthConnectionListQuerySchema.entries.after),
           },
           {
             in: "query",
             name: "limit",
             required: false,
-            schema: toJsonSchema(oauthConnectionListQuerySchema.entries.limit, {
+            schema: openApiParameterSchema(oauthConnectionListQuerySchema.entries.limit, {
               errorMode: "ignore",
-            }) as never,
+            }),
           },
         ],
         responses: {
@@ -308,8 +403,8 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
           noStore,
         );
       },
-    );
-    app.on(
+    )
+    .on(
       routes.revokeConnection.method,
       routes.revokeConnection.path,
       describePolicy(routes.revokeConnection, {
@@ -320,7 +415,7 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
             in: "path",
             name: "connectionId",
             required: true,
-            schema: toJsonSchema(identifierSchemaPublic) as never,
+            schema: openApiParameterSchema(identifierSchemaPublic),
           },
         ],
         requestBody: {
@@ -353,100 +448,7 @@ export function registerAccountRoutes(app: Hono, routeContext: RouteContext): vo
         parse(oauthConnectionRevokeSchema, await optionalJsonBody(context.req.raw));
         const connectionId = parse(identifierSchemaPublic, context.req.param("connectionId"));
         if (!(await connections.revoke(resolvedActor, connectionId))) return notFound();
-        return new Response(null, { status: 204, headers: noStore });
+        return bodyResponse(null, 204, noStore);
       },
     );
-  }
-
-  app.on(
-    routes.sessions.method,
-    routes.sessions.path,
-    describePolicy(routes.sessions, {
-      summary: "List the signed-in user's sessions",
-      tags: ["account"],
-      responses: {
-        200: {
-          content: { "application/json": { schema: resolver(accountSessionListSchema) } },
-          description: "Sessions without tokens or IP addresses",
-        },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
-      },
-    }),
-    async (context) => {
-      const resolvedActor = await actor(context);
-      const items = await accounts().listSessions(resolvedActor, await currentSessionId(context));
-      return response(
-        accountSessionListSchema,
-        {
-          items: items.map((item) => ({
-            browser: item.browser,
-            createdAt: toIsoTimestamp(item.createdAt),
-            current: item.current,
-            id: item.id,
-            lastActiveAt: toIsoTimestamp(item.lastActiveAt),
-            os: item.os,
-          })),
-        },
-        200,
-        noStore,
-      );
-    },
-  );
-  app.on(
-    routes.revokeSession.method,
-    routes.revokeSession.path,
-    describePolicy(routes.revokeSession, {
-      summary: "End another session of the signed-in user",
-      tags: ["account"],
-      responses: {
-        204: { description: "Session ended" },
-        404: {
-          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-          description: "No such session for this user",
-        },
-        409: {
-          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-          description: "The current session is ended by signing out instead",
-        },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
-        ...validationFailure(),
-      },
-    }),
-    async (context) => {
-      const resolvedActor = await actor(context);
-      const sessionId = parse(identifierSchemaPublic, context.req.param("sessionId"));
-      await accounts().deleteSession(resolvedActor, await currentSessionId(context), sessionId);
-      return new Response(null, { status: 204 });
-    },
-  );
-  app.on(
-    routes.revokeOtherSessions.method,
-    routes.revokeOtherSessions.path,
-    describePolicy(routes.revokeOtherSessions, {
-      summary: "End every other session of the signed-in user",
-      tags: ["account"],
-      requestBody: {
-        content: { "application/json": { schema: resolver(sessionRevokeRequestSchema) } },
-      },
-      responses: {
-        200: {
-          content: { "application/json": { schema: resolver(sessionRevocationResultSchema) } },
-          description: "Count of sessions ended",
-        },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
-        ...validationFailure(),
-      },
-    }),
-    async (context) => {
-      const resolvedActor = await actor(context);
-      parse(sessionRevokeRequestSchema, await optionalJsonBody(context.req.raw));
-      return response(
-        sessionRevocationResultSchema,
-        await accounts().deleteOtherSessions(resolvedActor, await currentSessionId(context)),
-      );
-    },
-  );
 }

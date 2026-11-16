@@ -23,133 +23,134 @@ import { v1Routes } from "../routing/v1-routes.js";
 
 const routes = v1Routes.builds;
 
-export function registerBuildRoutes(app: Hono, routeContext: RouteContext): void {
+export function createBuildRoutes(routeContext: RouteContext) {
   const { actor } = routeContext.actors;
   const { builds, buildSite } = routeContext.capabilities;
-  app.on(
-    routes.buildSite.method,
-    routes.buildSite.path,
-    describePolicy(routes.buildSite, {
-      summary: "Read current configured build site",
-      tags: ["admin"],
-      responses: {
-        200: {
-          description: "Current configuration, not deployment verification",
-          content: { "application/json": { schema: resolver(buildSiteSelectionSchema) } },
+  return new Hono()
+    .on(
+      routes.buildSite.method,
+      routes.buildSite.path,
+      describePolicy(routes.buildSite, {
+        summary: "Read current configured build site",
+        tags: ["admin"],
+        responses: {
+          200: {
+            description: "Current configuration, not deployment verification",
+            content: { "application/json": { schema: resolver(buildSiteSelectionSchema) } },
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
         },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
+      }),
+      async (context) => {
+        return response(buildSiteSelectionSchema, { site: buildSite(await actor(context)) });
       },
-    }),
-    async (context) => {
-      return response(buildSiteSelectionSchema, { site: buildSite(await actor(context)) });
-    },
-  );
-  app.on(
-    routes.list.method,
-    routes.list.path,
-    describePolicy(routes.list, {
-      responses: {
-        200: {
-          content: { "application/json": { schema: resolver(siteBuildListSchema) } },
-          description: "Recent site builds",
+    )
+    .on(
+      routes.list.method,
+      routes.list.path,
+      describePolicy(routes.list, {
+        responses: {
+          200: {
+            content: { "application/json": { schema: resolver(siteBuildListSchema) } },
+            description: "Recent site builds",
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
         },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
+        summary: "List site builds",
+        tags: ["admin"],
+      }),
+      async (context) => {
+        const resolvedActor = await actor(context);
+        const items = await builds.list(resolvedActor);
+        return response(siteBuildListSchema, { items: items.map(toSiteBuildRecordDto) });
       },
-      summary: "List site builds",
-      tags: ["admin"],
-    }),
-    async (context) => {
-      const resolvedActor = await actor(context);
-      const items = await builds.list(resolvedActor);
-      return response(siteBuildListSchema, { items: items.map(toSiteBuildRecordDto) });
-    },
-  );
-  app.on(
-    routes.get.method,
-    routes.get.path,
-    describePolicy(routes.get, {
-      responses: {
-        200: {
-          content: { "application/json": { schema: resolver(siteBuildRecordSchema) } },
-          description: "Site build detail",
+    )
+    .on(
+      routes.get.method,
+      routes.get.path,
+      describePolicy(routes.get, {
+        responses: {
+          200: {
+            content: { "application/json": { schema: resolver(siteBuildRecordSchema) } },
+            description: "Site build detail",
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          404: {
+            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+            description: "Site build not found",
+          },
+          ...validationFailure(),
         },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
-        404: {
-          content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-          description: "Site build not found",
-        },
-        ...validationFailure(),
+        summary: "Get a site build",
+        tags: ["admin"],
+      }),
+      async (context) => {
+        const resolvedActor = await actor(context);
+        const buildId = parse(identifierSchemaPublic, context.req.param("buildId"));
+        const build = await builds.get(resolvedActor, buildId);
+        return build === null
+          ? notFound()
+          : response(siteBuildRecordSchema, toSiteBuildRecordDto(build));
       },
-      summary: "Get a site build",
-      tags: ["admin"],
-    }),
-    async (context) => {
-      const resolvedActor = await actor(context);
-      const buildId = parse(identifierSchemaPublic, context.req.param("buildId"));
-      const build = await builds.get(resolvedActor, buildId);
-      return build === null
-        ? notFound()
-        : response(siteBuildRecordSchema, toSiteBuildRecordDto(build));
-    },
-  );
-  app.on(
-    routes.request.method,
-    routes.request.path,
-    describePolicy(routes.request, {
-      requestBody: { content: { "application/json": { schema: resolver(buildRequestSchema) } } },
-      responses: {
-        202: {
-          content: { "application/json": { schema: resolver(buildQueueReceiptSchema) } },
-          description: "Build request queued",
+    )
+    .on(
+      routes.request.method,
+      routes.request.path,
+      describePolicy(routes.request, {
+        requestBody: { content: { "application/json": { schema: resolver(buildRequestSchema) } } },
+        responses: {
+          202: {
+            content: { "application/json": { schema: resolver(buildQueueReceiptSchema) } },
+            description: "Build request queued",
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          ...validationFailure(),
         },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
-        ...validationFailure(),
+        summary: "Request a site build",
+        tags: ["admin"],
+      }),
+      async (context) => {
+        const resolvedActor = await actor(context);
+        return response(
+          buildQueueReceiptSchema,
+          await builds.request(resolvedActor, async () => {
+            parse(buildRequestSchema, await optionalJsonBody(context.req.raw));
+          }),
+          202,
+        );
       },
-      summary: "Request a site build",
-      tags: ["admin"],
-    }),
-    async (context) => {
-      const resolvedActor = await actor(context);
-      return response(
-        buildQueueReceiptSchema,
-        await builds.request(resolvedActor, async () => {
-          parse(buildRequestSchema, await optionalJsonBody(context.req.raw));
-        }),
-        202,
-      );
-    },
-  );
-  app.on(
-    routes.retry.method,
-    routes.retry.path,
-    describePolicy(routes.retry, {
-      requestBody: { content: { "application/json": { schema: resolver(buildRequestSchema) } } },
-      responses: {
-        202: {
-          content: { "application/json": { schema: resolver(buildQueueReceiptSchema) } },
-          description: "Failed build retry queued",
+    )
+    .on(
+      routes.retry.method,
+      routes.retry.path,
+      describePolicy(routes.retry, {
+        requestBody: { content: { "application/json": { schema: resolver(buildRequestSchema) } } },
+        responses: {
+          202: {
+            content: { "application/json": { schema: resolver(buildQueueReceiptSchema) } },
+            description: "Failed build retry queued",
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          ...validationFailure(),
         },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
-        ...validationFailure(),
+        summary: "Retry a failed site build",
+        tags: ["admin"],
+      }),
+      async (context) => {
+        const resolvedActor = await actor(context);
+        return response(
+          buildQueueReceiptSchema,
+          await builds.retry(resolvedActor, async () => {
+            parse(buildRequestSchema, await optionalJsonBody(context.req.raw));
+            return parse(identifierSchemaPublic, context.req.param("buildId"));
+          }),
+          202,
+        );
       },
-      summary: "Retry a failed site build",
-      tags: ["admin"],
-    }),
-    async (context) => {
-      const resolvedActor = await actor(context);
-      return response(
-        buildQueueReceiptSchema,
-        await builds.retry(resolvedActor, async () => {
-          parse(buildRequestSchema, await optionalJsonBody(context.req.raw));
-          return parse(identifierSchemaPublic, context.req.param("buildId"));
-        }),
-        202,
-      );
-    },
-  );
+    );
 }

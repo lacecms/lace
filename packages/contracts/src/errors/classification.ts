@@ -35,17 +35,7 @@ interface ErrorMapping {
 }
 
 // The constrained union also checks every portable domain/account code.
-const errorMappings: Readonly<
-  Record<
-    AssertMapped<
-      | MappedErrorCode
-      | Exclude<DomainErrorCode, InternalDomainErrorCode>
-      | AccountErrorCode
-      | "RATE_LIMITED"
-    >,
-    ErrorMapping
-  >
-> = {
+const errorMappings = {
   AUTHENTICATION_REQUIRED: {
     status: 401,
     message: "Authentication is required.",
@@ -124,10 +114,20 @@ const errorMappings: Readonly<
   },
   RESET_INVALID: { status: 410, message: "The password reset link is invalid or has expired." },
   VALIDATION_FAILED: { status: 422, message: "The request did not satisfy the API contract." },
-};
+} as const satisfies Record<
+  AssertMapped<
+    | MappedErrorCode
+    | Exclude<DomainErrorCode, InternalDomainErrorCode>
+    | AccountErrorCode
+    | "RATE_LIMITED"
+  >,
+  ErrorMapping
+>;
 
 /** Creates one of the stable sanitized envelopes for HTTP boundary failures. */
-export function transportError(code: TransportErrorCode): ClassifiedError {
+export function transportError<Code extends TransportErrorCode>(
+  code: Code,
+): ClassifiedError & { readonly status: (typeof errorMappings)[Code]["status"] } {
   const mapping = errorMappings[code];
   return { body: { error: { code, message: mapping.message } }, status: mapping.status };
 }
@@ -143,7 +143,7 @@ export function classifyError(error: unknown): ClassifiedError {
     ]);
   if (error instanceof LaceError && Object.hasOwn(errorMappings, error.code)) {
     const code = error.code as MappedErrorCode;
-    const mapping = errorMappings[code];
+    const mapping: ErrorMapping = errorMappings[code];
     const exposed = mapping.expose?.(error);
     return {
       status: mapping.status,

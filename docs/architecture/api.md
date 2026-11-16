@@ -187,6 +187,10 @@ builds.
   through `@hono/standard-validator` (Standard Schema). OpenAPI is generated
   from the same route contracts through `hono-openapi` and
   `@valibot/to-json-schema`, never maintained separately.
+- The versioned handlers infer validated inputs from their schemas. The
+  return type of `createLaceApp` carries the declared routes, response
+  formats and handler status codes for Hono clients. Capability checks
+  decide which optional routes are available in each deployment.
 - Database rows are never exposed directly as API DTOs.
 - Public read representations are defined once in a **strict** variant
   (rejects unknown keys; the API validates every public response with it and

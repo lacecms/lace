@@ -1,0 +1,53 @@
+import type {
+  AdminContentEntryDto,
+  BuildExportPageDto,
+  BuildTokenCreatedDto,
+  ErrorEnvelope,
+} from "@lacecms/contracts";
+import type { saveDraftRequestSchema } from "@lacecms/contracts";
+import type { createLaceApp } from "@lacecms/server";
+import { hc, type InferRequestType, type InferResponseType } from "hono/client";
+import type { InferInput } from "valibot";
+import { expectTypeOf, test } from "vitest";
+
+const v1 = hc<ReturnType<typeof createLaceApp>>("https://lace.test").api.v1;
+
+test("the mounted client infers validated requests and their JSON replies", () => {
+  const draft = v1.admin.entries[":entryId"].draft;
+  type Save = typeof draft.$put;
+  type SaveInput = InferRequestType<Save>;
+  expectTypeOf<SaveInput["param"]>().toEqualTypeOf<{ entryId: string }>();
+  expectTypeOf<SaveInput["json"]>().toEqualTypeOf<InferInput<typeof saveDraftRequestSchema>>();
+  expectTypeOf<SaveInput>().not.toExtend<{ param: { entryId: number } }>();
+  expectTypeOf<{ param: { entryId: string }; json: { title: string } }>().not.toExtend<SaveInput>();
+  expectTypeOf<typeof draft>().not.toHaveProperty("$get");
+  expectTypeOf<Awaited<ReturnType<Save>>["status"]>().toEqualTypeOf<200 | 422>();
+  expectTypeOf<InferResponseType<Save, 200>>().toEqualTypeOf<AdminContentEntryDto>();
+  expectTypeOf<InferResponseType<Save, 422>>().toEqualTypeOf<ErrorEnvelope>();
+
+  type LinkTargets = (typeof v1.admin)["link-targets"]["$get"];
+  expectTypeOf<InferRequestType<LinkTargets>["query"]["limit"]>().toEqualTypeOf<
+    string | undefined
+  >();
+  expectTypeOf<InferResponseType<LinkTargets, 422>>().toEqualTypeOf<ErrorEnvelope>();
+
+  type IssueToken = (typeof v1.admin)["api-tokens"]["$post"];
+  expectTypeOf<Awaited<ReturnType<IssueToken>>["status"]>().toEqualTypeOf<201 | 422>();
+  expectTypeOf<InferResponseType<IssueToken, 201>>().toEqualTypeOf<BuildTokenCreatedDto>();
+});
+
+test("the mounted client keeps empty and binary replies separate from JSON", () => {
+  type DeleteEntry = (typeof v1.admin.entries)[":entryId"]["$delete"];
+  expectTypeOf<Awaited<ReturnType<DeleteEntry>>["status"]>().toEqualTypeOf<204 | 422>();
+  expectTypeOf<InferResponseType<DeleteEntry, 204>>().toEqualTypeOf<null>();
+
+  type BuildExport = (typeof v1.public)["build-export"]["$get"];
+  expectTypeOf<Awaited<ReturnType<BuildExport>>["status"]>().toEqualTypeOf<200 | 304>();
+  expectTypeOf<InferResponseType<BuildExport, 200>>().toEqualTypeOf<BuildExportPageDto>();
+  expectTypeOf<InferResponseType<BuildExport, 304>>().toEqualTypeOf<null>();
+
+  type Media = (typeof v1.public.media)[":mediaId"]["$get"];
+  expectTypeOf<Awaited<ReturnType<Media>>["status"]>().toEqualTypeOf<200 | 304 | 404 | 422>();
+  expectTypeOf<InferResponseType<Media, 200>>().toEqualTypeOf<ReadableStream<Uint8Array>>();
+  expectTypeOf<InferResponseType<Media, 304>>().toEqualTypeOf<null>();
+});

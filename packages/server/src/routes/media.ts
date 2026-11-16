@@ -1,9 +1,11 @@
-import { invalid, notFound, response, validationHook } from "../shared/http.js";
+import { mediaId } from "../shared/application-input.js";
+import { invalid, notFound, response } from "../shared/http.js";
 import { mediaIdParams, pagination } from "../shared/request.js";
 import {
   authenticationFailure,
   authorizationFailure,
   describePolicy,
+  validate,
   validationFailure,
 } from "../shared/openapi.js";
 import {
@@ -26,8 +28,7 @@ import {
   toMediaDetailDto,
 } from "@lacecms/contracts";
 import { Hono } from "hono";
-import { resolver, validator } from "hono-openapi";
-import * as v from "valibot";
+import { resolver } from "hono-openapi";
 import type { RouteContext } from "../composition/route-context.js";
 import { v1Routes } from "../routing/v1-routes.js";
 import {
@@ -39,340 +40,338 @@ import { readMediaUpload } from "./media-upload.js";
 
 const routes = v1Routes.media;
 
-export function registerMediaRoutes(app: Hono, routeContext: RouteContext): void {
+export function createMediaRoutes(routeContext: RouteContext) {
   const { actor } = routeContext.actors;
   const { capabilities } = routeContext;
   const { media, mediaDto } = capabilities;
-  app.on(
-    routes.list.method,
-    routes.list.path,
-    describePolicy(routes.list, {
-      responses: {
-        200: {
-          content: { "application/json": { schema: resolver(mediaListSchema) } },
-          description: "Media page",
+  return new Hono()
+    .on(
+      routes.list.method,
+      routes.list.path,
+      describePolicy(routes.list, {
+        responses: {
+          200: {
+            content: { "application/json": { schema: resolver(mediaListSchema) } },
+            description: "Media page",
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          ...validationFailure(),
         },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
-        ...validationFailure(),
-      },
-      summary: "List media",
-      tags: ["admin"],
-    }),
-    validator("query", mediaListQuerySchema, validationHook),
-    async (context) => {
-      const query = context.req.valid("query") as v.InferOutput<typeof mediaListQuerySchema>;
-      const page = await media().list({
-        actor: await actor(context),
-        ...pagination(context.req.raw),
-        ...(query.q === undefined || query.q.length === 0 ? {} : { q: query.q }),
-        ...(query.sort === undefined ? {} : { sort: query.sort }),
-        ...(query.type === undefined ? {} : { type: query.type }),
-        ...(query.tag === undefined ? {} : { tags: query.tag }),
-        ...(query.sha256 === undefined ? {} : { sha256: query.sha256 }),
-      });
-      return response(mediaListSchema, {
-        items: page.items.map(mediaDto),
-        ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
-      });
-    },
-  );
-
-  app.on(
-    routes.tags.method,
-    routes.tags.path,
-    describePolicy(routes.tags, {
-      summary: "List media tags with counts",
-      tags: ["admin"],
-      responses: {
-        200: {
-          description: "Media tag catalog",
-          content: { "application/json": { schema: resolver(mediaTagCatalogSchema) } },
-        },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
-        ...validationFailure(),
-      },
-    }),
-    validator("query", mediaTagCatalogQuerySchema, validationHook),
-    async (context) => {
-      const query = context.req.valid("query");
-      return response(
-        mediaTagCatalogSchema,
-        await media().listTags({
+        summary: "List media",
+        tags: ["admin"],
+      }),
+      validate("query", mediaListQuerySchema),
+      async (context) => {
+        const query = context.req.valid("query");
+        const page = await media().list({
           actor: await actor(context),
           ...pagination(context.req.raw),
-          ...(query.q === undefined ? {} : { q: query.q }),
-        }),
-      );
-    },
-  );
-
-  app.on(
-    routes.upload.method,
-    routes.upload.path,
-    describePolicy(routes.upload, {
-      requestBody: {
-        required: true,
-        content: {
-          "multipart/form-data": {
-            schema: {
-              type: "object",
-              required: ["file"],
-              properties: {
-                file: { type: "string", format: "binary" },
-                tags: {
-                  type: "array",
-                  maxItems: MAX_MEDIA_TAGS_PER_ITEM,
-                  items: {
-                    type: "string",
-                    description: "ASCII tag: letters, digits and hyphens; normalized to lowercase",
-                    maxLength: MAX_MEDIA_TAG_INPUT_LENGTH,
+          ...(query.q === undefined || query.q.length === 0 ? {} : { q: query.q }),
+          ...(query.sort === undefined ? {} : { sort: query.sort }),
+          ...(query.type === undefined ? {} : { type: query.type }),
+          ...(query.tag === undefined ? {} : { tags: query.tag }),
+          ...(query.sha256 === undefined ? {} : { sha256: query.sha256 }),
+        });
+        return response(mediaListSchema, {
+          items: page.items.map(mediaDto),
+          ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
+        });
+      },
+    )
+    .on(
+      routes.tags.method,
+      routes.tags.path,
+      describePolicy(routes.tags, {
+        summary: "List media tags with counts",
+        tags: ["admin"],
+        responses: {
+          200: {
+            description: "Media tag catalog",
+            content: { "application/json": { schema: resolver(mediaTagCatalogSchema) } },
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          ...validationFailure(),
+        },
+      }),
+      validate("query", mediaTagCatalogQuerySchema),
+      async (context) => {
+        const query = context.req.valid("query");
+        return response(
+          mediaTagCatalogSchema,
+          await media().listTags({
+            actor: await actor(context),
+            ...pagination(context.req.raw),
+            ...(query.q === undefined ? {} : { q: query.q }),
+          }),
+        );
+      },
+    )
+    .on(
+      routes.upload.method,
+      routes.upload.path,
+      describePolicy(routes.upload, {
+        requestBody: {
+          required: true,
+          content: {
+            "multipart/form-data": {
+              schema: {
+                type: "object",
+                required: ["file"],
+                properties: {
+                  file: { type: "string", format: "binary" },
+                  tags: {
+                    type: "array",
+                    maxItems: MAX_MEDIA_TAGS_PER_ITEM,
+                    items: {
+                      type: "string",
+                      description:
+                        "ASCII tag: letters, digits and hyphens; normalized to lowercase",
+                      maxLength: MAX_MEDIA_TAG_INPUT_LENGTH,
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
-      responses: {
-        201: {
-          content: { "application/json": { schema: resolver(mediaMetadataSchema) } },
-          description: "Created media",
-        },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
-        ...validationFailure(),
-      },
-      summary: "Upload media",
-      tags: ["admin"],
-    }),
-    async (context) => {
-      const resolvedActor = await actor(context);
-      const upload = await readMediaUpload(context.req.raw);
-      if (upload instanceof Response) return upload;
-      const created = await media().create({ ...upload, actor: resolvedActor });
-      return response(mediaMetadataSchema, mediaDto(created), 201);
-    },
-  );
-
-  app.on(
-    routes.delete.method,
-    routes.delete.path,
-    describePolicy(routes.delete, {
-      responses: {
-        202: {
-          content: { "application/json": { schema: resolver(mediaMetadataSchema) } },
-          description: "Deletion requested",
-        },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
-        ...validationFailure(),
-      },
-      summary: "Request media deletion",
-      description:
-        "With `detach=drafts`, first removes the media from the current draft of every entry that uses it; refused with `MEDIA_IN_USE` while a current publication uses it.",
-      tags: ["admin"],
-    }),
-    validator("param", mediaIdParams, validationHook),
-    validator("query", mediaDeleteQuerySchema, validationHook),
-    async (context) => {
-      const { detach } = context.req.valid("query");
-      const deleted = await media().requestDeletion({
-        actor: await actor(context),
-        ...(detach === undefined ? {} : { detach }),
-        mediaId: context.req.param("mediaId") as never,
-      });
-      return response(mediaMetadataSchema, mediaDto(deleted), 202);
-    },
-  );
-
-  app.on(
-    routes.get.method,
-    routes.get.path,
-    describePolicy(routes.get, {
-      responses: {
-        200: {
-          content: { "application/json": { schema: resolver(mediaDetailSchema) } },
-          description: "Media item with the entries that use it",
-        },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
-        ...validationFailure(),
-      },
-      summary: "Get media details",
-      tags: ["admin"],
-    }),
-    validator("param", mediaIdParams, validationHook),
-    async (context) => {
-      const detail = await media().get({
-        actor: await actor(context),
-        mediaId: context.req.param("mediaId") as never,
-      });
-      return detail === null
-        ? notFound()
-        : response(
-            mediaDetailSchema,
-            toMediaDetailDto(detail, mediaUrl(capabilities.publicBaseUrl!, detail.id)),
-            200,
-            { etag: mediaEntityTag(detail.updatedAt) },
-          );
-    },
-  );
-
-  app.on(
-    routes.update.method,
-    routes.update.path,
-    describePolicy(routes.update, {
-      description:
-        "Updates alt text, caption, and focal point of active media. Requires media:write and the item's ETag in If-Match. Editing media used by published content queues a site build.",
-      parameters: [
-        {
-          description: "The item's current ETag: its updatedAt in quoted Unix milliseconds.",
-          in: "header",
-          name: "If-Match",
-          required: true,
-          schema: { type: "string" },
-        },
-      ],
-      requestBody: {
-        content: { "application/json": { schema: resolver(updateMediaMetadataRequestSchema) } },
-      },
-      responses: {
-        200: {
-          content: {
-            "application/json": { schema: resolver(updateMediaMetadataResultSchema) },
+        responses: {
+          201: {
+            content: { "application/json": { schema: resolver(mediaMetadataSchema) } },
+            description: "Created media",
           },
-          description: "Updated media and build dispatch outcome",
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          ...validationFailure(),
         },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
-        ...validationFailure(),
+        summary: "Upload media",
+        tags: ["admin"],
+      }),
+      async (context) => {
+        const resolvedActor = await actor(context);
+        const upload = await readMediaUpload(context.req.raw);
+        if (upload instanceof Response) return upload;
+        const created = await media().create({ ...upload, actor: resolvedActor });
+        return response(mediaMetadataSchema, mediaDto(created), 201);
       },
-      summary: "Update media metadata",
-      tags: ["admin"],
-    }),
-    validator("param", mediaIdParams, validationHook),
-    validator("json", updateMediaMetadataRequestSchema, validationHook),
-    async (context) => {
-      const body = context.req.valid("json") as v.InferOutput<
-        typeof updateMediaMetadataRequestSchema
-      >;
-      let expectedUpdatedAt: ReturnType<typeof resolveMediaPrecondition>;
-      try {
-        expectedUpdatedAt = resolveMediaPrecondition(context.req.header("if-match") ?? undefined);
-      } catch (error) {
-        if (!(error instanceof ContractValidationError)) throw error;
-        return invalid("If-Match must carry the media item's current strong ETag.");
-      }
-      const updated = await media().updateMetadata({
-        actor: await actor(context),
-        expectedUpdatedAt,
-        mediaId: context.req.param("mediaId") as never,
-        patch: body,
-      });
-      return updated === null
-        ? notFound()
-        : response(
-            updateMediaMetadataResultSchema,
-            toUpdateMediaMetadataResultDto(
-              updated,
-              mediaUrl(capabilities.publicBaseUrl!, updated.media.id),
-            ),
-            200,
-            { etag: mediaEntityTag(updated.media.updatedAt) },
-          );
-    },
-  );
-
-  app.on(
-    routes.retryDeletion.method,
-    routes.retryDeletion.path,
-    describePolicy(routes.retryDeletion, {
-      responses: {
-        202: {
-          content: { "application/json": { schema: resolver(mediaMetadataSchema) } },
-          description: "Deletion retry requested",
+    )
+    .on(
+      routes.delete.method,
+      routes.delete.path,
+      describePolicy(routes.delete, {
+        responses: {
+          202: {
+            content: { "application/json": { schema: resolver(mediaMetadataSchema) } },
+            description: "Deletion requested",
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          ...validationFailure(),
         },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
-        ...validationFailure(),
+        summary: "Request media deletion",
+        description:
+          "With `detach=drafts`, first removes the media from the current draft of every entry that uses it; refused with `MEDIA_IN_USE` while a current publication uses it.",
+        tags: ["admin"],
+      }),
+      validate("param", mediaIdParams),
+      validate("query", mediaDeleteQuerySchema),
+      async (context) => {
+        const { detach } = context.req.valid("query");
+        const deleted = await media().requestDeletion({
+          actor: await actor(context),
+          ...(detach === undefined ? {} : { detach }),
+          mediaId: mediaId(context.req.valid("param").mediaId),
+        });
+        return response(mediaMetadataSchema, mediaDto(deleted), 202);
       },
-      summary: "Retry media deletion",
-      tags: ["admin"],
-    }),
-    validator("param", mediaIdParams, validationHook),
-    async (context) => {
-      const retried = await media().retryDeletion({
-        actor: await actor(context),
-        mediaId: context.req.param("mediaId") as never,
-      });
-      return response(mediaMetadataSchema, mediaDto(retried), 202);
-    },
-  );
-
-  app.on(
-    routes.binary.method,
-    routes.binary.path,
-    describePolicy(routes.binary, {
-      description:
-        "Streams media that a current publication uses. The response carries a strong `ETag` " +
-        "derived from the media ID, which never changes because stored bytes are immutable, " +
-        "and `Cache-Control: public, max-age=86400`. A matching `If-None-Match` (weak " +
-        "comparison or `*`) receives `304 Not Modified` without a body; a malformed one is " +
-        "ignored. Unpublished or unknown media is not found, never `304`.",
-      responses: {
-        200: { description: "Media bytes" },
-        304: { description: "The cached media is still valid" },
-        404: { description: "Media is not published or does not exist" },
-        ...validationFailure(),
+    )
+    .on(
+      routes.get.method,
+      routes.get.path,
+      describePolicy(routes.get, {
+        responses: {
+          200: {
+            content: { "application/json": { schema: resolver(mediaDetailSchema) } },
+            description: "Media item with the entries that use it",
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          ...validationFailure(),
+        },
+        summary: "Get media details",
+        tags: ["admin"],
+      }),
+      validate("param", mediaIdParams),
+      async (context) => {
+        const detail = await media().get({
+          actor: await actor(context),
+          mediaId: mediaId(context.req.valid("param").mediaId),
+        });
+        return detail === null
+          ? notFound()
+          : response(
+              mediaDetailSchema,
+              toMediaDetailDto(detail, mediaUrl(capabilities.publicBaseUrl!, detail.id)),
+              200,
+              { etag: mediaEntityTag(detail.updatedAt) },
+            );
       },
-      summary: "Read published media",
-      tags: ["public"],
-    }),
-    validator("param", mediaIdParams, validationHook),
-    async (context) => {
-      const resolved = await media().resolvePublic({
-        mediaId: context.req.param("mediaId") as never,
-      });
-      return resolved === null
-        ? notFound()
-        : conditionalMediaResponse(context.req.raw, resolved, PUBLIC_MEDIA_CACHE_CONTROL, (item) =>
-            media().openBinary(item),
-          );
-    },
-  );
-
-  app.on(
-    routes.preview.method,
-    routes.preview.path,
-    describePolicy(routes.preview, {
-      description:
-        "Streams active media to an authenticated reader with the same immutable `ETag` as " +
-        "the public route and `Cache-Control: private, no-cache`. A matching `If-None-Match` " +
-        "receives `304 Not Modified` after authorization; a malformed one is ignored.",
-      responses: {
-        200: { description: "Media bytes" },
-        304: { description: "The cached media is still valid" },
-        404: { description: "Media is not active or does not exist" },
-        ...authenticationFailure(),
-        ...authorizationFailure(),
-        ...validationFailure(),
+    )
+    .on(
+      routes.update.method,
+      routes.update.path,
+      describePolicy(routes.update, {
+        description:
+          "Updates alt text, caption, and focal point of active media. Requires media:write and the item's ETag in If-Match. Editing media used by published content queues a site build.",
+        parameters: [
+          {
+            description: "The item's current ETag: its updatedAt in quoted Unix milliseconds.",
+            in: "header",
+            name: "If-Match",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          content: { "application/json": { schema: resolver(updateMediaMetadataRequestSchema) } },
+        },
+        responses: {
+          200: {
+            content: {
+              "application/json": { schema: resolver(updateMediaMetadataResultSchema) },
+            },
+            description: "Updated media and build dispatch outcome",
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          ...validationFailure(),
+        },
+        summary: "Update media metadata",
+        tags: ["admin"],
+      }),
+      validate("param", mediaIdParams),
+      validate("json", updateMediaMetadataRequestSchema),
+      async (context) => {
+        const body = context.req.valid("json");
+        let expectedUpdatedAt: ReturnType<typeof resolveMediaPrecondition>;
+        try {
+          expectedUpdatedAt = resolveMediaPrecondition(context.req.header("if-match") ?? undefined);
+        } catch (error) {
+          if (!(error instanceof ContractValidationError)) throw error;
+          return invalid("If-Match must carry the media item's current strong ETag.");
+        }
+        const updated = await media().updateMetadata({
+          actor: await actor(context),
+          expectedUpdatedAt,
+          mediaId: mediaId(context.req.valid("param").mediaId),
+          patch: body,
+        });
+        return updated === null
+          ? notFound()
+          : response(
+              updateMediaMetadataResultSchema,
+              toUpdateMediaMetadataResultDto(
+                updated,
+                mediaUrl(capabilities.publicBaseUrl!, updated.media.id),
+              ),
+              200,
+              { etag: mediaEntityTag(updated.media.updatedAt) },
+            );
       },
-      summary: "Preview media",
-      tags: ["admin"],
-    }),
-    validator("param", mediaIdParams, validationHook),
-    async (context) => {
-      const resolved = await media().resolvePreview({
-        actor: await actor(context),
-        mediaId: context.req.param("mediaId") as never,
-      });
-      return resolved === null
-        ? notFound()
-        : conditionalMediaResponse(context.req.raw, resolved, PREVIEW_MEDIA_CACHE_CONTROL, (item) =>
-            media().openBinary(item),
-          );
-    },
-  );
+    )
+    .on(
+      routes.retryDeletion.method,
+      routes.retryDeletion.path,
+      describePolicy(routes.retryDeletion, {
+        responses: {
+          202: {
+            content: { "application/json": { schema: resolver(mediaMetadataSchema) } },
+            description: "Deletion retry requested",
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          ...validationFailure(),
+        },
+        summary: "Retry media deletion",
+        tags: ["admin"],
+      }),
+      validate("param", mediaIdParams),
+      async (context) => {
+        const retried = await media().retryDeletion({
+          actor: await actor(context),
+          mediaId: mediaId(context.req.valid("param").mediaId),
+        });
+        return response(mediaMetadataSchema, mediaDto(retried), 202);
+      },
+    )
+    .on(
+      routes.binary.method,
+      routes.binary.path,
+      describePolicy(routes.binary, {
+        description:
+          "Streams media that a current publication uses. The response carries a strong `ETag` " +
+          "derived from the media ID, which never changes because stored bytes are immutable, " +
+          "and `Cache-Control: public, max-age=86400`. A matching `If-None-Match` (weak " +
+          "comparison or `*`) receives `304 Not Modified` without a body; a malformed one is " +
+          "ignored. Unpublished or unknown media is not found, never `304`.",
+        responses: {
+          200: { description: "Media bytes" },
+          304: { description: "The cached media is still valid" },
+          404: { description: "Media is not published or does not exist" },
+          ...validationFailure(),
+        },
+        summary: "Read published media",
+        tags: ["public"],
+      }),
+      validate("param", mediaIdParams),
+      async (context) => {
+        const resolved = await media().resolvePublic({
+          mediaId: mediaId(context.req.valid("param").mediaId),
+        });
+        return resolved === null
+          ? notFound()
+          : conditionalMediaResponse(
+              context.req.raw,
+              resolved,
+              PUBLIC_MEDIA_CACHE_CONTROL,
+              (item) => media().openBinary(item),
+            );
+      },
+    )
+    .on(
+      routes.preview.method,
+      routes.preview.path,
+      describePolicy(routes.preview, {
+        description:
+          "Streams active media to an authenticated reader with the same immutable `ETag` as " +
+          "the public route and `Cache-Control: private, no-cache`. A matching `If-None-Match` " +
+          "receives `304 Not Modified` after authorization; a malformed one is ignored.",
+        responses: {
+          200: { description: "Media bytes" },
+          304: { description: "The cached media is still valid" },
+          404: { description: "Media is not active or does not exist" },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          ...validationFailure(),
+        },
+        summary: "Preview media",
+        tags: ["admin"],
+      }),
+      validate("param", mediaIdParams),
+      async (context) => {
+        const resolved = await media().resolvePreview({
+          actor: await actor(context),
+          mediaId: mediaId(context.req.valid("param").mediaId),
+        });
+        return resolved === null
+          ? notFound()
+          : conditionalMediaResponse(
+              context.req.raw,
+              resolved,
+              PREVIEW_MEDIA_CACHE_CONTROL,
+              (item) => media().openBinary(item),
+            );
+      },
+    );
 }

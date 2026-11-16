@@ -1,8 +1,42 @@
 import { errorEnvelopeSchema } from "@lacecms/contracts";
-import { describeRoute, resolver } from "hono-openapi";
-import type { DescribeRouteOptions, ResolverReturnType } from "hono-openapi";
+import { sValidator } from "@hono/standard-validator";
+import { toJsonSchema } from "@valibot/to-json-schema";
+import type { Env, ValidationTargets } from "hono";
+import { describeRoute, resolver, uniqueSymbol } from "hono-openapi";
+import type { DescribeRouteOptions, HandlerUniqueProperty, ResolverReturnType } from "hono-openapi";
+import type { InferInput, InferOutput } from "valibot";
 import type { RestCredentialMode, RoutePolicy } from "../routing/route-policy.js";
 import { withRoutePolicy } from "../routing/route-matching.js";
+import { validationHook, type ServerSchema, type validationResponse } from "./http.js";
+
+type Validator<Schema extends ServerSchema, Target extends keyof ValidationTargets> = ReturnType<
+  typeof sValidator<Schema, Target, Env, string, InferInput<Schema>, InferOutput<Schema>>
+>;
+
+export function validate<Schema extends ServerSchema, Target extends keyof ValidationTargets>(
+  target: Target,
+  schema: Schema,
+): (...args: Parameters<Validator<Schema, Target>>) => ReturnType<typeof validationResponse> {
+  const middleware = sValidator(target, schema, validationHook);
+  // Keep sValidator's hook response type and the metadata hono-openapi reads.
+  const metadata = { target, ...resolver(schema) } satisfies HandlerUniqueProperty;
+  Object.assign(middleware, { [uniqueSymbol]: metadata });
+  return middleware;
+}
+
+type OpenApiParameter = Exclude<
+  NonNullable<DescribeRouteOptions["parameters"]>[number],
+  { $ref: string }
+>;
+type OpenApiParameterSchema = NonNullable<OpenApiParameter["schema"]>;
+
+export function openApiParameterSchema(
+  schema: Parameters<typeof toJsonSchema>[0],
+  options?: Parameters<typeof toJsonSchema>[1],
+): OpenApiParameterSchema {
+  // Valibot's JSON Schema is wider than the OpenAPI parameter type.
+  return toJsonSchema(schema, options) as OpenApiParameterSchema;
+}
 
 interface EnvelopeResponse {
   readonly content: { readonly "application/json": { readonly schema: ResolverReturnType } };

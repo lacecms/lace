@@ -30,8 +30,9 @@ type RouteMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "ALL";
 export interface RoutePolicy<
   Path extends string = string,
   Auth extends CredentialMode = CredentialMode,
+  Method extends RouteMethod = RouteMethod,
 > {
-  readonly method: RouteMethod;
+  readonly method: Method;
   readonly path: Path;
   readonly auth: Auth;
   readonly bodyLimit: "default" | "media-upload";
@@ -39,12 +40,16 @@ export interface RoutePolicy<
   readonly mcpOperation?: (typeof mcpContentOperations)[keyof typeof mcpContentOperations];
 }
 
-export function defineRoute<const Path extends string, const Auth extends CredentialMode>(
-  method: RouteMethod,
+export function defineRoute<
+  const Method extends RouteMethod,
+  const Path extends string,
+  const Auth extends CredentialMode,
+>(
+  method: Method,
   path: Path,
   auth: Auth,
   options: Partial<Pick<RoutePolicy, "bodyLimit" | "rateLimit" | "mcpOperation">> = {},
-): RoutePolicy<Path, Auth> {
+): RoutePolicy<Path, Auth, Method> {
   return Object.freeze({
     method,
     path,

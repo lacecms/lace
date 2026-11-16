@@ -1,15 +1,15 @@
 import { AuthenticationRequiredError } from "@lacecms/contracts";
 import { registerDocsRoutes, registerOpenApiRoute } from "../routes/docs.js";
-import { registerPublicRoutes } from "../routes/public.js";
-import { registerContentRoutes } from "../routes/content.js";
-import { registerMediaRoutes } from "../routes/media.js";
+import { createPublicRoutes } from "../routes/public.js";
+import { createContentRoutes } from "../routes/content.js";
+import { createMediaRoutes } from "../routes/media.js";
 import { registerProtocolRoutes } from "../routes/protocol.js";
 import { registerHealthRoutes } from "../routes/health.js";
-import { registerSetupSessionRoutes } from "../routes/setup-session.js";
-import { registerAccountRoutes } from "../routes/accounts.js";
-import { registerAdminUserRoutes } from "../routes/admin-users.js";
-import { registerCredentialRoutes } from "../routes/credentials.js";
-import { registerBuildRoutes } from "../routes/builds.js";
+import { createSetupSessionRoutes } from "../routes/setup-session.js";
+import { createAccountRoutes } from "../routes/accounts.js";
+import { createAdminUserRoutes } from "../routes/admin-users.js";
+import { createCredentialRoutes } from "../routes/credentials.js";
+import { createBuildRoutes } from "../routes/builds.js";
 import { createActorContext } from "../composition/actor-context.js";
 import { createCapabilities } from "../composition/capabilities.js";
 import type { RouteContext } from "../composition/route-context.js";
@@ -49,7 +49,7 @@ declare module "hono" {
 }
 
 /** Creates a portable Hono API app; runtime adapters supply every infrastructure capability. */
-export function createLaceApp(input: LaceAppInput): Hono {
+export function createLaceApp(input: LaceAppInput) {
   if (!Number.isSafeInteger(input.maxBodyBytes) || input.maxBodyBytes < 1)
     throw new TypeError("maxBodyBytes must be a positive safe integer.");
   const app = new Hono();
@@ -217,17 +217,17 @@ export function createLaceApp(input: LaceAppInput): Hono {
 
   registerProtocolRoutes(app, routeContext);
   registerHealthRoutes(app, routeContext);
-  const v1 = new Hono();
-  registerSetupSessionRoutes(v1, routeContext);
-  registerAccountRoutes(v1, routeContext);
-  registerAdminUserRoutes(v1, routeContext);
-  registerCredentialRoutes(v1, routeContext);
-  registerBuildRoutes(v1, routeContext);
-  registerMediaRoutes(v1, routeContext);
-  registerContentRoutes(v1, routeContext);
-  registerPublicRoutes(v1, routeContext);
+  const v1 = new Hono()
+    .route("/", createSetupSessionRoutes(routeContext))
+    .route("/", createAccountRoutes(routeContext))
+    .route("/", createAdminUserRoutes(routeContext))
+    .route("/", createCredentialRoutes(routeContext))
+    .route("/", createBuildRoutes(routeContext))
+    .route("/", createMediaRoutes(routeContext))
+    .route("/", createContentRoutes(routeContext))
+    .route("/", createPublicRoutes(routeContext));
   registerOpenApiRoute(v1, app, routeContext);
-  app.route(API_V1, v1);
+  const appWithV1 = app.route(API_V1, v1);
   registerDocsRoutes(app, routeContext);
 
   app.notFound(async (context) => {
@@ -241,5 +241,5 @@ export function createLaceApp(input: LaceAppInput): Hono {
     return notFound();
   });
 
-  return app;
+  return appWithV1;
 }

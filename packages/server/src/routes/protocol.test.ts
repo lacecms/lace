@@ -103,11 +103,14 @@ test("account MCP connection routes keep ownership, CSRF, strict bodies and safe
     ).toBe(422);
 });
 
-test("disabled and anonymous MCP account routes do not disclose connections", async () => {
-  const disabled = await fixture();
+test("unavailable and anonymous MCP account routes do not disclose connections", async () => {
+  const disabled = await fixture({ mcpEnabled: true });
   expect(await (await disabled.app.request("/api/v1/account/capabilities")).json()).toEqual({
     mcpEnabled: false,
   });
+  const doc = (await json(disabled.app, "/api/v1/openapi.json")).body;
+  expect(doc.paths).not.toHaveProperty("/api/v1/account/mcp-connections");
+  expect(doc.paths).not.toHaveProperty("/api/v1/account/mcp-connections/{connectionId}/revoke");
   for (const method of ["GET", "POST", "HEAD", "DELETE"]) {
     expect(
       (await disabled.app.request("https://lace.test/api/v1/account/mcp-connections", { method }))
