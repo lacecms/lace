@@ -833,13 +833,16 @@ for (const runtime of ["SQLite", "D1"]) {
     for (const role of ["viewer", "editor", "admin"]) {
       const actor = { id: "fixture-user", role };
       const list = await useCases.list(actor, { limit: 50 });
-      expect(list).toHaveLength(1);
-      expect(list[0]).toMatchObject({ clientName: "Fixture", scopes, resource });
+      expect(list.items).toHaveLength(1);
+      expect(list.items[0]).toMatchObject({ clientName: "Fixture", scopes, resource });
+      expect(list.nextCursor).toBeUndefined();
       expect(JSON.stringify(list)).not.toMatch(
         /tokenHash|inputHash|sessionId|clientSecret|fixture-only-refresh-credential/u,
       );
     }
-    expect(await useCases.list({ id: "another-user", role: "admin" }, { limit: 50 })).toEqual([]);
+    expect(await useCases.list({ id: "another-user", role: "admin" }, { limit: 50 })).toEqual({
+      items: [],
+    });
     expect(await useCases.revoke({ id: "another-user", role: "admin" }, "fixture-grant")).toBe(
       false,
     );
