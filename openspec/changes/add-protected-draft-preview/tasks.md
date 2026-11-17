@@ -31,12 +31,12 @@ fixture packages before the real Astro runner is available.
 Depends on PV1A/PV1B. Implements `astro-draft-preview` rendering/navigation
 requirements, the `astro-adapter` and `workspace-governance` deltas, and design §8.
 
-- [ ] 3.1 Add the separate SDK frozen-input client and preview site view without widening public loader/export/build-token behavior; verify target replacement, records/globals, private media, published-only regressions and the explicit preview flag.
-- [ ] 3.2 Add the opt-in server-only Astro preview entry, supported-version preflight and single-route prerenderer wrapper; verify home/fixed pages and unpublished/renamed dynamic routes, logical-path handling under the prefix, zero/multiple target failures and no whole-site fallback.
-- [ ] 3.3 Integrate generation-prefixed assets, private local media staging, optimization and required original copying; verify CSS backgrounds, fonts, image variants, lazy JS, lightbox originals, media dependency reporting and credential-free output.
-- [ ] 3.4 Add the catalog-pinned server-only HTML parser and narrowly scoped boundary allowance; implement page-link/base-path/fragment handling, preserved rel semantics and resource classification; verify parser edge cases, downloads/media links, prohibited imports and no blanket base-tag rewriting.
-- [ ] 3.5 Enforce one-site-HTML artifact packaging, file/path/type/budget rules and compatibility diagnostics; verify a malicious output fixture, a missing literal local asset, unrelated route enumeration failure and rejected unsupported source arrangements.
-- [ ] 3.6 Add generated-starter integration and an independently authored existing-site fixture; verify packed-package builds, normal published-only builds unchanged, and desktop/narrow rendering with working scripts/media under two generation prefixes. Record PV1C evidence and run the checkpoint quality gate.
+- [x] 3.1 Add the separate SDK frozen-input client and preview site view without widening public loader/export/build-token behavior; verify target replacement, records/globals, private media, published-only regressions and the explicit preview flag.
+- [x] 3.2 Add the opt-in server-only Astro preview entry, supported-version preflight and single-route prerenderer wrapper; verify home/fixed pages and unpublished/renamed dynamic routes, logical-path handling under the prefix, zero/multiple target failures and no whole-site fallback.
+- [x] 3.3 Integrate generation-prefixed assets, private local media staging, optimization and required original copying; verify CSS backgrounds, fonts, image variants, lazy JS, lightbox originals, media dependency reporting and credential-free output.
+- [x] 3.4 Add the catalog-pinned server-only HTML parser and narrowly scoped boundary allowance; implement page-link/base-path/fragment handling, preserved rel semantics and resource classification; verify parser edge cases, downloads/media links, prohibited imports and no blanket base-tag rewriting.
+- [x] 3.5 Enforce one-site-HTML artifact packaging, file/path/type/budget rules and compatibility diagnostics; verify a malicious output fixture, a missing literal local asset, unrelated route enumeration failure and rejected unsupported source arrangements.
+- [x] 3.6 Add generated-starter integration and an independently authored existing-site fixture; verify packed-package builds, normal published-only builds unchanged, and desktop/narrow rendering with working scripts/media under two generation prefixes. Record PV1C evidence and run the checkpoint quality gate.
 
 ## 4. PV1D — Fixed VPS execution
 

@@ -1,5 +1,64 @@
 # Preview implementation verification
 
+## PV1C verified on 2026-11-17
+
+Tasks 3.1–3.6 passed. The packed Astro integration renders the saved home,
+fixed, newly routed and renamed collection pages through the selected site's
+components. The SDK overlays only the target, keeps the captured public
+context and resolves internal links against that view. The saved target has
+a revision and capture time with no synthetic publication timestamp.
+
+The trusted runner stages frozen input and originals in scratch and supplies
+the input file through `LACE_PREVIEW_INPUT_FILE`. The site build uses a
+loopback source for Astro image optimization and serves needed originals from
+the generation prefix. The manifest reports media used by the image pipeline
+and by literal output references. The package is checked with the same path,
+type and manifest rules as the gateway. Build credentials and absolute
+scratch paths are rejected from package files. Shared Astro assets can remain
+in the package even when the selected page does not request them.
+
+The starter pins Astro 7.4.12. The preview preflight accepts 7.4.12 and later
+7.4 patches in static directory mode. Existing sites opt in by installing
+`lacePreview()` and using the preview-aware server loader. The HTML pass
+rebases literal local asset paths and rewrites page navigation against the
+public site base. Custom runtime URL construction stays with the site.
+Compilation and route enumeration can still visit unrelated code.
+
+### Test results
+
+- `pnpm turbo build --filter=@lacecms/astro --filter=create-lace` and
+  `pnpm exec vitest run --config vitest.verification.config.mjs --project preview-astro`
+  passed all 12 acceptance cases. The fixtures unpacked actual `pnpm pack`
+  tarballs outside the checkout and reused the lockfile's third-party dependencies.
+- Chromium loaded both generation prefixes at 1280 and 360 pixels. CSS and
+  its font and background, optimized images, the lazy script and the lightbox
+  original all loaded within the generation. The browser checks exercised
+  fragment navigation and verified the public base path and new-tab link attributes.
+- The packed starter rendered the saved post and reproduced byte-identical
+  published post HTML on the ordinary builds before and after preview. The
+  published API received only the two ordinary build requests. The generator
+  reproduced all six reviewed project snapshots.
+- Astro (87), SDK (115), application (170), contracts (209), generated
+  onboarding (3), local D1/R2 preview (3) and server preview routing (1)
+  tests passed. Packaged export checks and the boundary and release-artifact
+  suites passed.
+- `pnpm typecheck`, `pnpm lint` (including boundaries and Drizzle),
+  `pnpm format:check`, `pnpm openapi:check` and
+  `pnpm exec openspec validate add-protected-draft-preview --type change --strict`
+  passed.
+
+### Limits and handoff
+
+The local staging limit is 10 MiB per original and 100 MiB total for originals
+in the frozen context. The output package allows 2,000 files, 32 MiB per file,
+100 MiB total and a 1 MiB manifest. The trusted runner can lower output limits.
+The fixture checks missing and duplicate routes, missing literal assets,
+unrelated route enumeration failure, unsupported Astro output, and denied
+source maps, linked files, raw input and private values in output.
+
+Runtime creation remains disabled. The next unchecked task is 4.1 (PV1D),
+operator-selected immutable source preparation for the fixed VPS runner.
+
 ## PV1B verified on 2026-11-17
 
 Tasks 2.1–2.6 passed. Node and the Worker exercise the same browser-bound
@@ -50,8 +109,8 @@ executor configuration belong to PV1D/PV1E.
   passed.
 
 The fixture packages exercise delivery before a site runner is available.
-Preview remains disabled in the deployment entry points. The next unchecked
-task is 3.1 (PV1C).
+Preview remained disabled in the deployment entry points. The next task at
+the PV1B handoff was 3.1 (PV1C).
 
 ## PV1A verified on 2026-11-17
 

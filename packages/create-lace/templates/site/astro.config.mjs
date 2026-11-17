@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { parseEnv } from "node:util";
 import { laceImageConfig } from "@lacecms/astro";
+import { lacePreview } from "@lacecms/astro/preview";
 import { defineConfig } from "astro/config";
 
 // The project .env (the site's envDir) overlaid by the process environment, so
@@ -13,6 +14,7 @@ const env = {
 
 export default defineConfig({
   image: laceImageConfig(env),
+  integrations: [lacePreview()],
   output: "static",
   vite: { envDir: "..", envPrefix: ["VITE_", "LACE_PUBLIC_"] },
 });

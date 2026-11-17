@@ -326,6 +326,9 @@ catalogs:
     oxlint:
       specifier: 1.81.0
       version: 1.81.0
+    parse5:
+      specifier: 8.0.1
+      version: 8.0.1
     react:
       specifier: 19.3.1
       version: 19.3.1
@@ -807,6 +810,9 @@ importers:
       '@lacecms/sdk':
         specifier: workspace:*
         version: link:../sdk
+      parse5:
+        specifier: 'catalog:'
+        version: 8.0.1
     devDependencies:
       '@lacecms/content':
         specifier: workspace:*

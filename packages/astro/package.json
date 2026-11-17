@@ -22,6 +22,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./preview": {
+      "@lacecms/source": "./src/preview.ts",
+      "types": "./dist/preview.d.ts",
+      "import": "./dist/preview.js"
+    },
     "./LaceBlocks.astro": {
       "@lacecms/source": "./src/LaceBlocks.astro",
       "default": "./dist/LaceBlocks.astro"
@@ -57,7 +62,8 @@
   },
   "dependencies": {
     "@lacecms/render": "workspace:*",
-    "@lacecms/sdk": "workspace:*"
+    "@lacecms/sdk": "workspace:*",
+    "parse5": "catalog:"
   },
   "devDependencies": {
     "@lacecms/content": "workspace:*",

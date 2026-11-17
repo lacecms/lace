@@ -14,7 +14,11 @@
     "./LaceImage.astro": "./dist/LaceImage.astro",
     "./LaceSeo.astro": "./dist/LaceSeo.astro",
     "./LaceVideo.astro": "./dist/LaceVideo.astro",
-    "./RichText.astro": "./dist/RichText.astro"
+    "./RichText.astro": "./dist/RichText.astro",
+    "./preview": {
+      "types": "./dist/preview.d.ts",
+      "import": "./dist/preview.js"
+    }
   },
   "@lacecms/auth": {
     ".": {
@@ -49,6 +53,10 @@
     "./outbox": {
       "types": "./dist/outbox.d.ts",
       "import": "./dist/outbox.js"
+    },
+    "./preview": {
+      "types": "./dist/preview.d.ts",
+      "import": "./dist/preview.js"
     }
   },
   "create-lace": {
@@ -101,6 +109,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./preview": {
+      "types": "./dist/preview.d.ts",
+      "import": "./dist/preview.js"
     }
   },
   "@lacecms/server": {

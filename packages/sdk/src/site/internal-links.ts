@@ -47,7 +47,10 @@ function atPointer(root: unknown, pointer: string): unknown {
 
 /** O(entries + locations) setup; lookups are pure O(1), with no target requests. */
 export function publishedLinks(
-  exported: Pick<BuildExportDto, "entries" | "globals"> & Partial<Pick<BuildExportDto, "records">>,
+  exported: Pick<BuildExportDto, "globals"> &
+    Partial<Pick<BuildExportDto, "records">> & {
+      readonly entries: readonly Omit<BuildExportDto["entries"][number], "publishedAt">[];
+    },
 ): PublishedLinkLookup & { readonly linkDiagnostics: LinkDiagnostics } {
   // Records and globals are link sources but never targets: they have no route.
   const sources = [...exported.entries, ...(exported.records ?? []), ...exported.globals];

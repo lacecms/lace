@@ -25,7 +25,7 @@ export interface SeoResolverInput {
   readonly entry: Readonly<{
     readonly fields: PublicEntryDto["fields"];
     readonly path: string;
-    readonly seo?: SeoValueDto;
+    readonly seo?: SeoValueDto | undefined;
     readonly title: string;
   }>;
   /** Resolves a media ID to an image with its effective alt text, or `undefined`. */
@@ -45,6 +45,21 @@ export interface ResolvedSeo {
   readonly robots?: "noindex, follow" | "noindex, nofollow";
   readonly siteName?: string;
   readonly title: string;
+}
+
+/** Normalizes a public site base URL to a trailing slash, or `undefined` when invalid. */
+export function normalizeSiteUrl(raw: string): string | undefined {
+  // A bare `?` or `#` disappears during parsing; refuse it rather than silently dropping it.
+  if (raw.includes("?") || raw.includes("#")) return undefined;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return undefined;
+  }
+  if (!["http:", "https:"].includes(url.protocol) || url.username !== "" || url.password !== "")
+    return undefined;
+  return url.href.endsWith("/") ? url.href : `${url.href}/`;
 }
 
 /** The absolute URL of a public path under a site base URL ending with `/`. */

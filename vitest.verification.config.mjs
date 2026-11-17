@@ -5,6 +5,12 @@ export default defineConfig({
   test: {
     projects: [
       {
+        test: {
+          name: "preview-astro",
+          include: ["tests/preview-astro.acceptance.mjs"],
+        },
+      },
+      {
         plugins: [sourceCondition()],
         test: {
           name: "preview-https",

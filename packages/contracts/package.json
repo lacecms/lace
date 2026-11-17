@@ -22,6 +22,11 @@
       "@lacecms/source": "./src/outbox.ts",
       "types": "./dist/outbox.d.ts",
       "import": "./dist/outbox.js"
+    },
+    "./preview": {
+      "@lacecms/source": "./src/preview.ts",
+      "types": "./dist/preview.d.ts",
+      "import": "./dist/preview.js"
     }
   },
   "publishConfig": {

@@ -28,6 +28,7 @@ async function project() {
   await mkdir(adapter, { recursive: true });
   await cp(join(workspace, "packages/astro/dist"), join(adapter, "dist"), { recursive: true });
   await cp(join(workspace, "packages/astro/package.json"), join(adapter, "package.json"));
+  await symlink(join(workspace, "packages/astro/node_modules/parse5"), join(modules, "parse5"));
   for (const name of ["astro", "sharp", "@lacecms/render", "@lacecms/sdk", "@lacecms/content"]) {
     await symlink(join(workspace, "apps/site/node_modules", name), join(modules, name));
   }

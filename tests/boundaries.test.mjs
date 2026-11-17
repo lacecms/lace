@@ -52,6 +52,24 @@ test.each([
   expect(result.stderr).toContain(message);
 });
 
+test("allows parse5 only in the server-side preview HTML module", () => {
+  const root = mkdtempSync(join(tmpdir(), "lace-parser-boundary-"));
+  try {
+    const adapter = join(root, "packages/astro");
+    mkdirSync(join(adapter, "src/preview"), { recursive: true });
+    writeFileSync(join(adapter, "package.json"), JSON.stringify({ name: "@lacecms/astro" }));
+    const useParser = 'import { parse } from "parse5";\nexport const document = parse("");';
+    writeFileSync(join(adapter, "src/preview/html.ts"), useParser);
+    expect(spawnSync(process.execPath, [checker, root], { encoding: "utf8" }).status).toBe(0);
+    writeFileSync(join(adapter, "src/Preview.astro"), `---\n${useParser}\n---\n`);
+    const denied = spawnSync(process.execPath, [checker, root], { encoding: "utf8" });
+    expect(denied.status).not.toBe(0);
+    expect(denied.stderr).toContain("framework adapter @lacecms/astro may not import parse5");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 const adminFixtureDirectory = join(testDirectory, "fixtures", "admin-structure");
 
 function checkAdminFixture(name) {

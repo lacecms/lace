@@ -155,7 +155,7 @@ endpoint family per content kind; a generated admin API client; pruning
 
 ## Pre-1.0 priority PV1 — Protected saved-draft preview
 
-**Selected:** 2026-11-17. **Status:** PV1A and PV1B verified, PV1C next. **Session unit:** PV1,
+**Selected:** 2026-11-17. **Status:** PV1A–PV1C verified, PV1D next. **Session unit:** PV1,
 [`add-protected-draft-preview`](../openspec/changes/add-protected-draft-preview/proposal.md).
 The owner selected this as the first product priority before Lace 1.0, outside
 EX1–EX7. It does not depend on the unfinished EX5/EX7 work or combine their
@@ -169,7 +169,7 @@ Keep the feature disabled until all checkpoints pass.
 | --- | --- | --- |
 | PV1A | Lifecycle, immutable inputs, SQLite/D1 persistence | [Verified on SQLite and local D1](../openspec/changes/add-protected-draft-preview/verification.md) |
 | PV1B | Session handoff and protected artifact delivery | [Verified on SQLite/SILO, local D1/R2 and Chromium](../openspec/changes/add-protected-draft-preview/verification.md#pv1b-verified-on-2026-11-17) |
-| PV1C | Astro single-route integration | Packed-site asset/link and browser checks |
+| PV1C | Astro single-route integration | [Verified with packed sites and Chromium](../openspec/changes/add-protected-draft-preview/verification.md#pv1c-verified-on-2026-11-17) |
 | PV1D | Fixed VPS runner and publication priority | Container timeout/restart/release isolation checks |
 | PV1E | GitHub runner and private R2 | Worker protocol and real-provider acceptance |
 | PV1F | Admin, documentation and complete acceptance | Role/iframe/new-tab journeys on both runtimes |

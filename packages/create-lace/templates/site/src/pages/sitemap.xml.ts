@@ -5,5 +5,6 @@ import { getSite } from "../lib/lace";
 // Collections without a route never appear. Pass `{ include: (entry) => ... }`
 // to list only entries whose route your site renders.
 export async function GET(): Promise<Response> {
-  return sitemapResponse(await getSite());
+  const site = await getSite();
+  return site.preview ? new Response(null, { status: 404 }) : sitemapResponse(site);
 }

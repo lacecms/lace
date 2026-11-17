@@ -102,7 +102,7 @@ const externalImportAllowlist = new Map([
     new Set(["@lacecms/domain", "@lacecms/config", "@lacecms/content", outboxContracts]),
   ],
   ["@lacecms/render", new Set(["@lacecms/content"])],
-  ["@lacecms/sdk", new Set(["@lacecms/contracts", "valibot"])],
+  ["@lacecms/sdk", new Set(["@lacecms/contracts", "@lacecms/contracts/preview", "valibot"])],
 ]);
 
 // Framework adapters may additionally import their framework and its subpaths.
@@ -697,10 +697,12 @@ function manifestEntrySources(member) {
   collect(manifest.exports);
   collect(manifest.bin);
   return new Set(
-    targets
-      .map((target) => /^\.\/dist\/([^/]+)\.js$/u.exec(target)?.[1])
-      .filter((name) => name !== undefined)
-      .flatMap((name) => [`${name}.ts`, `${name}.tsx`]),
+    targets.flatMap((target) => {
+      const entry = /^\.\/dist\/([^/]+)\.(js|astro)$/u.exec(target);
+      if (entry === null) return [];
+      const [, name, extension] = entry;
+      return extension === "astro" ? [`${name}.astro`] : [`${name}.ts`, `${name}.tsx`];
+    }),
   );
 }
 
@@ -953,7 +955,12 @@ export function checkBoundaries(rootDirectory = defaultRoot) {
         if (framework !== undefined) {
           // Adapters run only at site build time: `node:` builtins and the
           // framework's virtual modules (such as `astro:assets`) are allowed.
+          const previewHtmlParser =
+            member.name === "@lacecms/astro" &&
+            specifier === "parse5" &&
+            sourcePath === "preview/html.ts";
           const allowed =
+            previewHtmlParser ||
             specifier.startsWith("node:") ||
             specifier.startsWith(`${framework}:`) ||
             (!isNodeBuiltin(specifier) && (target === framework || memberNames.has(target)));

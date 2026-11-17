@@ -39,7 +39,7 @@
     "openapi": ["shared"],
     "settings": ["accounts", "shared"],
     "media": ["content", "shared"],
-    "delivery": ["content", "errors", "media", "shared"],
+    "delivery": ["content", "errors", "media", "preview", "shared"],
     "preview": ["shared"]
   },
   "packages/domain": {
@@ -102,7 +102,14 @@
   },
   "packages/sdk": {
     "client": [],
-    "site": ["client"]
+    "site": ["client"],
+    "preview": ["client", "site"]
+  },
+  "packages/astro": {
+    "media": [],
+    "preview": ["media", "server"],
+    "rich-text": [],
+    "server": []
   },
   "packages/create-lace": {
     "site": [],

@@ -26,6 +26,7 @@ export * from "./builds/export-errors.js";
 
 // preview
 export * from "./preview/state.js";
+export * from "./preview/artifacts.js";
 
 // content
 export * from "./content/routes.js";

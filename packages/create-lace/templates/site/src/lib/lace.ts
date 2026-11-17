@@ -1,12 +1,12 @@
-import { createAstroSiteLoader } from "@lacecms/astro";
+import { createAstroPreviewSiteLoader } from "@lacecms/astro/preview";
 
 const onLinkDiagnostics = (diagnostics: import("@lacecms/sdk").LinkDiagnostics) => {
   if (diagnostics.total > 0) console.warn("[lace] Unavailable internal links", diagnostics);
 };
 
-// Server-only: the loader reads LACE_BUILD_TOKEN. Astro dev revalidates the
-// export on every request; a static build reads it once.
-export const getSite = createAstroSiteLoader({
+// Server-only. Ordinary builds read the published export; the preview runner
+// supplies frozen input for one saved route. Astro dev revalidates publication.
+export const getSite = createAstroPreviewSiteLoader({
   onLinkDiagnostics,
   env: { ...import.meta.env, ...process.env },
   dev: import.meta.env.DEV,
