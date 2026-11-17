@@ -13,6 +13,7 @@
     "./LaceBlocks.astro": "./dist/LaceBlocks.astro",
     "./LaceImage.astro": "./dist/LaceImage.astro",
     "./LaceSeo.astro": "./dist/LaceSeo.astro",
+    "./LaceVideo.astro": "./dist/LaceVideo.astro",
     "./RichText.astro": "./dist/RichText.astro"
   },
   "@lacecms/auth": {

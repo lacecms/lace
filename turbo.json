@@ -64,11 +64,25 @@
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/lace.config.ts"]
     },
     "@lacecms/app-docs#build": {
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/api/openapi/api-v1.json"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/api/openapi/api-v1.json",
+        "$TURBO_ROOT$/release/alpha.json"
+      ],
       "outputs": ["dist/**"]
     },
     "test:packaged": {
       "dependsOn": ["build", "^build"],
+      "outputs": [],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/tests/fixtures/**",
+        "$TURBO_ROOT$/tests/support/**",
+        "$TURBO_ROOT$/lace.config.ts"
+      ]
+    },
+    "create-lace#test:packaged": {
+      "dependsOn": ["build", "^build", "@lacecms/astro#build"],
       "outputs": [],
       "inputs": [
         "$TURBO_DEFAULT$",

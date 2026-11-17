@@ -30,7 +30,7 @@ publication. Local artifact preparation does not need publishing credentials.
 
 ### Selecting the next version
 
-Choose a prerelease that is not in `publishedVersions` and is unused in the registries, change `release/alpha.json`, every public manifest, generated dependencies and image defaults, the Dockerfile `LACE_VERSION` defaults, versioned guide commands and the block registry's package requirements together, and advance the ownership template version with upgrade instructions. `release:check` names any stale coordinate; it never rewrites files. After the owner publishes a version, append it to `publishedVersions`.
+Choose a prerelease that is not in `publishedVersions` and is unused in the registries. Update `release/alpha.json`, every public manifest, generated dependencies and image defaults, the Dockerfile `LACE_VERSION` defaults, versioned guide commands, and the block registry's package requirements together. Advance the ownership template version with upgrade instructions. Match the documentation catalog's `latest` target in `apps/docs/src/catalog.json` to the new release. Run `pnpm release:check` and `pnpm docs:check` to detect stale coordinates. After the owner publishes a version, append it to `publishedVersions`.
 
 The scoped packages are `content`, `config`, `domain`, `application`, `auth`, `db`, `contracts`, `server`, `platform-cloudflare`, `platform-node`, `cli`, `sdk`, `render`, `astro`, and `mcp`. The inventory lists their dependency-safe publication order, followed by the generator. Root, applications and test-utils remain private. The admin is shipped inside the API image; generated projects have no editable admin source.
 

@@ -1264,15 +1264,22 @@ async function starterJourney(project) {
   const gallery = post.match(
     /<section\b(?=[^>]*\bclass="gallery")(?=[^>]*\bdata-lace-block="gallery")(?=[^>]*\bdata-lace-block-key="post-gallery")[^>]*>[\s\S]*?<\/section>/,
   )?.[0];
+  const ambientFigure = gallery
+    ?.match(/<figure\b[^>]*>/gu)
+    ?.some(
+      (figure) =>
+        /\sdata-lace-video(?=[\s=>])/u.test(figure) &&
+        /\sdata-lace-video-instance(?=[\s=>])/u.test(figure) &&
+        figure.includes('data-lace-aspect-ratio="1:1"') &&
+        figure.includes('data-lace-playback="ambient"'),
+    );
   if (
     !gallery ||
     (gallery.match(/<li\b[^>]*data-lace-part="item"[^>]*>\s*<figure\b/g) ?? []).length !== 4 ||
     !gallery.includes('<img alt="Media library description" data-lace-part="media"') ||
     !gallery.includes('<img alt="A quiet desk" data-lace-part="media"') ||
     // The ambient video item ships templates and no live ambient player.
-    !gallery.includes(
-      '<figure data-lace-video data-lace-aspect-ratio="1:1" data-lace-playback="ambient">',
-    ) ||
+    !ambientFigure ||
     !gallery.includes("<template data-lace-ambient-template>") ||
     !gallery.includes("Watch on Vimeo")
   )
