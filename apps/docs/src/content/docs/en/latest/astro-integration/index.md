@@ -106,7 +106,7 @@ Use your actual site path. Review `VideoEmbedBlock.astro` and `VideoEmbed.css` t
 
 The block accepts YouTube watch, share, shorts and embed URLs and Vimeo video and player URLs, including unlisted Vimeo links with their privacy hash, for example `https://youtu.be/dQw4w9WgXcQ`. Title is required for accessibility; poster image and caption are optional. Settings choose `aspectRatio` (`16:9` default, `4:3`, `1:1`, `4:5`, `9:16`) and `playback` (`player` default, or `ambient`). A square showcase video has `settings: { aspectRatio: "1:1", playback: "ambient" }`.
 
-The renderer is site-owned and the only built-in with a small local script for activation and ambient mounting; there is no provider SDK or framework hydration. `describeVideoEmbed` from `@lacecms/render` returns the canonical player URLs (`src` and `ambientSrc`) without network access. Playback and tracking parameters from the entered URL are never forwarded; only a Vimeo privacy hash is kept. Provider privacy and domain restrictions must allow your site. Player and ambient behavior, styling hooks and the missing pause control are described in [Style your site](styling/#style-video-embeds).
+`VideoEmbedBlock.astro` and the video items in `GalleryBlock.astro` use `@lacecms/astro/LaceVideo.astro` for player markup, poster activation and ambient playback. The block sources and their stylesheets belong to your site. `describeVideoEmbed` from `@lacecms/render` returns the canonical player URLs (`src` and `ambientSrc`) without network access. Only a Vimeo privacy hash is kept from the entered URL. Provider privacy and domain restrictions must allow your site. See [Style your site](styling/#style-video-embeds) for playback behavior, styling hooks and the ambient pause limitation.
 
 To check playback manually, publish a public YouTube video and a Vimeo video allowed on your domain, with and without a poster, then open the built site, activate each with the keyboard and press the provider's Play control. Keep the renderer deployed while published content uses the block: a site without it fails its build.
 
@@ -120,6 +120,27 @@ pnpm exec lace add block image gallery hero --site site
 ```
 
 Unedited files are updated. An edited component, stylesheet or block map is reported as a conflict with a diff, and its files and lock revision stay unchanged. Add `--write-new` to write the proposed files next to yours as `.new` files and merge them by hand. Components must match the synchronized block versions before the next build; otherwise the build fails with `block_version_mismatch`.
+
+### Adopt the shared video player
+
+For a site already using `videoEmbed` version 2 or `gallery` version 6, use the
+matching CLI and site packages from `0.1.0-rc6`. Review the renderer update
+from the CMS directory, then apply it using your site path:
+
+```sh
+pnpm exec lace add block videoEmbed gallery --site site --dry-run
+pnpm exec lace add block videoEmbed gallery --site site
+```
+
+Name only the block you want to update. Rebuild with the same published
+export. This renderer update requires no model version bump or configuration
+synchronization. If you have local playback controls, review them when
+merging a `.new` proposal and test them before adopting it.
+
+Sites still using `videoEmbed` version 1 first need to raise the versions of
+the models that allow it and run configuration synchronization with the built-in
+version 2 definition. Builds reject stored blocks that do not match the site's
+block definition with `block_version_mismatch`.
 
 The gallery registry item installs `GalleryBlock.astro`, `ListLayout.css` and `GalleryVideo.css` as one hash-guarded unit. Gallery items have a `kind`: published `image` items carry `media` and image fields, `video` items carry only video fields, so `media` can be absent. A gallery component you copied and edited must narrow by `kind` and check `media` before describing an image:
 

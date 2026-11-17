@@ -14,7 +14,7 @@ RUN pnpm install --frozen-lockfile --filter @lacecms/app-builder... \
 FROM node:24.22.3-bookworm-slim
 
 ENV npm_config_manage_package_manager_versions=false
-ARG LACE_VERSION=0.1.0-rc5
+ARG LACE_VERSION=0.1.0-rc6
 ARG LACE_REVISION=unrecorded
 LABEL org.opencontainers.image.source="https://github.com/lacecms/lace" \
     org.opencontainers.image.version=$LACE_VERSION \

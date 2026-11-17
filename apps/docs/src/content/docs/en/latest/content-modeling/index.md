@@ -198,7 +198,7 @@ reduced motion and visitors without JavaScript get the player). Ambient has no
 built-in pause control and does not meet WCAG 2.2.2 for videos longer than five
 seconds. Install the matching site component before building; see
 [Style video embeds](../astro-integration/styling/#style-video-embeds) for
-behavior and a stop control.
+playback behavior and options for limiting motion.
 
 The block accepts YouTube watch, share, Shorts and embed links and Vimeo video
 and player links, including unlisted privacy hashes. Other providers and pasted

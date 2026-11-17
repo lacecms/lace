@@ -1,0 +1,110 @@
+---
+import type { ImageDescription, describeVideoEmbed } from "@lacecms/render";
+import LaceImage from "./LaceImage.astro";
+
+interface Props {
+  readonly video: ReturnType<typeof describeVideoEmbed>;
+  /** The validated provider URL used for the source link. */
+  readonly url: string;
+  readonly title: string;
+  readonly aspectRatio: "16:9" | "4:3" | "1:1" | "4:5" | "9:16";
+  readonly playback: "player" | "ambient";
+  readonly poster?: ImageDescription;
+  readonly posterSizes?: string;
+  readonly caption?: string;
+  readonly class?: string;
+  readonly id?: string;
+  readonly [attribute: `data-${string}`]: string | boolean | undefined;
+}
+
+const { video, url, title, aspectRatio, playback, poster, posterSizes, caption, ...attributes } = Astro.props;
+const ambient = playback === "ambient";
+const player = {
+  src: video.src,
+  title,
+  allow: "fullscreen; picture-in-picture; encrypted-media",
+  allowfullscreen: true,
+  referrerpolicy: "strict-origin-when-cross-origin" as const,
+  tabindex: 0,
+  "data-lace-part": "player",
+};
+---
+
+<figure {...attributes} data-lace-video-instance data-lace-aspect-ratio={aspectRatio} data-lace-playback={playback}>
+  <div data-lace-video-area>
+    {poster !== undefined && (
+      <button type="button" data-lace-part="preview" aria-label={`Load video: ${title}`}>
+        <LaceImage image={{ ...poster, alt: "" }} sizes={posterSizes} />
+        <span data-lace-part="play" aria-hidden="true">▶</span>
+      </button>
+    )}
+    {poster !== undefined || ambient ? (
+      <template data-lace-video-template>
+        <iframe {...player} loading={poster === undefined ? "lazy" : undefined}></iframe>
+      </template>
+    ) : (
+      <iframe {...player} loading="lazy"></iframe>
+    )}
+    {ambient && (
+      <template data-lace-ambient-template>
+        <iframe
+          src={video.ambientSrc}
+          title={title}
+          tabindex="-1"
+          loading="lazy"
+          allow="autoplay; encrypted-media"
+          referrerpolicy="strict-origin-when-cross-origin"
+          data-lace-part="player"
+        ></iframe>
+      </template>
+    )}
+    {ambient && poster === undefined && (
+      <noscript><iframe {...player} loading="lazy"></iframe></noscript>
+    )}
+  </div>
+  {caption !== undefined && <figcaption data-lace-part="caption">{caption}</figcaption>}
+  <a data-lace-part="source" href={url}>Watch on {video.provider === "youtube" ? "YouTube" : "Vimeo"}</a>
+</figure>
+
+<script>
+  const instance = "figure[data-lace-video-instance]";
+  const preview = 'button[data-lace-part="preview"]';
+  const area = "[data-lace-video-area]";
+  const playerTemplate = "template[data-lace-video-template]";
+
+  function initializeAmbientVideos() {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const uninitialized = `${instance}[data-lace-playback="ambient"]:not([data-lace-ambient])`;
+    for (const figure of document.querySelectorAll<HTMLElement>(uninitialized)) {
+      const videoArea = figure.querySelector(`:scope > ${area}`);
+      if (!videoArea) continue;
+      const button = videoArea.querySelector<HTMLButtonElement>(`:scope > ${preview}`);
+      if (!reducedMotion || !button) {
+        const selector = reducedMotion ? playerTemplate : "template[data-lace-ambient-template]";
+        const template = videoArea.querySelector<HTMLTemplateElement>(`:scope > ${selector}`);
+        if (!template) continue;
+        videoArea.append(template.content.cloneNode(true));
+        if (button) button.inert = true;
+      }
+      figure.dataset.laceAmbient = reducedMotion ? "fallback" : "active";
+    }
+  }
+
+  initializeAmbientVideos();
+  document.addEventListener("astro:page-load", initializeAmbientVideos);
+  // A native button emits click for pointer, Enter and Space.
+  document.addEventListener("click", (event) => {
+    if (!(event.target instanceof Element)) return;
+    const button = event.target.closest<HTMLButtonElement>(`${instance} > ${area} > ${preview}`);
+    if (!button || button.inert) return;
+    const videoArea = button.parentElement;
+    const template = videoArea?.querySelector<HTMLTemplateElement>(`:scope > ${playerTemplate}`);
+    if (!template || videoArea?.querySelector(":scope > iframe")) return;
+    const fragment = template.content.cloneNode(true) as DocumentFragment;
+    const iframe = fragment.querySelector("iframe");
+    if (!iframe) return;
+    button.replaceWith(fragment);
+    template.remove();
+    iframe.focus();
+  });
+</script>

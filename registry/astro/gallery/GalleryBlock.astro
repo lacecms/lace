@@ -2,6 +2,7 @@
 import "./ListLayout.css";
 import "./GalleryVideo.css";
 import LaceImage from "@lacecms/astro/LaceImage.astro";
+import LaceVideo from "@lacecms/astro/LaceVideo.astro";
 import type { builtInBlocks } from "@lacecms/content";
 import { describeVideoEmbed, type BlockProps } from "@lacecms/render";
 
@@ -21,18 +22,13 @@ const items = data.images.map((item) => {
   const placement = item.placement ?? "auto";
   if (item.kind === "video") {
     if (item.videoUrl === undefined || item.videoTitle === undefined) return undefined;
-    const video = describeVideoEmbed(item.videoUrl, context);
-    // The same player attributes as the videoEmbed block.
-    const frame = { src: video.src, title: item.videoTitle, allow: "fullscreen; picture-in-picture; encrypted-media", allowfullscreen: true, referrerpolicy: "strict-origin-when-cross-origin" as const, tabindex: 0, "data-lace-part": "player" };
     return {
       kind: "video" as const,
-      ambientSrc: video.ambientSrc,
+      video: describeVideoEmbed(item.videoUrl, context),
       aspectRatio: item.aspectRatio ?? "16:9",
       caption: item.caption,
-      frame,
       placement,
       playback: item.playback ?? "ambient",
-      provider: video.provider === "youtube" ? "YouTube" : "Vimeo",
       title: item.videoTitle,
       url: item.videoUrl,
     };
@@ -56,19 +52,15 @@ const items = data.images.map((item) => {
   <ul data-lace-part="items" data-lace-layout={settings.layoutMode} data-lace-wrap={String(settings.layoutWrap)} data-lace-preset={settings.layoutPreset} role="list">
     {items.map((item, index) => item === undefined ? undefined : item.kind === "video" ? (
       <li data-lace-part="item" data-lace-layout-item data-lace-kind="video" data-lace-placement={item.placement}>
-        <figure data-lace-video data-lace-aspect-ratio={item.aspectRatio} data-lace-playback={item.playback}>
-          <div data-lace-video-area>
-            {item.playback === "ambient" ? (
-              <>
-                <template data-lace-video-template><iframe {...item.frame} loading="lazy" /></template>
-                <template data-lace-ambient-template><iframe src={item.ambientSrc} title={item.title} tabindex="-1" loading="lazy" allow="autoplay; encrypted-media" referrerpolicy="strict-origin-when-cross-origin" data-lace-part="player" /></template>
-                <noscript><iframe {...item.frame} loading="lazy" /></noscript>
-              </>
-            ) : <iframe {...item.frame} loading="lazy" />}
-          </div>
-          {item.caption !== undefined && <figcaption data-lace-part="caption">{item.caption}</figcaption>}
-          <a data-lace-part="source" href={item.url}>Watch on {item.provider}</a>
-        </figure>
+        <LaceVideo
+          data-lace-video=""
+          video={item.video}
+          aspectRatio={item.aspectRatio}
+          caption={item.caption}
+          playback={item.playback}
+          title={item.title}
+          url={item.url}
+        />
       </li>
     ) : (
       <li data-lace-part="item" data-lace-layout-item data-lace-kind="image" data-lace-placement={item.placement} data-lace-size={item.size}>
@@ -86,20 +78,3 @@ const items = data.images.map((item) => {
     ))}
   </ul>
 </section>
-
-<script>
-  // Mounts each ambient video item once on page load: the muted looping player,
-  // or the ordinary player when the visitor prefers reduced motion.
-  function initializeGalleryVideos() {
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    for (const video of document.querySelectorAll<HTMLElement>('[data-lace-block="gallery"] [data-lace-video][data-lace-playback="ambient"]:not([data-lace-ambient])')) {
-      const area = video.querySelector<HTMLElement>("[data-lace-video-area]");
-      const template = area?.querySelector<HTMLTemplateElement>(reducedMotion ? "template[data-lace-video-template]" : "template[data-lace-ambient-template]");
-      if (!area || !template) continue;
-      area.append(template.content.cloneNode(true));
-      video.dataset.laceAmbient = reducedMotion ? "fallback" : "active";
-    }
-  }
-  initializeGalleryVideos();
-  document.addEventListener("astro:page-load", initializeGalleryVideos);
-</script>

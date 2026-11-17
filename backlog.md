@@ -42,11 +42,10 @@
   `bySlug`-style record lookup. Related, but separate: bulk publication for many
   small entries (see "bulk list actions" below).
 
-- **Shared video primitive (deferred from SM5D, 2026-11-01):** `videoEmbed`
-  and gallery video items each carry their own registry markup and ambient
-  mounting script. Extract a `LaceVideo` adapter component (with its
-  structural CSS and script) only when a third consumer, such as a hero video,
-  needs the same playback contract.
+- **Shared Astro video player (implemented, archived 2026-11-17):**
+  `videoEmbed` and gallery video items use `LaceVideo` for provider markup and
+  playback. Existing content uses the same block definitions. See the
+  [archived change](openspec/changes/archive/2026-11-17-shared-astro-video-player/).
 
 - **Alpha.8 release preparation (implemented, archived 2026-10-30):**
   `prepare-alpha-eight-release` prepared alpha.8/next with template 0.39.0,

@@ -61,12 +61,12 @@ function block(
   return { data, key: `${type}-1`, position: 0, schemaVersion, type, ...overrides };
 }
 
-// The gallery's hoisted module script, which the container emits in place.
-const galleryScript =
-  /<script type="module" src="[^"]*\/registry\/astro\/gallery\/GalleryBlock\.astro\?astro&type=script&index=0&lang\.ts"><\/script>/gu;
+// The adapter's hoisted module script, which the container emits in place.
+const videoScript =
+  /<script type="module" src="[^"]*\/packages\/astro\/src\/LaceVideo\.astro\?astro&type=script&index=0&lang\.ts"><\/script>/gu;
 
 async function render(entryBlocks: ReturnType<typeof block>[], options?: Record<string, unknown>) {
-  return (await renderWithScripts(entryBlocks, options)).replace(galleryScript, "");
+  return (await renderWithScripts(entryBlocks, options)).replace(videoScript, "");
 }
 
 async function renderWithScripts(
@@ -175,7 +175,7 @@ test("gallery video items render embed players and keep image dialog indexes", a
   ]);
   const cell = items[1]!;
   expect(cell).toContain(
-    '<figure data-lace-video data-lace-aspect-ratio="4:5" data-lace-playback="player">',
+    '<figure data-lace-video data-lace-video-instance data-lace-aspect-ratio="4:5" data-lace-playback="player">',
   );
   expect(cell).toContain('src="https://player.vimeo.com/video/123?h=abc"');
   expect(cell).toContain('title="<Studio &amp; team>"');
@@ -440,10 +440,16 @@ test("Gallery emits validated shared hooks for every mode and preset without inl
       expect(html).toContain('data-lace-part="item" data-lace-layout-item');
       expect(html).not.toMatch(/style=|<style|<script/);
     }
-  // Only the gallery's own ambient mounting module is emitted, never inline code.
-  const withScripts = await renderWithScripts([block("gallery", { images: [{ media: "bare" }] })]);
-  expect(withScripts.match(galleryScript)).toHaveLength(1);
-  expect(withScripts.replace(galleryScript, "")).not.toContain("<script");
+  const imagesOnly = await renderWithScripts([block("gallery", { images: [{ media: "bare" }] })]);
+  expect(imagesOnly).not.toContain("<script");
+  const withVideo = await renderWithScripts([
+    block("gallery", {
+      images: [{ kind: "video", videoTitle: "Tour", videoUrl: "https://vimeo.com/76979871" }],
+    }),
+  ]);
+  expect(withVideo.match(videoScript)).toHaveLength(1);
+  expect(withVideo.replace(videoScript, "")).not.toContain("<script");
+  expect(withVideo).toContain('data-lace-aspect-ratio="16:9" data-lace-playback="ambient"');
 });
 
 test("gallery items expose their placement and image size hooks", async () => {
@@ -583,6 +589,7 @@ test("video embeds render canonical iframes or inert optimized previews", async 
   expect(direct).toContain('title="<Studio &amp; team>"');
   expect(direct).toContain('id="film"');
   expect(direct).toContain('class="video-embed wide"');
+  expect(direct).toContain('data-lace-aspect-ratio="16:9" data-lace-playback="player"');
   expect(direct).toContain('referrerpolicy="strict-origin-when-cross-origin"');
   expect(direct).toContain('allow="fullscreen; picture-in-picture; encrypted-media"');
   expect(direct).not.toContain("autoplay;");

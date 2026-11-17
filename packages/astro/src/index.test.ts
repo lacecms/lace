@@ -218,6 +218,7 @@ test("the adapter exports only its server module and the generic components", as
     "./LaceBlocks.astro",
     "./LaceImage.astro",
     "./LaceSeo.astro",
+    "./LaceVideo.astro",
     "./RichText.astro",
   ]);
   expect(manifest.files).toEqual(["dist"]);
@@ -230,6 +231,7 @@ test("the adapter exports only its server module and the generic components", as
     "LaceBlocks.astro",
     "LaceImage.astro",
     "LaceSeo.astro",
+    "LaceVideo.astro",
     "RichText.astro",
     "RichTextNodes.astro",
   ]);

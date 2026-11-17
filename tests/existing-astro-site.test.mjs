@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { cp, mkdtemp, readdir, readFile, rm, symlink } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, symlink } from "node:fs/promises";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -42,8 +42,16 @@ test("an existing Astro site builds Lace pages, collections and blocks from the 
   roots.push(root);
   const site = join(root, "site");
   await cp(fixtureSite, site, { recursive: true });
-  // The guide installs the packages; reuse the workspace installation here.
-  await symlink(join(workspace, "apps/site/node_modules"), join(site, "node_modules"));
+  // Install the built adapter under the fixture's root like a consumer would.
+  // Astro resolves processed component scripts relative to that build root.
+  const modules = join(site, "node_modules");
+  const adapter = join(modules, "@lacecms/astro");
+  await mkdir(adapter, { recursive: true });
+  await cp(join(workspace, "packages/astro/dist"), join(adapter, "dist"), { recursive: true });
+  await cp(join(workspace, "packages/astro/package.json"), join(adapter, "package.json"));
+  for (const name of ["astro", "sharp", "@lacecms/render", "@lacecms/sdk", "@lacecms/content"]) {
+    await symlink(join(workspace, "apps/site/node_modules", name), join(modules, name));
+  }
   // The guide installs the blocks with `lace add block`; it must reproduce the fixture files.
   await Promise.all(blockFiles.map((path) => rm(join(site, path))));
   const added = await exec(
@@ -61,8 +69,10 @@ test("an existing Astro site builds Lace pages, collections and blocks from the 
   const exported = JSON.parse(
     await readFile(join(workspace, "apps/site/src/fixtures/published-export.json"), "utf8"),
   );
+  const embed = exported.entries[2].blocks.find((block) => block.key === "about-vimeo");
   exported.entries = exported.entries.slice(0, 2);
   exported.entries[1].path = "/articles/first-post";
+  exported.entries[1].blocks.push(embed);
   const token = "lace_build_existing-site-sentinel";
   const originals = new Map(
     await Promise.all(
@@ -116,7 +126,9 @@ test("an existing Astro site builds Lace pages, collections and blocks from the 
         .matchAll(/data-lace-block="([^"]+)"/gu),
     ].map((match) => match[1]);
   expect(blocks(home)).toEqual(["hero", "navigation", "cta", "link", "link"]);
-  expect(blocks(article)).toEqual(["richText", "image", "quote", "gallery"]);
+  expect(blocks(article)).toEqual(["richText", "image", "quote", "gallery", "videoEmbed"]);
+  expect(article.match(/<figure[^>]*\bdata-lace-video-instance\b/gu)).toHaveLength(2);
+  expect(article).toContain('aria-label="Load video: Vimeo film"');
   expect(home).toContain('<main data-lace-model="home" data-lace-entry="home-entry">');
   expect(home).toContain('<a href="/articles/first-post/">First published post</a>');
   // Block images are WebP variants built from the API; lightboxes keep the public URL.

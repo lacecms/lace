@@ -517,7 +517,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
       .getByRole("link", { name: "Settings", exact: true })
       .click();
     await visible(tab.getByText("CMS version", { exact: true }), "cloudflare-cms-version");
-    await visible(tab.getByText("0.1.0-rc5", { exact: true }), "cloudflare-cms-release");
+    await visible(tab.getByText("0.1.0-rc6", { exact: true }), "cloudflare-cms-release");
     console.info("Acceptance: cloudflare-browser-complete");
     // Both publications and the Settings assertions are complete. Close the
     // browser context before the API journey to stop background polling.

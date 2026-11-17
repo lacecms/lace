@@ -26,7 +26,7 @@ Site mode: **none**. This project builds no site, so this guide ends with publis
 
 - Node `>=24.12.0` and pnpm `>=12` (tested baseline: Node `24.12.0`, pnpm `12.3.4`).
 - Docker with Compose and a running daemon. A first SILO pull requires registry access or an existing local copy.
-- Lace `0.1.0-rc5` or a later compatible release of the packages in `package.json` and the API/builder images in `.env.example`.
+- Lace `0.1.0-rc6` or a later compatible release of the packages in `package.json` and the API/builder images in `.env.example`.
 
 ## Install and prepare the environment
 

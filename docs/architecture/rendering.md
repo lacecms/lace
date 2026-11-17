@@ -163,7 +163,8 @@ content validation error as cause.
 `@lacecms/astro` depends only on `@lacecms/render` and `@lacecms/sdk` among Lace
 packages, declares a peer dependency on the supported Astro range, and ships
 Astro component source next to its compiled server module in `dist/`. It
-contains no visual blocks, no client scripts and no Astro integration. Its
+contains no visual blocks or Astro integration. Its only client script is
+the shared video player's local activation and ambient playback script. Its
 components and helpers are specified in
 [astro-adapter](../../openspec/specs/astro-adapter/spec.md):
 
@@ -173,6 +174,7 @@ components and helpers are specified in
 | `LaceBlocks.astro` | Renders an entry's or global's visible blocks through the block map, with no wrapper markup |
 | `RichText.astro` | Renders the validated rich-text description; overrides typed by `RichTextOverrideProps` |
 | `LaceImage.astro` | Build-time WebP variants, blurred placeholder and script-free lightbox |
+| `LaceVideo.astro` | Provider video markup, poster activation and ambient playback with source fallbacks |
 | `LaceSeo.astro` | Head metadata from a resolved SEO value |
 | `sitemapResponse`, `robotsResponse` | Endpoint responses for user-owned routes |
 | `laceImageConfig` | Allows only the public media path of the API origin as a remote image source |
@@ -228,10 +230,11 @@ Rules every registry component and scaffold follows:
   the component's own classes in the root `class`; there is no wrapper
   element, and a block without an envelope renders unchanged markup.
 - Components keep the documented `data-lace-*` styling hooks.
-- Built-in components carry no `<style>`; presentation stays in the site
-  stylesheet. Only `videoEmbed` and `gallery` carry a small local `<script>`
-  for video activation and ambient mounting, with no player SDK or framework
-  hydration.
+- Built-in component sources carry no `<style>` or `<script>`. `videoEmbed`
+  and `gallery` render provider videos through `LaceVideo.astro`, which
+  handles activation and ambient mounting without a provider SDK or
+  framework hydration. The site owns both block sources and their structural
+  stylesheet companions.
 - Media images render through `LaceImage.astro`, including the lightbox for
   blocks whose `lightbox` setting is on.
 - Rendering stays static: no live ambient video iframe appears in static

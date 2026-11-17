@@ -12,9 +12,9 @@
       }
     },
     "gallery": {
-      "revision": 8,
+      "revision": 9,
       "files": {
-        "src/components/lace/GalleryBlock.astro": "eb5798e7396ec1ac95be091618c6cd84bd5df196e3ef99e949a72671de7ef056",
+        "src/components/lace/GalleryBlock.astro": "8059221d24c82fc622ed5b98bf178a1395ca4dff2c3f306dd2d8f438f2b7d5bd",
         "src/components/lace/GalleryVideo.css": "95c9b2d88f75e22f2e1a722a7eb84898a1bab9a8feabfa0a769185a143b0bff8",
         "src/components/lace/ListLayout.css": "e42ffa1f2428479fd8cb46a7c6bfc3acaa5ee3af242dc94655ed4a4127bad07b"
       }
@@ -56,10 +56,10 @@
       }
     },
     "videoEmbed": {
-      "revision": 2,
+      "revision": 3,
       "files": {
         "src/components/lace/VideoEmbed.css": "d0ced20f52373325ce006bae34de47cc8b8ee82261f655eba6c4bef57cad0426",
-        "src/components/lace/VideoEmbedBlock.astro": "a5060c874d3d1c9bf9d1c15e94d9f78b8a3667e18b4f90a410017d4eda30408e"
+        "src/components/lace/VideoEmbedBlock.astro": "52e7445e7f0b028e6ce849122d07b7f39277b1deef653e0090ccf63b6032ee17"
       }
     }
   }

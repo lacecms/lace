@@ -82,6 +82,7 @@ test("published versions are recorded and cannot be prepared again", async () =>
     "0.1.0-rc2",
     "0.1.0-rc3",
     "0.1.0-rc4",
+    "0.1.0-rc5",
   ]);
   for (const version of [
     "0.1.0-alpha.2",
@@ -94,6 +95,7 @@ test("published versions are recorded and cannot be prepared again", async () =>
     "0.1.0-rc2",
     "0.1.0-rc3",
     "0.1.0-rc4",
+    "0.1.0-rc5",
   ]) {
     const model = await coherentModel();
     model.definition.publishedVersions = definition.publishedVersions;

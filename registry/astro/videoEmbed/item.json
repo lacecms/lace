@@ -4,10 +4,10 @@
   "framework": "astro",
   "blockType": "videoEmbed",
   "blockVersion": 2,
-  "revision": 2,
+  "revision": 3,
   "requires": {
-    "@lacecms/astro": "0.1.0-rc5",
-    "@lacecms/render": "0.1.0-rc5"
+    "@lacecms/astro": "0.1.0-rc6",
+    "@lacecms/render": "0.1.0-rc6"
   },
   "files": [
     {

@@ -360,7 +360,7 @@ test("the fixture build emits published static routes without CMS access", async
       `<img alt="A quiet desk" data-lace-part="media" decoding="async" height="480" loading="lazy" src="${media("note-media")}" width="640"></a>` +
       '<figcaption data-lace-part="caption">The note desk</figcaption></figure></li>' +
       galleryItem(2, "A looping sketch", "sketch-media", 600, 400, undefined, "full", "natural") +
-      '<li data-lace-part="item" data-lace-layout-item data-lace-kind="video" data-lace-placement="auto"><figure data-lace-video data-lace-aspect-ratio="1:1" data-lace-playback="ambient"><div data-lace-video-area>' +
+      '<li data-lace-part="item" data-lace-layout-item data-lace-kind="video" data-lace-placement="auto"><figure data-lace-video data-lace-video-instance data-lace-aspect-ratio="1:1" data-lace-playback="ambient"><div data-lace-video-area>' +
       '<template data-lace-video-template><iframe src="https://player.vimeo.com/video/76979871?h=abc123def" title="Studio loop"',
   );
   // The ambient video item ships templates and a no-script player, never a live ambient iframe.
