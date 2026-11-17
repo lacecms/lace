@@ -109,7 +109,7 @@ Content DTOs expose a stable absolute media URL: the configured
 short-lived signed URL. The base URL is validated at startup and never
 inferred from `Host` or forwarded headers; an API composed without it serves
 no public content routes. The endpoint may stream the object or redirect to a
-short-lived R2/MinIO URL, so static HTML keeps a durable URL while storage
+short-lived R2/S3 URL, so static HTML keeps a durable URL while storage
 credentials and object keys stay private.
 
 The public media route serves an object only when a currently published

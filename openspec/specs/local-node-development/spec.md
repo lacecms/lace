@@ -32,8 +32,8 @@ The developer guide SHALL describe the local sync command, `--check` semantics, 
 ### Requirement: One documented command starts the complete local Node stack
 The system SHALL provide a documented `dev:node` command that starts the Node
 API, applies already-committed SQLite migrations before the API becomes ready,
-starts a private MinIO bucket and its idempotent bucket initializer, and starts
-the admin and Astro development servers. The command SHALL make persistent
+starts the bundled SILO service and its idempotent private bucket initializer,
+and starts the admin and Astro development servers. The command SHALL make persistent
 development database and object data explicit, preserve it across ordinary
 stops, and report a non-zero outcome when a required service cannot become
 healthy. It SHALL not use a production builder, release directory, or public
@@ -42,12 +42,13 @@ object bucket.
 #### Scenario: A contributor starts a fresh local stack
 - **WHEN** a contributor has installed the documented prerequisites, created a
   valid ignored local environment file, and invokes `dev:node`
-- **THEN** the stack applies migrations, initializes the configured private
-  bucket, and exposes healthy API, admin, and site development endpoints
+- **THEN** the stack uses the pinned SILO image by default, applies migrations,
+  initializes the configured private bucket, and exposes healthy API, admin,
+  and site development endpoints
 
 #### Scenario: A required service fails to become ready
-- **WHEN** MinIO, the migration dependency, API, admin server, or site server
-  cannot start with the supplied local configuration
+- **WHEN** the configured storage image is unavailable to Compose or a required
+  service cannot start with the supplied local configuration
 - **THEN** the start command reports the failing service and exits unsuccessfully
   without claiming that the stack is ready
 
@@ -58,7 +59,9 @@ SQLite location, MinIO root and application credentials, bucket and region,
 timeout, and authentication secret. The example SHALL contain no usable
 credential. Startup diagnostics and command output SHALL name invalid settings
 without printing supplied secret values, and the local environment file SHALL
-remain ignored by version control.
+remain ignored by version control. The example and development guide SHALL
+explain the optional `LACE_MINIO_IMAGE` Compose override and how to preserve
+ordinary development data when switching an existing storage container.
 
 #### Scenario: A required local setting is absent
 - **WHEN** a contributor starts the local stack with a missing or malformed
@@ -70,6 +73,10 @@ remain ignored by version control.
 - **WHEN** a contributor reads the tracked environment example or repository
   history
 - **THEN** it contains no local password, token, or other usable credential
+
+#### Scenario: A contributor selects a compatible storage image
+- **WHEN** the ignored local `.env` sets `LACE_MINIO_IMAGE` to a compatible image reference
+- **THEN** `dev:node` selects that image with the same storage endpoint, credentials, and persistent volume
 
 ### Requirement: Local browser development retains one public API origin and live frontend behavior
 The local stack SHALL expose the API and health endpoints through the Node
@@ -100,7 +107,8 @@ first start, first-admin completion, normal stop, deliberate data reset,
 development URLs, focused/root test commands, quality gates, and common local
 failures. A repeatable `dev:smoke` command SHALL create an isolated stack,
 wait for the documented readiness conditions, verify API, admin, site, and
-MinIO reachability, and clean up only the resources it created.
+SILO reachability using the pinned default, and clean up only the resources it
+created.
 
 #### Scenario: A contributor performs the documented first run
 - **WHEN** a contributor follows the README from an installed checkout through
@@ -112,8 +120,8 @@ MinIO reachability, and clean up only the resources it created.
 - **WHEN** `dev:smoke` runs against a valid local checkout with Docker
   available
 - **THEN** it reports success only after all four documented surfaces are
-  reachable and leaves no stack or persistent data that existed before the
-  check altered or removed
+  reachable and cleans up only the stack and persistent data it created,
+  leaving pre-existing stacks and persistent data intact
 
 #### Scenario: A contributor requests a local reset
 - **WHEN** a contributor explicitly invokes the documented destructive local

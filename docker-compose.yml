@@ -1,6 +1,6 @@
 services:
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-02-07T23-21-09Z
+    image: ${LACE_MINIO_IMAGE:-docker.io/pgsty/silo:RELEASE.2026-11-12T00-00-00Z@sha256:c20d112390b9a9ce8c11b8af95ad35bcaa62f4759663c09c936cd8d2b511f329}
     command: server /data
     environment:
       MINIO_ROOT_USER: ${LACE_MINIO_ROOT_ACCESS_KEY:?set LACE_MINIO_ROOT_ACCESS_KEY}

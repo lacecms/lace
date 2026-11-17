@@ -5,7 +5,7 @@ kind: guide
 verifiedAgainst: 0.1.0-rc5
 ---
 
-Lace manages one website per installation. Developers define models and rendering in code; editors manage values and blocks in Admin. Content is stored in SQLite (Node) or D1 (Cloudflare), binary media in MinIO or R2, and published content is kept separate from editable drafts. This guide creates a project, starts the CMS locally with Docker Compose, publishes a first page and builds the site from it.
+Lace manages one website per installation. Developers define models and rendering in code; editors manage values and blocks in Admin. Content is stored in SQLite (Node) or D1 (Cloudflare), binary media in SILO or R2, and published content is kept separate from editable drafts. This guide creates a project, starts the CMS locally with Docker Compose, publishes a first page and builds the site from it.
 
 ## Before you start
 
@@ -39,7 +39,7 @@ The generated project is your CMS installation, not the Lace engine repository. 
 pnpm env:prepare
 ```
 
-This runs `lace env prepare`, which creates `.env` from `.env.example`, generates independent random values for `LACE_AUTH_SECRET`, the MinIO credentials and `LACE_BUILDER_SECRET`, leaves `LACE_BUILD_TOKEN` empty and restricts the file to its owner. It prints no secrets and never overwrites an existing `.env`. Never commit `.env`.
+This runs `lace env prepare`, which creates `.env` from `.env.example`, generates independent random values for `LACE_AUTH_SECRET`, the object storage credentials and `LACE_BUILDER_SECRET`, leaves `LACE_BUILD_TOKEN` empty and restricts the file to its owner. It prints no secrets and never overwrites an existing `.env`. Never commit `.env`.
 
 Review `LACE_PUBLIC_BASE_URL` (default `http://127.0.0.1:3000/`): Admin, sign-in and media URLs use it. Always open Admin at exactly that origin, because `localhost` and `127.0.0.1` have different cookies.
 

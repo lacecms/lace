@@ -307,6 +307,22 @@ async function compose(stage, args, options = {}) {
   });
 }
 
+async function verifyPrivateBucket(stage) {
+  await compose(stage, [
+    "exec",
+    "-T",
+    "api",
+    "node",
+    "-e",
+    [
+      "const { LACE_MINIO_ENDPOINT: endpoint, LACE_MINIO_BUCKET: bucket } = process.env;",
+      "fetch(new URL(bucket, endpoint), { signal: AbortSignal.timeout(5000) })",
+      ".then(r => { if (r.status !== 403) throw Error('Expected a private bucket (403)'); })",
+      ".catch(e => { console.error(e.message); process.exitCode = 1; });",
+    ].join(" "),
+  ]);
+}
+
 /** Follows every build-export page and returns the strictly validated assembled export. */
 async function readExport(base, token) {
   const complete = await readCompleteBuildExport(
@@ -430,7 +446,7 @@ async function nodeJourney(context) {
     if (!context.values[key]) throw new Error(`env-prepare: ${key} was not generated`);
     secretValues.add(context.values[key]);
   }
-  await compose("image-minio", ["build", "minio"], { timeoutMs: 30 * 60_000 });
+  await compose("image-storage", ["pull", "--policy", "missing", "minio"]);
 
   const doctor = runStatus(
     "doctor-setup",
@@ -483,6 +499,7 @@ async function nodeJourney(context) {
     timeoutMs: 10 * 60_000,
   });
   await waitApiReady(base);
+  await verifyPrivateBucket("development-private-storage");
 
   const email = "acceptance@lace.test";
   const password = randomBytes(24).toString("hex");
@@ -760,6 +777,7 @@ async function productionSmoke(context, session) {
   });
   await compose("compose-production-ps", ["ps"]);
   await waitHealthy(publicBase, "compose-production");
+  await verifyPrivateBucket("production-private-storage");
   const running = JSON.parse(
     await compose("production-api-ports", ["ps", "--format", "json", "api"], {
       intentionalReveal: true,

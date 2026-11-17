@@ -93,6 +93,11 @@ export async function openProductRuntime(kind, options = {}) {
     let dispatchPending = async () => {};
     const buildTrigger = { trigger: async () => ({ status: "failed", reason: "build_failed" }) };
     if (kind === "node") {
+      const composeFile = new URL("../../docker-compose.yml", import.meta.url);
+      const storageImage = (await readFile(composeFile, "utf8")).match(
+        /^    image: \$\{LACE_MINIO_IMAGE:-([^}]+)\}$/mu,
+      )?.[1];
+      if (!storageImage) throw new Error("Cross-runtime: missing repository storage default");
       const directory = await mkdtemp(join(tmpdir(), "lace-cross-runtime-node-"));
       cleanups.push(() => rm(directory, { recursive: true, force: true }));
       const container = `lace-cross-runtime-${randomUUID()}`;
@@ -114,7 +119,7 @@ export async function openProductRuntime(kind, options = {}) {
         "MINIO_ROOT_USER=lacecross-runtimelocal",
         "-e",
         "MINIO_ROOT_PASSWORD=lacecross-runtimelocalpassword",
-        "quay.io/minio/minio:RELEASE.2025-02-07T23-21-09Z",
+        storageImage,
         "server",
         "/data",
       ]);
@@ -141,7 +146,7 @@ export async function openProductRuntime(kind, options = {}) {
           await new Promise((done) => setTimeout(done, 100));
         }
       }
-      if (!ready) throw new Error("Cross-runtime: local MinIO did not become ready");
+      if (!ready) throw new Error("Cross-runtime: local object storage did not become ready");
       const databasePath = join(directory, "lace.sqlite");
       if (options.backup) {
         await cp(join(options.backup, "lace.sqlite"), databasePath);
@@ -199,7 +204,7 @@ export async function openProductRuntime(kind, options = {}) {
           "MINIO_ROOT_USER=laceoperationsreplacement",
           "-e",
           "MINIO_ROOT_PASSWORD=laceoperationsreplacementpassword",
-          "quay.io/minio/minio:RELEASE.2025-02-07T23-21-09Z",
+          storageImage,
           "server",
           "/data",
         ]);

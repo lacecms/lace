@@ -41,8 +41,8 @@ This directory defines the scope and invariants of Lace (**Lightweight AI Cloud
 Engine**), a self-hosted headless CMS paired with a statically generated Astro
 website. One installation manages one website, with the same content model and
 domain behavior on Cloudflare (Workers, D1, R2, optionally KV) or a VPS (Docker
-Compose, Node.js, SQLite, MinIO). Authority order, highest first: this
-directory, `openspec/specs/**` (accepted behavior), the active OpenSpec change
+Compose, Node.js, SQLite, and private S3 storage bundled as SILO). Authority
+order, highest first: this directory, `openspec/specs/**` (accepted behavior), the active OpenSpec change
 (proposed delta), then the [active roadmap](../extensibility-roadmap.md)
 (delivery order and decisions), [backlog.md](../../backlog.md) (future work)
 and `docs/archive/` (completed roadmaps). A lower level may add detail but
@@ -79,8 +79,9 @@ for agent-assisted development, not a required LLM, chat or source-edit agent.
 
 Included: one installation per website; pages, collections and route-less
 globals as model kinds; code-first models; draft and published snapshots
-only; ordered blocks; Tiptap rich-text blocks; media in R2 or MinIO; Better Auth email/password sign-in;
-admin, editor and viewer roles; a versioned, runtime-validated REST API; an
+only; ordered blocks; Tiptap rich-text blocks; media in R2 or private S3 storage;
+Better Auth email/password sign-in; admin, editor and viewer roles; a versioned,
+runtime-validated REST API; an
 Astro build-time SDK; outbox build-trigger dispatch; Node/Docker and Cloudflare
 adapters; CLI initialization and an upgrade-safe project layout. Optional and
 never required: OAuth-delegated MCP assistance that inspects models and entries
@@ -131,7 +132,8 @@ React or every Web API; abstractions mark only real environment differences.
 
 ### 4.6 Media never lives in SQL
 
-D1 and SQLite hold media metadata and object keys; binaries live in R2 or MinIO.
+D1 and SQLite hold media metadata and object keys. Binaries live in R2 or the
+private Node S3 store.
 
 ### 4.7 Published content is immutable
 

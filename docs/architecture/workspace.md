@@ -29,7 +29,7 @@ packages/
 ├── render/                    # framework-neutral block parsing, block map, rich-text description
 ├── astro/                     # Astro adapter: LaceBlocks, RichText, loader environment glue
 ├── platform-cloudflare/       # D1, R2, KV, Worker and deploy-hook adapters
-├── platform-node/             # SQLite lifecycle, MinIO/S3, Node server wiring
+├── platform-node/             # SQLite lifecycle, private S3, Node server wiring
 ├── cli/                       # create, sync, migrate, upgrade, add block, import commands
 ├── create-lace/               # `create-lace` project generator and starter templates
 └── test-utils/                # factories, fixtures, and contract test suites
@@ -157,7 +157,7 @@ only after test and migration review. Engine minimums are separate from pins
 | Admin | React and React DOM; TanStack Router and Query; React Hook Form; Tiptap; dnd-kit; Tailwind CSS; individual `@radix-ui/react-*` primitives consumed through shadcn/ui-generated Lace-owned components in `shared/ui`; `clsx`, `tailwind-merge` and `class-variance-authority`; `lucide-react`; `sonner`; `@tanstack/react-table`; `react-dropzone`; `react-day-picker`; `@fontsource-variable/inter`; `@axe-core/playwright` (test only); shared contract and content packages. |
 | API and validation | Hono and its Node server adapter; Valibot; `@hono/standard-validator`; `hono-openapi`; `@valibot/to-json-schema` for OpenAPI-compatible JSON Schema ([ADR 0022](../adr/0022-hono-rest-valibot-schemas.md)). |
 | Data and authentication | Drizzle ORM and Drizzle Kit; `drizzle-orm/valibot` for database-boundary schemas where useful; `better-sqlite3` as the Node SQLite driver, compatible with Better Auth and the Node LTS; Better Auth with its Drizzle integration; catalog-pinned `@better-auth/oauth-provider` for optional MCP OAuth, with the official MCP TypeScript SDK v2 Web-standard handling and Valibot-derived schemas. |
-| Infrastructure | Wrangler and Workers types; the AWS S3 client for MinIO on Node; `nodemailer` for SMTP in `@lacecms/platform-node` only (Resend and the Cloudflare Email Service are called without an SDK); no AWS SDK in the R2 adapter. |
+| Infrastructure | Wrangler and Workers types; the AWS S3 client for private object storage on Node; `nodemailer` for SMTP in `@lacecms/platform-node` only (Resend and the Cloudflare Email Service are called without an SDK); no AWS SDK in the R2 adapter. |
 
 As in [§17](admin.md#component-source-and-design-tokens), shadcn/ui output is
 Lace-owned source, with no themed runtime library or animation plugin such as

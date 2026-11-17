@@ -42,7 +42,12 @@ export async function composeDatabaseSafety() {
       throw new Error(`Security Compose command failed: ${command} ${args.slice(0, 2).join(" ")}`);
     }
   };
-  const compose = (...args) => run("docker", ["compose", "--project-name", project, ...args]);
+  const storageOverride = process.env.LACE_VERIFY_MINIO_IMAGE;
+  const storageTag = `${project}-minio:fixture`;
+  const composeEnv = { ...process.env };
+  delete composeEnv.LACE_MINIO_IMAGE;
+  const compose = (...args) =>
+    run("docker", ["compose", "--project-name", project, ...args], { env: composeEnv });
   const host = async (args, status = 0) => {
     let result;
     try {
@@ -100,14 +105,15 @@ export async function composeDatabaseSafety() {
         `LACE_HTTP_PORT=${port}`,
         `LACE_MINIO_ROOT_ACCESS_KEY=${randomBytes(12).toString("hex")}`,
         `LACE_MINIO_ROOT_SECRET=${randomBytes(32).toString("hex")}`,
+        ...(storageOverride ? [`LACE_MINIO_IMAGE=${storageTag}`] : []),
         `LACE_BUILDER_SECRET=${randomBytes(32).toString("hex")}`,
         "",
       ].join("\n"),
     );
-    if (process.env.LACE_VERIFY_MINIO_IMAGE) {
-      await run("docker", ["tag", process.env.LACE_VERIFY_MINIO_IMAGE, `${project}-minio`]);
+    if (storageOverride) {
+      await run("docker", ["tag", storageOverride, storageTag]);
       taggedMinio = true;
-    } else await compose("build", "minio");
+    }
     await host(["db", "migrate"]);
     await host(["content", "sync"]);
     await compose("up", "-d", "--wait", "web", "dispatcher");
@@ -191,9 +197,15 @@ export async function composeDatabaseSafety() {
     cleaning = true;
     process.removeListener("SIGINT", stop);
     process.removeListener("SIGTERM", stop);
-    await compose("down", "--volumes", "--remove-orphans");
-    if (taggedMinio) await run("docker", ["image", "rm", `${project}-minio`]);
-    await rm(parent, { recursive: true, force: true });
+    try {
+      await compose("down", "--volumes", "--remove-orphans");
+    } finally {
+      try {
+        if (taggedMinio) await run("docker", ["image", "rm", storageTag]);
+      } finally {
+        await rm(parent, { recursive: true, force: true });
+      }
+    }
   }
 }
 

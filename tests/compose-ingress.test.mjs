@@ -17,14 +17,26 @@ const env = {
   LACE_BUILD_TOKEN: "test-token",
   LACE_API_IMAGE: "test-api",
   LACE_BUILDER_IMAGE: "test-builder",
+  LACE_ADMIN_DEV_ORIGIN: "http://admin:5173",
+  LACE_SITE_DEV_ORIGIN: "http://site:4321",
+  LACE_DATABASE_PATH: "/workspace/dev-data/lace.sqlite",
+  LACE_MINIO_BUCKET: "lace-media",
+  LACE_MINIO_ENDPOINT: "http://minio:9000",
+  LACE_MINIO_REGION: "us-east-1",
+  LACE_MINIO_TIMEOUT_MS: "5000",
 };
-function config(project, extra = {}, dev = false) {
-  const files = ["-f", join(project, "docker-compose.yml")];
+function config(
+  project,
+  extra = {},
+  dev = false,
+  { envFile = "/dev/null", sourceDev = false } = {},
+) {
+  const files = ["-f", join(project, sourceDev ? "docker-compose.dev.yml" : "docker-compose.yml")];
   if (dev) files.push("-f", join(project, "docker-compose.dev.yml"));
   return JSON.parse(
     execFileSync(
       "docker",
-      ["compose", "--env-file", "/dev/null", ...files, "config", "--format", "json"],
+      ["compose", "--env-file", envFile, ...files, "config", "--format", "json"],
       {
         cwd: project,
         env: { ...env, ...extra },
@@ -99,5 +111,42 @@ test("all generated modes resolve production and explicit development bindings",
     verify(config(project, { LACE_HTTP_BIND_ADDRESS: "" }), "127.0.0.1", 8080);
     verify(config(project, { LACE_API_PORT: "3333" }, true), "127.0.0.1", 8080, true);
     expect(Boolean(prod.services.builder)).toBe(mode !== "none");
+  }
+});
+test("repository and generated Compose use the same private, prebuilt storage", async () => {
+  const defaultImage = config(workspace).services.minio.image;
+  expect(defaultImage).toMatch(/^docker\.io\/pgsty\/silo:RELEASE\.[^@]+@sha256:[a-f0-9]{64}$/u);
+  const envFile = join(root, "storage.env");
+  for (const override of [undefined, "", "registry.example.test/storage:compatible"]) {
+    await writeFile(envFile, override === undefined ? "" : `LACE_MINIO_IMAGE=${override}\n`);
+    for (const [project, sourceDev, dev] of [
+      [workspace, true, false],
+      [workspace, false, false],
+      ...projects.flatMap(({ project }) => [
+        [project, false, false],
+        [project, false, true],
+      ]),
+    ]) {
+      const model = config(project, {}, dev, { envFile, sourceDev });
+      const { minio, "minio-init": init, api } = model.services;
+      expect(minio.image).toBe(override || defaultImage);
+      expect(minio.build).toBeUndefined();
+      expect(minio.ports).toBeUndefined();
+      expect(minio.command.slice(0, 2)).toEqual(["server", "/data"]);
+      expect(minio.healthcheck.test[1]).toContain("/minio/health/live");
+      expect(minio.volumes).toMatchObject([
+        { type: "volume", source: "minio-data", target: "/data" },
+      ]);
+      expect(model.volumes["minio-data"].name).toBe(
+        sourceDev ? "lace-dev-minio-data" : `${model.name}_minio-data`,
+      );
+      const network = sourceDev ? "default" : "backend";
+      expect(Object.keys(minio.networks)).toEqual([network]);
+      expect(Object.keys(init.networks)).toEqual([network]);
+      if (!sourceDev) expect(model.networks[network].internal).toBe(true);
+      expect(init.environment.LACE_MINIO_ENDPOINT).toBe("http://minio:9000");
+      expect(init.depends_on.minio.condition).toBe("service_healthy");
+      expect(api.depends_on["minio-init"].condition).toBe("service_completed_successfully");
+    }
   }
 });

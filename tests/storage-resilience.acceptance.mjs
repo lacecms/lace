@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { openProductRuntime, png } from "./support/cross-runtime-fixture.mjs";
 import { MediaDeletionDispatcher } from "../packages/application/dist/index.js";
+import { MEDIA_DELETE_REQUESTED } from "../packages/contracts/dist/outbox.js";
 
 for (const kind of ["node", "worker"]) {
   test(`Security ${kind}: real object storage faults preserve lifecycle and recover after eight attempts`, async () => {
@@ -38,11 +39,19 @@ for (const kind of ["node", "worker"]) {
       const admin = (await f.runtime.security.listUsers({ limit: 50 })).items.find(
         (user) => user.role === "admin",
       );
-      await f.runtime.repository.markForDeletion({
+      const deletion = (requestedAt) => ({
+        events: [
+          {
+            type: MEDIA_DELETE_REQUESTED,
+            requestedAt,
+            payload: { mediaId: media.id, requestedBy: admin.id },
+          },
+        ],
         mediaId: media.id,
-        requestedAt: now,
+        requestedAt,
         requestedBy: { id: admin.id, role: "admin" },
       });
+      await f.runtime.repository.markForDeletion(deletion(now));
       const failures = vi
         .spyOn(storage, "delete")
         .mockRejectedValue(new Error("private object deletion detail"));
@@ -60,7 +69,7 @@ for (const kind of ["node", "worker"]) {
         expect(state.status).toBe(attempt === 8 ? "delete_failed" : "deleting");
         if (attempt < 8) {
           const [lease] = await f.runtime.repository.claim({
-            eventTypes: ["media.delete.requested"],
+            eventTypes: [MEDIA_DELETE_REQUESTED],
             limit: 1,
             now,
           });
@@ -73,11 +82,7 @@ for (const kind of ["node", "worker"]) {
       expect(JSON.stringify(logs)).not.toContain("private");
       expect(await storage.get(record.storageKey)).not.toBeNull();
       failures.mockRestore();
-      await f.runtime.repository.retryDeletion({
-        mediaId: media.id,
-        requestedAt: ++now,
-        requestedBy: { id: admin.id, role: "admin" },
-      });
+      await f.runtime.repository.retryDeletion(deletion(++now));
       await dispatcher.runOnce();
       expect(await f.runtime.repository.loadMedia(media.id)).toBeNull();
       expect(await storage.get(record.storageKey)).toBeNull();

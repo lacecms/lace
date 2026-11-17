@@ -9,7 +9,7 @@ Lace has two supported infrastructure paths with the same CMS behavior. Both kee
 
 | Path                      | CMS and persistence               | Site builds                                                        |
 | ------------------------- | --------------------------------- | ------------------------------------------------------------------ |
-| [Docker/VPS](node/)       | Node API and Admin, SQLite, MinIO | Private builder and static web proxy, or your own pipeline         |
+| [Docker/VPS](node/)       | Node API and Admin, SQLite, SILO  | Private builder and static web proxy, or your own pipeline         |
 | [Cloudflare](cloudflare/) | Worker, D1, R2, optional KV cache | Separate Pages or static deployment; optional deploy hook tracking |
 
 Keep Admin and the authenticated API on one origin. In production use HTTPS, persistent storage, a tested coordinated backup of database and media, and a public URL that matches your reverse proxy. A working local simulation does not establish a working deployment on your real server or account.

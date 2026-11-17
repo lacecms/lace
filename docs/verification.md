@@ -11,7 +11,7 @@ Use the pinned verification toolchain, Node 24.12.0 and pnpm 12.3.4, with depend
 `pnpm install --frozen-lockfile`. Run commands from the engine checkout.
 The [script catalog](../DEVELOPMENT.md#script-catalog) lists all root commands.
 Verification runners build their required packages. Docker/Compose, a local
-MinIO image and Playwright Chromium are required for runtime/browser drills;
+SILO image and Playwright Chromium are required for runtime/browser drills;
 ordinary pure unit checks and the public docs checks need no running CMS.
 
 | Command | Proves / prerequisites | Evidence |
@@ -47,13 +47,14 @@ Security fixture environment:
 ```sh
 LACE_VERIFY_API_IMAGE=<local-api-image-id> \
 LACE_VERIFY_BUILDER_IMAGE=<local-builder-image-id> \
-LACE_VERIFY_MINIO_IMAGE=<optional-local-minio-image-id> \
+LACE_VERIFY_MINIO_IMAGE=<optional-local-storage-image-id-or-reference> \
 pnpm verify:security
 ```
 
-`LACE_VERIFY_MINIO_IMAGE` optionally selects a cached MinIO image; otherwise
-fixtures build the generated service. `LACE_VERIFY_EVIDENCE` is set by the
-operations runner to its output directory; `LACE_VERIFY_PACKED_ROOT` is set by
+`LACE_VERIFY_MINIO_IMAGE` optionally selects a compatible local storage image ID
+or reference. Otherwise the fixture uses the bundled SILO image.
+`LACE_VERIFY_EVIDENCE` is set by the operations runner to its output directory;
+`LACE_VERIFY_PACKED_ROOT` is set by
 exact-consumer acceptance so restore/rotation uses installed tarball exports.
 Neither turns source verification into candidate acceptance. Normal development
 `.env` files and remote secrets are not verification inputs. Operations rejects
@@ -77,12 +78,36 @@ lockfile or newly disclosed advisory.
 Operations restore compares roles, draft/public snapshots, ordered blocks, routes,
 references and all referenced object checksums, then signs in, downloads media
 and builds Astro twice. Missing/corrupt objects fail. SQLite uses its WAL-safe
-backup API plus paginated MinIO copies; local Worker backup stops Miniflare and
+backup API plus paginated S3 copies; local Worker backup stops Miniflare and
 captures its complete version-labelled D1/R2 persistence. Auth and build tokens
-rotate on both paths; Node also rotates real MinIO credentials. Builder shared
+rotate on both paths; Node also rotates real SILO credentials. Builder shared
 secrets and hook/Pages replacements use controlled local adapters. The reference
 Astro restore drill is distinct from the generated starter/independent-site build
 journeys. Filesystem upgrade rollback does not roll back SQL or object data.
+
+### Storage image switch
+
+For the physical MinIO volume drill, build the generator and provide locally
+built API and builder images. The prior storage image must be MinIO
+`RELEASE.2025-02-07T23-21-09Z` from commit
+`703f51164d3d0c44af41b0d86075a1f61e4779e7`. Use a known cached image or
+build the unchanged `deploy/minio.Dockerfile` from
+[the retained template fixture](../tests/fixtures/template-0.49.0/default.json)
+in a separate build directory.
+
+```sh
+LACE_VERIFY_API_IMAGE=<local-api-image> \
+LACE_VERIFY_BUILDER_IMAGE=<local-builder-image> \
+LACE_VERIFY_LEGACY_MINIO_IMAGE=<exact-local-minio-image> \
+node tests/storage-switch.integration.mjs
+```
+
+The drill uses the generated Compose definition in a temporary project. It
+reports media IDs, object keys and SHA-256 hashes and checks readback after
+replacement, restart, an unavailable image and recovery from a stopped volume
+copy. It removes its own test containers, volumes and temporary database.
+This verifies local migration only; see the [operator procedure](../deploy/README.md#switch-the-object-storage-image)
+before switching an existing installation.
 
 ## Limits
 
@@ -128,7 +153,7 @@ original scope and does not establish later candidates' readiness.
 | Draft and published snapshots | `scripts/cross-runtime-api.mjs`; `scripts/publication-visibility-acceptance.mjs` | Architecture §4.4; generated publication guidance | Covered / owner scenario 4 |
 | Ordered block content | `scripts/block-order-acceptance.mjs`; cross-runtime API/Astro ordered-block comparison | Architecture §9.5; [Astro integration](../apps/docs/src/content/docs/en/latest/astro-integration/index.md) | Covered / owner scenario 4 |
 | Tiptap rich text | Admin editor tests; `packages/content/src/fields/rich-text.test.ts`; render tests | Architecture §11; [Style your site](../apps/docs/src/content/docs/en/latest/astro-integration/styling.md) | Covered / owner scenario 4 |
-| R2 or MinIO media | `tests/operations.acceptance.mjs` object API backup, hashes, negatives and download; platform storage tests | [Operations and restore](#commands) | Covered locally / owner scenario 7 |
+| R2 or S3 media | `tests/operations.acceptance.mjs` object API backup, hashes, negatives and download; platform storage tests | [Operations and restore](#commands) | Covered locally / owner scenario 7 |
 | Better Auth email/password | `packages/auth/src/index.test.ts`; both generated browser onboarding journeys; operations fresh sign-in | auth-operations.md | Covered / owner scenarios 2–5 |
 | Admin/editor/viewer roles | `scripts/cross-runtime-api.mjs` role denials; `packages/server/src/routes/content.test.ts` role-denial boundary | Architecture §14; auth-operations.md | Covered / owner scenarios 4–5 |
 | Optional OAuth MCP content assistance | `packages/mcp/src/index.test.ts`; auth security and repository contracts; `scripts/journeys/list-settings-mcp-proxy.mjs` | [Connect an AI assistant](../apps/docs/src/content/docs/en/latest/operations/mcp.md); ADR 0015 | Local contracts; owner scenarios 4–5 cover consent, scope, publication and revocation |
@@ -234,13 +259,13 @@ credentials, resource IDs, backup files and full provider responses stay private
 | Scenario | Required check and retained evidence |
 | --- | --- |
 | 1. Baseline and independent application | Select a coherent candidate: source, package/generator/template versions, checksums, image digests, Worker revision, site revision, config hash, migration/block versions, toolchain, architecture and browser/device. Use an independent Astro site with user-owned styling/block source, pages, collections, required fields, rich text and shared media. Record URLs, publication mode and initial dataset; installations have independent storage. Reuse prior evidence only when version/configuration/scenario match, and rerun affected cases. |
-| 2. VPS deployment | Fresh generated CMS; select and verify the Astro source mount, persistent SQLite/MinIO, runtime data separation, secrets, canonical origin, HTTPS/proxy and fixed builder/static release settings. Migrate/sync/bootstrap, verify setup closure across restart, health, doctor with its stopped/running requirements, engine/migrations/config/object/build observations. Build and inspect public assets/media through HTTPS; restart API/builder/host and prove persistence and last-release continuity. |
+| 2. VPS deployment | Fresh generated CMS; select and verify the Astro source mount, persistent SQLite/S3, runtime data separation, secrets, canonical origin, HTTPS/proxy and fixed builder/static release settings. Migrate/sync/bootstrap, verify setup closure across restart, health, doctor with its stopped/running requirements, engine/migrations/config/object/build observations. Build and inspect public assets/media through HTTPS; restart API/builder/host and prove persistence and last-release continuity. |
 | 3. Cloudflare deployment | Record intended account/Worker/D1/R2 targets and remote migrate/sync/deploy/bootstrap order. Exercise Wrangler OAuth and separately loaded D1-only operator credentials without shell/.env shadowing; record a broader-token path if used. Verify health, same-origin admin, sessions, persistence/media, optional KV and redeploy recovery. Deploy Astro separately on Git-connected Pages with read-only build token, Worker hook and separate Pages-Read tracking token. Correlate exact deployment IDs, deploy-stage success and served output; test compressed strong/weak ETags. Measure real maximum-block/export workload and provider limits. |
 | 4. Shared editorial journey | Admin/editor/viewer UI and direct API permissions; create/edit/validate required fields and slug conflicts, render rich text, add/insert/duplicate/reorder/remove/restore blocks through save/reload/publish/export/served output. Two-session stale-save conflict preserves edits. Upload/reuse media, referenced deletion protection and asynchronous unreferenced deletion. Publish/draft isolation, coalesced builds, sign-out/session expiry and safe reauthentication; compare environments allowing origins/IDs. Exercise current optional MCP consent, delegated scopes, publication and revocation, and configured email delivery. |
 | 5. Security and diagnostics | Real HTTPS/cookies/origins, cross-origin denials, anonymous/role/setup/build-token permissions, trusted proxy/client-IP separation and forged-forwarding rejection. Representative invalid uploads, unsafe URLs/rich text, path/command attempts leave safe errors and protected state. Inspect browser, static output, logs and diagnostics for secret leakage; retain safe request/build IDs and sanitized reasons. |
 | 6. Failure and build recovery | In a maintenance window or disposable installation, interrupt API/builder and deny DB/storage; prove truthful health, bounded retries and lease/restart recovery with host DB concurrency guards. Fail/correct Astro while the last complete release stays served. On Cloudflare break/restore hooks, fail/correct real Pages builds, test cancellation/tracking authorization loss/deadlines, disable/restore tracking (`accepted` alone is not deployment proof). Rapid retries/late results must correlate to exact Lace/provider IDs without losing committed publication. Restore each fault before the next. |
 | 7. Backup, restore, upgrade and rotation | Quiesce writes/builds/background deletion and settle in-flight work; record time and copy matching SQL, objects and project/config/ownership metadata. Use WAL-safe SQLite and supported remote D1/R2 procedures. Restore to isolated matching-version targets with private settings and isolated hooks; compare roles/counts/draft/public values/order/references/object hashes, sign in and rebuild the independent site. Record durations/data-loss window/caveats and original resumption. Forward migration/upgrade dry-run/apply preserves user-owned hashes; edited blocks conflict while unedited blocks update. Rotate auth/build/storage/builder/hook/provider credentials, proving old denial, replacement recovery, session consequences and retained data; no automatic DB downgrade. |
-| 8. Results and owner decision | One row per scenario/environment with artifact/site revision, date, status and private evidence/next action. Use `passed`, `failed`, `pending`, or explained `not applicable`. Record owner/impact/mitigation for accepted risks without relabelling failures as passed. Require both environments, shared independent-site journey, credential separation, real Pages ETag/outcomes and usable SQLite/MinIO plus remote D1/R2 restore evidence. Identify pending/failed checks, tested version set and explicit release decision. Shipped fixes require a coherent new candidate and affected local/remote reruns. Check targets before cleanup and retain needed evidence/backups. |
+| 8. Results and owner decision | One row per scenario/environment with artifact/site revision, date, status and private evidence/next action. Use `passed`, `failed`, `pending`, or explained `not applicable`. Record owner/impact/mitigation for accepted risks without relabelling failures as passed. Require both environments, shared independent-site journey, credential separation, real Pages ETag/outcomes and usable SQLite/S3 plus remote D1/R2 restore evidence. Identify pending/failed checks, tested version set and explicit release decision. Shipped fixes require a coherent new candidate and affected local/remote reruns. Check targets before cleanup and retain needed evidence/backups. |
 
 Suggested private result row:
 

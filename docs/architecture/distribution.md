@@ -45,6 +45,10 @@ without a site).
 Production uses only `docker-compose.yml` and reaches the private API through
 Nginx. `pnpm dev:api` explicitly adds `docker-compose.dev.yml`, publishing the
 API on loopback for local development; it is not a production ingress.
+Both modes use the same prebuilt SILO default and persistent media volume.
+Template upgrades apply managed storage configuration through the existing
+hash and conflict rules. The operator switches a previously populated store
+with a coordinated backup; applying a template does not migrate media data.
 
 Managed files that reference the site are rendered from the recorded mode and
 path through the build-site selection configuration, never a second selection

@@ -69,7 +69,7 @@ Cloudflare needs an installed project-local Wrangler and an explicitly selected 
 
 `--json` prints one deterministic report with ordered checks and safe recovery guidance. Exit codes: `0` passing/expected setup, `3` invalid arguments, `4` failed compatibility/settings, `5` failed migration state, `6` failed infrastructure/probe. Mixed failures prioritize `4`, then `5`, then `6`. Each probe is limited to five seconds, total diagnosis to thirty seconds and captured data to 64 KiB. Secrets, paths and raw provider/tool errors are excluded, redirects are rejected, and diagnosis never migrates, syncs, bootstraps, starts services or creates credentials.
 
-MinIO is built once from the pinned source in `deploy/minio.Dockerfile`, requiring network access to its source and Go modules and sufficient disk space. Review `LACE_API_IMAGE` and `LACE_BUILDER_IMAGE` in `.env` and select compatible image tags.
+Compose pulls or reuses the pinned SILO image; see [Switch the object storage image](#switch-the-object-storage-image) for image selection and existing volumes. Review `LACE_API_IMAGE` and `LACE_BUILDER_IMAGE` in `.env` and select compatible image tags.
 
 Keep `LACE_BUILD_TOKEN` empty until setup finishes. Local API startup does not need it; starting the full builder requires a real read-only build token. Keep these settings aligned:
 
@@ -216,18 +216,18 @@ pnpm exec lace import ./import --url http://127.0.0.1:3000 --publish
 
 <!-- lace-site: starter existing -->
 
-Once the real build token is configured, run `pnpm prod:start`. It starts API/admin, MinIO, explicit migration, dispatcher, fixed-command builder and web proxy. The builder reads generated source read-only and publishes successful static releases atomically. Visit `http://127.0.0.1:8080/` after a successful build. Publication queues a build; Settings also offers an explicit build request. If earlier publications were already built, request a fresh build in Settings. Failed builds retain the last successful release; inspect build history and request retry after correcting the cause. Rendered images use the host API URL, not `http://api:3000/`.
+Once the real build token is configured, run `pnpm prod:start`. It starts API/admin, SILO, explicit migration, dispatcher, fixed-command builder and web proxy. The builder reads generated source read-only and publishes successful static releases atomically. Visit `http://127.0.0.1:8080/` after a successful build. Publication queues a build; Settings also offers an explicit build request. If earlier publications were already built, request a fresh build in Settings. Failed builds retain the last successful release; inspect build history and request retry after correcting the cause. Rendered images use the host API URL, not `http://api:3000/`.
 
 The web proxy serves the content-hashed files under `/_astro/` with `Cache-Control: public, max-age=2592000, immutable` (30 days) and every other site response with `Cache-Control: no-cache`; it answers `404` for `/_headers`, the Cloudflare Pages rules file that Astro copies from `public/`. The builder keeps the pnpm package store and the site's Astro cache (`node_modules/.astro`: image variants and placeholders) in the `builder-cache` volume at `/cache`. It clears that volume before a build when it holds more than 2 GiB, drops the Astro cache after a failed build, and builds uncached when the volume is unusable; the cache never enters a release. To reset it, run `docker compose rm --stop --force builder`, `docker volume rm <project>_builder-cache` and start the builder again.
 
 <!-- lace-site: end -->
 <!-- lace-site: none -->
 
-`pnpm prod:start` starts API/admin, MinIO, explicit migration, dispatcher and web proxy; there is no builder. The web proxy serves `/admin/` and `/api/` on `LACE_HTTP_PORT`, and `/` reports that no site build exists yet. Build requests fail as unavailable until a site is configured.
+`pnpm prod:start` starts API/admin, SILO, explicit migration, dispatcher and web proxy; there is no builder. The web proxy serves `/admin/` and `/api/` on `LACE_HTTP_PORT`, and `/` reports that no site build exists yet. Build requests fail as unavailable until a site is configured.
 
 <!-- lace-site: end -->
 
-`pnpm dev:stop` and `pnpm prod:stop` retain SQLite in `.lace/data/` and MinIO/static-output volumes (and, with a site, the `builder-cache` volume). Restart with the corresponding start command. Use `docker compose down --volumes` and remove `.lace/data/` only for disposable test deployments after backing up valuable content.
+`pnpm dev:stop` and `pnpm prod:stop` retain SQLite in `.lace/data/` and the `minio-data` and `static-output` volumes (and, with a site, the `builder-cache` volume). Restart with the corresponding start command. Use `docker compose down --volumes` and remove `.lace/data/` only for disposable test deployments after backing up valuable content.
 
 ## When published content becomes visible
 
@@ -288,11 +288,11 @@ Settings → Site status → **CMS version** identifies the running API platform
 | Media upload followed by its public URL and a downloaded-byte checksum            | Confirms object write/read at the configured origin. SQL rows alone do not prove that referenced bytes exist. Test using a disposable installation or unreferenced sample.                                                                                                                                                                                          |
 | Builds latest record plus actual served HTML                                      | Distinguish pending/running/accepted from proven succeeded. Hook acceptance is not deployment success. A failed build keeps the previous complete release served. Correct the cause, then Retry build.                                                                                                                                                              |
 
-### Coordinated SQLite and MinIO backup
+### Coordinated SQLite and object storage backup
 
 Schedule downtime, prevent editor writes, stop API/dispatcher and any builder, hook receiver or scheduled process, and wait for in-flight work to settle. Keep the previous static release available separately. `docker compose stop api dispatcher builder` applies to a configured site; omit `builder` in no-site mode. Never use `down -v` for backup or rotation.
 
-Create a private directory outside the application and repository, restrict permissions and record the consistency point, release inventory, tool versions, object count/checksums and capture time. Use SQLite's backup API (or the SQLite CLI `.backup` operation) against the stopped database. A raw main-file copy can omit committed WAL data. If archiving filesystem state instead, preserve the entire stopped `.lace/data` directory including SQLite journals. Copy **all MinIO objects through its S3 API** with an operator S3 client and the configured bucket; preserve object keys, bytes and metadata. Do not assume a database backup includes media. Record checksums for each referenced object and detect missing or altered bytes.
+Create a private directory outside the application and repository, restrict permissions and record the consistency point, release inventory, tool versions, object count/checksums and capture time. Use SQLite's backup API (or the SQLite CLI `.backup` operation) against the stopped database. A raw main-file copy can omit committed WAL data. If archiving filesystem state instead, preserve the entire stopped `.lace/data` directory including SQLite journals. Copy **all media objects through the storage server’s S3 API** with an operator S3 client and the configured bucket; preserve object keys, bytes and metadata. Do not assume a database backup includes media. Record checksums for each referenced object and detect missing or altered bytes.
 
 Capture `lace.config.ts`, `package.json`, `pnpm-lock.yaml`, `.lace/manifest.json`, the user-owned site source and deployment configuration at the same point. Store `.env`, auth credentials and backups separately in private storage; SQL backups contain password/token hashes and sessions. Encrypt and restrict access according to your operating policy. Resume the original services only after the coordinated capture completes; verify sign-in, readiness, media and the served release.
 
@@ -308,11 +308,54 @@ Remote backup/restore is owner-operated and remains unverified locally. Quiesce 
 
 Create a replacement read-only build token in Settings; update the private builder/site environment, prove a successful export/build, then revoke the old token and verify it is denied. For compromise revoke immediately and accept temporary build downtime. Replace `LACE_AUTH_SECRET` while writes/dispatch are stopped, recreate the API or local Worker and require fresh sign-in; existing session cookies must fail.
 
-Rotate the builder shared secret on both API/dispatcher and builder; recreate affected services together. Old requests must be denied and replacement requests accepted. For MinIO, replace access credentials using the server's supported credentials mechanism, update API/dispatcher storage credentials, recreate clients and verify an old client is denied while the new one can read existing objects and upload a sample. Preserve the bucket/volume. Changing a variable on only one side is insufficient. Record a pre-rotation backup and verify media/build recovery before resuming work.
+Rotate the builder shared secret on both API/dispatcher and builder; recreate affected services together. Old requests must be denied and replacement requests accepted. For Node storage, replace access credentials using the server's supported credentials mechanism, update API/dispatcher storage credentials, recreate clients and verify an old client is denied while the new one can read existing objects and upload a sample. Preserve the bucket/volume. Changing a variable on only one side is insufficient. Record a pre-rotation backup and verify media/build recovery before resuming work.
 
 For a deploy hook, replace the provider hook and Worker secret together, revoke the old hook at the provider and verify rejection. Rotate the Pages API token separately with least privilege; validate deployment tracking with the replacement, then revoke the old token. Local controlled-provider tests prove adapter behavior, not real provider permission or publication. Worker secret changes can deploy a version; perform them deliberately on the selected account.
 
 Before engine or filesystem upgrades, take a coordinated backup. Stop SQLite consumers, run forward migrations with the selected compatible engine, review `lace upgrade --help` and the managed-file dry run before applying. Keep your Astro/config/README and environment files user-owned; review conflicts instead of overwriting edited managed files or blocks. Filesystem rollback uses the upgrade journal; it does not undo SQL migrations or restore media. Database recovery requires a verified backup and compatible engine. No SQL down migration is provided. After restart verify CMS version, config sync, sign-in, media and a successful build; on failure keep the last successful static release and correct the cause before retrying.
+
+## Switch the object storage image
+
+Both Node Compose modes pull or reuse the same pinned classic SILO image. An
+unset or empty `LACE_MINIO_IMAGE` selects it. To use a mirror or another
+compatible image, set a full reference (prefer a digest) in your ignored
+`.env`. It must accept `server /data` and the existing root credentials and
+provide a shell, curl and the MinIO HTTP liveness endpoint. Check that the
+image supports the on-disk format before opening a populated volume.
+
+1. On an existing MinIO installation, record the running image reference and
+   image ID and keep a local copy of that image. Record the actual named volume
+   mounted at `/data` on the `minio` container (`docker compose ps -a minio`,
+   then inspect that container with Docker). Save representative media IDs
+   or storage keys and SHA-256 checksums of bytes downloaded through Lace.
+   Keep the same Compose project name and overrides, bucket and credentials
+   throughout the switch.
+2. Review the managed `lace upgrade` plan for the Compose replacement and
+   removal of the old `deploy/minio.Dockerfile`. Resolve conflicts before
+   applying; your `.env` stays yours. Use `docker pull <selected-image>` with
+   the full reference from the new Compose definition or your override before
+   taking storage offline.
+3. Put ingress in maintenance mode or restrict it to the operator. Pause all
+   writers, builders and outbox work; let in-flight work settle. Stop the stack
+   with the usual `pnpm dev:stop` or `pnpm prod:stop`. Take a consistent private
+   backup of SQLite (including any journals if copying files), configuration
+   and the **entire stopped media volume**, including server metadata. Use volume
+   snapshot or backup tooling that preserves ownership and permissions. Keep
+   this copy before the new server opens the volume.
+4. Apply the reviewed managed upgrade. In production run `docker compose up -d --wait web` to start storage, bucket
+   initialization and the API without starting the dispatcher. For development
+   run `pnpm dev:api`. Download the previously recorded media from Lace using
+   their existing IDs and compare their hashes. Upload a disposable image and
+   verify its downloaded bytes. Restart storage with `docker compose restart minio`
+   and repeat both readbacks once it is healthy. Resume the normal start command
+   and reopen traffic only after verification.
+5. On failure keep ingress closed and stop the stack. Restore the saved volume
+   and matching SQLite/configuration state, then select the retained previous
+   image in `.env` and start with the same project and settings. Check the
+   original media again before resuming traffic. The replacement can change
+   storage metadata, so a template rollback or a restart of the old server
+   against the modified volume is insufficient. An unavailable image is a
+   startup failure; keep the volume and correct the reference or registry access.
 
 ## Email delivery
 

@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { expect, test, vi } from "vitest";
 import { loadBrowser } from "../scripts/acceptance-browser.mjs";
+import { SITE_BUILD_REQUESTED } from "../packages/contracts/dist/outbox.js";
 import { openProductRuntime, password } from "./support/cross-runtime-fixture.mjs";
 const require = createRequire(new URL("../apps/admin/package.json", import.meta.url));
 const { expect: browserExpect } = require("@playwright/test");
@@ -60,7 +61,22 @@ for (const kind of ["node", "worker"]) {
       ).toBe(true);
       let now = Date.now() + 10000;
       for (const status of ["accepted", "cancelled", "unknown"]) {
-        await repo.requestBuild({ requestedAt: now, requestedBy: actor });
+        await repo.requestBuild({
+          events: [
+            {
+              type: SITE_BUILD_REQUESTED,
+              requestedAt: now,
+              payload: {
+                reason: "manual",
+                requestedAt: now,
+                requestedBy: actor.id,
+                publishedSnapshotId: null,
+              },
+            },
+          ],
+          requestedAt: now,
+          requestedBy: actor,
+        });
         now += 5000;
         const [lease] = await repo.claimSiteBuilds({ limit: 1, now });
         expect(lease).toBeDefined();

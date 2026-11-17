@@ -6,7 +6,9 @@ import { createServer } from "node:net";
 const project = `lace21c-it-${process.pid}`;
 const secret = () => randomBytes(36).toString("base64url");
 const environment = {
-  ...process.env,
+  ...Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !/^(?:LACE|COMPOSE)_/u.test(name)),
+  ),
   LACE_AUTH_SECRET: secret(),
   LACE_BUILDER_SECRET: secret(),
   LACE_BUILD_TOKEN: "bootstrap-placeholder",
@@ -15,7 +17,7 @@ const environment = {
 };
 
 function compose(...args) {
-  return execFileSync("docker", ["compose", "-p", project, ...args], {
+  return execFileSync("docker", ["compose", "--env-file", "/dev/null", "-p", project, ...args], {
     cwd: new URL("..", import.meta.url),
     encoding: "utf8",
     env: environment,

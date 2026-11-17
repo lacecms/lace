@@ -70,14 +70,17 @@ test("generates deterministic owned source and hashed managed files", async () =
     await readFile(join(left.path, ".lace/upgrade-instructions.json"), "utf8"),
   );
   expect(instructions).toMatchObject({ schemaVersion: 1, templateVersion: TEMPLATE_VERSION });
-  // Instructions cover the latest published template and the production ingress migration.
-  expect(instructions.configuration).toHaveLength(1);
+  // Instructions cover the latest published template's ingress and storage changes.
+  expect(instructions.configuration).toHaveLength(2);
   expect(instructions.configuration[0]).toContain(`Template ${TEMPLATE_VERSION}`);
   expect(instructions.configuration[0]).toMatch(/no longer publishes the API port/u);
   expect(instructions.configuration[0]).toMatch(/Nginx defaults to 127\.0\.0\.1:8080/u);
   expect(instructions.configuration[0]).toMatch(/LACE_API_BASE_URL/u);
   expect(instructions.configuration[0]).toMatch(/docker compose config.*docker compose ps/u);
   expect(instructions.configuration[0]).not.toMatch(/rc[23] installations/u);
+  expect(instructions.configuration[1]).toMatch(
+    /SILO.*deploy\/minio\.Dockerfile.*docs\/lace-operations\.md.*back up the stopped volume/u,
+  );
   expect(instructions.database).toHaveLength(1);
   expect(instructions.database[0]).toMatch(
     /rc4 database.*baseline migration.*forward migrations.*pnpm db:migrate.*without recreation/u,

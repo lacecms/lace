@@ -9,7 +9,7 @@ context: |
   Accepted capability behavior lives in openspec/specs/**.
   Active change artifacts may refine but must not silently contradict architecture or accepted specs.
   The monorepo uses TypeScript, pnpm workspaces, Turborepo, Oxlint, and Oxfmt.
-  It targets Node/SQLite/MinIO and Cloudflare Workers/D1/R2 through narrow adapters.
+  It targets Node/SQLite/private S3 (bundled SILO) and Cloudflare Workers/D1/R2 through narrow adapters.
   One roadmap session unit normally maps to one just-in-time OpenSpec change.
 
 rules:
