@@ -1,4 +1,5 @@
 import emojiRegex from "emoji-regex";
+import { MODEL_KEY_PATTERN } from "./identifiers.js";
 
 export const MODEL_ICON_NAMES = Object.freeze([
   "book-open",
@@ -23,7 +24,7 @@ export function isModelIconName(value: string): value is (typeof MODEL_ICON_NAME
 }
 
 export function isModelIconIdentifier(value: string): boolean {
-  return value.length <= MAX_MODEL_ICON_LENGTH && /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(value);
+  return value.length <= MAX_MODEL_ICON_LENGTH && MODEL_KEY_PATTERN.test(value);
 }
 
 export function isModelIconEmoji(value: string): boolean {
