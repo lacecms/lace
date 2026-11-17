@@ -61,7 +61,7 @@ async function astroSite(root, name = "site") {
   return site;
 }
 
-async function installPackages(site, version = "0.1.0-rc5") {
+async function installPackages(site, version) {
   for (const name of ["astro", "render", "content", "sdk"]) {
     const directory = join(site, "node_modules/@lacecms", name);
     await mkdir(directory, { recursive: true });
@@ -129,7 +129,7 @@ describe("installation into an independent Astro site", () => {
   test("a fresh add reproduces the committed starter block files", async () => {
     const root = await tempRoot();
     const site = await astroSite(root);
-    await installPackages(site);
+    await installPackages(site, "0.1.0-rc6");
     const result = await run(root, builtIns);
     expect(result).toMatchObject({ ok: true, code: "BLOCKS_INSTALLED", exitCode: 0 });
     expect(result.data.items.map((item) => item.status)).toEqual(
@@ -193,7 +193,7 @@ describe("installation into an independent Astro site", () => {
     expect(Object.keys(lock.items)).toEqual(
       builtIns.filter((name) => name !== "videoEmbed" && name !== "link"),
     );
-    expect(lock.items.gallery.revision).toBe(8);
+    expect(lock.items.gallery.revision).toBe(9);
     expect(lock.items.navigation.revision).toBe(2);
     const map = await readFile(join(site, "src/lace/blocks.ts"), "utf8");
     expect(map).toBe(
@@ -255,11 +255,11 @@ describe("installation into an independent Astro site", () => {
     const result = await run(root, ["quote", "--site", "web"]);
     expect(result.ok).toBe(true);
     expect(result.data.packages.missing).toEqual([
-      { name: "@lacecms/astro", range: "0.1.0-rc5", installed: "0.0.1" },
-      { name: "@lacecms/render", range: "0.1.0-rc5", installed: "0.0.1" },
+      { name: "@lacecms/astro", range: "0.1.0-rc6", installed: "0.0.1" },
+      { name: "@lacecms/render", range: "0.1.0-rc6", installed: "0.0.1" },
     ]);
     expect(result.data.packages.command).toBe(
-      "pnpm --dir web add @lacecms/astro@0.1.0-rc5 @lacecms/render@0.1.0-rc5",
+      "pnpm --dir web add @lacecms/astro@0.1.0-rc6 @lacecms/render@0.1.0-rc6",
     );
     expect((await readFile(join(site, "package.json"))).equals(packageJson)).toBe(true);
     await stat(join(site, "src/components/lace/QuoteBlock.astro"));
@@ -745,7 +745,7 @@ test("Gallery v3 upgrades to v6 with its stylesheets and protects edited v3 sour
   await writeFile(component, "<section>Version 3</section>\n");
   await run(root, ["gallery"]);
   const lock = JSON.parse(await readFile(join(site, "lace.site.json"), "utf8"));
-  expect(lock.items.gallery.revision).toBe(8);
+  expect(lock.items.gallery.revision).toBe(9);
   expect(Object.keys(lock.items.gallery.files)).toHaveLength(3);
   expect(await readFile(component, "utf8")).toContain('import "./GalleryVideo.css"');
   expect(await readFile(css, "utf8")).toContain("@layer lace-layout");
@@ -774,7 +774,7 @@ test("a clean revision 6 Gallery update adds the video stylesheet", async () => 
   expect(result).toMatchObject({ ok: true, exitCode: 0 });
   expect(result.data.items[0].status).toBe("updated");
   const lock = JSON.parse(await readFile(join(site, "lace.site.json"), "utf8"));
-  expect(lock.items.gallery.revision).toBe(8);
+  expect(lock.items.gallery.revision).toBe(9);
   expect(Object.keys(lock.items.gallery.files).sort()).toEqual([
     "src/components/lace/GalleryBlock.astro",
     "src/components/lace/GalleryVideo.css",
@@ -783,34 +783,68 @@ test("a clean revision 6 Gallery update adds the video stylesheet", async () => 
   expect(await readFile(videoCss, "utf8")).toContain("data-lace-video-area");
 });
 
-test("videoEmbed installs and protects both component and CSS during updates", async () => {
-  for (const edited of ["VideoEmbedBlock.astro", "VideoEmbed.css"]) {
+test.each([
+  ["gallery", "GalleryBlock.astro", 9],
+  ["videoEmbed", "VideoEmbedBlock.astro", 3],
+])(
+  "%s installs independently and warns about the older Astro adapter",
+  async (type, file, revision) => {
     const root = await tempRoot();
     const site = await astroSite(root);
-    await run(root, ["videoEmbed"]);
-    const component = join(site, "src/components/lace/VideoEmbedBlock.astro");
-    const css = join(site, "src/components/lace/VideoEmbed.css");
-    const map = await readFile(join(site, "src/lace/blocks.ts"));
-    const lock = await readFile(join(site, "lace.site.json"));
-    await writeFile(join(site, "src/components/lace", edited), "/* user customization */");
-    const before = [await readFile(component), await readFile(css)];
-    const next = await newerRegistry(root, async (directory) => {
-      const manifestPath = join(directory, "astro/videoEmbed/item.json");
-      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      manifest.revision = 3;
-      await writeFile(manifestPath, JSON.stringify(manifest));
-      for (const filename of ["VideoEmbedBlock.astro", "VideoEmbed.css"]) {
-        const path = join(directory, "astro/videoEmbed", filename);
-        await writeFile(path, (await readFile(path, "utf8")) + "\n<!-- revision 3 -->\n");
-      }
+    await installPackages(site, "0.1.0-rc5");
+    const result = await run(root, [type]);
+    expect(result).toMatchObject({ ok: true, code: "BLOCKS_INSTALLED" });
+    expect(result.data.items).toEqual([expect.objectContaining({ name: type, revision })]);
+    expect(result.data.packages.missing).toContainEqual({
+      name: "@lacecms/astro",
+      range: "0.1.0-rc6",
+      installed: "0.1.0-rc5",
     });
-    const result = await run(root, ["videoEmbed", "--write-new"], next);
-    expect(result.data.items[0].status).toBe("conflict");
-    expect(await readFile(component)).toEqual(before[0]);
-    expect(await readFile(css)).toEqual(before[1]);
-    expect(await readFile(join(site, "src/lace/blocks.ts"))).toEqual(map);
-    expect(await readFile(join(site, "lace.site.json"))).toEqual(lock);
-    expect(await readFile(`${component}.new`, "utf8")).toContain("describeVideoEmbed");
-    expect(await readFile(`${css}.new`, "utf8")).toContain("aspect-ratio");
-  }
-});
+    expect(result.data.packages.command).toContain("pnpm --dir site add @lacecms/astro@0.1.0-rc6");
+    expect(await readFile(join(site, "src/components/lace", file), "utf8")).toContain(
+      "@lacecms/astro/LaceVideo.astro",
+    );
+    const lock = JSON.parse(await readFile(join(site, "lace.site.json"), "utf8"));
+    expect(Object.keys(lock.items)).toEqual([type]);
+  },
+);
+
+test.each([
+  ["gallery", "GalleryBlock.astro", "GalleryVideo.css"],
+  ["videoEmbed", "VideoEmbedBlock.astro", "VideoEmbed.css"],
+])(
+  "%s protects both component and stylesheet during updates",
+  async (type, componentFile, cssFile) => {
+    for (const edited of [componentFile, cssFile]) {
+      const root = await tempRoot();
+      const site = await astroSite(root);
+      await run(root, [type]);
+      const component = join(site, "src/components/lace", componentFile);
+      const css = join(site, "src/components/lace", cssFile);
+      const map = await readFile(join(site, "src/lace/blocks.ts"));
+      const lock = await readFile(join(site, "lace.site.json"));
+      await writeFile(join(site, "src/components/lace", edited), "/* user customization */");
+      const before = [await readFile(component), await readFile(css)];
+      const next = await newerRegistry(root, async (directory) => {
+        const itemDir = join(directory, "astro", type);
+        const manifestPath = join(itemDir, "item.json");
+        const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+        manifest.revision++;
+        await writeFile(manifestPath, JSON.stringify(manifest));
+        for (const filename of [componentFile, cssFile]) {
+          const path = join(itemDir, filename);
+          const comment = filename === cssFile ? "/* next revision */" : "<!-- next revision -->";
+          await writeFile(path, (await readFile(path, "utf8")) + `\n${comment}\n`);
+        }
+      });
+      const result = await run(root, [type, "--write-new"], next);
+      expect(result.data.items[0].status).toBe("conflict");
+      expect(await readFile(component)).toEqual(before[0]);
+      expect(await readFile(css)).toEqual(before[1]);
+      expect(await readFile(join(site, "src/lace/blocks.ts"))).toEqual(map);
+      expect(await readFile(join(site, "lace.site.json"))).toEqual(lock);
+      expect(await readFile(`${component}.new`, "utf8")).toContain("LaceVideo.astro");
+      expect(await readFile(`${css}.new`, "utf8")).toContain("aspect-ratio");
+    }
+  },
+);

@@ -1,7 +1,7 @@
 # Connect an existing Astro site
 
 Use this guide when your Astro site already exists and the Lace CMS lives in a
-subdirectory generated with `pnpm create lace@0.1.0-rc5 cms`. The CMS never
+subdirectory generated with `pnpm create lace@0.1.0-rc6 cms`. The CMS never
 modifies your site; every file below is yours. For build-site selection,
 mounts and the Compose builder, see
 [Selecting the build site](lace-operations.md#selecting-the-build-site).
@@ -22,7 +22,7 @@ my-site/                 your Astro project (lockfile root)
 Astro `^7.3.1` must already be a dependency. In the site root:
 
 ```sh
-pnpm add @lacecms/astro@0.1.0-rc5 @lacecms/render@0.1.0-rc5 @lacecms/sdk@0.1.0-rc5 @lacecms/content@0.1.0-rc5 sharp@0.35.5
+pnpm add @lacecms/astro@0.1.0-rc6 @lacecms/render@0.1.0-rc6 @lacecms/sdk@0.1.0-rc6 @lacecms/content@0.1.0-rc6 sharp@0.35.5
 ```
 
 `@lacecms/sdk` loads published content, `@lacecms/render` validates blocks and
@@ -185,8 +185,8 @@ add at least one item before publishing:
   figures. Each image uses `image(item.media, item.alt)`, so its alt text falls
   back to the media item's alt text and then to `""`; the caption falls back to
   the media caption. Images carry `width`, `height`, the focal-point
-  `object-position` and `loading="lazy"`. Video items render the player in
-  their cell, sized by `GalleryVideo.css`, with the same ambient, reduced-motion
+  `object-position` and `loading="lazy"`. The video cells use `LaceVideo.astro`
+  and are sized by `GalleryVideo.css`, with the same ambient, reduced-motion
   and no-JavaScript behavior as the Video embed block. Published items include
   only the fields of their kind, so a customized copy checks `item.kind` and
   that `item.media` is present before describing an image.
@@ -843,13 +843,14 @@ available without JavaScript or if embedding fails. Provider privacy/domain
 restrictions must permit the site. URL playback/tracking parameters are not
 forwarded; only a Vimeo privacy hash is retained.
 
-The renderer is site-owned. It is the sole built-in with a small local activation and ambient mounting
-script; there is no provider SDK or framework hydration. `VideoEmbed.css` reserves
-the selected responsive aspect ratio (16:9 by default) in `@layer lace-layout`; site CSS owns decoration. Hooks:
-`data-lace-part="preview|play|player|caption|source"` on the corresponding elements.
+Both `VideoEmbedBlock.astro` and `GalleryBlock.astro` use
+`@lacecms/astro/LaceVideo.astro` for player markup and local playback logic.
+The block sources and stylesheets belong to your site. `VideoEmbed.css` and
+`GalleryVideo.css` reserve the responsive aspect ratio in `@layer lace-layout`.
+Your CSS owns decoration. The player exposes `preview`, `play`, `player`,
+`caption` and `source` as `data-lace-part` hooks.
 `describeVideoEmbed` from `@lacecms/render` supplies canonical player data without
-network access. Source URLs are content strings; only posters use media storage.
-Video-file upload support is separate deferred work.
+network access. Source URLs are content strings and posters use media storage.
 
 Settings use choice cards: `aspectRatio` is `16:9` (default), `4:3`, `1:1`,
 `4:5` or `9:16`; `playback` is `player` (default) or `ambient`. For example,
@@ -873,39 +874,30 @@ Browsers may block autoplay (for example in low-power mode); the provider can
 show a still frame instead. Verify real playback with videos allowed on your domain.
 
 **Motion accessibility:** ambient ships without a pause control and does not meet
-WCAG 2.2.2 (Pause, Stop, Hide) for videos longer than five seconds. Prefer player
-mode when this requirement applies, or add a pause/stop control to your site-owned
-component. For example, place this button in the figure and add the handler to
-its local script; it stops the ambient player and restores the player fallback
-(restarting later starts from the beginning, rather than resuming):
+WCAG 2.2.2 (Pause, Stop, Hide) for videos longer than five seconds. Choose player
+mode when the requirement applies, or supply a site-owned renderer with a
+keyboard-accessible pause or stop control. Test any existing custom control when
+reviewing the new renderer.
 
-```html
-<button type="button" data-stop-ambient>Stop motion</button>
+### Adopt the shared player in an existing site
+
+For definitions already at `videoEmbed` version 2 or `gallery` version 6, use
+the matching CLI and site packages from `0.1.0-rc6`. Review the update, apply it
+and rebuild from the same published export:
+
+```sh
+pnpm exec lace add block videoEmbed gallery --site site --dry-run
+pnpm exec lace add block videoEmbed gallery --site site
 ```
 
-```js
-document.addEventListener("click", (event) => {
-  if (!(event.target instanceof Element)) return;
-  const control = event.target.closest("[data-stop-ambient]");
-  const block = control?.closest('[data-lace-ambient="active"]');
-  if (!block) return;
-  const area = block.querySelector("[data-lace-video-area]");
-  area.querySelector(":scope > iframe")?.remove();
-  const preview = area.querySelector('[data-lace-part="preview"]');
-  if (preview) preview.inert = false;
-  else area.append(area.querySelector("[data-lace-video-template]").content.cloneNode(true));
-  block.dataset.laceAmbient = "fallback";
-  block.querySelector('[data-lace-part="source"]').focus();
-  control.remove();
-});
-```
+Substitute your site path and name just one block if you want to update it
+independently. Review `.new` files if you edited the installed sources. This
+renderer update requires no model version bump or configuration sync.
 
-To adopt v2 in an existing project, raise every model version that allows
-`videoEmbed`, run configuration sync, then run `pnpm exec lace add block videoEmbed
---site site` before building (substitute your site path). Both component and CSS
-need registry revision 2. Use `--write-new` to review locally edited copies. An
-older component or stored block version can fail with `block_version_mismatch`.
-Template 0.40.0 includes these steps. No database migration is required.
+If your stored `videoEmbed` blocks are still at version 1, raise every model
+version that allows the block and synchronize with the built-in version 2
+definition before building. The build reports `block_version_mismatch` if the
+stored version differs from the site's block definition.
 
 For an optional manual playback smoke check, publish an owner-approved public
 YouTube video and a Vimeo video allowed on your domain, with and without a poster.

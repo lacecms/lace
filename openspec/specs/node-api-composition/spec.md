@@ -11,8 +11,8 @@ HTTP application safely usable with SQLite and verifiable as an HTTP service.
 
 The system SHALL provide a Node composition root that supplies the normalized
 configuration, SQLite-backed content capabilities, system UTC clock, unique-ID
-generation, non-authoritative no-op cache, configured private MinIO
-object-storage, no-op site-build trigger, request IDs, logging, rate limiting,
+generation, non-authoritative no-op cache, configured private S3-compatible
+object storage, no-op site-build trigger, request IDs, logging, rate limiting,
 health checks, and environment metadata required by the portable HTTP
 application. It SHALL construct the portable media lifecycle use cases with the
 Node object store and expose only contract DTOs or verified binary responses
@@ -26,10 +26,10 @@ SHALL remain inside the Node boundary.
   changes remain absent from the public response until another publication
 
 #### Scenario: A configured Node service serves an uploaded published image
-- **WHEN** a Node service has passed its MinIO startup check and an authorized
+- **WHEN** a Node service has passed its private bucket startup check and an authorized
   actor uploads media that is referenced by a current published snapshot
 - **THEN** the public stable media route serves that verified object while the
-  Node composition keeps its object key and MinIO credentials private
+  Node composition keeps its object key and object-store credentials private
 
 #### Scenario: A conditional build export reaches the Node boundary
 - **WHEN** a client requests the Node build export with the ETag returned for

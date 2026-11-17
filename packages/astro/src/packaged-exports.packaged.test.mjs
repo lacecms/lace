@@ -19,6 +19,7 @@ test("packaged entry point keeps its public exports", async () => {
     "LaceBlocks.astro",
     "LaceImage.astro",
     "LaceSeo.astro",
+    "LaceVideo.astro",
     "RichText.astro",
   ]) {
     expect(await readFile(new URL(`../dist/${component}`, import.meta.url), "utf8")).not.toBe("");

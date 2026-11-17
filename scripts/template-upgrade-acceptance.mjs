@@ -10,6 +10,7 @@ export function upgradeMetadata(path) {
 }
 
 const userReadme = "# Operator site\n\nOur own deployment notes; Lace upgrades never touch them.\n";
+const legacyStorageDockerfile = "deploy/minio.Dockerfile";
 
 async function files(root, prefix = "") {
   const result = {};
@@ -128,6 +129,7 @@ export async function templateUpgradeJourney(temporary, operations) {
       path === "README.md" ||
       path === "lace.config.ts" ||
       path.startsWith("site/") ||
+      path.startsWith(".lace/data/") ||
       [
         ".env",
         ".env.local",
@@ -135,6 +137,8 @@ export async function templateUpgradeJourney(temporary, operations) {
         "worker/.dev.vars",
         "worker/wrangler.jsonc",
       ].includes(path);
+    await mkdir(join(project, ".lace/data"), { recursive: true });
+    await writeFile(join(project, ".lace/data/local-state"), Buffer.from([0, 1, 255]));
     const user = Object.fromEntries(
       Object.entries(await files(project)).filter(([path]) => isUser(path)),
     );
@@ -170,9 +174,11 @@ export async function templateUpgradeJourney(temporary, operations) {
 
     // Infrastructure and documentation candidates that the current template changes;
     // an unchanged managed file cannot conflict, and at least one must change.
-    const conflictPaths = [variant.conflict, "docs/lace-operations.md"].filter(
-      (path) => targetManifest.files[path]?.sha256 !== baseline.files[path]?.sha256,
-    );
+    const conflictPaths = [
+      variant.conflict,
+      "docs/lace-operations.md",
+      legacyStorageDockerfile,
+    ].filter((path) => targetManifest.files[path]?.sha256 !== baseline.files[path]?.sha256);
     if (conflictPaths.length === 0)
       throw new Error(`upgrade-${version}-${variant.name}: no conflict candidate changes`);
     for (const conflictPath of conflictPaths) {
@@ -245,6 +251,17 @@ export async function templateUpgradeJourney(temporary, operations) {
       ["add", "replace", "remove"].includes(decision.action),
     );
     if (
+      baseline.files[legacyStorageDockerfile]?.owner === "managed" &&
+      (!changed.some(
+        ({ path, action }) => path === legacyStorageDockerfile && action === "remove",
+      ) ||
+        !changed.some(
+          ({ path, action }) => path === "docker-compose.yml" && action === "replace",
+        ) ||
+        legacyStorageDockerfile in manifest.files)
+    )
+      throw new Error(`upgrade-${version}-${variant.name}: legacy storage was not retired`);
+    if (
       !changed.some(
         (decision) => decision.path === "docker-compose.dev.yml" && decision.action === "add",
       )
@@ -276,6 +293,6 @@ export async function templateUpgradeJourney(temporary, operations) {
       throw new Error(`upgrade-${version}-${variant.name}-repeat: upgraded project is not current`);
   }
   console.info(
-    "Retained published-template default and Cloudflare projects: conflicts on changed infrastructure/documentation and new-guide collisions refused, managed files current, user README, configuration and site source preserved, repeat plan current",
+    "Retained published-template projects: Compose replaced and legacy storage Dockerfile retired; edits and guide collisions refused; user files and state preserved; repeat plan current",
   );
 }

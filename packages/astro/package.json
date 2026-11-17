@@ -1,6 +1,6 @@
 {
   "name": "@lacecms/astro",
-  "version": "0.1.0-rc5",
+  "version": "0.1.0-rc6",
   "keywords": [
     "astro-component",
     "lace"
@@ -33,6 +33,10 @@
     "./LaceSeo.astro": {
       "@lacecms/source": "./src/LaceSeo.astro",
       "default": "./dist/LaceSeo.astro"
+    },
+    "./LaceVideo.astro": {
+      "@lacecms/source": "./src/LaceVideo.astro",
+      "default": "./dist/LaceVideo.astro"
     },
     "./RichText.astro": {
       "@lacecms/source": "./src/RichText.astro",

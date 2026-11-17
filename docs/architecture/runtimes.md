@@ -119,7 +119,7 @@ Implementations:
 | Capability | Cloudflare | Node/VPS |
 | --- | --- | --- |
 | SQL | Drizzle D1 | Drizzle SQLite |
-| Object storage | native R2 binding | S3 client configured for MinIO |
+| Object storage | native R2 binding | S3 client configured for a private bucket (bundled SILO) |
 | Cache | Workers KV when a `CACHE` binding exists, otherwise no-op | no-op |
 | API runtime | Cloudflare Worker | Hono Node server |
 | Build trigger | Cloudflare deploy hook | authenticated fixed-command builder |
@@ -138,9 +138,9 @@ Startup names invalid email variables without repeating their values, and
 provider secrets never appear in logs, errors, status, or doctor output. Sends
 are synchronous with a bounded timeout; there is no email outbox or retry queue.
 
-R2 and MinIO use different concrete adapters even though both expose
-S3-compatible concepts: Cloudflare uses the native R2 binding, Node the S3
-client against MinIO.
+Cloudflare uses the native R2 binding. Node uses the S3 client against a
+configured private bucket, typically served by the bundled SILO container.
+The Compose image selection stays outside the Node adapter.
 
 KV is a derived cache, never an authoritative source, and correctness must not
 depend on immediate KV consistency. The no-op cache is the default in both

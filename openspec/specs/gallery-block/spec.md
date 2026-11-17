@@ -175,8 +175,8 @@ stylesheet companions `ListLayout.css` and `GalleryVideo.css`.
   video item part carries no `data-lace-size`
 
 ### Requirement: Gallery renders video items with embed playback
-The `gallery` registry component SHALL render each video item inside its
-`item` part as a figure carrying `data-lace-video`, `data-lace-aspect-ratio`
+The `gallery` registry component SHALL use the Astro adapter's shared video
+component to render each video item inside its `item` part as a figure carrying `data-lace-video`, `data-lace-aspect-ratio`
 and `data-lace-playback` equal to the item's `aspectRatio` and `playback`,
 holding a video area, a `caption` part only when the item's caption is
 present (videos have no media caption fallback), and a `source` part link to
@@ -193,8 +193,8 @@ motion, and offers a non-autoplaying `<noscript>` player without JavaScript.
 The source link SHALL be visually hidden only while an ambient player is
 mounted and SHALL become visible on focus. Repeated initialization and
 several galleries or video items on one page SHALL NOT create duplicate
-players, and neither the gallery script nor the `videoEmbed` script SHALL
-mount a player into the other's markup.
+players. On a page with both gallery items and standalone embeds, each
+player SHALL mount only within its own figure.
 
 The `GalleryVideo.css` stylesheet companion SHALL reserve each video area at
 its item's aspect ratio by data attribute (16:9 base) inside the layout cell,
@@ -238,8 +238,8 @@ before a `player` iframe is lazily loaded or an ambient player is mounted.
 #### Scenario: Gallery and videoEmbed on one page
 - **WHEN** a page holds an ambient `videoEmbed` block and a gallery with an
   ambient video item
-- **THEN** each has exactly one ambient iframe and neither script mounts a
-  player into the other's markup
+- **THEN** each figure has exactly one ambient iframe and its own
+  ambient state
 
 ### Requirement: Gallery version 6 migrates rc2 galleries
 The `gallery` definition SHALL declare exactly one migration, to version 6,

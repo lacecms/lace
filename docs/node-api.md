@@ -7,7 +7,7 @@ uploads, caches, email, proxy trust and upgrades are public:
 Every runtime setting is listed in
 [CLI and environment](../apps/docs/src/content/docs/en/latest/reference/cli-environment.md).
 
-The Node composition uses SQLite, Better Auth and a private MinIO bucket. It
+The Node composition uses SQLite, Better Auth and a private S3 bucket. It
 checks that the configured bucket exists before binding the listener.
 Startup errors name invalid variables, never their values. The runtime never
 derives public URLs from `Host`, `Forwarded` or `X-Forwarded-*`;
@@ -21,11 +21,11 @@ readiness request.
 ## Engine repository local stack
 
 For the full local browser stack, follow [DEVELOPMENT.md](../DEVELOPMENT.md).
-`pnpm dev:node` owns the Compose lifecycle and starts six roles: private MinIO,
+`pnpm dev:node` owns the Compose lifecycle and starts private SILO,
 its bucket initializer, a migration job, the Node gateway, Admin Vite and
 Astro. It applies already-committed migrations before the API becomes ready and
 never runs configuration synchronization. It is the only supported local start
-command; do not start an API, frontend or MinIO process alongside it.
+command; do not start an API, frontend or object storage process alongside it.
 
 The browser uses `http://127.0.0.1:3000`. `/api/*` and `/health/*` stay local
 to Node; `/admin/*` reaches Vite and every other path reaches Astro through the
@@ -125,7 +125,7 @@ published version even when the failed build targeted an older one.
 ## Recoverable media deletion
 
 `DELETE /api/v1/admin/media/:mediaId` only marks an unreferenced active item as
-`deleting` and returns `202 Accepted`. After the MinIO startup preflight, the
+`deleting` and returns `202 Accepted`. After the object storage startup preflight, the
 Node process runs one non-overlapping background pass per second for
 `media.delete.requested` work. Each claim has a 60-second lease; a restart or
 crash leaves unfinished work recoverable after the lease expires.

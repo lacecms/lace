@@ -1,0 +1,226 @@
+## MODIFIED Requirements
+
+### Requirement: Built-in image components render through the adapter image component
+The `image` registry item (revision 7, block version 4), the `gallery` item
+(revision 9, block version 6) and the `hero` item (revision 5, block version 1)
+SHALL render every media image through the adapter's image component, keeping
+the image element's `media` part, effective alt text, dimensions and
+focal-point object position, and adding the component's variants and
+placeholder. `image` SHALL pass the sizes `(min-width: 64rem) 60rem, 100vw`,
+`gallery` the sizes `(min-width: 64rem) 20rem, (min-width: 32rem) 50vw, 100vw`
+for `grid` with `auto`, and the conservative sizes `100vw` for all other layout
+combinations, except that a `natural` gallery image whose width `W` is known
+SHALL receive the sizes `(max-width: Wpx) 100vw, Wpx`, and `hero` the sizes `(min-width: 64rem) 60rem, 100vw` with eager loading. Gallery image rules
+apply to image items only; video items SHALL render no `media` image, link or
+lightbox. When
+the block's `lightbox` setting is `true`, `image` and each `gallery` image item SHALL
+enable the lightbox with the identifier `lace-lightbox-<entry id>-<block key>`
+for `image` and `lace-lightbox-<entry id>-<block key>-<item index>` for each
+gallery image item, where the index counts every stored item, so adding video
+items never renames the dialogs of the images before them; with the setting `false` they SHALL render no button and no
+dialog. When an `image` block or a `gallery` item has a `link`, its `media`
+image SHALL be wrapped in an anchor with that `href` and the part `link`,
+opening in the same browsing context, and that image SHALL render no
+lightbox button or dialog even when the setting is `true`; the anchor's
+accessible name SHALL be the effective alt text, or the caption when the alt
+text is empty, or the link URL when both are empty. Images without a `link`
+SHALL keep the lightbox behavior above. `hero` SHALL never render a lightbox. The components SHALL still carry
+no `<style>` element. Gallery video items SHALL use the shared adapter
+video player.
+
+#### Scenario: Image block with the lightbox on
+- **WHEN** a site renders a version 4 `image` block with key `photo` of entry
+  `e1` whose settings are `{ lightbox: true }`
+- **THEN** its figure holds the `lightbox-trigger` button wrapping the `media`
+  image, the dialog `lace-lightbox-e1-photo` with the original public URL, and
+  the caption after them
+
+#### Scenario: Gallery with the lightbox off
+- **WHEN** a site renders a version 6 `gallery` block of image items with the default settings
+- **THEN** each item's figure holds only the optimized `media` image and its
+  caption, with no button or dialog
+
+#### Scenario: Gallery items open their own dialogs
+- **WHEN** a gallery with key `shots` of entry `e1` and two items has the
+  lightbox on
+- **THEN** the items open `lace-lightbox-e1-shots-0` and
+  `lace-lightbox-e1-shots-1` respectively
+
+#### Scenario: Linked image takes precedence over the lightbox
+- **WHEN** a version 4 `image` block with `link` `/work/kitchen`, alt text
+  `Kitchen` and settings `{ lightbox: true }` is rendered
+- **THEN** its figure holds an anchor `href="/work/kitchen"` with part `link`
+  and accessible name `Kitchen` wrapping the `media` image, and no
+  `lightbox-trigger` button or dialog
+
+#### Scenario: Gallery mixes linked and lightbox items
+- **WHEN** a gallery with key `shots` of entry `e1`, the lightbox on, and two
+  items of which only the second has a `link` is rendered
+- **THEN** the first item opens `lace-lightbox-e1-shots-0` and the second
+  item is an anchor to its link with no dialog
+
+#### Scenario: Linked image without alt text
+- **WHEN** a linked gallery item has an empty effective alt text and the
+  caption `Before`
+- **THEN** its anchor carries the accessible name `Before`; without a caption
+  the accessible name is the link URL
+
+#### Scenario: Hero image loads eagerly
+- **WHEN** a site renders a `hero` block with an image
+- **THEN** the image element carries `loading="eager"` and
+  `fetchpriority="high"` and no lightbox
+
+#### Scenario: Gallery applies the shared list contract without theming
+- **WHEN** a version 6 Gallery renders any layout mode, preset, item placement and image size
+- **THEN** its existing section is marked as the layout container, its items
+  list and direct items expose the shared list-layout hooks, its source imports
+  `./ListLayout.css`, and it adds no inline layout styles, image aspect ratio,
+  cropping or decorative styles; existing title/media/link/lightbox behavior remains
+
+#### Scenario: Nondefault Gallery layout uses conservative image sizing
+- **WHEN** Gallery uses horizontal flex or a `columns-2` grid with `fill` images
+- **THEN** optimized images receive sizes `100vw` and retain the existing
+  resolution, placeholder, loading and media-fallback behavior
+
+#### Scenario: Video items keep image dialog indexes
+- **WHEN** a gallery with key `shots` of entry `e1` and the lightbox on holds
+  an image, a video and an image
+- **THEN** the images open `lace-lightbox-e1-shots-0` and
+  `lace-lightbox-e1-shots-2`, and the video item renders no lightbox button,
+  dialog or link
+
+#### Scenario: Natural image requests its own width
+- **WHEN** a `columns-2` gallery holds a `natural` image item whose media is
+  405 pixels wide
+- **THEN** its image carries `width="405"`, its original height and the sizes
+  `(max-width: 405px) 100vw, 405px`, and a `fill` item beside it keeps `100vw`
+
+### Requirement: The registry holds one canonical source per built-in block
+The repository SHALL keep block sources in a framework-keyed registry with an index listing every item. Each item SHALL declare its name, framework, block type, block definition version, item revision, required render-core and adapter package ranges, its files with source and target role, and its item dependencies. The registry SHALL contain `astro` items for the `hero`, `richText`, `image`, `quote`, `cta`, `gallery`, `navigation`, `videoEmbed` and `link` built-in blocks whose components consume parsed block props and the adapter's rich-text component and preserve every documented `data-lace-*` hook. The root element of every built-in component SHALL carry an `id` equal to the block's anchor when the block has one and SHALL add the block's class name to its `class` after the component's own classes when the block has one; without an anchor or class name the component SHALL emit no `id`; envelope omission SHALL not otherwise change markup. The `gallery` component is specified by `gallery-block`. The `image` and `hero` components SHALL render their media through the image describer: the image element SHALL always carry an `alt` attribute with the effective alt text (for `image`, the block's alt text, then the media alt text, then an empty string; for `hero`, the media alt text, then an empty string), SHALL carry `width` and `height` when the media dimensions are known, and SHALL carry an inline `object-position` style when the media has a focal point. The `image` caption SHALL be the block's caption, falling back to the media caption. Built-in components SHALL carry no `<style>` element; presentation belongs to the site's stylesheet. Built-in registry component sources SHALL carry no `<script>` element. The `videoEmbed` and `gallery` items SHALL both render their provider players through the shared Astro adapter video component and retain their own site-owned stylesheet companions. Neither SHALL require a provider SDK or framework hydration. Registry content SHALL never be imported by a package at runtime. The `@lacecms/cli` package SHALL bundle a byte-identical copy of the registry with each build, and the CLI SHALL read registry content only from that bundled copy, never over the network.
+
+The `navigation` component SHALL render a `nav` root with class `navigation`
+whose `aria-label` is the block's `name` when it is a non-empty string, and a
+`list` part list with one `item` part per link in stored order. A link
+without children SHALL render a `link` part anchor to its URL, or a `label`
+part text element when it has no URL. A link with at least one child SHALL
+render a `submenu` part `details` element whose `toggle` part `summary` shows
+the link label, containing a `children` part list whose first item is a
+`link` part anchor to the parent's own URL with the parent label when the
+parent has a URL, followed by one `item` part with a `link` part anchor per
+child. The component SHALL use no JavaScript. A `link` anchor whose URL is a
+root-relative path without query or fragment equal to the current page path,
+ignoring one trailing slash, SHALL carry `aria-current="page"`. Hrefs SHALL be safe resolved URLs from the shared link resolver. Unavailable parent/child targets SHALL render label text while retaining valid descendants and native disclosure behavior.
+
+The `astro/videoEmbed` registry item SHALL target block definition version 2
+at revision 3 and the `gallery` item SHALL target block definition version 6
+at revision 9. Both items SHALL require
+an adapter package version with the `LaceVideo.astro` export and remain
+installable independently. The `videoEmbed` item SHALL ship a site-owned component consuming
+parsed block props, typed settings and the pure embed description, plus a
+structural stylesheet companion reserving the responsive player area at the
+selected aspect ratio and visually hiding the source link only while an ambient
+player is mounted. It SHALL preserve block anchor, class name, `data-lace-block`
+and `data-lace-block-key` hooks, SHALL expose the selected settings on the root
+element as `data-lace-aspect-ratio` and `data-lace-playback`, SHALL mark a
+mounted ambient player with `data-lace-ambient="active"` on the root, and SHALL
+expose `data-lace-part` values `preview`, `play`, `player`, `caption` and
+`source` on applicable elements. Preview media SHALL use the image describer and
+existing Astro image component through `LaceVideo`. The shared player SHALL
+implement the activation, ambient playback and source fallback contract.
+The wrapper SHALL reserve the ratio without an inline `style` attribute. Installation and update SHALL use existing manifest,
+lock, conflict protection and `.new` recovery behavior for all item files.
+
+The `astro/link` item SHALL provide a site-owned component preserving anchor,
+class and root block hooks, with `data-lace-part=link` for a resolved anchor and
+`data-lace-part=label` for unresolved plain text. Its root SHALL have class `link`
+and `data-lace-appearance` equal to the selected appearance. An unavailable label
+SHALL NOT have active button styling, role button/link, tabindex or click action.
+Resolved anchors SHALL use the authored label and safe href; `newTab` SHALL emit
+`target=_blank` and `rel="noopener noreferrer"` only when true. Presentation
+SHALL live in the site's stylesheet, without new scripts or inline style blocks.
+Image, gallery, navigation, Hero and CTA registry sources SHALL call the shared
+resolver before writing URL-field hrefs, following internal-url-links fallback
+rules; accessible image labels SHALL use resolved hrefs instead of tokens.
+Updated items SHALL declare compatible package ranges and advance item revisions
+without changing existing block schema versions solely for resolver adoption.
+Install/update SHALL retain hash guards, locks and `.new` recovery.
+
+#### Scenario: Registry index is complete
+- **WHEN** the registry index is read
+- **THEN** it lists exactly one `astro` item per built-in block type, each item manifest exists, its block definition version equals the built-in definition version, and every declared file exists
+
+#### Scenario: Item manifest is inconsistent
+- **WHEN** an item declares a block type other than the one its block definition version refers to, or a file it does not contain
+- **THEN** registry verification fails and names the item
+
+#### Scenario: Bundled registry matches the repository
+- **WHEN** the CLI package is built
+- **THEN** its bundled registry files are byte-identical to the repository `registry/` files
+
+#### Scenario: Image block without alt text renders an empty alt attribute
+- **WHEN** a site renders an `image` block whose data has media and no alt text, and the media has no alt text
+- **THEN** the rendered image element has an empty `alt` attribute and the documented `data-lace-*` hooks
+
+#### Scenario: Image block inherits the media description
+- **WHEN** a site renders an `image` block without alt text or caption whose media has alt text, a caption, dimensions and a focal point
+- **THEN** the image element carries the media alt text, `width`, `height` and an `object-position` style, and the caption shows the media caption
+
+#### Scenario: Hero uses the media alt text
+- **WHEN** a site renders a `hero` block whose image media has alt text
+- **THEN** the hero image element carries that alt text instead of an empty one
+
+#### Scenario: An anchored block with a class name
+- **WHEN** a site renders a `cta` block with anchor `get-started` and class name `cta--highlight`
+- **THEN** its root element carries `id="get-started"` and `class="cta cta--highlight"` beside its `data-lace-block` and `data-lace-block-key` hooks
+
+#### Scenario: A component without its own class
+- **WHEN** a site renders an `image` block with class name `full-bleed` and no anchor
+- **THEN** its root element carries `class="full-bleed"` and no `id`
+
+#### Scenario: A block without an envelope keeps its markup
+- **WHEN** a site renders any built-in block without an anchor or class name
+- **THEN** its root element carries no `id` and only the component's own
+  classes, and the rest of its markup equals the markup of the same block
+  with an anchor and class name
+
+#### Scenario: Navigation with a submenu
+- **WHEN** a site renders a navigation block named "Main" with a link
+  "Home" to `/`, a link "Docs" to `/docs` with children "Guide" `/guide` and
+  "API" `https://api.example/`, and a link "Company" without a URL whose
+  child is "About" `/about`
+- **THEN** the `nav` root has `aria-label="Main"`, "Home" is a `link` anchor,
+  "Docs" and "Company" are `details` disclosures with their labels in the
+  `summary`, the "Docs" submenu lists links "Docs" `/docs`, "Guide" and "API"
+  in that order, and the "Company" submenu lists only "About"
+
+#### Scenario: Navigation marks the current page
+- **WHEN** the navigation is rendered on the page `/about/` and holds links
+  to `/about`, `/about#team` and `https://site.example/about`
+- **THEN** only the `/about` link carries `aria-current="page"`
+
+#### Scenario: Navigation link without URL or children
+- **WHEN** a link has a label and neither a URL nor children
+- **THEN** it renders as a `label` part text element and no anchor or
+  disclosure
+
+#### Scenario: Embed install and conflict handling
+- **WHEN** the embed item is installed or updated with a locally modified component or stylesheet
+- **THEN** ordinary installation succeeds for clean targets and conflicts preserve the active component, stylesheet, map and lock according to the existing CLI contract
+
+#### Scenario: Embed settings hooks
+- **WHEN** the embed component renders a block with aspect ratio `4:5` and ambient playback
+- **THEN** its root carries `data-lace-aspect-ratio="4:5"` and `data-lace-playback="ambient"`, and the structural stylesheet gives the video area a 4:5 shape with no inline style
+
+#### Scenario: Unavailable link and image
+- **WHEN** a Link target and an image target are absent from a valid export
+- **THEN** Link emits plain label text, the image emits no anchor and retains enabled lightbox behavior, and neither emits an entry-token href
+
+#### Scenario: Link opens a new tab safely
+- **WHEN** a resolved Link has `newTab=true`
+- **THEN** it is an anchor with the safe href, `_blank` target and `noopener noreferrer`, while newTab=false omits both attributes
+
+#### Scenario: Install one video renderer on an existing site
+- **WHEN** a site installs or updates just one of `videoEmbed` and `gallery`
+- **THEN** only that item's sources and lock entry are needed to use the
+  packaged player. If the installed adapter lacks the export, the CLI
+  reports its required package range using the existing diagnostics.

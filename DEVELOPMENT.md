@@ -1,7 +1,7 @@
 # Developing Lace
 
 Lace is a self-hosted headless CMS with a static Astro site. This repository's
-supported local workflow starts the complete Node, SQLite, MinIO, Admin, and
+supported local workflow starts the complete Node, SQLite, SILO, Admin, and
 Astro development stack through one same-origin gateway.
 
 ## Local development
@@ -27,7 +27,7 @@ pnpm dev:node
 ```
 
 The command builds the development container, applies committed forward SQLite
-migrations, creates the private MinIO bucket, and waits for the API, Admin, and
+migrations, pulls or reuses the pinned SILO image, initializes its private bucket, and waits for the API, Admin, and
 Astro development servers to become healthy. It preserves the named
 `lace-dev-sqlite-data` and `lace-dev-minio-data` volumes across ordinary stops.
 
@@ -44,10 +44,25 @@ Browser sessions are scoped to the hostname, so switching between `localhost`
 and `127.0.0.1` may require signing in again. Restart the local API after
 changing authentication code.
 
-MinIO has no host port in this topology. The browser never receives its Docker
+The `minio` storage service has no host port in this topology. The browser never receives its Docker
 hostname or object-store credentials. API and health paths stay in the Node
 application; `/admin/*` and site routes are proxied through the same origin,
 including supported Vite/Astro upgrade connections.
+
+### Switch an existing development store
+
+The ignored `.env` can select a compatible full image reference with
+`LACE_MINIO_IMAGE`; unset or empty selects the pinned classic SILO image.
+If this checkout has existing MinIO media, record its running image, actual
+volume and media checksums before the first SILO start. Follow the
+[storage switch and recovery procedure](deploy/README.md#switch-the-object-storage-image)
+with `pnpm dev:stop` to quiesce the checkout and `pnpm dev:node` to restart it
+for verification. Use `docker compose --project-name lace-dev --env-file .env
+--file docker-compose.dev.yml` for storage inspection and restart commands.
+Keep the normal `lace-dev` project and its media and SQLite volumes (or your
+existing `LACE_DATA_VOLUME_PREFIX`). Back up both stopped volumes before
+starting SILO. If the change fails, restore the backup and select the previous
+image in `.env`; do not run `dev:reset`.
 
 ### First administrator
 
@@ -139,7 +154,7 @@ token in **Settings**.
 ### Local product acceptance
 
 The isolated acceptance run uses its own Compose project, random host port,
-credentials, SQLite and MinIO volumes. It does not reset `lace-dev`. Docker,
+credentials, SQLite and media volumes. It does not reset `lace-dev`. Docker,
 Node/pnpm, installed dependencies, and a Playwright Chromium browser are
 required. Start from a clean acceptance project:
 
@@ -223,7 +238,7 @@ sync–Admin–publication–public-site check.
 pnpm dev:logs               # follow the same lace-dev topology
 pnpm dev:stop               # stop containers, preserving local data
 pnpm dev:smoke              # isolated stack; does not touch lace-dev data
-pnpm dev:reset -- --confirm # permanently remove only Lace dev SQLite/MinIO data
+pnpm dev:reset -- --confirm # permanently remove only Lace dev SQLite/media data
 ```
 
 `dev:reset` is intentionally the only destructive lifecycle command. Its data

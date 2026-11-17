@@ -1,11 +1,11 @@
 ---
 title: Deploy on Docker or a VPS
-description: Run the packaged Node CMS with SQLite and MinIO, a private static-site builder and a web proxy on your own server.
+description: Run the packaged Node CMS with SQLite and SILO, a private static-site builder and a web proxy on your own server.
 kind: guide
 verifiedAgainst: 0.1.0-rc2
 ---
 
-The generated Docker Compose topology runs the packaged API and Admin, SQLite, a private MinIO bucket, a dispatcher, a fixed-command site builder and an Nginx web proxy on one server. Publishing content queues a site build; the builder rebuilds your Astro site and switches the served release only after a successful build. This guide prepares a server, starts the stack, configures builds, uploads, email and the proxy, and verifies the result.
+The generated Docker Compose topology runs the packaged API and Admin, SQLite, a private S3 bucket served by SILO, a dispatcher, a fixed-command site builder and an Nginx web proxy on one server. Publishing content queues a site build; the builder rebuilds your Astro site and switches the served release only after a successful build. This guide prepares a server, starts the stack, configures builds, uploads, email and the proxy, and verifies the result.
 
 ## Before you start
 
@@ -17,20 +17,21 @@ The generated Docker Compose topology runs the packaged API and Admin, SQLite, a
 
 ## Prepare the server environment
 
-Copy the project to the server and run `pnpm install` and `pnpm env:prepare` there. Preparation creates a protected `.env` with fresh secrets and refuses to overwrite an existing one. Never reuse a development `.env` in production, and back up `.env` privately: losing `LACE_AUTH_SECRET` invalidates sessions and losing the MinIO credentials blocks media access.
+Copy the project to the server and run `pnpm install` and `pnpm env:prepare` there. Preparation creates a protected `.env` with fresh secrets and refuses to overwrite an existing one. Never reuse a development `.env` in production, and back up `.env` privately: losing `LACE_AUTH_SECRET` invalidates sessions and losing the object storage credentials blocks media access.
 
 Review `.env`:
 
 - `LACE_PUBLIC_BASE_URL`: the public HTTPS origin with any intended path prefix and a trailing slash, for example `https://cms.example.com/`. Admin sessions, sign-in links and media URLs use it; it must match your reverse proxy.
 - `LACE_API_BASE_URL`: set this to the public HTTPS origin for host commands and manual Astro builds. The Compose builder always uses the internal `http://api:3000/`.
 - `LACE_API_IMAGE` and `LACE_BUILDER_IMAGE`: the exact compatible images.
+- `LACE_MINIO_IMAGE`: optional full storage image reference. Unset or empty selects the pinned classic SILO image. See [Switch the object storage image](#switch-the-object-storage-image) before changing an existing installation.
 - `LACE_HTTP_BIND_ADDRESS` and `LACE_HTTP_PORT`: Nginx binding, default `127.0.0.1:8080`. `LACE_API_PORT` is only for local development; production does not publish the API.
 
 Configure the host TLS proxy before setup. For a remote proxy, explicitly bind Nginx to a controlled host interface and restrict it with a firewall. A container proxy can instead join the frontend network using operator-owned Compose configuration and target `web:8080`; restrict access to that network. Terminate TLS at the proxy and review `docker compose config`.
 
 - `LACE_BUILD_SITE_URL` and `LACE_SITE_INDEXING`: the public site URL for canonical URLs and `sitemap.xml`, and `off` on a staging installation.
 
-Keep SQLite data (`.lace/data/`) and the MinIO volume persistent. Do not publish MinIO or the builder's private endpoint to browsers.
+Keep SQLite data (`.lace/data/`) and the `minio-data` volume persistent. Do not publish the storage service or the builder's private endpoint to browsers.
 
 ## Initialize the CMS
 
@@ -44,7 +45,7 @@ pnpm auth:bootstrap
 docker compose up -d web
 ```
 
-`docker compose up -d web` starts Nginx and its API, MinIO and initialization dependencies without the builder or dispatcher, so you can create the first administrator before the builder needs a token. Open `<LACE_PUBLIC_BASE_URL>admin/`, create the administrator with the one-time setup token and sign in. Bootstrap only an uninitialized installation. Copying project files to a server does not move a local database or media: a new server starts with empty content.
+`docker compose up -d web` starts Nginx and its API, SILO and initialization dependencies without the builder or dispatcher, so you can create the first administrator before the builder needs a token. Open `<LACE_PUBLIC_BASE_URL>admin/`, create the administrator with the one-time setup token and sign in. Bootstrap only an uninitialized installation. Copying project files to a server does not move a local database or media: a new server starts with empty content.
 
 In **Settings**, create a read-only build token and put its value into `LACE_BUILD_TOKEN` in `.env`. It never belongs in browser-visible variables.
 
@@ -55,9 +56,40 @@ pnpm prod:start
 docker compose ps
 ```
 
-Wait until every service is running (healthy where a health check exists) and `/health/ready` at your public origin answers. `pnpm prod:start` starts the dispatcher, the builder and the web proxy. Until the first successful build, the site answers `503 Site build pending`: publish content or select **Request build** in Admin **Builds**. `pnpm prod:stop` stops the stack and keeps the database, MinIO and static-output volumes. Never use `docker compose down --volumes` on production data.
+Wait until every service is running (healthy where a health check exists) and `/health/ready` at your public origin answers. `pnpm prod:start` starts the dispatcher, the builder and the web proxy. Until the first successful build, the site answers `503 Site build pending`: publish content or select **Request build** in Admin **Builds**. `pnpm prod:stop` stops the stack and keeps the database, media and static-output volumes. Never use `docker compose down --volumes` on production data.
 
 Host commands that open the database (`db:migrate`, `content:sync`, `auth:bootstrap`) must run while `api` and `dispatcher` are stopped (`docker compose stop api dispatcher`). Ordinary restarts preserve data; never recreate volumes to work around a dependency or cache problem.
+
+## Switch the object storage image
+
+Compose pulls or reuses a digest-pinned classic SILO image. A compatible
+`LACE_MINIO_IMAGE` override must accept the existing server command,
+credentials and disk format and include a shell and curl for the health check.
+
+1. Record the previous storage server's image and ID and keep a local copy.
+   Record the Compose project, actual named volume mounted at `/data` on
+   `minio`, bucket and representative Lace media IDs and SHA-256 checksums.
+   Preserve project identity, volume, bucket and credentials. Review the
+   managed Compose update and removal of the old Dockerfile using
+   [the upgrade plan](../../operations/#upgrade-and-roll-back). Pre-pull the
+   full selected image reference before downtime.
+2. Restrict ingress to the operator, pause writers and background work and
+   wait for in-flight work to settle. Run `pnpm prod:stop`. Privately back up
+   the full stopped media volume (including server metadata), matching SQLite
+   state and deployment configuration. Preserve ownership and permissions.
+3. Apply the managed update after resolving any conflicts. Run
+   `docker compose up -d --wait web` and check readiness and authenticated
+   downloads of the recorded media by ID against their hashes. Upload and
+   download a sample image. Run `docker compose restart minio` and repeat the
+   readbacks once storage is healthy. Then run `pnpm prod:start` and reopen
+   ingress. For local installations use the generated development guide and
+   its `pnpm dev:stop` and `pnpm dev:api` commands.
+4. If the new server fails or media differs, stop it and keep writers paused.
+   Restore the saved media volume and matching SQLite/configuration, select
+   the retained prior image in `.env` and verify the original data before
+   reopening traffic. A template rollback does not restore storage metadata.
+   If the selected image is unavailable, fix registry access or the reference
+   without removing the data volume.
 
 ## Configure automatic builds
 

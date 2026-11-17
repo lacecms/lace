@@ -36,7 +36,7 @@ Every Lace-maintained site that installs registry blocks — the generated start
 
 ### Requirement: Built-in image components render through the adapter image component
 The `image` registry item (revision 7, block version 4), the `gallery` item
-(revision 8, block version 6) and the `hero` item (revision 5, block version 1)
+(revision 9, block version 6) and the `hero` item (revision 5, block version 1)
 SHALL render every media image through the adapter's image component, keeping
 the image element's `media` part, effective alt text, dimensions and
 focal-point object position, and adding the component's variants and
@@ -59,8 +59,8 @@ lightbox button or dialog even when the setting is `true`; the anchor's
 accessible name SHALL be the effective alt text, or the caption when the alt
 text is empty, or the link URL when both are empty. Images without a `link`
 SHALL keep the lightbox behavior above. `hero` SHALL never render a lightbox. The components SHALL still carry
-no `<style>` element, and only `gallery` SHALL carry the ambient mounting
-`<script>` of its video items.
+no `<style>` element. Gallery video items SHALL use the shared adapter
+video player.
 
 #### Scenario: Image block with the lightbox on
 - **WHEN** a site renders a version 4 `image` block with key `photo` of entry
@@ -149,7 +149,7 @@ items SHALL remain valid without manifest/lock schema-version changes.
 - **THEN** registry/installation validation rejects the item set before writes
 
 ### Requirement: The registry holds one canonical source per built-in block
-The repository SHALL keep block sources in a framework-keyed registry with an index listing every item. Each item SHALL declare its name, framework, block type, block definition version, item revision, required render-core and adapter package ranges, its files with source and target role, and its item dependencies. The registry SHALL contain `astro` items for the `hero`, `richText`, `image`, `quote`, `cta`, `gallery`, `navigation`, `videoEmbed` and `link` built-in blocks whose components consume parsed block props and the adapter's rich-text component and preserve every documented `data-lace-*` hook. The root element of every built-in component SHALL carry an `id` equal to the block's anchor when the block has one and SHALL add the block's class name to its `class` after the component's own classes when the block has one; without an anchor or class name the component SHALL emit no `id`; envelope omission SHALL not otherwise change markup. The `gallery` component is specified by `gallery-block`. The `image` and `hero` components SHALL render their media through the image describer: the image element SHALL always carry an `alt` attribute with the effective alt text (for `image`, the block's alt text, then the media alt text, then an empty string; for `hero`, the media alt text, then an empty string), SHALL carry `width` and `height` when the media dimensions are known, and SHALL carry an inline `object-position` style when the media has a focal point. The `image` caption SHALL be the block's caption, falling back to the media caption. Built-in components SHALL carry no `<style>` element; presentation belongs to the site's stylesheet. Only `videoEmbed` and `gallery` SHALL be allowed a local `<script>`: `videoEmbed` implementing the video-embeds preview activation and ambient playback contract, and `gallery` implementing only the ambient mounting of its video items; neither SHALL use an external player SDK or framework hydration, and all other built-ins SHALL carry no `<script>` element. Registry content SHALL never be imported by a package at runtime. The `@lacecms/cli` package SHALL bundle a byte-identical copy of the registry with each build, and the CLI SHALL read registry content only from that bundled copy, never over the network.
+The repository SHALL keep block sources in a framework-keyed registry with an index listing every item. Each item SHALL declare its name, framework, block type, block definition version, item revision, required render-core and adapter package ranges, its files with source and target role, and its item dependencies. The registry SHALL contain `astro` items for the `hero`, `richText`, `image`, `quote`, `cta`, `gallery`, `navigation`, `videoEmbed` and `link` built-in blocks whose components consume parsed block props and the adapter's rich-text component and preserve every documented `data-lace-*` hook. The root element of every built-in component SHALL carry an `id` equal to the block's anchor when the block has one and SHALL add the block's class name to its `class` after the component's own classes when the block has one; without an anchor or class name the component SHALL emit no `id`; envelope omission SHALL not otherwise change markup. The `gallery` component is specified by `gallery-block`. The `image` and `hero` components SHALL render their media through the image describer: the image element SHALL always carry an `alt` attribute with the effective alt text (for `image`, the block's alt text, then the media alt text, then an empty string; for `hero`, the media alt text, then an empty string), SHALL carry `width` and `height` when the media dimensions are known, and SHALL carry an inline `object-position` style when the media has a focal point. The `image` caption SHALL be the block's caption, falling back to the media caption. Built-in components SHALL carry no `<style>` element; presentation belongs to the site's stylesheet. Built-in registry component sources SHALL carry no `<script>` element. The `videoEmbed` and `gallery` items SHALL both render their provider players through the shared Astro adapter video component and retain their own site-owned stylesheet companions. Neither SHALL require a provider SDK or framework hydration. Registry content SHALL never be imported by a package at runtime. The `@lacecms/cli` package SHALL bundle a byte-identical copy of the registry with each build, and the CLI SHALL read registry content only from that bundled copy, never over the network.
 
 The `navigation` component SHALL render a `nav` root with class `navigation`
 whose `aria-label` is the block's `name` when it is a non-empty string, and a
@@ -165,7 +165,10 @@ root-relative path without query or fragment equal to the current page path,
 ignoring one trailing slash, SHALL carry `aria-current="page"`. Hrefs SHALL be safe resolved URLs from the shared link resolver. Unavailable parent/child targets SHALL render label text while retaining valid descendants and native disclosure behavior.
 
 The `astro/videoEmbed` registry item SHALL target block definition version 2
-with an advanced item revision. It SHALL ship a site-owned component consuming
+at revision 3 and the `gallery` item SHALL target block definition version 6
+at revision 9. Both items SHALL require
+an adapter package version with the `LaceVideo.astro` export and remain
+installable independently. The `videoEmbed` item SHALL ship a site-owned component consuming
 parsed block props, typed settings and the pure embed description, plus a
 structural stylesheet companion reserving the responsive player area at the
 selected aspect ratio and visually hiding the source link only while an ambient
@@ -175,9 +178,9 @@ element as `data-lace-aspect-ratio` and `data-lace-playback`, SHALL mark a
 mounted ambient player with `data-lace-ambient="active"` on the root, and SHALL
 expose `data-lace-part` values `preview`, `play`, `player`, `caption` and
 `source` on applicable elements. Preview media SHALL use the image describer and
-existing Astro image component. It SHALL implement the video-embeds activation,
-ambient playback and source fallback contract without inline `style`
-attributes for the ratio. Installation and update SHALL use existing manifest,
+existing Astro image component through `LaceVideo`. The shared player SHALL
+implement the activation, ambient playback and source fallback contract.
+The wrapper SHALL reserve the ratio without an inline `style` attribute. Installation and update SHALL use existing manifest,
 lock, conflict protection and `.new` recovery behavior for all item files.
 
 The `astro/link` item SHALL provide a site-owned component preserving anchor,
@@ -268,3 +271,9 @@ Install/update SHALL retain hash guards, locks and `.new` recovery.
 #### Scenario: Link opens a new tab safely
 - **WHEN** a resolved Link has `newTab=true`
 - **THEN** it is an anchor with the safe href, `_blank` target and `noopener noreferrer`, while newTab=false omits both attributes
+
+#### Scenario: Install one video renderer on an existing site
+- **WHEN** a site installs or updates just one of `videoEmbed` and `gallery`
+- **THEN** only that item's sources and lock entry are needed to use the
+  packaged player. If the installed adapter lacks the export, the CLI
+  reports its required package range using the existing diagnostics.

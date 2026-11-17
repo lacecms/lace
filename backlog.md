@@ -42,11 +42,10 @@
   `bySlug`-style record lookup. Related, but separate: bulk publication for many
   small entries (see "bulk list actions" below).
 
-- **Shared video primitive (deferred from SM5D, 2026-11-01):** `videoEmbed`
-  and gallery video items each carry their own registry markup and ambient
-  mounting script. Extract a `LaceVideo` adapter component (with its
-  structural CSS and script) only when a third consumer, such as a hero video,
-  needs the same playback contract.
+- **Shared Astro video player (implemented, archived 2026-11-17):**
+  `videoEmbed` and gallery video items use `LaceVideo` for provider markup and
+  playback. Existing content uses the same block definitions. See the
+  [archived change](openspec/changes/archive/2026-11-17-shared-astro-video-player/).
 
 - **Alpha.8 release preparation (implemented, archived 2026-10-30):**
   `prepare-alpha-eight-release` prepared alpha.8/next with template 0.39.0,
@@ -138,17 +137,16 @@ when selected and do not yet have an implementation order or new CE numbers.
   player on explicit activation. No video-file upload dependency. Implemented;
   specs synchronized and change archived 2026-10-31 at
   `openspec/changes/archive/2026-10-31-video-embed-block`.
-- **Uploaded video (deferred, no implementation order selected):** MP4/WebM
-  storage, streamed upload, byte-range delivery and field-level media kinds;
-  then uploaded-video blocks and admin library/picker/player support. Revisit
-  autoplay/loop/muted/controls and motion accessibility when selecting that work.
-  The unapplied `video-a-media-upload-delivery` draft (0 completed tasks)
-  is preserved as historical planning input at
-  [`2026-11-01-video-a-media-upload-delivery-superseded`](openspec/changes/archive/2026-11-01-video-a-media-upload-delivery-superseded/),
-  without synchronizing its deltas. It is not the selected next change. Its old
-  A → B → C order is superseded by this embed-first selection; rebase and replan
-  it against accepted specs before any future apply. Do not include another
-  `videoEmbed` implementation in that future uploaded-video scope.
+- **Uploaded video (deferred):** the
+  [superseded upload and delivery draft](openspec/superseded/2026-11-01-video-a-media-upload-delivery-superseded/SUPERSEDED.md)
+  remains historical planning input. No tasks were applied or delta specs
+  synchronized. Replan against accepted specs before selecting this work.
+  Start by evaluating short H.264 MP4 clips with native `<video>` in the shared
+  player. Workers can stream known-length uploads to private R2 and read byte
+  ranges, with SILO as the Node equivalent. Measure CPU on a deployed Worker
+  before choosing the upload cap and verify seeking on iPhone Safari. Stream
+  SHA-256 over the stored bytes for existing import reuse, and integrate range
+  delivery with the current publication gate, ETag and cache behavior.
 
 - **Word/Google Docs paste cleanup (deferred from CE8/B1):** normalize source
   markup into supported rich text, preserve meaningful text/lists/links and

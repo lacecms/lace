@@ -1,8 +1,8 @@
-import { fileURLToPath } from "node:url";
 import { assertHostDatabaseSafe } from "./database/host-database-safety.js";
 import { migrateNodeDatabase } from "./database/connection.js";
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+// The packaged API image reaches this entry point through a workspace symlink.
+if (import.meta.main) {
   try {
     await assertHostDatabaseSafe({
       databasePath: process.env.LACE_DATABASE_PATH ?? "./lace.sqlite",

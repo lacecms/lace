@@ -97,6 +97,13 @@ from committed outbox work, and `401 AUTHENTICATION_REQUIRED`.
 | EX6 | Trusted client identity and production Compose ingress | M | EX6A and EX6B independent | done |
 | EX7 | pnpm 12.21.0 toolchain | S | EX7A | planned |
 
+**Deployment maintenance outside EX1–EX7:** the owner selected
+[`adopt-silo-object-storage`](../openspec/changes/archive/2026-11-17-adopt-silo-object-storage/)
+as one maintenance unit. It replaces the unavailable default MinIO image
+with pinned SILO across repository and generated Node Compose deployments,
+and verifies the template and media volume transitions together. The Node S3
+and native R2 boundaries and the release preparation sequence stay in place.
+
 Dependencies:
 
 | Session | Depends on | May run in parallel with |

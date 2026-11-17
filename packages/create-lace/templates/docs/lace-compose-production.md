@@ -2,11 +2,11 @@
 
 <!-- lace-site: starter existing -->
 
-Run Lace on a server with Docker Compose: the packaged API/admin, MinIO, the dispatcher, the fixed-command builder and the web proxy, from the same managed files as development.
+Run Lace on a server with Docker Compose: the packaged API/admin, SILO, the dispatcher, the fixed-command builder and the web proxy, from the same managed files as development.
 <!-- lace-site: end -->
 <!-- lace-site: none -->
 
-Run Lace on a server with Docker Compose: the packaged API/admin, MinIO, the dispatcher and the web proxy, from the same managed files as development.
+Run Lace on a server with Docker Compose: the packaged API/admin, SILO, the dispatcher and the web proxy, from the same managed files as development.
 <!-- lace-site: end -->
 
 **Working directory:** the CMS installation root on the server that contains `package.json`, `lace.config.ts` and this `docs/` directory (for example `cms/`). Run every command from there.
@@ -40,7 +40,7 @@ This guide does not depend on the development guide; it repeats the one-time ini
 ## Prerequisites
 
 - A server with Docker, Compose and a running daemon, plus Node `>=24.12.0` and pnpm `>=12` for the host operator commands (tested baseline: Node `24.12.0`, pnpm `12.3.4`).
-- Compatible API and builder images for your Lace release (`0.1.0-rc5` or a later compatible release). Pin exact tags or digests; the packages in `package.json` must come from the same release.
+- Compatible API and builder images for your Lace release (`0.1.0-rc6` or a later compatible release). Pin exact tags or digests; the packages in `package.json` must come from the same release.
 - A public HTTPS origin and a TLS-terminating reverse proxy that forwards to `127.0.0.1:8080` by default (or the configured Nginx binding). The web proxy routes `/admin`, `/api/` and `/health/` to the API and everything else to the static site, so one origin can serve both.
 
 <!-- lace-site: starter -->
@@ -63,7 +63,7 @@ pnpm install
 pnpm env:prepare
 ```
 
-Preparation creates a protected `.env` with fresh random `LACE_AUTH_SECRET`, MinIO and builder credentials. It refuses to overwrite an existing `.env`. Never copy a development `.env` to production; back up `.env` privately, because losing `LACE_AUTH_SECRET` invalidates sessions and losing MinIO credentials blocks media access.
+Preparation creates a protected `.env` with fresh random `LACE_AUTH_SECRET`, storage and builder credentials. It refuses to overwrite an existing `.env`. Never copy a development `.env` to production; back up `.env` privately, because losing `LACE_AUTH_SECRET` invalidates sessions and losing storage credentials blocks media access.
 
 Review `.env`:
 
@@ -81,6 +81,8 @@ Configure your host TLS proxy before setup and forward HTTPS traffic to the loop
 
 <!-- lace-site: end -->
 
+See [Switch the object storage image](lace-operations.md#switch-the-object-storage-image) for the optional `LACE_MINIO_IMAGE` Compose override and the backup and recovery steps for existing media.
+
 ## Initialize the CMS
 
 Host database commands share the SQLite file with the Compose `api` and `dispatcher` services: run them only while those services are stopped (see the [development guide](lace-compose-dev.md#prepare-the-database-and-start-the-cms)). On a fresh server nothing runs yet.
@@ -95,7 +97,7 @@ pnpm auth:bootstrap
 docker compose up -d web
 ```
 
-`docker compose up -d web` starts Nginx and its API, MinIO, migration and output initialization dependencies, without starting the builder or dispatcher. Bootstrap prints one setup token that expires after one hour.
+`docker compose up -d web` starts Nginx and its API, SILO, migration and output initialization dependencies, without starting the builder or dispatcher. Bootstrap prints one setup token that expires after one hour.
 
 Open `<LACE_PUBLIC_BASE_URL>admin/`, create the first administrator on the setup screen with the bootstrap token and sign in. To avoid putting credentials in shell history, use the browser or the [private-input setup script](lace-operations.md#migrate-sync-and-create-the-first-administrator).
 
@@ -144,7 +146,7 @@ pnpm prod:start
 
 `pnpm content:sync --check` previews changes without writing. To change images, update `LACE_API_IMAGE` and `LACE_BUILDER_IMAGE` together with the matching packages, then run the sequence above.
 
-Backups: with `api` and `dispatcher` stopped, copy `.lace/data/` (the SQLite database) and back up the MinIO data volume with your volume tooling, together with `.env`. `pnpm prod:stop` stops everything and keeps `.lace/data/`, MinIO and static-output volumes. Never use `docker compose down --volumes` on production data.
+Follow the [coordinated backup procedure](lace-operations.md#coordinated-sqlite-and-object-storage-backup) before upgrades. `pnpm prod:stop` stops everything and keeps `.lace/data/`, `minio-data` and static-output volumes. Never use `docker compose down --volumes` on production data.
 
 ## Recovery
 

@@ -1,6 +1,6 @@
 # Docker Compose development
 
-Run Lace on your own machine: the packaged API/admin and MinIO in Docker Compose, operator commands on the host.
+Run Lace on your own machine: the packaged API/admin and SILO in Docker Compose, operator commands on the host.
 
 **Working directory:** the CMS installation root that contains `package.json`, `lace.config.ts` and this `docs/` directory (for example `cms/`). Run every command from there.
 
@@ -25,8 +25,8 @@ Site mode: **none**. This project builds no site, so this guide ends with publis
 ## Prerequisites
 
 - Node `>=24.12.0` and pnpm `>=12` (tested baseline: Node `24.12.0`, pnpm `12.3.4`).
-- Docker with Compose and a running daemon. MinIO's first image build needs network access and disk space.
-- Lace `0.1.0-rc5` or a later compatible release of the packages in `package.json` and the API/builder images in `.env.example`.
+- Docker with Compose and a running daemon. A first SILO pull requires registry access or an existing local copy.
+- Lace `0.1.0-rc6` or a later compatible release of the packages in `package.json` and the API/builder images in `.env.example`.
 
 ## Install and prepare the environment
 
@@ -37,11 +37,12 @@ pnpm install
 pnpm env:prepare
 ```
 
-Preparation creates a protected, ignored `.env` with random auth, MinIO and builder credentials and an empty `LACE_BUILD_TOKEN`. It prints no secrets and refuses to overwrite an existing `.env`; keep and review an existing one instead. Never commit `.env`. Details and recovery: [environment preparation](lace-operations.md#prerequisites-and-generation).
+Preparation creates a protected, ignored `.env` with random auth, storage and builder credentials and an empty `LACE_BUILD_TOKEN`. It prints no secrets and refuses to overwrite an existing `.env`; keep and review an existing one instead. Never commit `.env`. Details and recovery: [environment preparation](lace-operations.md#prerequisites-and-generation).
 
 Review `.env` before any command that loads it. Change only what your machine needs:
 
 - `LACE_API_IMAGE` and `LACE_BUILDER_IMAGE`: compatible image references for your Lace release.
+- `LACE_MINIO_IMAGE`: optional full Compose image reference. Unset or empty uses the pinned classic SILO image. See [Switch the object storage image](lace-operations.md#switch-the-object-storage-image) before changing an existing installation.
 - `LACE_API_PORT`: loopback API/admin port for development. `LACE_HTTP_PORT` and `LACE_HTTP_BIND_ADDRESS` configure the production web proxy.
 - `LACE_PUBLIC_BASE_URL` and `LACE_API_BASE_URL`: both default to `http://127.0.0.1:3000/`. Change both when you change the API port. Use the exact public origin for admin login (`localhost` and `127.0.0.1` differ). Keep path prefixes and the trailing slash.
 
@@ -65,7 +66,7 @@ pnpm dev:api
 - Migration is explicit and creates `.lace/data/` when missing; the API never migrates on startup.
 - Sync registers Home and Posts and creates the Home draft.
 - Bootstrap prints one setup token that expires after one hour. Capture it privately.
-- `pnpm dev:api` starts MinIO, its initialization, the migration service and the API/admin. Wait until `/health/ready` at your API origin answers `ready`.
+- `pnpm dev:api` starts SILO, its private bucket initializer, the migration service and the API/admin. Wait until `/health/ready` at your API origin answers `ready`.
 
 ## Create the first administrator
 
@@ -152,7 +153,7 @@ pnpm dev:api
 pnpm dev:stop
 ```
 
-Stopping preserves `.lace/data/` and the MinIO volume. Restarting needs no migration, sync or bootstrap.
+Stopping preserves `.lace/data/` and the `minio-data` volume. Restarting needs no migration, sync or bootstrap.
 
 After editing `lace.config.ts`, or for any other host database command, stop the services first, run the command and start again:
 

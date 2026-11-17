@@ -23,9 +23,13 @@ Credentials are separate: a builder credential authorizes private build requests
 
 ## Back up and restore
 
-Back up configuration, source and locks, the SQLite or D1 database and all corresponding MinIO or R2 objects as one coordinated set. SQL alone cannot restore media. Choose a maintenance point, stop writers (on Compose `docker compose stop api dispatcher builder`) and record the installed version and migration state. Use SQLite's backup API (or the CLI `.backup` command) rather than copying the database file, and copy every object through the S3 API with its key and bytes. On Cloudflare, export D1 with `wrangler d1 export` and copy R2 objects through the account's S3-compatible endpoint. Protect backups as private data: they contain password hashes and sessions.
+Back up configuration, source and locks, the SQLite or D1 database and all corresponding S3 or R2 objects as one coordinated set. SQL alone cannot restore media. Choose a maintenance point, stop writers (on Compose `docker compose stop api dispatcher builder`) and record the installed version and migration state. Use SQLite's backup API (or the CLI `.backup` command) rather than copying the database file, and copy every object through the S3 API with its key and bytes. On Cloudflare, export D1 with `wrangler d1 export` and copy R2 objects through the account's S3-compatible endpoint. Protect backups as private data: they contain password hashes and sessions.
 
 Restore into an isolated environment first: a new database, bucket, origin and build output, with external deploy hooks disabled and replacement credentials. Use matching packages and storage mappings, check migration state and media access, sign in, read, edit and publish content and complete a new site build. Never point a restored test installation at production storage or hooks. A successful archive command does not prove a usable restore.
+
+To replace the server image while keeping the same media volume, follow
+[Switch the object storage image](../deployment/node/#switch-the-object-storage-image).
+It includes a stopped volume backup for restoring on-disk storage metadata.
 
 ## Upgrade and roll back
 
@@ -61,7 +65,7 @@ Custom code that reads the REST build export directly must follow its pagination
 
 - **Build token:** create a replacement in Settings, update the server-side site or builder settings, verify a fresh build, then revoke the old token. After a compromise, revoke immediately and accept temporary build downtime.
 - **Authentication secret:** replace `LACE_AUTH_SECRET` while writes and dispatch are stopped, recreate the API or redeploy the Worker and expect every user to sign in again.
-- **Builder secret and MinIO credentials:** change both sides together (API and dispatcher, and the builder or storage), recreate the affected services and verify that old credentials are refused and new ones work.
+- **Builder secret and Node storage credentials:** change both sides together (API and dispatcher, and the builder or storage), recreate the affected services and verify that old credentials are refused and new ones work.
 - **Deploy hook and Pages token:** replace the provider hook and the Worker secret together and revoke the old hook; rotate the Pages read-only token separately and verify tracking with the replacement.
 
 Review user sessions after an account compromise. If setup is complete, do not try to bootstrap a second first administrator; use account recovery or your tested restore plan. For a revision conflict in Admin, keep the local copy before reloading the server draft; for an invalid configuration, fix the reported field rather than deleting data to force a sync.

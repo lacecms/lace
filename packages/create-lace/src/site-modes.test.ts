@@ -542,7 +542,12 @@ test.each([
   const right = await generateProject({ target: join(await astroSite(), "cms"), site });
   expect(left.manifest).toEqual(right.manifest);
   expect(await treeHashes(left.path)).toEqual(await treeHashes(right.path));
-  for (const document of ["README.md", "docs/lace-operations.md"]) {
+  for (const document of [
+    "README.md",
+    "docs/lace-operations.md",
+    "docs/lace-compose-dev.md",
+    "docs/lace-compose-production.md",
+  ]) {
     const text = await readFile(join(left.path, document), "utf8");
     for (const [, matchLink] of text.matchAll(/\]\(([^)\s]+)\)/gu)) {
       const link = matchLink!;
@@ -551,8 +556,8 @@ test.each([
       const file = path ? join(left.path, document, "..", path) : join(left.path, document);
       expect((await stat(file)).isFile(), `${document} -> ${link}`).toBe(true);
       if (fragment) {
-        const anchors = [...(await readFile(file, "utf8")).matchAll(/^## (.+)$/gmu)].map((match) =>
-          match[1]!.toLowerCase().replaceAll(",", "").replaceAll(" ", "-"),
+        const anchors = [...(await readFile(file, "utf8")).matchAll(/^#{1,6} (.+)$/gmu)].map(
+          (match) => match[1]!.toLowerCase().replaceAll(",", "").replaceAll(" ", "-"),
         );
         expect(anchors, `${document} -> ${link}`).toContain(fragment);
       }

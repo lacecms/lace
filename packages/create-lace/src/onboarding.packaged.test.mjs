@@ -1,7 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
-import { mkdtemp, readdir, readFile, rm, symlink } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,8 +21,16 @@ async function project() {
   const parent = await mkdtemp(join(tmpdir(), "lace-onboarding-test-"));
   roots.push(parent);
   const result = await generateProject({ target: join(parent, "site") });
-  // Focused template tests reuse installed tools; packaged isolation is checked by acceptance.
-  await symlink(join(workspace, "apps/site/node_modules"), join(result.path, "site/node_modules"));
+  // Keep the built adapter inside the consumer. Astro resolves processed
+  // component scripts relative to the site's build root.
+  const modules = join(result.path, "site/node_modules");
+  const adapter = join(modules, "@lacecms/astro");
+  await mkdir(adapter, { recursive: true });
+  await cp(join(workspace, "packages/astro/dist"), join(adapter, "dist"), { recursive: true });
+  await cp(join(workspace, "packages/astro/package.json"), join(adapter, "package.json"));
+  for (const name of ["astro", "sharp", "@lacecms/render", "@lacecms/sdk", "@lacecms/content"]) {
+    await symlink(join(workspace, "apps/site/node_modules", name), join(modules, name));
+  }
   return result;
 }
 
@@ -160,6 +168,9 @@ test("generated Astro builds every built-in block from one export and rejects un
       ].map((match) => match[1]),
     ).toEqual(["navigation", "richText", "image", "quote", "gallery"]);
     expect(home).toContain('data-lace-model="home" data-lace-entry="home-entry"');
+    expect(home).toMatch(
+      /<figure[^>]*data-lace-block-key="starter-video"[^>]*data-lace-video-instance/u,
+    );
     expect(post).toContain('data-lace-block-key="post-image"');
     expect(post).toContain('data-lace-part="caption"');
     expect(post).toContain("Content belongs in the CMS");

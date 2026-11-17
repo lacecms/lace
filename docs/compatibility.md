@@ -105,8 +105,9 @@ mixing artifacts from different versions is unsupported.
 
 | Release | Template | Status |
 | --- | --- | --- |
-| `0.1.0-rc5` | `0.50.0` | Selected candidate; publication pending |
-| `0.1.0-rc4` | `0.49.0` | Latest published release |
+| `0.1.0-rc6` | `0.51.0` | Selected candidate; publication pending |
+| `0.1.0-rc5` | `0.50.0` | Latest published release |
+| `0.1.0-rc4` | `0.49.0` | Published release |
 | `0.1.0-rc3` | `0.48.0` | Published release |
 | `0.1.0-rc2` | `0.47.0` | Oldest supported release |
 

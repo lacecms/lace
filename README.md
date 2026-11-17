@@ -9,7 +9,7 @@ admin interface for everyday publishing. One installation manages one website.
 - Write rich text, organize nested fields and reuse media in a browser.
 - Keep drafts separate from published content, with administrator-controlled publication.
 - Build a static Astro site through the SDK and customize block components you own.
-- Run on your own VPS with Node, SQLite and MinIO, or on Cloudflare Workers, D1 and R2.
+- Run on your own VPS with Node, SQLite and SILO, or on Cloudflare Workers, D1 and R2.
 
 Lace is **pre-release**. Latest documentation tracks `main` and currently targets
 **0.1.0-rc5**; check [releases](https://github.com/lacecms/lace/releases) for

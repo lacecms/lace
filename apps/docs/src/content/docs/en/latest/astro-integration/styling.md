@@ -2,7 +2,7 @@
 title: Style your site
 description: Target stable data-lace hooks to style blocks, rich text, galleries, images and video players without editing Lace.
 kind: guide
-verifiedAgainst: 0.1.0-rc2
+verifiedAgainst: 0.1.0-rc6
 ---
 
 Your Astro site owns its presentation. Lace renders blocks through source components installed into your site and marks their output with stable `data-lace-*` attributes, so you can style pages from your own stylesheet without changing content, Admin or a block component. This guide lists those hooks and the behavior of the built-in galleries, images and video players that your CSS works with.
@@ -155,35 +155,14 @@ An image with a link wraps its `media` image in a `link` anchor instead and neve
 
 ## Style video embeds
 
-The `videoEmbed` component imports `VideoEmbed.css`, which reserves the selected aspect ratio (16:9 by default) in `@layer lace-layout`; your CSS owns decoration. The root exposes `data-lace-aspect-ratio` and `data-lace-playback`, and the parts are `preview`, `play`, `player`, `caption` and `source`.
+`LaceVideo.astro` renders the figure and handles playback for both video blocks. The site-owned `VideoEmbed.css` and `GalleryVideo.css` reserve the selected aspect ratio in `@layer lace-layout`. Your site CSS owns decoration. The root exposes `data-lace-aspect-ratio` and `data-lace-playback`, and the parts are `preview`, `play`, `player`, `caption` and `source`.
 
 - **Player** (default): without a poster, the component renders a lazy iframe. With a poster, it shows the optimized image, with an empty decorative alt, inside a named `preview` button. Activating it loads one iframe and moves focus to it; playback never starts automatically and may need a second click on the provider's Play control. Nothing is requested from the provider before that activation.
 - **Ambient**: after checking motion preferences, the component mounts one lazy, muted, looping iframe without controls (Vimeo `background=1`; YouTube autoplay, mute, single-video loop, hidden controls, inline playback). The poster stays underneath and its button becomes inert, and the ambient iframe is not a keyboard stop. The source link is visually hidden only under `data-lace-ambient="active"` and reappears on keyboard focus. Reduced motion and disabled JavaScript use player behavior. The preference is read on page load, not watched afterwards.
 
 A source link stays available without JavaScript or when embedding fails. Use posters and few ambient blocks per page: lazy loading still costs bandwidth, and browsers may block autoplay, for example in low-power mode, in which case the provider shows a still frame.
 
-**Motion accessibility:** ambient playback ships without a pause control and does not meet WCAG 2.2.2 (Pause, Stop, Hide) for videos longer than five seconds. This applies to `videoEmbed` blocks and gallery video items. Prefer player mode when the requirement applies, or add a control to your component copy. For example, place this button in the figure and add the handler to the component's script. It stops the ambient player and restores the player fallback; starting again begins from the start.
-
-```html
-<button type="button" data-stop-ambient>Stop motion</button>
-```
-
-```js
-document.addEventListener("click", (event) => {
-  if (!(event.target instanceof Element)) return;
-  const control = event.target.closest("[data-stop-ambient]");
-  const block = control?.closest('[data-lace-ambient="active"]');
-  if (!block) return;
-  const area = block.querySelector("[data-lace-video-area]");
-  area.querySelector(":scope > iframe")?.remove();
-  const preview = area.querySelector('[data-lace-part="preview"]');
-  if (preview) preview.inert = false;
-  else area.append(area.querySelector("[data-lace-video-template]").content.cloneNode(true));
-  block.dataset.laceAmbient = "fallback";
-  block.querySelector('[data-lace-part="source"]').focus();
-  control.remove();
-});
-```
+**Motion accessibility:** ambient playback ships without a pause control and does not meet WCAG 2.2.2 (Pause, Stop, Hide) for videos longer than five seconds. This applies to both standalone embeds and gallery videos. Choose player mode when the requirement applies, or supply a site-owned renderer with a keyboard-accessible pause or stop control. If you already have a custom control, test it with the updated markup before adopting the shared renderer.
 
 ## Reference
 

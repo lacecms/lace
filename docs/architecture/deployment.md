@@ -10,7 +10,7 @@ Content editor
     v
 Admin SPA ---- REST ----> Lace API ----> SQLite/D1
                              |  |
-                             |  +------> MinIO/R2
+                             |  +------> S3/R2
                              |
                              +---------> Build trigger/outbox
                                              |
@@ -65,11 +65,18 @@ Real-account steps are in `docs/cloudflare-deployment-handoff.md`, used in the
 ```text
 Docker Compose
 ├── lace-api: Node.js + Hono, built admin assets, mounted SQLite volume
-├── minio: mounted object-storage volume
+├── minio: bundled SILO server, mounted object-storage volume
 ├── site-builder: private authenticated HTTP endpoint, read-only
 │   generated-project source mount, static-output volume, builder-cache volume
 └── static web server/reverse proxy: Astro build output
 ```
+
+Node Compose ships one digest-pinned classic SILO image across local development,
+the repository VPS stack and generated projects. The optional `LACE_MINIO_IMAGE`
+Compose setting selects a compatible full image reference. The private `minio`
+service, `/data` mount and idempotent private bucket initializer keep their
+identity. Switching an existing deployment is an operator procedure with paused
+writes, a consistent backup, media validation and recovery from the saved state.
 
 Production publishes only Nginx, on IPv4 loopback port 8080 by default,
 for a host TLS proxy; `LACE_HTTP_BIND_ADDRESS` and `LACE_HTTP_PORT` select
@@ -102,7 +109,7 @@ for 30 days; Cloudflare Pages receives the same rule through the site's
 Two root development commands are required:
 
 - `pnpm dev:node`, the fast vendor-independent workflow: Hono on Node, a local
-  SQLite file, MinIO, the admin and Astro development servers behind a
+  SQLite file, SILO, the admin and Astro development servers behind a
   same-origin proxy, and a local mail capture so outgoing email never leaves
   the machine ([local-node-development](../../openspec/specs/local-node-development/spec.md));
 - `pnpm dev:cloudflare`, the integration workflow that validates Cloudflare

@@ -46,6 +46,16 @@ export async function verifyVideoEmbeds(siteRoot) {
     );
     const page = await context.newPage();
     await page.goto(url, { waitUntil: "domcontentloaded" });
+    const directPlayer = page.locator('[data-lace-block-key="about-youtube"] iframe');
+    await browserExpect(directPlayer).toHaveAttribute("loading", "lazy");
+    await browserExpect(directPlayer).toHaveAttribute(
+      "src",
+      "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
+    );
+    await browserExpect(directPlayer).toHaveAttribute(
+      "allow",
+      "fullscreen; picture-in-picture; encrypted-media",
+    );
     const block = page.locator('[data-lace-block-key="about-vimeo"]');
     await browserExpect(
       block.getByRole("button", { name: "Load video: Vimeo film", exact: true }),
@@ -143,8 +153,7 @@ export async function verifyVideoEmbeds(siteRoot) {
     await browserExpect(ambientBlocks).toHaveCount(6);
     for (const item of await ambientBlocks.all())
       await browserExpect(item.locator("iframe")).toHaveCount(1);
-    // Gallery ambient items mount once each, even after repeated initialization,
-    // and neither script mounts a player into the other's markup.
+    // The shared script mounts each gallery and standalone player once.
     const galleryAmbient = moving.locator(
       '[data-lace-block="gallery"] [data-lace-video][data-lace-playback="ambient"]',
     );
@@ -176,6 +185,15 @@ export async function verifyVideoEmbeds(siteRoot) {
     expect(await player.getAttribute("data-lace-ambient")).toBeNull();
     for (const key of ["about-vimeo", "about-vimeo-second"])
       expect(await moving.locator(`[data-lace-block-key="${key}"] iframe`).count()).toBe(0);
+    await moving.setViewportSize({ width: 320, height: 720 });
+    await browserExpect
+      .poll(() => moving.evaluate(() => document.documentElement.scrollWidth - window.innerWidth))
+      .toBeLessThanOrEqual(0);
+    for (const gallery of await moving.locator('[data-lace-block="gallery"]').all()) {
+      expect(await gallery.evaluate((element) => element.scrollWidth)).toBeLessThanOrEqual(
+        await gallery.evaluate((element) => element.clientWidth),
+      );
+    }
     await motion.close();
     await context.close();
     const noScript = await browser.newContext({ javaScriptEnabled: false });
