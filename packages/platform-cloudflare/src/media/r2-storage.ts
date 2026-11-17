@@ -43,10 +43,14 @@ const timers = globalThis as unknown as {
   setTimeout(callback: () => void, delayMs: number): unknown;
 };
 
-function streamFromReadable(body: ReadableStream<Uint8Array>, timeoutMs: number): ByteStream {
+export function streamFromReadable(
+  body: ReadableStream<Uint8Array>,
+  timeoutMs: number,
+): ByteStream {
   return {
     async *[Symbol.asyncIterator](): AsyncGenerator<Uint8Array> {
       const reader = body.getReader();
+      let finished = false;
       try {
         for (;;) {
           let result: Awaited<ReturnType<typeof reader.read>>;
@@ -55,18 +59,22 @@ function streamFromReadable(body: ReadableStream<Uint8Array>, timeoutMs: number)
           } catch {
             throw new CloudflareObjectStorageError();
           }
-          if (result.done) return;
+          if (result.done) {
+            finished = true;
+            return;
+          }
           if (!(result.value instanceof Uint8Array)) throw new CloudflareObjectStorageError();
           yield result.value;
         }
       } finally {
+        if (!finished) await reader.cancel().catch(() => undefined);
         reader.releaseLock();
       }
     },
   };
 }
 
-function bounded<Value>(operation: Promise<Value>, timeoutMs: number): Promise<Value> {
+export function bounded<Value>(operation: Promise<Value>, timeoutMs: number): Promise<Value> {
   let handle: unknown;
   const timeout = new Promise<never>((_resolve, reject) => {
     handle = timers.setTimeout(() => reject(new CloudflareObjectStorageError()), timeoutMs);

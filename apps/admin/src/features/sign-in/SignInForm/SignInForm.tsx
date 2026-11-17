@@ -21,9 +21,11 @@ import { PasswordField } from "../../../shared/ui/PasswordField/index.js";
 export function SignInForm({
   redirectTo,
   mcpTransaction,
+  previewReturn,
 }: {
   readonly redirectTo: string;
   readonly mcpTransaction?: string | undefined;
+  readonly previewReturn?: string | undefined;
 }) {
   const client = useAdminClient();
   const sessionSource = useSessionSource();
@@ -40,6 +42,12 @@ export function SignInForm({
       if (mcpTransaction) {
         window.location.assign(
           `/api/auth/oauth2/authorize?transaction=${encodeURIComponent(mcpTransaction)}`,
+        );
+        return;
+      }
+      if (previewReturn) {
+        window.location.assign(
+          `/api/v1/admin/preview/authorize?resume=${encodeURIComponent(previewReturn)}`,
         );
         return;
       }

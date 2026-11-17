@@ -1,8 +1,17 @@
 import { defineConfig } from "vitest/config";
+import { sourceCondition } from "./vitest.shared.mjs";
 
 export default defineConfig({
   test: {
     projects: [
+      {
+        plugins: [sourceCondition()],
+        test: {
+          name: "preview-https",
+          include: ["tests/preview-https.acceptance.mjs"],
+          testTimeout: 60000,
+        },
+      },
       {
         test: {
           name: "cross-runtime",

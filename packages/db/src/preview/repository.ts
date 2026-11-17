@@ -69,6 +69,7 @@ import {
   replay,
 } from "./rows.js";
 import type { PreviewExecutionRow, PreviewGenerationRow } from "./rows.js";
+import { SqlPreviewAccess } from "./access.js";
 
 export type ExecutePreviewPlan = <Miss>(
   plan: WritePlan<Miss>,
@@ -86,11 +87,15 @@ function execution(row: PreviewExecutionRow): PreviewExecution {
 export class SqlPreviewRepository
   implements PreviewReadPort, PreviewCommandPort, PreviewMaintenancePort
 {
+  public readonly access: SqlPreviewAccess;
+
   public constructor(
     private readonly sql: ContentReadSql,
     private readonly execute: ExecutePreviewPlan,
     private readonly content: Pick<SqlContentReader, "exportBuildContentPage">,
-  ) {}
+  ) {
+    this.access = new SqlPreviewAccess(sql, execute);
+  }
 
   public async previewContextPage(input: ExportBuildContentPageInput) {
     return this.content.exportBuildContentPage(input, BUILD_EXPORT_PAGE_BYTE_BUDGET);
@@ -183,6 +188,11 @@ export class SqlPreviewRepository
     if (media === null) return false;
     const result = await this.execute(finalizePreviewPlan(input, media), input.now);
     if (result.kind === "committed") return true;
+    return this.confirmedPreviewOutput(input);
+  }
+
+  public async confirmedPreviewOutput(input: PreviewClaim & { readonly output: PreviewObject }) {
+    if (!validPreviewClaim(input) || !previewStoredObject(input.output)) return false;
     const lookup = finalizedPreviewRead(input);
     return (await this.sql.all(lookup.sql, ...lookup.params)).length > 0;
   }

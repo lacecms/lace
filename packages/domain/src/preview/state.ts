@@ -42,7 +42,7 @@ export function isPreviewArtifactPath(path: string): boolean {
       .split("/")
       .every(
         (segment) =>
-          /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/u.test(segment) &&
+          /^[A-Za-z0-9_-][A-Za-z0-9._-]*(?![\s\S])/u.test(segment) &&
           !segment.endsWith(".") &&
           !segment.toLowerCase().endsWith(".map"),
       )

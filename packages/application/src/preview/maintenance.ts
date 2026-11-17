@@ -1,5 +1,6 @@
 import type { Clock } from "../ports/infrastructure.js";
 import type { PreviewInputStore, PreviewMaintenancePort, PreviewRunner } from "../ports/preview.js";
+import { unixMilliseconds } from "@lacecms/domain";
 
 const DEADLINES_PER_PASS = 3;
 const CLEANUPS_PER_PASS = 2;
@@ -11,6 +12,8 @@ export interface PreviewMaintenanceDependencies {
   readonly clock: Clock;
   readonly store: Pick<PreviewInputStore, "purge">;
   readonly runner: Pick<PreviewRunner, "stop">;
+  /** Give writes admitted just before their deadline time to leave storage. */
+  readonly cleanupGraceMs?: number;
 }
 
 export interface PreviewMaintenanceResult {
@@ -63,7 +66,8 @@ export async function maintainPreviews(
     executor = await reconcilePreviewExecutor(deps);
   });
   await attempt(async () => {
-    for (const item of await repository.previewCleanup(clock.now(), CLEANUPS_PER_PASS)) {
+    const cutoff = unixMilliseconds(Math.max(0, clock.now() - (deps.cleanupGraceMs ?? 0)));
+    for (const item of await repository.previewCleanup(cutoff, CLEANUPS_PER_PASS)) {
       await attempt(async () => {
         if (
           (await store.purge(item.id, item.scope, OBJECTS_PER_PURGE)) === "empty" &&

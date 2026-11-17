@@ -15,7 +15,6 @@ import type {
   ExportBuildContentPageInput,
   PublishedProjection,
 } from "./content.js";
-import type { ByteStream } from "./media.js";
 
 /** Values selected by operator configuration, never by a preview creation request. */
 export interface PreviewSource {
@@ -146,6 +145,9 @@ export interface PreviewCommandPort extends PreviewCapturePort {
       readonly media: readonly MediaId[];
     },
   ) => Promise<boolean>;
+  readonly confirmedPreviewOutput: (
+    input: PreviewClaim & { readonly output: PreviewObject },
+  ) => Promise<boolean>;
   readonly failPreview: (
     id: string,
     reason: PreviewFailureReason,
@@ -205,8 +207,4 @@ export interface PreviewInputStore {
    * deleted. Return "empty" only after staged writes can no longer commit into that namespace.
    */
   readonly purge: (id: string, scope: "input" | "all", limit: number) => Promise<"empty" | "more">;
-}
-
-export interface PreviewArtifactStore {
-  readonly read: (id: string, path: string) => Promise<ByteStream | null>;
 }

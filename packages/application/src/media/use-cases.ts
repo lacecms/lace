@@ -37,10 +37,10 @@ import { detached, failure } from "./helpers.js";
 import {
   collectMediaBytes,
   detectMediaMimeType,
-  mediaSha256,
   sanitizeMediaFilename,
   streamBytes,
 } from "./upload.js";
+import { sha256Bytes } from "../shared/sha256.js";
 import { normalizeMediaMetadataPatch, sameFocalPoint, validatedTags } from "./metadata.js";
 import { toMediaView, validateDimensions } from "./projection.js";
 
@@ -55,7 +55,7 @@ export class MediaUseCases {
     const mimeType = detectMediaMimeType(bytes);
     const dimensions = await this.dependencies.imageInspector.inspect(bytes, mimeType);
     validateDimensions(dimensions.width, dimensions.height);
-    const sha256 = await mediaSha256(bytes);
+    const sha256 = await sha256Bytes(bytes);
     const id = mediaId(this.dependencies.idGenerator.next());
     const storageKey = `media/${id}`;
     const stored = await this.dependencies.storage.put({

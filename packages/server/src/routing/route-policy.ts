@@ -10,6 +10,7 @@ export type SensitiveRequestOperation =
   | "mcp"
   | "oauth-register"
   | "oauth-token"
+  | "preview-access"
   | "oauth-revoke";
 
 export interface SensitiveRequestLimit {

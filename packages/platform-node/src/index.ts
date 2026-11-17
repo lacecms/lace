@@ -9,7 +9,12 @@ export type { ContentModelResolver, NodeRepositoryOptions } from "@lacecms/db/no
 export { nodeContentRepository } from "./database/repository.js";
 export * from "./runtime/content-sync.js";
 export * from "./media/image-inspector.js";
-export * from "./media/minio-storage.js";
+export {
+  NodeMinioObjectStorage,
+  NodeObjectStorageError,
+  type NodeMinioSettings,
+  type S3CommandClient,
+} from "./media/minio-storage.js";
 export * from "./media/media-deletion-dispatcher.js";
 export * from "./builds/site-build-dispatcher.js";
 export * from "./builds/builder-trigger.js";

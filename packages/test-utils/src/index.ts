@@ -34,6 +34,15 @@ export {
 } from "./repository-contract/shared.js";
 export { MEDIA_METADATA_CHECKPOINTS } from "./repository-contract/media/catalog.js";
 export { securityContractCases } from "./security-contract/registry.js";
+export {
+  assertPreviewHandoff,
+  draftPreviewOrigin,
+  openPreviewSession,
+  seedReadyPreview,
+} from "./security-contract/preview.js";
+export { assertPreviewPackage, claimPreviewFixture } from "./security-contract/preview-package.js";
+export { assertPreviewResourceGuards } from "./security-contract/preview-delivery.js";
+export { assertPreviewCleanup } from "./security-contract/preview-cleanup.js";
 export { SECURITY_CONTRACT_EPOCH, createUserByInvitation } from "./security-contract/harness.js";
 export type {
   SecurityContractHarness,

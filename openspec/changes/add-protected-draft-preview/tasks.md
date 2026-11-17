@@ -19,12 +19,12 @@ plan is estimated at 6–10 working sessions, not one implementation turn.
 Depends on PV1A. Implements `draft-preview-delivery` and design §§6–7, using
 fixture packages before the real Astro runner is available.
 
-- [ ] 2.1 Implement preview-origin initiation, browser-bound one-use handoff and restricted host-only preview sessions linked to real Lace sessions; verify expiry, replay, stolen callback, mismatched origin/return path, concurrent tabs and parent revocation against actual auth on both runtimes.
-- [ ] 2.2 Add strict hostname dispatch and credential-isolated routes, with existing origin/body/rate-limit policy integration; verify no admin/MCP/OAuth/build-control route on the preview host and no preview authority from public build/import/MCP tokens.
-- [ ] 2.3 Implement private S3/R2 artifact staging, manifest validation, sealed immutable output and streamed gateway reads; verify traversal/encoded separators, cross-generation paths, missing/oversized/partial files and forbidden source/environment/source-map content.
-- [ ] 2.4 Enforce live parent/user/permission and generation checks for HTML, assets, originals, HEAD, conditional and range requests; verify direct unauthenticated URLs, logout, role/account changes, invalidation and expiry deny subsequent bytes before any 304/206.
-- [ ] 2.5 Add no-store/no-referrer/noindex, content-type and framing policies, prevent preview service-worker persistence, and implement the protected top-level viewer with revision/expiry; verify same-site iframe bootstrap, cross-site fallback, parent isolation and denied foreign framing in real-browser HTTPS fixtures.
-- [ ] 2.6 Implement bounded handoff/session/input/artifact cleanup in both runtime maintenance paths; verify cleanup retries do not restore access or rerun builds, and record PV1B security evidence with the checkpoint quality gate.
+- [x] 2.1 Implement preview-origin initiation, browser-bound one-use handoff and restricted host-only preview sessions linked to real Lace sessions; verify expiry, replay, stolen callback, mismatched origin/return path, concurrent tabs and parent revocation against actual auth on both runtimes.
+- [x] 2.2 Add strict hostname dispatch and credential-isolated routes, with existing origin/body/rate-limit policy integration; verify no admin/MCP/OAuth/build-control route on the preview host and no preview authority from public build/import/MCP tokens.
+- [x] 2.3 Implement private S3/R2 artifact staging, manifest validation, sealed immutable output and streamed gateway reads; verify traversal/encoded separators, cross-generation paths, missing/oversized/partial files and forbidden source/environment/source-map content.
+- [x] 2.4 Enforce live parent/user/permission and generation checks for HTML, assets, originals, HEAD, conditional and range requests; verify direct unauthenticated URLs, logout, role/account changes, invalidation and expiry deny subsequent bytes before any 304/206.
+- [x] 2.5 Add no-store/no-referrer/noindex, content-type and framing policies, prevent preview service-worker persistence, and implement the protected top-level viewer with revision/expiry; verify same-site iframe bootstrap, cross-site fallback, parent isolation and denied foreign framing in real-browser HTTPS fixtures.
+- [x] 2.6 Implement bounded handoff/session/input/artifact cleanup in both runtime maintenance paths; verify cleanup retries do not restore access or rerun builds, and record PV1B security evidence with the checkpoint quality gate.
 
 ## 3. PV1C — Astro single-page integration
 

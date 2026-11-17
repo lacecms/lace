@@ -23,6 +23,7 @@ export function LoginPage() {
       <SignInForm
         redirectTo={search.redirect ?? "/content"}
         mcpTransaction={search.mcpTransaction}
+        previewReturn={search.previewReturn}
       />
       <p className="m-0 text-center text-sm">
         <Link

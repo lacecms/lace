@@ -36,7 +36,7 @@ export class NodeObjectStorageError extends ObjectStorageError {
   }
 }
 
-function isMissingObject(error: unknown): boolean {
+export function isMissingObject(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
   const record = error as {
     readonly $metadata?: { readonly httpStatusCode?: unknown };
@@ -49,7 +49,7 @@ function isMissingObject(error: unknown): boolean {
   );
 }
 
-function streamFromNode(value: unknown): ByteStream {
+export function streamFromNode(value: unknown): ByteStream {
   if (value === null || typeof value !== "object" || !(Symbol.asyncIterator in value)) {
     throw new NodeObjectStorageError();
   }
@@ -64,7 +64,7 @@ function streamFromNode(value: unknown): ByteStream {
   };
 }
 
-function clientConfig(settings: NodeMinioSettings): S3ClientConfig {
+export function nodeS3ClientConfig(settings: NodeMinioSettings): S3ClientConfig {
   return {
     credentials: {
       accessKeyId: settings.accessKeyId,
@@ -82,7 +82,7 @@ export class NodeMinioObjectStorage implements ObjectStorage {
 
   public constructor(
     private readonly settings: NodeMinioSettings,
-    client: S3CommandClient = new S3Client(clientConfig(settings)),
+    client: S3CommandClient = new S3Client(nodeS3ClientConfig(settings)),
   ) {
     this.client = client;
   }

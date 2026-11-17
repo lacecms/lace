@@ -1,12 +1,65 @@
 # Preview implementation verification
 
+## PV1B verified on 2026-11-17
+
+Tasks 2.1–2.6 passed. Node and the Worker exercise the same browser-bound
+handoff against real Better Auth sessions. The callback exchanges its code from
+the URL fragment in a bounded POST. An embedded handoff requests authorization
+from the single CORS-enabled CMS endpoint, which lets the admin frame policy
+allow only the configured preview origin. The standalone viewer supports
+top-level sign-in and opens a fresh handoff after sign-in.
+
+Private S3 and R2 staging accepts an immutable manifest first, so it can reject
+files outside the declared package limits before writing them. The manifest
+allows up to 2,000 files, 32 MiB per file, 100 MiB total and 1 MiB of manifest
+data. Files use generation-scoped content hashes and create-only writes with
+integrity checks. Finalization verifies the complete inventory before making
+the manifest visible through the guarded generation pointer. Range requests
+support a single byte interval. All resource methods check live parent
+authorization and generation readiness before opening storage or returning a
+validator.
+
+Maintenance removes up to 16 expired handoffs and 16 expired preview sessions
+per pass. The existing lifecycle cleanup processes up to two namespaces per
+pass with up to 64 objects per namespace and preserves ready output when
+purging inputs. Worker preview maintenance uses a dedicated `*/2 * * * *`
+invocation so publication and preview have independent query budgets. The
+runtime hook is wired in the checkpoint fixture. Production ingress and
+executor configuration belong to PV1D/PV1E.
+
+### Test results
+
+- `pnpm --filter @lacecms/platform-node test src/runtime/preview.test.ts` passed
+  three cases using SQLite and an ephemeral loopback SILO container from the
+  repository-pinned image. Set `LACE_TEST_PREVIEW_S3_URL` to the disposable
+  endpoint to include the S3 cases.
+- `pnpm --filter @lacecms/platform-cloudflare test src/runtime/preview.test.ts
+  src/worker-dispatch.test.ts` passed 11 cases on local D1/R2. The preview
+  cleanup pass stayed within 50 statements and 100 bound parameters.
+- `pnpm exec vitest run --config vitest.verification.config.mjs --project preview-https`
+  passed in Chromium with the SILO fixture and compiled admin. It covered
+  same-site framing with scripts and CSS, protection from foreign framing and
+  service worker registration, cross-site new-tab access, and sign-in through
+  the normal admin screen with return to the protected viewer.
+- The focused `src/repository-contract.test.ts -t preview` reruns passed 30
+  SQLite cases and 15 local D1 cases. Focused server, Better Auth and admin
+  login regressions passed.
+- Root `pnpm typecheck`, `pnpm lint` (including boundaries and Drizzle),
+  `pnpm format:check`, `pnpm openapi:check` and
+  `pnpm exec openspec validate add-protected-draft-preview --type change --strict`
+  passed.
+
+The fixture packages exercise delivery before a site runner is available.
+Preview remains disabled in the deployment entry points. The next unchecked
+task is 3.1 (PV1C).
+
 ## PV1A verified on 2026-11-17
 
 Tasks 1.1–1.8 passed. The shared application and SQL layers implement admission,
 immutable input capture, runner claims, finalization, expiry, invalidation and
 recovery. Invalidation shares the guarded publication, content removal, model
 removal and media deletion transactions. Preview runtime creation and routes
-remain disabled. The next unchecked task is 2.1 (PV1B).
+remained disabled at the PV1A handoff.
 
 The approved capture fence uses a preview-only epoch. The migration trigger
 advances the epoch when a committed in-place write updates the current published

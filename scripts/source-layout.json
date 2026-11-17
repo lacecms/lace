@@ -14,7 +14,8 @@
     "shared": [],
     "import": ["shared"],
     "mcp": [],
-    "session": ["mcp", "shared"]
+    "session": ["mcp", "shared"],
+    "preview": ["session"]
   },
   "packages/config": {
     "shared": [],
@@ -85,7 +86,8 @@
     "security": ["routing", "shared"],
     "composition": ["routing", "runtime", "security", "shared"],
     "routes": ["composition", "routing", "runtime", "security", "shared"],
-    "app": ["composition", "routes", "routing", "runtime", "security", "shared"]
+    "preview": ["routing", "shared"],
+    "app": ["composition", "preview", "routes", "routing", "runtime", "security", "shared"]
   },
   "packages/test-utils": {
     "shared": [],

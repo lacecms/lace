@@ -46,6 +46,11 @@ const rootRoute = createRootRouteWithContext<AdminRouterContext>()({
 });
 const loginRoute = createRoute({
   beforeLoad: async ({ context, search }) => {
+    if (search.previewReturn && (await context.sessionSource.get()) !== null)
+      throw redirect({
+        href: `/api/v1/admin/preview/authorize?resume=${encodeURIComponent(search.previewReturn)}`,
+        reloadDocument: true,
+      });
     if (!search.mcpTransaction && (await context.sessionSource.get()) !== null)
       throw redirect({ to: "/content" });
   },
@@ -57,9 +62,15 @@ const loginRoute = createRoute({
   ): {
     redirect?: string | undefined;
     mcpTransaction?: string | undefined;
+    previewReturn?: string | undefined;
     reset?: boolean | undefined;
     setupComplete?: boolean | undefined;
   } => ({
+    previewReturn:
+      typeof search.previewReturn === "string" &&
+      /^\/view\/[A-Za-z0-9_-]{1,128}(?![\s\S])/u.test(search.previewReturn)
+        ? search.previewReturn
+        : undefined,
     mcpTransaction:
       typeof search.mcpTransaction === "string" &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
