@@ -341,6 +341,8 @@ or its history. Scripts have current names and one catalog.
   superseded by the embed-first decision, fails strict validation) to
   `openspec/changes/archive/2026-11-01-video-a-media-upload-delivery-superseded`
   with a one-paragraph note; `pnpm spec:validate` passes again.
+  The draft now lives under [superseded planning](../../openspec/superseded/2026-11-01-video-a-media-upload-delivery-superseded/SUPERSEDED.md)
+  outside the archive checked by `openspec validate --archived`.
 - Add `packages/platform-node/lace.sqlite` (local database) to `.gitignore`.
 - `DEVELOPMENT.md` gains a "Script catalog" table: every root script, its
   group (dev, verification, acceptance, release, docs), when to run it and the
