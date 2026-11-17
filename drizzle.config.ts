@@ -13,6 +13,7 @@ const tableModules = [
   "security",
   "auth",
   "oauth",
+  "preview",
 ];
 
 export default defineConfig({

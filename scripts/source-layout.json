@@ -7,7 +7,8 @@
     "configuration": ["ports", "shared"],
     "content": ["ports", "shared"],
     "media": ["ports", "shared"],
-    "outbox": ["ports", "shared"]
+    "outbox": ["ports", "shared"],
+    "preview": ["content", "ports", "shared"]
   },
   "packages/auth": {
     "shared": [],
@@ -37,14 +38,16 @@
     "openapi": ["shared"],
     "settings": ["accounts", "shared"],
     "media": ["content", "shared"],
-    "delivery": ["content", "errors", "media", "shared"]
+    "delivery": ["content", "errors", "media", "shared"],
+    "preview": ["shared"]
   },
   "packages/domain": {
     "shared": [],
     "access": ["shared"],
     "media": ["shared"],
     "builds": ["shared"],
-    "content": ["access", "shared"]
+    "content": ["access", "shared"],
+    "preview": []
   },
   "packages/db": {
     "shared": [],
@@ -70,8 +73,10 @@
       "reads",
       "shared",
       "sync",
-      "write-plan"
-    ]
+      "write-plan",
+      "preview"
+    ],
+    "preview": ["content", "media", "reads", "shared", "write-plan"]
   },
   "packages/server": {
     "routing": [],

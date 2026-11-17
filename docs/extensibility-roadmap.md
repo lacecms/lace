@@ -153,6 +153,41 @@ CORS on public reads (needed by SSR, preview or mobile clients); one public
 endpoint family per content kind; a generated admin API client; pruning
 `openspec/changes/archive`.
 
+## Pre-1.0 priority PV1 — Protected saved-draft preview
+
+**Selected:** 2026-11-17. **Status:** PV1A verified, PV1B next. **Session unit:** PV1,
+[`add-protected-draft-preview`](../openspec/changes/add-protected-draft-preview/proposal.md).
+The owner selected this as the first product priority before Lace 1.0, outside
+EX1–EX7. It does not depend on the unfinished EX5/EX7 work or combine their
+sessions. PV1 is an explicit staged exception to one session per change: one
+proposal defines the complete contract, with six independently verified
+checkpoints and an initial estimate of 6–10 working sessions. Apply one
+checkpoint at a time; record its evidence and remaining tasks before stopping.
+Keep the feature disabled until all checkpoints pass.
+
+| Checkpoint | Scope | Completion evidence |
+| --- | --- | --- |
+| PV1A | Lifecycle, immutable inputs, SQLite/D1 persistence | [Verified on SQLite and local D1](../openspec/changes/add-protected-draft-preview/verification.md) |
+| PV1B | Session handoff and protected artifact delivery | Real-auth and host/resource denial tests |
+| PV1C | Astro single-route integration | Packed-site asset/link and browser checks |
+| PV1D | Fixed VPS runner and publication priority | Container timeout/restart/release isolation checks |
+| PV1E | GitHub runner and private R2 | Worker protocol and real-provider acceptance |
+| PV1F | Admin, documentation and complete acceptance | Role/iframe/new-tab journeys on both runtimes |
+
+Scope: saved routed pages/collection entries, explicit single-page generation,
+one preview per entity, one active generation per installation, protected
+resources and a session-bound iframe with new-tab fallback. GitHub Actions
+plus private R2 on Cloudflare; a fixed local builder on VPS. Ready artifacts
+live for 24 hours. Execution/upload is bounded to 10 minutes and the operation
+to 15 minutes including provider waiting. Save/revert/unpublish retain the
+preview; publication, entity/model deletion and included-media deletion
+invalidate it. Retries are manual for the current saved revision. No live
+editing, guest links, automatic rebuilds or preview queue.
+
+Architecture §§3–5/10/13/14 and ADR 0033 record the selected scope before code.
+Main capability specs remain unchanged until verified delta synchronization.
+The existing release-preparation change remains separate.
+
 ## 5. Owner decisions (2026-11-14)
 
 1. The refactoring roadmap is archived; its unfinished sessions and the open

@@ -177,6 +177,12 @@ when selected and do not yet have an implementation order or new CE numbers.
 
 Further candidates, not yet ordered: scheduled publication (C2, an MVP
 exclusion), bulk list actions, media folders (tags are selected as SM3),
-token-protected draft preview, trash for deleted entries, and an early
+trash for deleted entries, and an early
 decision on whether localized content will ever be supported, because locales
 would affect snapshot and route keys.
+
+Saved-draft preview was selected on 2026-11-17 as pre-1.0 priority PV1 in the
+[active roadmap](docs/extensibility-roadmap.md#pre-10-priority-pv1--protected-saved-draft-preview).
+[The proposal](openspec/changes/add-protected-draft-preview/proposal.md) covers
+protected static single-page preview. Live editing and guest preview links
+remain deferred.

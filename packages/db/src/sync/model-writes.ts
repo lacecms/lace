@@ -1,3 +1,4 @@
+import { invalidatePreviews } from "../write-plan/preview-invalidation.js";
 import { configurationSyncBaseline } from "@lacecms/application";
 import type {
   ApplyConfigurationSynchronizationInput,
@@ -42,6 +43,10 @@ export function configurationSyncModelStatements(
         sql: `delete from content_models where ${IDENTITY_SQL} and ${guard.sql}`,
         params: [...identityParams(expected), ...guard.params],
       },
+      invalidatePreviews("model", model.key, appliedAt, {
+        sql: `${guard.sql} and not exists(select 1 from content_models where key = ?)`,
+        params: [...guard.params, model.key],
+      }),
     ];
   }
 

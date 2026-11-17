@@ -96,7 +96,7 @@ tenants; another database dialect; unlimited revision history; a
 `previousPublished` snapshot; real-time collaboration or CRDTs; arbitrarily
 nested layout blocks; models created in the admin UI; per-entry or
 per-collection ACLs; internationalization and localized snapshots; scheduled
-publication; an exact visual site preview; a built-in AI chat or LLM provider;
+publication; live preview with in-page editing; a built-in AI chat or LLM provider;
 a plugin marketplace.
 
 ## 4. Architectural principles
@@ -111,6 +111,12 @@ configuration ([ADR 0021](../adr/0021-single-site-static-architecture.md)).
 
 Astro builds the site from the public API; page requests are normally served as
 static assets without the CMS API.
+
+An optional, explicitly requested draft preview builds one routed page with the
+site-owned Astro components into private, expiring storage. It never changes
+the public export or deployment. This is the selected pre-1.0 scope, pending
+implementation in [PV1](../../openspec/changes/add-protected-draft-preview/proposal.md);
+[ADR 0033](../adr/0033-protected-static-draft-preview.md) records the boundary.
 
 ### 4.3 Code-first structure, CMS-managed content
 

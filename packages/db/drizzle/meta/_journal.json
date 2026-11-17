@@ -29,6 +29,20 @@
       "when": 1794864311984,
       "tag": "0003_invitation_pagination",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794935620563,
+      "tag": "0004_protected_draft_preview",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794936220439,
+      "tag": "0005_preview_capture_fence",
+      "breakpoints": true
     }
   ]
 }

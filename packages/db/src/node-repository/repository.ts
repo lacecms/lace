@@ -1,3 +1,5 @@
+import { SqlPreviewRepository } from "../preview/repository.js";
+import { executeWritePlan } from "./write-plan.js";
 import type { ListMediaTagsInput, MediaTagCount } from "@lacecms/application";
 import { collectionListPlan } from "../content/collection-list.js";
 import { purgeExpiredIdempotencyRecordsStatement } from "../publication/idempotency.js";
@@ -113,13 +115,20 @@ export class NodeContentRepository
   private readonly siteBuilds: NodeSiteBuilds;
 
   private readonly reader: SqlContentReader;
+  public readonly preview: SqlPreviewRepository;
 
   public constructor(
     private readonly connection: Database.Database,
     resolveModel: ContentModelResolver,
     options: NodeRepositoryOptions = {},
   ) {
-    this.reader = new SqlContentReader(nodeContentReadSql(connection), resolveModel);
+    const sql = nodeContentReadSql(connection);
+    this.reader = new SqlContentReader(sql, resolveModel);
+    this.preview = new SqlPreviewRepository(
+      sql,
+      async (plan) => executeWritePlan(connection, plan, options.beforeMutation),
+      this.reader,
+    );
     const parts = [connection, resolveModel, options, this.reader] as const;
     this.configurationSync = new NodeConfigurationSync(...parts);
     this.entries = new NodeEntryCommands(...parts);

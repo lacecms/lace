@@ -24,8 +24,14 @@ export type RestCredentialMode =
   | "import-only"
   | "build";
 
-type CredentialMode = RestCredentialMode | "provider" | "mcp";
-type RouteMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "ALL";
+type PreviewCredentialMode =
+  | "preview-handoff"
+  | "preview-session"
+  | "preview-bootstrap"
+  | "preview-claim"
+  | "preview-builder";
+type CredentialMode = RestCredentialMode | "provider" | "mcp" | PreviewCredentialMode;
+type RouteMethod = "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE" | "ALL";
 
 export interface RoutePolicy<
   Path extends string = string,

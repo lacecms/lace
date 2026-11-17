@@ -29,6 +29,12 @@ import { cases as registeredClaims } from "./builds/registered-claims.js";
 import { cases as routeLess } from "./entries/route-less.js";
 import { cases as retention } from "./entries/retention.js";
 import { cases as attribution } from "./entries/attribution.js";
+import { cases as previewAdmission } from "./preview/admission.js";
+import { cases as previewCapture } from "./preview/capture.js";
+import { cases as previewExecution } from "./preview/execution.js";
+import { cases as previewInvalidation } from "./preview/invalidation.js";
+import { cases as previewMaintenance } from "./preview/maintenance.js";
+import { cases as previewBudgets } from "./preview/budgets.js";
 import type { RepositoryContractCase } from "./shared.js";
 
 export const contentRepositoryContractCases: readonly RepositoryContractCase[] = Object.freeze([
@@ -63,4 +69,10 @@ export const contentRepositoryContractCases: readonly RepositoryContractCase[] =
   ...routeLess,
   ...retention,
   ...attribution,
+  ...previewAdmission,
+  ...previewCapture,
+  ...previewExecution,
+  ...previewInvalidation,
+  ...previewMaintenance,
+  ...previewBudgets,
 ]);
