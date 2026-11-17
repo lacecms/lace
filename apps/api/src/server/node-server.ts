@@ -168,7 +168,11 @@ export async function startNodeServer(input: {
           signal: request.signal,
           ...(body === null ? {} : { body, duplex: "half" }),
         } as RequestInit);
-        input.runtime.setRequestPeer(nativeRequest, bindings.incoming.socket.remoteAddress);
+        input.runtime.setRequestPeer(
+          nativeRequest,
+          bindings.incoming.socket.remoteAddress,
+          bindings.incoming.url,
+        );
         return fetch(nativeRequest);
       },
       { overrideGlobalObjects: false },

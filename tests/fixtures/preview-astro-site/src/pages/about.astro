@@ -1,0 +1,9 @@
+---
+import { loadContent } from "../lib/content";
+
+const site = await loadContent();
+const home = site.byPath(site.preview ? Astro.url.pathname : "/about");
+if (!home) throw new Error("Missing homepage");
+---
+
+<h1>{home.title}</h1>

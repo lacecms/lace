@@ -22,7 +22,7 @@ import type { NormalizedDraft } from "./draft-normalization.js";
 type ModelFieldMap = Readonly<Record<string, FieldDefinition>>;
 
 export function internalLinks(
-  dependencies: ContentUseCaseDependencies,
+  dependencies: Pick<ContentUseCaseDependencies, "config">,
   model: NormalizedContentModel,
   fields: JsonObject,
   blocks: readonly Pick<ContentBlock, "data" | "hidden" | "key" | "type">[],
@@ -65,7 +65,7 @@ function declaresVisibility(
  * repository copies the draft as before.
  */
 export function publishedProjection(
-  dependencies: ContentUseCaseDependencies,
+  dependencies: Pick<ContentUseCaseDependencies, "config">,
   visibilityOwners: Map<string, boolean>,
   model: NormalizedContentModel,
   draft: NormalizedDraft,

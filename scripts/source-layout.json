@@ -7,13 +7,15 @@
     "configuration": ["ports", "shared"],
     "content": ["ports", "shared"],
     "media": ["ports", "shared"],
-    "outbox": ["ports", "shared"]
+    "outbox": ["ports", "shared"],
+    "preview": ["content", "ports", "shared"]
   },
   "packages/auth": {
     "shared": [],
     "import": ["shared"],
     "mcp": [],
-    "session": ["mcp", "shared"]
+    "session": ["mcp", "shared"],
+    "preview": ["session"]
   },
   "packages/config": {
     "shared": [],
@@ -37,14 +39,16 @@
     "openapi": ["shared"],
     "settings": ["accounts", "shared"],
     "media": ["content", "shared"],
-    "delivery": ["content", "errors", "media", "shared"]
+    "delivery": ["content", "errors", "media", "preview", "shared"],
+    "preview": ["shared"]
   },
   "packages/domain": {
     "shared": [],
     "access": ["shared"],
     "media": ["shared"],
     "builds": ["shared"],
-    "content": ["access", "shared"]
+    "content": ["access", "shared"],
+    "preview": []
   },
   "packages/db": {
     "shared": [],
@@ -70,8 +74,10 @@
       "reads",
       "shared",
       "sync",
-      "write-plan"
-    ]
+      "write-plan",
+      "preview"
+    ],
+    "preview": ["content", "media", "reads", "shared", "write-plan"]
   },
   "packages/server": {
     "routing": [],
@@ -80,7 +86,8 @@
     "security": ["routing", "shared"],
     "composition": ["routing", "runtime", "security", "shared"],
     "routes": ["composition", "routing", "runtime", "security", "shared"],
-    "app": ["composition", "routes", "routing", "runtime", "security", "shared"]
+    "preview": ["routing", "shared"],
+    "app": ["composition", "preview", "routes", "routing", "runtime", "security", "shared"]
   },
   "packages/test-utils": {
     "shared": [],
@@ -95,7 +102,14 @@
   },
   "packages/sdk": {
     "client": [],
-    "site": ["client"]
+    "site": ["client"],
+    "preview": ["client", "site"]
+  },
+  "packages/astro": {
+    "media": [],
+    "preview": ["media", "server"],
+    "rich-text": [],
+    "server": []
   },
   "packages/create-lace": {
     "site": [],

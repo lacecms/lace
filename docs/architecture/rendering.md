@@ -163,7 +163,8 @@ content validation error as cause.
 `@lacecms/astro` depends only on `@lacecms/render` and `@lacecms/sdk` among Lace
 packages, declares a peer dependency on the supported Astro range, and ships
 Astro component source next to its compiled server module in `dist/`. It
-contains no visual blocks or Astro integration. Its only client script is
+contains no visual blocks. The selected PV1 scope adds an opt-in server-only
+preview integration; normal builds keep their existing behavior. Its only client script is
 the shared video player's local activation and ambient playback script. Its
 components and helpers are specified in
 [astro-adapter](../../openspec/specs/astro-adapter/spec.md):
@@ -281,3 +282,21 @@ Collection routes read the entry by slug on each render, not only in
 
 The CMS describes route patterns for validation and preview URLs, but it does
 not generate or own the user's Astro route files.
+
+### 13.7 Draft preview integration (selected PV1 scope)
+
+A separate opt-in preview loader reads an immutable job-scoped input, overlays
+only the selected saved draft on frozen published context, and reuses the
+site's route files, layouts and block components. Public loaders and build
+tokens remain published-only. The Astro integration renders exactly the
+selected route with its asset graph; compilation and route enumeration may
+still visit the whole project. Missing/ambiguous routes and render failures
+fail the preview instead of falling back to a full-site build.
+
+Preview resources live below a generation prefix on the protected hostname;
+necessary original images are copied into its private package. Ordinary page
+links resolve to the public site, while same-document anchors stay inside the
+preview. Existing sites explicitly adopt the integration and account for
+custom runtime URLs. A preview flag lets site code control analytics, forms
+and other external side effects; Lace does not rewrite arbitrary scripts.
+See [ADR 0033](../adr/0033-protected-static-draft-preview.md).

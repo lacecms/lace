@@ -211,10 +211,11 @@ test("evaluating the server module in a browser fails", async () => {
   await expect(import(browserModule)).rejects.toThrow(/server-only/u);
 });
 
-test("the adapter exports only its server module and the generic components", async () => {
+test("the adapter exports its server entries and generic components", async () => {
   const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
   expect(Object.keys(manifest.exports)).toEqual([
     ".",
+    "./preview",
     "./LaceBlocks.astro",
     "./LaceImage.astro",
     "./LaceSeo.astro",
@@ -223,7 +224,11 @@ test("the adapter exports only its server module and the generic components", as
   ]);
   expect(manifest.files).toEqual(["dist"]);
   expect(manifest.peerDependencies).toEqual({ astro: "^7.3.1" });
-  expect(Object.keys(manifest.dependencies).sort()).toEqual(["@lacecms/render", "@lacecms/sdk"]);
+  expect(Object.keys(manifest.dependencies).sort()).toEqual([
+    "@lacecms/render",
+    "@lacecms/sdk",
+    "parse5",
+  ]);
   const components = (await readdir(new URL("./", import.meta.url))).filter((name) =>
     name.endsWith(".astro"),
   );
@@ -233,7 +238,6 @@ test("the adapter exports only its server module and the generic components", as
     "LaceSeo.astro",
     "LaceVideo.astro",
     "RichText.astro",
-    "RichTextNodes.astro",
   ]);
 });
 

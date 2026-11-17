@@ -29,6 +29,9 @@ import { bodyLimit } from "hono/body-limit";
 import { Hono } from "hono";
 import { API_V1 } from "../routing/v1-routes.js";
 import { matchedRoutePolicy } from "../routing/route-matching.js";
+import { previewIngress } from "./preview.js";
+import { privatePreviewHeaders } from "../preview/handoff.js";
+import { previewRoutes } from "../routing/preview-routes.js";
 import {
   acceptsImport,
   authenticationChallenge,
@@ -53,6 +56,7 @@ export function createLaceApp(input: LaceAppInput) {
   if (!Number.isSafeInteger(input.maxBodyBytes) || input.maxBodyBytes < 1)
     throw new TypeError("maxBodyBytes must be a positive safe integer.");
   const app = new Hono();
+  const registerPreviewAuthorization = previewIngress(app, input);
   const actors = createActorContext(input.actors);
   const routeContext: RouteContext = Object.freeze({
     actors,
@@ -60,11 +64,17 @@ export function createLaceApp(input: LaceAppInput) {
   });
   const { actor } = actors;
 
-  app.onError((error, context) =>
-    isProtocolErrorPath(context.req.path)
+  app.onError((error, context) => {
+    if (
+      input.preview &&
+      (new URL(context.req.raw.url).host === new URL(input.preview.previewOrigin).host ||
+        context.req.path === API_V1 + previewRoutes.admin.authorize.path)
+    )
+      return errorResponse(classifyError(error), privatePreviewHeaders());
+    return isProtocolErrorPath(context.req.path)
       ? protocolErrorResponse("server_error", 503, noStore)
-      : errorResponse(classifyError(error)),
-  );
+      : errorResponse(classifyError(error));
+  });
 
   app.use(async (context, next) => {
     context.set("lace.clientAddress", input.clientAddress?.(context.req.raw) ?? "0.0.0.0");
@@ -228,6 +238,7 @@ export function createLaceApp(input: LaceAppInput) {
     .route("/", createPublicRoutes(routeContext));
   registerOpenApiRoute(v1, app, routeContext);
   const appWithV1 = app.route(API_V1, v1);
+  registerPreviewAuthorization();
   registerDocsRoutes(app, routeContext);
 
   app.notFound(async (context) => {
@@ -236,8 +247,22 @@ export function createLaceApp(input: LaceAppInput) {
       !context.req.path.startsWith("/api/") &&
       context.req.path !== "/health/live" &&
       context.req.path !== "/health/ready"
-    )
-      return input.adminAssets.fetch(context.req.raw);
+    ) {
+      const response = await input.adminAssets.fetch(context.req.raw);
+      if (
+        input.preview &&
+        context.req.path.startsWith("/admin/") &&
+        response.headers.get("content-type")?.startsWith("text/html")
+      ) {
+        const headers = new Headers(response.headers);
+        headers.append(
+          "content-security-policy",
+          `frame-src ${input.preview.previewOrigin}; frame-ancestors 'none'`,
+        );
+        return new Response(response.body, { status: response.status, headers });
+      }
+      return response;
+    }
     return notFound();
   });
 

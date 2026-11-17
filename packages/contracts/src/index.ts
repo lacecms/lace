@@ -1,5 +1,5 @@
 // Directory dependencies: shared ← errors, openapi, accounts, builds, content;
-// accounts ← settings; content ← media; content, media, errors ← delivery.
+// accounts ← settings; content ← media; content, media, errors ← delivery; shared ← preview.
 
 export { InvariantError, LaceError } from "@lacecms/content";
 export {
@@ -136,6 +136,7 @@ export type {
 export * from "./delivery/build-export-mappers.js";
 export * from "./builds/site-builds.js";
 export * from "./builds/build-site.js";
+export * from "./preview/commands.js";
 export {
   setupStateSchema,
   setupAdminRequestSchema,

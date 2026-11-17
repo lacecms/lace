@@ -1,5 +1,5 @@
 {
   "extends": "../../tsconfig.node.json",
   "compilerOptions": { "outDir": "dist", "rootDir": "src" },
-  "include": ["src/index.ts", "src/outbox.ts"]
+  "include": ["src/index.ts", "src/preview.ts", "src/outbox.ts"]
 }

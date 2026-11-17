@@ -1,3 +1,5 @@
+import { SqlPreviewRepository } from "@lacecms/db";
+import { executeWritePlan } from "./write-plan.js";
 import type { ListMediaTagsInput, MediaTagCount } from "@lacecms/application";
 import type {
   ActorSummary,
@@ -124,13 +126,20 @@ export class D1ContentRepository
   private readonly siteBuilds: D1SiteBuilds;
 
   private readonly reader: SqlContentReader;
+  public readonly preview: SqlPreviewRepository;
 
   public constructor(
     private readonly database: D1Database,
     resolveModel: ContentModelResolver,
     options: D1RepositoryOptions = {},
   ) {
-    this.reader = new SqlContentReader(d1ContentReadSql(database), resolveModel);
+    const sql = d1ContentReadSql(database);
+    this.reader = new SqlContentReader(sql, resolveModel);
+    this.preview = new SqlPreviewRepository(
+      sql,
+      (plan, now) => executeWritePlan(database, plan, now, options.beforeMutation),
+      this.reader,
+    );
     const parts = [database, resolveModel, options, this.reader] as const;
     this.configurationSync = new D1ConfigurationSync(...parts);
     this.collectionList = new D1CollectionList(...parts);

@@ -7,6 +7,9 @@ import {
 } from "@lacecms/application";
 import type {
   ListQueryLimits,
+  PreviewReadPort,
+  PreviewCommandPort,
+  PreviewMaintenancePort,
   ConfigurationSyncApplyPort,
   ConfigurationSyncStateReadPort,
   ContentLinkReadPort,
@@ -57,7 +60,9 @@ export type ContractRepository = ContentLinkReadPort &
   PublicContentReadPort &
   SiteBuildCommandPort &
   SiteBuildDispatchPort &
-  SiteBuildReadPort;
+  SiteBuildReadPort & {
+    readonly preview: PreviewReadPort & PreviewCommandPort & PreviewMaintenancePort;
+  };
 
 /** Parameterized seeding and inspection over the runtime's migrated database. */
 export interface ContractSql {

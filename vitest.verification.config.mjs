@@ -1,8 +1,23 @@
 import { defineConfig } from "vitest/config";
+import { sourceCondition } from "./vitest.shared.mjs";
 
 export default defineConfig({
   test: {
     projects: [
+      {
+        test: {
+          name: "preview-astro",
+          include: ["tests/preview-astro.acceptance.mjs"],
+        },
+      },
+      {
+        plugins: [sourceCondition()],
+        test: {
+          name: "preview-https",
+          include: ["tests/preview-https.acceptance.mjs"],
+          testTimeout: 60000,
+        },
+      },
       {
         test: {
           name: "cross-runtime",

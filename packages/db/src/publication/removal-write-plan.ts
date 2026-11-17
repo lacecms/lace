@@ -1,3 +1,4 @@
+import { invalidatePreviews } from "../write-plan/preview-invalidation.js";
 import { decodeLinkImpactReceipt } from "@lacecms/application";
 import type {
   DeleteContentEntryInput,
@@ -269,6 +270,7 @@ export function deleteEntryWritePlan(
           expectedChanges: 1,
         },
       );
+      s.push(invalidatePreviews("entry", input.entryId, input.deletedAt, g));
       return s;
     },
   };

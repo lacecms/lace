@@ -3,6 +3,8 @@ import {
   RuntimeConfigurationError,
   SITE_BUILD_REQUESTED,
   createOutboxDispatchers,
+  PreviewPackages,
+  maintainPreviewDelivery,
 } from "@lacecms/application";
 import { createNodeOAuthPersistence } from "../security/oauth.js";
 import { engineVersion } from "./release-version.js";
@@ -14,6 +16,7 @@ import type {
   Clock,
   IdGenerator,
   ObjectStorage,
+  PreviewBlobStorage,
   ImageInspector,
   SiteBuildTrigger,
 } from "@lacecms/application";
@@ -23,6 +26,7 @@ import {
   TrustedClientAddresses,
   createBetterAuthBoundary,
   createImportActorResolver,
+  createPreviewAccess,
 } from "@lacecms/auth";
 // Load the auth graph before the SDK: their shared Zod ESM initialization
 // otherwise runs after SDK schemas in a combined esbuild bundle.
@@ -59,6 +63,7 @@ import { NodeFixedWindowRateLimiter, NodeSecurityService } from "../security/ser
 import { openNodeDatabase, type NodeDatabase } from "../database/connection.js";
 import { NodeSharpImageInspector } from "../media/image-inspector.js";
 import { NodeMinioObjectStorage, type NodeMinioSettings } from "../media/minio-storage.js";
+import { NodePreviewBlobStorage } from "../media/preview-s3.js";
 import type { NodeMediaDeletionDispatcher } from "../media/media-deletion-dispatcher.js";
 import type { NodeSiteBuildDispatcher } from "../builds/site-build-dispatcher.js";
 import {
@@ -378,6 +383,10 @@ const nodeOperationalLogger = Object.freeze({
 });
 
 export interface CreateNodeRuntimeInput {
+  /** Internal preview delivery composition. Environment activation is handled separately. */
+  readonly previewOrigin?: URL;
+  readonly previewBlobs?: PreviewBlobStorage;
+  readonly previewExecutor?: Pick<import("@lacecms/application").PreviewRunner, "stop">;
   readonly adminAssets?: BuiltAdminResponder;
   readonly actors?: ActorResolver;
   readonly auth?: {
@@ -418,7 +427,8 @@ export interface NodeRuntime {
   readonly maintainOAuth: () => Promise<void>;
   /** Purges one bounded batch of expired idempotency records. */
   readonly maintainOperations: () => Promise<void>;
-  readonly setRequestPeer: (request: Request, peer: string | undefined) => void;
+  readonly setRequestPeer: (request: Request, peer: string | undefined, target?: string) => void;
+  readonly previewPackages?: PreviewPackages;
   readonly app: ReturnType<typeof createLaceApp>;
   readonly cache: Cache;
   readonly close: () => void;
@@ -443,6 +453,7 @@ function hasStartupStorageCheck(
 /** Creates the SQLite-backed Node composition without importing Node code into portable packages. */
 export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
   const clients = new TrustedClientAddresses();
+  const requestTargets = new WeakMap<Request, string>();
   const trusted = trustedProxyPolicy(input.settings.trustedProxyCidrs);
   const database = openNodeDatabase(input.settings.databasePath);
   try {
@@ -551,11 +562,33 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     security,
     storage,
   });
-  const app = createLaceApp(services.appInput);
+  const previewBlobs =
+    input.previewOrigin && (input.previewBlobs ?? new NodePreviewBlobStorage(input.settings.minio));
+  const previewPackages =
+    previewBlobs && new PreviewPackages(previewBlobs, repository.preview, clock);
+  const app = createLaceApp({
+    ...services.appInput,
+    ...(input.previewOrigin && {
+      previewArtifacts: previewPackages!,
+      previewRawPath: (request) => requestTargets.get(request)?.split("?", 1)[0],
+      preview: createPreviewAccess({
+        admin: input.settings.publicBaseUrl,
+        preview: input.previewOrigin,
+        clock,
+        secret: input.settings.authSecret,
+        actors: auth.actors,
+        persistence: repository.preview.access,
+      }),
+    }),
+  });
   const { content, media } = services;
+  let nextPreviewMaintenance = 0;
   return Object.freeze({
-    setRequestPeer: (request: Request, peer: string | undefined) =>
-      clients.set(request, resolveNodeClientAddress(request, peer, trusted)),
+    setRequestPeer: (request: Request, peer: string | undefined, target?: string) => {
+      clients.set(request, resolveNodeClientAddress(request, peer, trusted));
+      if (previewPackages && target !== undefined) requestTargets.set(request, target);
+    },
+    ...(previewPackages && { previewPackages }),
     app,
     cache,
     close: () => database.connection.close(),
@@ -570,7 +603,20 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     storage,
     maintainOAuth: () => oauth.cleanup(Number(clock.now()), 20),
     maintainOperations: async () => {
-      await repository.purgeExpiredIdempotencyRecords(Number(clock.now()), IDEMPOTENCY_PURGE_LIMIT);
+      const now = clock.now();
+      await repository.purgeExpiredIdempotencyRecords(now, IDEMPOTENCY_PURGE_LIMIT);
+      if (!previewBlobs || now < nextPreviewMaintenance) return;
+      nextPreviewMaintenance = now + 60_000;
+      const failures = await maintainPreviewDelivery({
+        repository: repository.preview,
+        clock,
+        blobs: previewBlobs,
+        cleanupGraceMs: input.settings.minio.timeoutMs,
+        runner: input.previewExecutor ?? { stop: async () => "unconfirmed" },
+        purgeExpiredAccess: (at, limit) => repository.preview.access.purgeExpiredAccess(at, limit),
+      });
+      if (failures > 0)
+        nodeOperationalLogger.error({ component: "preview", reason: "cleanup_failed" });
     },
     verifyStorage: () =>
       hasStartupStorageCheck(storage) ? storage.assertReady() : Promise.resolve(),

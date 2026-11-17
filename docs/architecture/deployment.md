@@ -104,6 +104,23 @@ for 30 days; Cloudflare Pages receives the same rule through the site's
 `public/_headers`, which the VPS proxy refuses to serve
 ([vps-composition](../../openspec/specs/vps-composition/spec.md)).
 
+### Private preview builds (selected PV1 scope)
+
+Preview uses a separate generation lifecycle and private storage namespace.
+Cloudflare dispatches a dedicated GitHub Actions workflow and serves private
+R2 artifacts through authenticated Worker requests, without Pages preview
+deployments. Node uses the fixed-command local builder and private object
+storage; preview never switches the public release pointer. One preview
+build may be active per installation, with no preview queue. On a shared VPS
+builder, publication gets the next slot; an already running preview is bounded
+and is not preempted. The build pins the configured site's source commit, not
+necessarily the last deployed commit.
+
+A separate preview hostname can route to the same Worker or Node process, but
+host dispatch must exclude administrative routes. Existing installations
+without complete preview configuration keep preview disabled.
+See [ADR 0033](../adr/0033-protected-static-draft-preview.md).
+
 ## 18. Development modes
 
 Two root development commands are required:

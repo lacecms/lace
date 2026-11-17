@@ -296,6 +296,7 @@ export type SensitiveRateLimitOperation =
   | "oauth-register"
   | "oauth-token"
   | "oauth-revoke"
+  | "preview-access"
   | "auth"
   | "email"
   | "invite"
@@ -321,6 +322,7 @@ export const SENSITIVE_RATE_LIMIT_POLICIES: Readonly<
   "oauth-register": Object.freeze({ limit: 10, windowMs: 15 * minute }),
   "oauth-token": Object.freeze({ limit: 60, windowMs: minute }),
   "oauth-revoke": Object.freeze({ limit: 20, windowMs: hour }),
+  "preview-access": Object.freeze({ limit: 60, windowMs: minute }),
   auth: Object.freeze({ limit: 10, windowMs: 15 * minute }),
   email: Object.freeze({ limit: 5, windowMs: hour }),
   invite: Object.freeze({ limit: 20, windowMs: hour }),

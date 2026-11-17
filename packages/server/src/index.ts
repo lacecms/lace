@@ -1,4 +1,5 @@
-// Directory dependencies: routing ← shared, security. shared ← runtime. routing, runtime, security, shared ← composition ← routes ← app.
+// Directory dependencies: routing ← shared, security, preview. shared ← runtime, preview.
+// routing, runtime, security, shared ← composition ← routes ← app; preview ← app.
 export const packageName = "@lacecms/server";
 
 // Runtime

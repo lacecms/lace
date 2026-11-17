@@ -1,4 +1,4 @@
-// Directory dependencies: shared ← import, session; mcp ← session.
+// Directory dependencies: shared ← import, session; mcp ← session ← preview.
 export const packageName = "@lacecms/auth";
 
 // shared
@@ -16,3 +16,5 @@ export * from "./mcp/actor.js";
 export * from "./mcp/provider.js";
 export * from "./mcp/boundary.js";
 export * from "./mcp/guard.js";
+
+export * from "./preview/access.js";

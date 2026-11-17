@@ -1,0 +1,18 @@
+@font-face {
+  font-family: Notebook;
+  src: url("./notebook.woff2") format("woff2");
+  font-display: block;
+}
+
+#note-actions {
+  border: 1px solid #6d5a45;
+  padding: 18px;
+  font-family: Notebook, sans-serif;
+  background: url("./paper.svg");
+}
+
+@media (width < 600px) {
+  #note-actions {
+    padding: 6px;
+  }
+}

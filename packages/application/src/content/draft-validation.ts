@@ -9,7 +9,9 @@ import { markRouteLessTargets, routeLessModelKeys } from "./route-less-links.js"
 import { collectMedia, internalLinks as collectInternalLinks } from "./publication-projection.js";
 
 export async function validateDraft(
-  dependencies: ContentUseCaseDependencies,
+  dependencies: Pick<ContentUseCaseDependencies, "config" | "media"> & {
+    readonly content: Partial<import("../ports/links.js").ContentLinkReadPort>;
+  },
   input: CompleteDraftInput,
   model: NormalizedContentModel,
   mode: "draft" | "publish",

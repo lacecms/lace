@@ -113,6 +113,7 @@ Git history keeps the originals.
 | [0030-rc2-oldest-supported.md](adr/0030-rc2-oldest-supported.md) | authoritative | ADR 0030: rc2 is the oldest supported release |
 | [0031-route-less-collections.md](adr/0031-route-less-collections.md) | authoritative | ADR 0031: Route-less collections |
 | [0032-outbox-contract-boundary.md](adr/0032-outbox-contract-boundary.md) | authoritative | ADR 0032: Share durable outbox contracts through a dedicated subpath |
+| [0033-protected-static-draft-preview.md](adr/0033-protected-static-draft-preview.md) | authoritative | ADR 0033: Selected protected single-page preview; implementation pending PV1 |
 
 ## docs/archive/
 

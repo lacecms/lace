@@ -1,0 +1,31 @@
+---
+import LaceImage from "@lacecms/astro/LaceImage.astro";
+import { loadContent } from "../../lib/content";
+import "../../assets/notes.css";
+
+export async function getStaticPaths() {
+  const site = await loadContent();
+  return site.entries("notes").map((entry) => ({ params: { slug: entry.slug } }));
+}
+const site = await loadContent();
+const path = site.preview ? Astro.url.pathname : `/${Astro.url.pathname.slice(import.meta.env.BASE_URL.length).replace(/^\/|\/$/gu, "")}`;
+const note = site.byPath(path);
+if (!note) throw new Error("Missing notebook entry");
+const cover = typeof note.fields.cover === "string" ? site.image(note.fields.cover) : undefined;
+---
+
+<h1>{note.title}</h1>
+<p>{site.preview ? "Saved preview" : "Published"}</p>
+<button id="note-actions" type="button">Open notebook</button>
+{cover && cover.width && cover.height && (
+  <LaceImage image={{...cover, src: cover.url, width: cover.width, height: cover.height }} lightbox lightboxId="cover-original" />
+)}
+<script>
+  import "../../assets/interaction";
+</script>
+
+<nav aria-label="Notebook links">
+  <a href="/about" rel="nofollow">Published about</a>
+  <a href="#details">Details on this page</a>
+</nav>
+<p id="details">Notebook details</p>

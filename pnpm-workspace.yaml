@@ -71,6 +71,7 @@ catalog:
   lucide-react: 1.73.0
   miniflare: 5.20260903.0-alpha
   nodemailer: 10.5.0
+  parse5: 8.0.1
   oxfmt: 0.66.0
   oxlint: 1.81.0
   react: 19.3.1

@@ -1,3 +1,4 @@
+import { invalidatePreviews } from "../write-plan/preview-invalidation.js";
 import { MEDIA_DELETE_REQUESTED } from "@lacecms/contracts/outbox";
 import { DISPATCHER_LEASE_DURATION_MS } from "@lacecms/application";
 import type { MarkMediaForDeletionInput } from "@lacecms/application";
@@ -35,6 +36,7 @@ export function requestMediaDeletionWritePlan(
         params: [input.requestedAt, input.mediaId, ...guard.params],
         expectedChanges: 1,
       },
+      invalidatePreviews("media", input.mediaId, input.requestedAt, guard),
       ...enqueueEvents(
         input.events.map((event, index) =>
           bindEventRequest(event, eventIds[index]!, guard, false, "media.outbox"),
