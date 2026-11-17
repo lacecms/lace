@@ -41,6 +41,25 @@ test("both proxy configurations are identical", async () => {
   expect(template).toBe(repository);
 });
 
+test("the optional preview virtual host proxies only protected viewer routes", async () => {
+  const [main, preview, template] = await Promise.all([
+    readFile(repositoryConfig, "utf8"),
+    readFile("deploy/nginx-preview.conf", "utf8"),
+    readFile("packages/create-lace/templates/deploy/nginx-preview.conf", "utf8"),
+  ]);
+  expect(template).toBe(preview);
+  expect(values(parse(main).locations.get("^~ /api/v1/preview-runner/"), "return")).toEqual([
+    ["404"],
+  ]);
+  expect(preview).toContain("server_name ${LACE_PREVIEW_HOST};");
+  const { locations } = parse(preview);
+  const route = locations.get("~ ^/(?:access/(?:start|callback)$|view/|p/)");
+  expect(locations.size).toBe(2);
+  expect(values(locations.get("/"), "return")).toEqual([["404"]]);
+  expect(values(route, "proxy_pass")).toEqual([["http://api:3000"]]);
+  expect(values(route, "proxy_set_header")).toContainEqual(["Host", "$http_host"]);
+});
+
 test("the proxy keeps JSON bodies at 1 MiB and streams media up to the API ceiling", async () => {
   const { server, locations } = parse(await readFile(repositoryConfig, "utf8"));
 

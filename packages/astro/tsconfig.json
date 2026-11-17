@@ -6,5 +6,5 @@
     "rootDir": "src",
     "types": ["node"]
   },
-  "include": ["src/index.ts", "src/preview.ts"]
+  "include": ["src/index.ts", "src/preview.ts", "src/preview-tool.ts"]
 }

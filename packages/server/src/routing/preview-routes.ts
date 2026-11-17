@@ -21,10 +21,17 @@ export const previewRoutes = {
   runner: {
     claim: defineRoute("POST", "/preview-runner/:generationId/claim", "preview-bootstrap"),
     input: defineRoute("GET", "/preview-runner/:generationId/input", "preview-claim"),
+    manifest: defineRoute(
+      "POST",
+      "/preview-runner/:generationId/artifacts/manifest",
+      "preview-claim",
+    ),
     upload: defineRoute("PUT", "/preview-runner/:generationId/artifacts/*", "preview-claim"),
     complete: defineRoute("POST", "/preview-runner/:generationId/complete", "preview-claim"),
   },
   builder: {
+    reserve: defineRoute("PUT", "/preview", "preview-builder"),
     dispatch: defineRoute("POST", "/preview", "preview-builder"),
+    stop: defineRoute("DELETE", "/preview", "preview-builder"),
   },
 } as const;

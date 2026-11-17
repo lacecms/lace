@@ -51,6 +51,11 @@ services:
       LACE_BUILD_SITE_ID: ${LACE_BUILD_SITE_ID:-main-site}
       LACE_BUILD_SITE_LABEL: ${LACE_BUILD_SITE_LABEL:-Main site}
       LACE_BUILD_SITE_URL: ${LACE_BUILD_SITE_URL:-}
+      LACE_PREVIEW_ORIGIN: ${LACE_PREVIEW_ORIGIN:-}
+      LACE_PREVIEW_RUNNER_ORIGIN: http://api:3000/
+      LACE_PREVIEW_BUILDER_URL: http://builder:8788/
+      LACE_PREVIEW_BUILDER_SECRET: ${LACE_PREVIEW_BUILDER_SECRET:-}
+      LACE_PREVIEW_RUNNER_SECRET: ${LACE_PREVIEW_RUNNER_SECRET:-}
       LACE_API_DOCS_ENABLED: ${LACE_API_DOCS_ENABLED:-false}
       LACE_AUTH_SECRET: ${LACE_AUTH_SECRET:?set LACE_AUTH_SECRET}
       LACE_DATABASE_PATH: /data/lace.sqlite
@@ -126,6 +131,8 @@ services:
       LACE_BUILD_SITE_LABEL: ${LACE_BUILD_SITE_LABEL:-Main site}
       LACE_BUILDER_SECRET: ${LACE_BUILDER_SECRET:?set LACE_BUILDER_SECRET}
       LACE_API_BASE_URL: http://api:3000/
+      LACE_PREVIEW_BUILDER_SECRET: ${LACE_PREVIEW_BUILDER_SECRET:-}
+      LACE_PREVIEW_RUNNER_SECRET: ${LACE_PREVIEW_RUNNER_SECRET:-}
       LACE_BUILD_TOKEN: ${LACE_BUILD_TOKEN:?set LACE_BUILD_TOKEN}
       LACE_PUBLIC_BASE_URL: ${LACE_PUBLIC_BASE_URL:?set LACE_PUBLIC_BASE_URL}
       # Optional site output: canonical URLs and the sitemap use the site URL;
@@ -159,10 +166,14 @@ services:
 
   web:
     image: nginx:1.27.5-alpine
+    environment:
+      NGINX_ENVSUBST_FILTER: ^LACE_PREVIEW_HOST$$
+      LACE_PREVIEW_HOST: ${LACE_PREVIEW_HOST:-lace-preview-disabled.invalid}
     ports:
       - "${LACE_HTTP_BIND_ADDRESS:-127.0.0.1}:${LACE_HTTP_PORT:-8080}:8080"
     volumes:
       - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/nginx-preview.conf:/etc/nginx/templates/preview.conf.template:ro
       - static-output:/output:ro
     depends_on:
       api: { condition: service_healthy }

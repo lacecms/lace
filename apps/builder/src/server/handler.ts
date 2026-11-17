@@ -1,9 +1,11 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { BuildRequest, BuildResult } from "../runner/runner.js";
+import { BuilderSchedule, type PreviewJob } from "../runner/schedule.js";
 
 const MAX_BODY_BYTES = 1024;
 const BUILD_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/u;
+const PREVIEW_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}(?![\s\S])/u;
 import { siteBuildFailureReasons, normalizeBuildFailure } from "../runner/diagnostics.js";
 const SAFE_REASONS = new Set<string>(siteBuildFailureReasons.slice(0, 8));
 
@@ -57,19 +59,42 @@ function parseBuildRequest(value: unknown): BuildRequest | undefined {
   return { buildId: record.buildId, targetVersion: record.targetVersion };
 }
 
+function parsePreviewRequest(value: unknown): PreviewJob | undefined {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const { generationId, reservationId } = value as Record<string, unknown>;
+  if (
+    Object.keys(value).length !== 2 ||
+    typeof generationId !== "string" ||
+    !PREVIEW_ID_PATTERN.test(generationId) ||
+    typeof reservationId !== "string" ||
+    !PREVIEW_ID_PATTERN.test(reservationId)
+  )
+    return undefined;
+  return { generationId, reservationId };
+}
+
 export function createBuilderHandler(input: {
   readonly secret: string;
   readonly build: (request: BuildRequest) => Promise<BuildResult>;
+  readonly preview?: {
+    readonly secret: string;
+    readonly pin: () => Promise<string>;
+    readonly execute: (job: PreviewJob, commit: string, signal: AbortSignal) => Promise<void>;
+  };
 }): (request: IncomingMessage, response: ServerResponse) => Promise<void> {
   if (input.secret.length < 32)
     throw new TypeError("Builder secret must be at least 32 characters.");
-  let queue: Promise<void> = Promise.resolve();
+  const schedule = new BuilderSchedule(input.build);
   return async (request, response) => {
     if (request.url === "/health" && request.method === "GET") {
       send(response, 200, { status: "ok" });
       return;
     }
-    if (request.url !== "/build" || request.method !== "POST") {
+    const preview = request.url === "/preview" && input.preview;
+    if (
+      !(preview && ["PUT", "POST", "DELETE"].includes(request.method ?? "")) &&
+      (request.url !== "/build" || request.method !== "POST")
+    ) {
       send(response, 404, { status: "not_found" });
       return;
     }
@@ -77,7 +102,7 @@ export function createBuilderHandler(input: {
     if (
       typeof auth !== "string" ||
       !auth.startsWith("Bearer ") ||
-      !sameSecret(auth.slice(7), input.secret)
+      !sameSecret(auth.slice(7), preview ? preview.secret : input.secret)
     ) {
       send(response, 401, { status: "unauthorized" });
       return;
@@ -86,25 +111,39 @@ export function createBuilderHandler(input: {
       send(response, 400, { status: "invalid_request" });
       return;
     }
-    let parsed: BuildRequest | undefined;
+    let body: unknown;
     try {
-      parsed = parseBuildRequest(await readBody(request));
+      body = await readBody(request);
     } catch {
-      parsed = undefined;
+      body = undefined;
     }
-    if (parsed === undefined) {
+    if (preview) {
+      const job = parsePreviewRequest(body);
+      if (!job) return send(response, 400, { status: "invalid_request" });
+      if (request.method === "PUT") {
+        const result = await schedule.reserve(job, preview.pin);
+        return send(
+          response,
+          result.status === "reserved" ? 200 : result.status === "busy" ? 409 : 503,
+          result,
+        );
+      }
+      if (request.method === "DELETE") {
+        await schedule.stop(job);
+        return send(response, 200, { status: "stopped" });
+      }
+      return schedule.dispatch(job, preview.execute)
+        ? send(response, 202, { status: "accepted" })
+        : send(response, 409, { status: "busy" });
+    }
+    const buildRequest = parseBuildRequest(body);
+    if (buildRequest === undefined) {
       send(response, 400, { status: "invalid_request" });
       return;
     }
-    const buildRequest = parsed;
-    const job = queue.then(() => input.build(buildRequest));
-    queue = job.then(
-      () => undefined,
-      () => undefined,
-    );
     let result: BuildResult;
     try {
-      result = await job;
+      result = await schedule.build(buildRequest);
     } catch {
       result = { status: "failed", reason: "build_failed" };
     }

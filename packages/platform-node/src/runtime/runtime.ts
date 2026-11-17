@@ -71,6 +71,8 @@ import {
   type NodeBuilderTriggerSettings,
 } from "../builds/builder-trigger.js";
 import { createSmtpEmailSender } from "./smtp-email.js";
+import { composeNodePreview } from "./preview.js";
+import { parseNodePreviewSettings, type NodePreviewSettings } from "./preview-settings.js";
 import type { EmailSender } from "@lacecms/application";
 
 export type NodeEnvironment = Readonly<Record<string, string | undefined>>;
@@ -104,6 +106,7 @@ export interface NodeRuntimeSettings {
   readonly publicBaseUrl: URL;
   readonly siteDevOrigin?: URL;
   readonly builder?: Pick<NodeBuilderTriggerSettings, "baseUrl" | "secret">;
+  readonly preview?: NodePreviewSettings;
 }
 
 function requiredString(
@@ -263,6 +266,7 @@ export function parseNodeRuntimeSettings(environment: NodeEnvironment): NodeRunt
   ) {
     throw new NodeEnvironmentError(Object.freeze(issues));
   }
+  const preview = parseNodePreviewSettings(environment, publicBaseUrl);
   return Object.freeze({
     apiDocsEnabled: features.flags.apiDocsEnabled,
     mcpEnabled: features.flags.mcpEnabled,
@@ -284,6 +288,7 @@ export function parseNodeRuntimeSettings(environment: NodeEnvironment): NodeRunt
     },
     port,
     publicBaseUrl,
+    ...(preview === undefined ? {} : { preview }),
     ...(siteDevOrigin === undefined ? {} : { siteDevOrigin }),
     ...(builderUrl === undefined || builderSecret === undefined
       ? {}
@@ -429,6 +434,8 @@ export interface NodeRuntime {
   readonly maintainOperations: () => Promise<void>;
   readonly setRequestPeer: (request: Request, peer: string | undefined, target?: string) => void;
   readonly previewPackages?: PreviewPackages;
+  /** Internal composition for the later admin preview surface and checkpoint acceptance. */
+  readonly createPreview?: ReturnType<typeof composeNodePreview>["create"];
   readonly app: ReturnType<typeof createLaceApp>;
   readonly cache: Cache;
   readonly close: () => void;
@@ -562,24 +569,46 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     security,
     storage,
   });
+  const previewOrigin = input.previewOrigin ?? input.settings.preview?.origin;
   const previewBlobs =
-    input.previewOrigin && (input.previewBlobs ?? new NodePreviewBlobStorage(input.settings.minio));
+    previewOrigin && (input.previewBlobs ?? new NodePreviewBlobStorage(input.settings.minio));
   const previewPackages =
     previewBlobs && new PreviewPackages(previewBlobs, repository.preview, clock);
+  const nodePreview =
+    input.settings.preview &&
+    previewBlobs &&
+    previewPackages &&
+    composeNodePreview({
+      config: input.config,
+      clock,
+      idGenerator: ids,
+      repository,
+      media: services.media,
+      settings: input.settings.preview,
+      blobs: previewBlobs,
+      packages: previewPackages,
+      log: (generationId) =>
+        nodeOperationalLogger.error({
+          component: "preview",
+          generationId,
+          reason: "PREVIEW_PROVIDER_UNAVAILABLE",
+        }),
+    });
   const app = createLaceApp({
     ...services.appInput,
-    ...(input.previewOrigin && {
+    ...(previewOrigin && {
       previewArtifacts: previewPackages!,
       previewRawPath: (request) => requestTargets.get(request)?.split("?", 1)[0],
       preview: createPreviewAccess({
         admin: input.settings.publicBaseUrl,
-        preview: input.previewOrigin,
+        preview: previewOrigin,
         clock,
         secret: input.settings.authSecret,
         actors: auth.actors,
         persistence: repository.preview.access,
       }),
     }),
+    ...(nodePreview && { previewRunner: nodePreview.transport }),
   });
   const { content, media } = services;
   let nextPreviewMaintenance = 0;
@@ -589,6 +618,7 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
       if (previewPackages && target !== undefined) requestTargets.set(request, target);
     },
     ...(previewPackages && { previewPackages }),
+    ...(nodePreview && { createPreview: nodePreview.create }),
     app,
     cache,
     close: () => database.connection.close(),
@@ -612,7 +642,8 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
         clock,
         blobs: previewBlobs,
         cleanupGraceMs: input.settings.minio.timeoutMs,
-        runner: input.previewExecutor ?? { stop: async () => "unconfirmed" },
+        runner: input.previewExecutor ??
+          nodePreview?.builder ?? { stop: async () => "unconfirmed" },
         purgeExpiredAccess: (at, limit) => repository.preview.access.purgeExpiredAccess(at, limit),
       });
       if (failures > 0)

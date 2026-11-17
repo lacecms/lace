@@ -37,6 +37,7 @@ export async function nodePreviewFixture(
     readonly admin?: string;
     readonly preview?: string;
     readonly assets?: BuiltAdminResponder;
+    readonly runnerEnvironment?: Readonly<Record<string, string>>;
   } = {},
 ) {
   const admin = options.admin ?? nodePreviewAdmin;
@@ -44,8 +45,11 @@ export async function nodePreviewFixture(
   cleanups.push(() => rm(directory, { recursive: true, force: true }));
   const databasePath = join(directory, "lace.sqlite");
   migrateNodeDatabase(databasePath);
+  const config = await defineConfig({
+    content: [definePage({ key: "home", path: "/", version: 1 })],
+  });
   const runtime = createNodeRuntime({
-    config: await defineConfig({ content: [definePage({ key: "home", path: "/", version: 1 })] }),
+    config,
     logger: { log() {} },
     previewOrigin: new URL(options.preview ?? draftPreviewOrigin),
     ...(options.assets && { adminAssets: options.assets }),
@@ -59,6 +63,7 @@ export async function nodePreviewFixture(
       LACE_MINIO_REGION: "us-east-1",
       LACE_MINIO_SECRET_KEY: "test-secret-key",
       LACE_MINIO_TIMEOUT_MS: "1000",
+      ...options.runnerEnvironment,
     }),
   });
   cleanups.push(runtime.close);
@@ -79,6 +84,7 @@ export async function nodePreviewFixture(
     return signIn.headers.getSetCookie()[0]!.split(";")[0]!;
   }
   return {
+    config,
     runtime,
     signIn,
     run: async (sql: string, values: readonly unknown[]) =>

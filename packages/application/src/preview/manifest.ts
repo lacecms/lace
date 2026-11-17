@@ -52,6 +52,16 @@ export async function readPreviewManifest(
   expectedSha256?: string,
   limits: PreviewPackageLimits = defaultPreviewPackageLimits,
 ): Promise<PreviewPackageManifest | null> {
+  const value = await readPreviewJson(stream, bytes, limit, expectedSha256);
+  return parsePreviewManifest(value, limits);
+}
+
+export async function readPreviewJson(
+  stream: ByteStream,
+  bytes: number,
+  limit: number,
+  expectedSha256?: string,
+): Promise<unknown> {
   if (!Number.isSafeInteger(bytes) || bytes < 1 || bytes > limit) return null;
   const buffer = new Uint8Array(bytes);
   let size = 0;
@@ -63,10 +73,7 @@ export async function readPreviewManifest(
   if (size !== bytes || (expectedSha256 && (await sha256Bytes(buffer)) !== expectedSha256))
     return null;
   try {
-    const decoded: unknown = JSON.parse(
-      new utf8.TextDecoder("utf-8", { fatal: true }).decode(buffer),
-    );
-    return parsePreviewManifest(decoded, limits);
+    return JSON.parse(new utf8.TextDecoder("utf-8", { fatal: true }).decode(buffer)) as unknown;
   } catch {
     return null;
   }

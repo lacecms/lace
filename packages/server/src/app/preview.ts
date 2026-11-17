@@ -18,6 +18,7 @@ export function previewIngress(
     LaceAppInput,
     | "preview"
     | "previewArtifacts"
+    | "previewRunner"
     | "previewRawPath"
     | "clientAddress"
     | "rateLimiter"
@@ -40,6 +41,40 @@ export function previewIngress(
     const request = context.req.raw;
     const { host, pathname } = new URL(request.url);
     const header = request.headers.get("host");
+    const rawPath =
+      input.previewRawPath?.(request) ??
+      request.url.replace(/^https?:\/\/[^/]+/u, "").split("?", 1)[0];
+    if (pathname.startsWith(`${API_V1}/preview-runner/`)) {
+      if (
+        !input.previewRunner ||
+        host !== input.previewRunner.origin.host ||
+        (header !== null && header !== host) ||
+        rawPath !== pathname
+      )
+        return previewResponse(404);
+      try {
+        return await input.previewRunner.fetch(request);
+      } catch {
+        return previewResponse(503);
+      }
+    }
+    if (
+      input.previewRunner &&
+      request.method === "GET" &&
+      (header === null || header === host) &&
+      (host === input.previewRunner.origin.host || new URL(request.url).hostname === "127.0.0.1") &&
+      (pathname === "/health/live" || pathname === "/health/ready")
+    )
+      return next();
+    if (
+      input.previewRunner &&
+      host === input.previewRunner.origin.host &&
+      (header === null || header === host) &&
+      (request.method === "GET" || request.method === "HEAD") &&
+      (pathname === `${API_V1}/public/build-export` ||
+        pathname.startsWith(`${API_V1}/public/media/`))
+    )
+      return next();
     if ((header !== null && header !== host) || (host !== adminHost && host !== previewHost))
       return previewResponse(404);
     if (host === adminHost) return next();
@@ -49,9 +84,6 @@ export function previewIngress(
     )
       return previewResponse(404);
     // Neither a rewritten path nor an encoded path is accepted as an alias.
-    const rawPath =
-      input.previewRawPath?.(request) ??
-      request.url.replace(/^https?:\/\/[^/]+/u, "").split("?", 1)[0];
     if (rawPath !== pathname) return previewResponse(404);
     const route = hostRoutes.find(
       ({ policy }) => policy.method === request.method && policy.path === pathname,

@@ -95,6 +95,7 @@ export * from "./configuration/apply.js";
 
 // Preview
 export * from "./preview/admission.js";
+export { PreviewFrozenInputs } from "./preview/frozen-inputs.js";
 export * from "./preview/capture.js";
 export * from "./preview/maintenance.js";
 export * from "./preview/manifest.js";

@@ -1,7 +1,7 @@
 import { prepareBuildCache, type BuildCache } from "./cache.js";
 import { normalizeBuildFailure, type SiteBuildFailureReason } from "./diagnostics.js";
 import { randomUUID } from "node:crypto";
-import { spawn } from "node:child_process";
+import { builderNamespaceIsSupervised, runBuildProcess } from "./process.js";
 import {
   chmod,
   cp,
@@ -65,51 +65,16 @@ async function execute(
   toolPath: string,
   phase: "install" | "build",
 ): Promise<boolean> {
-  return new Promise((resolve) => {
-    const child = spawn(toolPath, [...args], {
-      cwd,
-      env: environment,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let output = "";
-    const collect = (chunk: Buffer) => {
-      output = (output + chunk.toString("utf8")).slice(-16_384);
-    };
-    child.stdout.on("data", collect);
-    child.stderr.on("data", collect);
-    let timedOut = false;
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGKILL");
-    }, 10 * 60_000);
-    child.on("error", () => {
-      clearTimeout(timeout);
-      console.error(JSON.stringify({ component: "builder-tool", phase, failure: "spawn_failed" }));
-      resolve(false);
-    });
-    child.on("close", (code, signal) => {
-      clearTimeout(timeout);
-      if (code !== 0) {
-        const failure = timedOut
-          ? "timeout"
-          : /ENOSPC|no space left on device/iu.test(output)
-            ? "disk_full"
-            : /ENOMEM|out of memory|heap out of memory/iu.test(output)
-              ? "memory_exhausted"
-              : /EACCES|permission denied/iu.test(output)
-                ? "permission_denied"
-                : /ERR_MODULE_NOT_FOUND|Cannot find (?:module|package)/iu.test(output)
-                  ? "missing_dependency"
-                  : /fetch failed|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT/iu.test(output)
-                    ? "network_unavailable"
-                    : signal === null
-                      ? "command_failed"
-                      : "signal";
-        console.error(JSON.stringify({ component: "builder-tool", phase, failure }));
-      }
-      resolve(code === 0);
-    });
+  const result = await runBuildProcess({
+    executable: toolPath,
+    args,
+    cwd,
+    env: environment,
+    signal: AbortSignal.timeout(10 * 60_000),
+    phase,
+    processGroup: builderNamespaceIsSupervised(),
   });
+  return result.success;
 }
 
 async function currentVersion(settings: BuilderSettings): Promise<number> {

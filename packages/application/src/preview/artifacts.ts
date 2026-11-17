@@ -9,6 +9,7 @@ import {
   encodePreviewJson,
   parsePreviewManifest,
   previewGenerationKey,
+  readPreviewJson,
   readPreviewManifest,
 } from "./manifest.js";
 import type {
@@ -20,6 +21,7 @@ import type {
 const outputPrefix = (id: string) => `${previewGenerationKey(id)}output/`;
 const manifestKey = (id: string) => `${outputPrefix(id)}manifest.json`;
 const filePrefix = (id: string) => `${outputPrefix(id)}files/`;
+const usageKey = (id: string) => `${outputPrefix(id)}media.json`;
 const fileKey = (id: string, file: PreviewPackageFile) => `${filePrefix(id)}${file.sha256}`;
 type Claim = Omit<PreviewClaim, "now">;
 
@@ -73,6 +75,46 @@ export class PreviewPackages {
     const key = fileKey(claim.id, file);
     const result = await this.blobs.put({ key, body, bytes: file.bytes, sha256: file.sha256 });
     return result === "created" || (await this.blobs.head(key)) === file.bytes;
+  }
+
+  public async prepareOutput(claim: Claim, value: unknown, media: readonly MediaId[]) {
+    const output = await this.prepare(claim, value);
+    if (!output || !(await this.running(claim))) return null;
+    const body = encodePreviewJson({ output, media });
+    if (body.byteLength > this.#limits.manifestBytes) return null;
+    const object = await describePreviewBytes(body);
+    const key = usageKey(claim.id);
+    if ((await this.blobs.put({ key, body, ...object })) === "created") return output;
+    const previous = await this.blobs.get(key);
+    return previous &&
+      (await readPreviewJson(
+        previous.body,
+        previous.bytes,
+        this.#limits.manifestBytes,
+        object.sha256,
+      ))
+      ? output
+      : null;
+  }
+
+  public async completeOutput(claim: Claim, output: PreviewObject) {
+    if (!(await this.running(claim)))
+      return this.execution.confirmedPreviewOutput({ ...claim, output, now: this.clock.now() });
+    const object = await this.blobs.get(usageKey(claim.id));
+    if (!object) return false;
+    const metadata = (await readPreviewJson(
+      object.body,
+      object.bytes,
+      this.#limits.manifestBytes,
+    )) as {
+      readonly output: PreviewObject;
+      readonly media: readonly MediaId[];
+    } | null;
+    return (
+      !!metadata &&
+      matchingObject(output, metadata.output) &&
+      this.complete(claim, output, metadata.media)
+    );
   }
 
   public async complete(claim: Claim, output: PreviewObject, media: readonly MediaId[]) {

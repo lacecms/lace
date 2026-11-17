@@ -1,5 +1,58 @@
 # Preview implementation verification
 
+## PV1D verified on 2026-11-17
+
+Tasks 4.1–4.5 passed. The VPS builder pins the configured publication checkout
+to its current clean Git commit and stages its tracked blobs and frozen lockfile.
+The source tests cover dirty tracked and relevant untracked files, runtime data
+and credential exclusions, a moving HEAD and unsupported source links.
+
+The private builder reserves one preview before SQL admission. A rejected SQL
+admission releases the reservation. A pending publication cancels a provisional
+reservation and gets the next slot. A running preview retains physical capacity
+until its process group exits and cleanup finishes. The image runs under
+`tini`, which reaps children and closes the old PID namespace when the builder
+exits. Startup removes interrupted preview scratch directories before accepting
+new work. SQLite claims and the combined execution deadline fence late input,
+uploads and completion, including after a container restart.
+
+The image-pinned Astro helper stages scoped input and validates the output.
+Site subprocesses receive the detached input path. The API streams the package
+to private SILO storage and seals the ready result after verifying the required
+files. Nginx forwards only viewer and handoff routes on the preview hostname.
+The runner API stays on the private backend network.
+
+### Test results
+
+- The builder passed 62 focused cases and its packaged interruption test.
+  Server claim and route tests passed. Preview repository contracts passed
+  30 cases on SQLite and 15 on local D1. Generator tests passed 43 cases.
+  The proxy and Compose checks passed nine cases.
+- `docker build -f apps/builder/Dockerfile -t lace-pv1d-builder:local .`
+  built the checked-out image. With a disposable local SILO and that image set
+  through `LACE_TEST_PREVIEW_S3_URL` and `LACE_TEST_PREVIEW_BUILDER_IMAGE`,
+  `pnpm exec vitest run --config vitest.verification.config.mjs --project preview-vps --project preview-https`
+  passed both acceptance journeys. The fixed runner built a packed Astro
+  consumer. A failed second file upload left the partial package inaccessible.
+  A container restart and deadline reconciliation denied the old runner and
+  cleared its scratch. Preview preserved the public release pointer, and
+  normal publication afterward successfully switched it. Chromium exercised
+  same-site framing and incompatible-domain top-level viewing.
+- The Nginx 1.27.5 container routed the configured preview hostname to the
+  protected viewer paths, returned 404 for admin and private runner paths
+  through public ingress, and preserved the ordinary health route.
+- `pnpm typecheck`, `pnpm lint` (including boundaries and Drizzle),
+  `pnpm format:check`, `pnpm openapi:check` and
+  `pnpm exec openspec validate add-protected-draft-preview --type change --strict`
+  passed.
+
+### Limits and handoff
+
+VPS preview requires a clean mounted Git checkout at its repository root,
+the supported static Astro integration and complete operator settings. Admin
+creation remains disabled pending the final checkpoints. The next unchecked
+task is 5.1 (PV1E), the Cloudflare GitHub runner configuration and dispatch.
+
 ## PV1C verified on 2026-11-17
 
 Tasks 3.1–3.6 passed. The packed Astro integration renders the saved home,

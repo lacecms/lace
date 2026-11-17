@@ -1,5 +1,5 @@
 import { contentPublicPath, PREVIEW_MAX_MODELS } from "@lacecms/domain";
-import type { Actor } from "@lacecms/domain";
+import type { Actor, PreviewFailureReason } from "@lacecms/domain";
 import type { ContentUseCaseDependencies } from "../content/use-case-inputs.js";
 import { contentModelRoute } from "../content/draft-normalization.js";
 import { validateDraft } from "../content/draft-validation.js";
@@ -25,7 +25,13 @@ export interface PreviewAdmissionDependencies extends Pick<
   readonly preview: PreviewReadPort & Pick<PreviewCapturePort, "admitPreview">;
   /** Exists only when the operator's preview configuration and source have been verified. */
   readonly source?: PreviewSource;
+  /** VPS reserves physical capacity before SQL can replace a ready preview. */
+  readonly reserveSource?: (id: string) => Promise<PreviewSourceReservation>;
 }
+
+export type PreviewSourceReservation =
+  | { readonly source: PreviewSource; readonly release: () => Promise<void> }
+  | { readonly reason: PreviewFailureReason };
 
 function configurationMatches(
   identity: string,
@@ -64,14 +70,10 @@ export class PreviewAdmissionService {
 
   public async create(actor: Actor, request: PreviewRequest): Promise<PreviewAdmission> {
     requireSessionActor(actor, "content:write");
-    const { source, preview, content, config, clock, idGenerator } = this.dependencies;
-    if (source === undefined)
+    const { source, reserveSource, preview, content, config, clock, idGenerator } =
+      this.dependencies;
+    if (!source && !reserveSource)
       return { kind: "rejected", reason: "PREVIEW_CONFIGURATION_UNAVAILABLE" };
-    if (
-      !/^(?:[0-9a-f]{40}|[0-9a-f]{64})(?![\s\S])/u.test(source.commit) ||
-      !/^[A-Za-z0-9_-]{1,128}(?![\s\S])/u.test(source.executor)
-    )
-      return { kind: "rejected", reason: "PREVIEW_SOURCE_UNAVAILABLE" };
     const prior = await preview.findPreviewRequest({ ...request, actorId: actor.id });
     if (prior !== null) return prior;
 
@@ -99,25 +101,44 @@ export class PreviewAdmissionService {
     const visible = new Set(
       draft.blocks.filter((block) => !block.hidden).map((block) => block.key),
     );
-    return preview.admitPreview({
-      ...request,
-      ...fence,
-      id: idGenerator.next(),
-      actorId: actor.id,
-      draftSnapshotId: entry.draft.id,
-      modelKey: entry.model.key,
-      path,
-      source,
-      now: clock.now(),
-      projection: {
-        fields: publication.fields,
-        blocks: publication.blocks.filter((block) => visible.has(block.key)),
-        internalLinks: publication.internalLinks.filter((link) => link.delivered),
-        mediaReferences: publication.mediaReferences.filter(
-          ({ sourceKey }) =>
-            sourceKey === "$fields" || sourceKey === "$seo" || visible.has(sourceKey),
-        ),
-      },
-    });
+    const id = idGenerator.next();
+    const reservation = await reserveSource?.(id);
+    if (reservation && "reason" in reservation) {
+      const raced = await preview.findPreviewRequest({ ...request, actorId: actor.id });
+      return raced ?? { kind: "rejected", reason: reservation.reason };
+    }
+    const selected = reservation?.source ?? source!;
+    let admitted = false;
+    try {
+      if (
+        !/^(?:[0-9a-f]{40}|[0-9a-f]{64})(?![\s\S])/u.test(selected.commit) ||
+        !/^[A-Za-z0-9_-]{1,128}(?![\s\S])/u.test(selected.executor)
+      )
+        return { kind: "rejected", reason: "PREVIEW_SOURCE_UNAVAILABLE" };
+      const result = await preview.admitPreview({
+        ...request,
+        ...fence,
+        id,
+        actorId: actor.id,
+        draftSnapshotId: entry.draft.id,
+        modelKey: entry.model.key,
+        path,
+        source: selected,
+        now: clock.now(),
+        projection: {
+          fields: publication.fields,
+          blocks: publication.blocks.filter((block) => visible.has(block.key)),
+          internalLinks: publication.internalLinks.filter((link) => link.delivered),
+          mediaReferences: publication.mediaReferences.filter(
+            ({ sourceKey }) =>
+              sourceKey === "$fields" || sourceKey === "$seo" || visible.has(sourceKey),
+          ),
+        },
+      });
+      admitted = result.kind === "admitted";
+      return result;
+    } finally {
+      if (!admitted) await reservation?.release().catch(() => undefined);
+    }
   }
 }

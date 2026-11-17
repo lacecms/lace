@@ -5,5 +5,6 @@
   "apps/api/src/dispatcher.ts": "Outbox dispatcher process, the dispatcher service command in docker-compose.yml and the generated project.",
   "apps/api/src/production.ts": "Production API process, the apps/api Dockerfile CMD.",
   "apps/builder/src/main.ts": "Builder process, started by the apps/builder start script and Dockerfile.",
+  "packages/astro/src/preview-tool.ts": "Trusted input and packaging helper, started by the fixed-command builder image.",
   "packages/platform-node/src/migrate.ts": "Migration executable, run as node dist/migrate.js by the Compose files, the generated project and release images."
 }

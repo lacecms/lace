@@ -78,6 +78,10 @@ export interface LaceAppInput {
   /** Present only for complete preview delivery composition or a checkpoint fixture. */
   readonly preview?: PreviewBrowserAccess<Request>;
   readonly previewArtifacts?: PreviewArtifactReader;
+  readonly previewRunner?: {
+    readonly origin: URL;
+    readonly fetch: (request: Request) => Promise<Response>;
+  };
   /** Original request-target supplied by Node ingress before URL normalization. */
   readonly previewRawPath?: (request: Request) => string | undefined;
   /** Reads trusted ingress metadata from the original request. */

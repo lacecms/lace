@@ -2,6 +2,7 @@ import { capturePreviewInput, PreviewAdmissionService } from "@lacecms/applicati
 import type {
   BuildContentExportPage,
   PreviewInputStore,
+  PreviewSourceReservation,
   PreviewTarget,
 } from "@lacecms/application";
 import { defineCollection, defineConfig, defineGlobal, definePage } from "@lacecms/config";
@@ -18,7 +19,7 @@ import {
   sequence,
 } from "../shared.js";
 import type { RepositoryContractCase } from "../shared.js";
-import { openPreview, previewInput } from "./fixtures.js";
+import { openPreview, previewInput, previewOutput } from "./fixtures.js";
 
 export const cases: RepositoryContractCase[] = [];
 const contract = registerContract(cases);
@@ -105,13 +106,20 @@ contract(
       "insert into content_blocks (snapshot_id,block_key,block_type,position,schema_version,data_json,created_at,updated_at) values (?, 'headline','callout',1000,1,'{}',1,1)",
       target.draft.id,
     );
+    let releaseCount = 0;
+    let reserve: () => Promise<PreviewSourceReservation> = async () => ({
+      source: { executor: "fixture", commit: "a".repeat(40) },
+      async release() {
+        releaseCount++;
+      },
+    });
     const admission = new PreviewAdmissionService({
       config: config.runtime,
       clock,
       content: repository,
       media: repository,
       idGenerator: { next: sequence("preview") },
-      source: { executor: "fixture", commit: "a".repeat(40) },
+      reserveSource: () => reserve(),
       preview: repository.preview,
     });
     const request = { entryId: target.id, expectedRevision: 1, idempotencyKey: "preview" };
@@ -159,6 +167,37 @@ contract(
     expect(pages.flatMap((page) => page.records).map(({ entry }) => entry.id)).toEqual(["record"]);
     expect(await repository.loadPublic("/")).toBeNull();
     expect(await repository.loadPublic("/blog/other")).toBeNull();
+
+    expect(releaseCount).toBe(0);
+    const retry = { ...request, expectedRevision: 2, idempotencyKey: "retry" };
+    // SQL rejects a second admission and the caller releases the provisional reservation.
+    expect(await admission.create(editor, retry)).toMatchObject({
+      kind: "rejected",
+      reason: "PREVIEW_BUSY",
+    });
+    expect(releaseCount).toBe(1);
+    const claim = {
+      ...receipt.generation.source,
+      id: receipt.generation.id,
+      run: "fixture-run",
+      credentialHash: "c".repeat(64),
+      now: clock.now(),
+    };
+    expect(await repository.preview.claimPreview(claim)).not.toBeNull();
+    expect(
+      await repository.preview.finalizePreview({ ...claim, output: previewOutput, media: [] }),
+    ).toBe(true);
+    const existing = await repository.preview.currentPreview(target.id, clock.now());
+    expect(existing).toMatchObject({ id: receipt.generation.id, state: "ready" });
+    reserve = async () => ({ reason: "PREVIEW_BUSY" });
+    expect(await admission.create(editor, retry)).toMatchObject({
+      kind: "rejected",
+      reason: "PREVIEW_BUSY",
+    });
+    expect(await repository.preview.currentPreview(target.id, clock.now())).toEqual(existing);
+    expect(await admission.create(editor, { ...request, expectedRevision: 2 })).toMatchObject({
+      kind: "replayed",
+    });
 
     // A route occupied by another publication is refused before any replacement.
     await repository.publish(publish(other.id, 1, 6));

@@ -37,6 +37,7 @@ export const TEMPLATE_FILES: readonly TemplateFile[] = [
   { path: "docker-compose.yml", owner: "managed", render: "markers" },
   { path: "docker-compose.dev.yml", owner: "managed" },
   { path: "deploy/nginx.conf", owner: "managed" },
+  { path: "deploy/nginx-preview.conf", owner: "managed", modes: SITE },
   { path: "docs/lace-astro-site.md", owner: "managed" },
   { path: "docs/cloudflare-operator.env.example", owner: "managed", cloudflare: true },
   { path: "docs/lace-cloudflare.md", owner: "managed", cloudflare: true, render: "markers" },

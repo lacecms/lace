@@ -43,11 +43,11 @@ requirements, the `astro-adapter` and `workspace-governance` deltas, and design 
 Depends on PV1A–PV1C. Implements VPS/source/execution requirements in
 `astro-draft-preview` and design §§5/9–10.
 
-- [ ] 4.1 Add operator-selected immutable source preparation and preview runner settings while preserving the existing `/build` request; verify clean commit pinning, relevant dirty-source refusal, secret/data exclusions and rejection of HTTP command/path/environment overrides.
-- [ ] 4.2 Implement the closed private `/preview` operation and executor reservation/claim handshake; verify no preview queue, duplicate transport deduplication, publication-busy rejection preserving old preview and release of failed provisional admissions.
-- [ ] 4.3 Refactor shared builder scheduling for one physical process and publication next-slot priority; verify publication arriving before preview execution wins, a running preview is not preempted, and the public release pointer never changes due to preview.
-- [ ] 4.4 Implement the combined execution deadline, process-group termination and restart reconciliation; verify child/grandchild termination, late upload refusal, crash recovery and no overlap after logical timeout.
-- [ ] 4.5 Complete scoped runner input/upload/finalization against private S3 and add generated/repository preview-host ingress settings; verify a real container build, upload failure, normal publication after preview and compatible/incompatible-domain viewer access. Record PV1D evidence and run the checkpoint quality gate.
+- [x] 4.1 Add operator-selected immutable source preparation and preview runner settings while preserving the existing `/build` request; verify clean commit pinning, relevant dirty-source refusal, secret/data exclusions and rejection of HTTP command/path/environment overrides.
+- [x] 4.2 Implement the closed private `/preview` operation and executor reservation/claim handshake; verify no preview queue, duplicate transport deduplication, publication-busy rejection preserving old preview and release of failed provisional admissions.
+- [x] 4.3 Refactor shared builder scheduling for one physical process and publication next-slot priority; verify publication arriving before preview execution wins, a running preview is not preempted, and the public release pointer never changes due to preview.
+- [x] 4.4 Implement the combined execution deadline, process-group termination and restart reconciliation; verify child/grandchild termination, late upload refusal, crash recovery and no overlap after logical timeout.
+- [x] 4.5 Complete scoped runner input/upload/finalization against private S3 and add generated/repository preview-host ingress settings; verify a real container build, upload failure, normal publication after preview and compatible/incompatible-domain viewer access. Record PV1D evidence and run the checkpoint quality gate.
 
 ## 5. PV1E — GitHub Actions and Cloudflare
 

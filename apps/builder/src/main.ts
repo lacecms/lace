@@ -2,6 +2,10 @@ import { createServer } from "node:http";
 import { createBuilderHandler } from "./server/handler.js";
 import { FixedCommandBuilder } from "./runner/runner.js";
 import { parseSiteOutputSettings } from "./runner/settings.js";
+import { parsePreviewRunnerSettings } from "./runner/preview-settings.js";
+import { clearInterruptedPreviewWork, fixedPreviewRunner } from "./runner/preview-runner.js";
+import { pinPreviewSource } from "./runner/preview-source.js";
+import { builderNamespaceIsSupervised } from "./runner/process.js";
 
 const secret = process.env.LACE_BUILDER_SECRET;
 const apiBaseUrl = process.env.LACE_API_BASE_URL;
@@ -13,7 +17,7 @@ if (secret === undefined || apiBaseUrl === undefined || buildToken === undefined
 
 const siteOutput = parseSiteOutputSettings(process.env);
 
-const builder = new FixedCommandBuilder({
+const settings = {
   sourceRoot: "/source",
   siteDirectory: process.env.LACE_BUILD_SITE_DIR ?? "site",
   outputDirectory: process.env.LACE_BUILD_OUTPUT_DIR ?? "dist",
@@ -26,8 +30,36 @@ const builder = new FixedCommandBuilder({
     ? {}
     : { publicBaseUrl: process.env.LACE_PUBLIC_BASE_URL }),
   ...siteOutput,
+};
+const builder = new FixedCommandBuilder(settings);
+let preview = builderNamespaceIsSupervised()
+  ? parsePreviewRunnerSettings(process.env, siteOutput.siteUrl)
+  : undefined;
+if (preview) {
+  try {
+    await clearInterruptedPreviewWork(settings.workRoot);
+  } catch {
+    console.error(
+      JSON.stringify({ component: "preview-builder", reason: "PREVIEW_STORAGE_FAILED" }),
+    );
+    preview = undefined;
+  }
+}
+const handler = createBuilderHandler({
+  secret,
+  build: (request) => builder.build(request),
+  ...(preview && {
+    preview: {
+      secret: preview.secret,
+      pin: () => pinPreviewSource(settings.sourceRoot, settings),
+      execute: fixedPreviewRunner({
+        ...settings,
+        settings: preview,
+        publicationSecrets: [secret, buildToken],
+      }),
+    },
+  }),
 });
-const handler = createBuilderHandler({ secret, build: (request) => builder.build(request) });
 const server = createServer((request, response) => {
   void handler(request, response).catch(() => {
     if (!response.headersSent) response.writeHead(500, { "content-type": "application/json" });

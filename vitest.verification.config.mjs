@@ -19,6 +19,14 @@ export default defineConfig({
         },
       },
       {
+        plugins: [sourceCondition()],
+        test: {
+          name: "preview-vps",
+          include: ["tests/preview-vps.acceptance.mjs"],
+          testTimeout: 240000,
+        },
+      },
+      {
         test: {
           name: "cross-runtime",
           include: [

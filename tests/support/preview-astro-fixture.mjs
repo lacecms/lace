@@ -80,6 +80,54 @@ export async function previewWorkspace() {
         await install(site, tarballs);
         return site;
       },
+      async containerSite() {
+        const site = join(root, "container-site");
+        await cp(simpleSite, site, { recursive: true });
+        await cp(font, join(site, "src/assets/notebook.woff2"));
+        await writeFile(join(site, "src/pages/about.astro"), "<h1>Published about</h1>\n");
+        const home = join(site, "src/pages/index.astro");
+        await writeFile(
+          home,
+          (await readFile(home, "utf8")).replace("---\n", '---\nimport "../assets/notes.css";\n'),
+        );
+        await mkdir(join(site, "vendor"));
+        const dependencies = {};
+        for (const name of packageNames) {
+          await cp(tarballs.get(`@lacecms/${name}`), join(site, `vendor/${name}.tgz`));
+          dependencies[`@lacecms/${name}`] = `file:./vendor/${name}.tgz`;
+        }
+        const manifestPath = join(site, "package.json");
+        const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+        manifest.dependencies["@lacecms/astro"] = dependencies["@lacecms/astro"];
+        await writeFile(manifestPath, JSON.stringify(manifest));
+        await writeFile(
+          join(site, "pnpm-workspace.yaml"),
+          [
+            "minimumReleaseAge: 0",
+            "overrides:",
+            ...Object.entries(dependencies).map(([name, path]) => `  '${name}': '${path}'`),
+            "",
+          ].join("\n"),
+        );
+        await exec("pnpm", ["install", "--lockfile-only"], { cwd: site, timeout: 60000 });
+        await writeFile(join(site, ".gitignore"), "node_modules/\ndist/\n.astro/\n");
+        await exec("git", ["init", "--quiet"], { cwd: site });
+        await exec("git", ["add", "."], { cwd: site });
+        await exec(
+          "git",
+          [
+            "-c",
+            "user.name=Lace",
+            "-c",
+            "user.email=lace@example.test",
+            "commit",
+            "-qm",
+            "Preview site",
+          ],
+          { cwd: site },
+        );
+        return site;
+      },
       async starterSite(existing) {
         const generator = join(existing, "node_modules/create-lace/dist/index.js");
         const { generateProject } = await import(pathToFileURL(generator));

@@ -12,6 +12,7 @@ test("packaged entry point keeps its public exports", async () => {
     "createEmailSender",
     "createLaceApp",
     "createLogEmailSender",
+    "createPreviewRunner",
     "createResendEmailSender",
     "defaultEmailFailureReporter",
     "emailDeliveryStatus",

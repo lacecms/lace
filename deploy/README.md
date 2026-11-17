@@ -27,6 +27,14 @@ Check `docker compose ps`, `docker compose logs dispatcher`, and `/health/ready`
 
 Run `pnpm test:vps` on a machine with Docker Compose to exercise rapid publication, a successful static release, a failed builder, retention of the previous release, and administrator retry. The test uses an isolated Compose project and removes its own containers and volumes afterward.
 
+The optional protected-preview ingress uses a second HTTPS hostname routed to
+the same Nginx service. Set `LACE_PREVIEW_HOST` to the hostname preserved by the
+TLS proxy and `LACE_PREVIEW_ORIGIN` to its bare HTTPS origin. The CMS origin also
+uses HTTPS. Set `LACE_BUILD_SITE_URL` to the public site URL, and set distinct
+`LACE_PREVIEW_BUILDER_SECRET` and `LACE_PREVIEW_RUNNER_SECRET` values in the
+ignored environment file. Preview requires the selected build source to be
+mounted at the root of a clean Git checkout and the site to adopt `lacePreview()`.
+
 ## Switch the object storage image
 
 Compose pulls or reuses the classic SILO image pinned in `docker-compose.yml`.
