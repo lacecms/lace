@@ -1,4 +1,5 @@
 import type { UnixMilliseconds } from "@lacecms/domain";
+import { ObjectStorageError } from "../ports/media.js";
 import type { PreviewBlobStorage } from "../ports/preview-storage.js";
 import type { PreviewInputStore } from "../ports/preview.js";
 import { previewGenerationKey } from "./manifest.js";
@@ -14,7 +15,7 @@ export function previewNamespaceCleanup(
       const page = await blobs.list(prefix, limit);
       const keys = page.objects.map(({ key }) => key);
       if (keys.length > limit || keys.some((key) => !key.startsWith(prefix)))
-        throw new Error("Invalid preview storage listing.");
+        throw new ObjectStorageError("Invalid preview storage listing.");
       await blobs.delete(keys);
       return page.cursor === undefined ? "empty" : "more";
     },

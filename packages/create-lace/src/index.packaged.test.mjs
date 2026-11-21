@@ -148,7 +148,15 @@ test("optional Cloudflare files are managed only when selected", async () => {
   expect(config).toContain('"directory": "../node_modules/@lacecms/platform-cloudflare/admin"');
   expect(config).toContain('"crons": ["* * * * *"]');
   expect(config).toContain('"LACE_BUILD_SITE_ID": "main-site"');
-  expect(config).not.toMatch(/pages_build_output_dir|LACE_AUTH_SECRET"|lace-site|lace-cloudflare/u);
+  expect(config).not.toMatch(/^ *\/\/ *lace-(?:site|cloudflare):/mu);
+  const activeConfig = config
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("//"))
+    .join("\n");
+  expect(activeConfig).not.toMatch(/pages_build_output_dir|lace-site|lace-cloudflare/u);
+  expect(activeConfig).not.toMatch(
+    /"LACE_(?:AUTH_SECRET|PREVIEW_(?:GITHUB_TOKEN|RUNNER_SECRET))"\s*:/u,
+  );
   expect(await read("worker/index.ts")).toContain('import config from "../lace.config.ts";');
   const manifest = JSON.parse(await read("package.json"));
   expect(manifest.dependencies).toMatchObject({

@@ -1,4 +1,6 @@
+import { InvariantError } from "@lacecms/content";
 import type { BuildContentExportPage } from "../ports/content.js";
+import { ObjectStorageError } from "../ports/media.js";
 import type { PreviewBlobStorage } from "../ports/preview-storage.js";
 import type { PreviewInputStore, PreviewObject, PreviewTarget } from "../ports/preview.js";
 import { previewNamespaceCleanup } from "./delivery-maintenance.js";
@@ -67,13 +69,13 @@ export class PreviewFrozenInputs<Metadata> implements PreviewInputStore {
   private async write(key: string, value: unknown) {
     const body = encodePreviewJson(value);
     if (body.byteLength > maxCaptureBytes)
-      throw new Error("Preview input exceeds its capture limit.");
+      throw new InvariantError("Preview input exceeds its capture limit.");
     const object = await describePreviewBytes(body);
     if (
       (await this.blobs.put({ key, body, ...object })) !== "created" &&
       (await this.readJson(key, object, maxCaptureBytes)) === null
     )
-      throw new Error("Preview input is already sealed with different contents.");
+      throw new ObjectStorageError("Preview input is already sealed with different contents.");
     return object;
   }
 

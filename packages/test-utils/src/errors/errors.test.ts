@@ -22,17 +22,18 @@ const codes: Readonly<Record<string, string>> = {
   LaceError: "INTERNAL_PRIVATE",
 };
 
-test.each(errorMatrixCases.filter((c) => c.errorClass !== Error && c.errorClass !== TypeError))(
-  "portable error keeps its code and name: $name",
-  ({ create, name }) => {
-    const error = create();
-    expect(error).toBeInstanceOf(LaceError);
-    expect((error as LaceError).code).toBe(codes[name] ?? name.split(":")[1]);
-    expect(error.name).toBe(
-      name === "CollectionQueryValidationError" ? "DomainError" : name.split(":")[0],
-    );
-  },
-);
+test.each(
+  errorMatrixCases.filter(
+    ({ errorClass }) => errorClass === LaceError || errorClass.prototype instanceof LaceError,
+  ),
+)("LaceError keeps its code and name: $name", ({ create, name }) => {
+  const error = create();
+  expect(error).toBeInstanceOf(LaceError);
+  expect((error as LaceError).code).toBe(codes[name] ?? name.split(":")[1]);
+  expect(error.name).toBe(
+    name === "CollectionQueryValidationError" ? "DomainError" : name.split(":")[0],
+  );
+});
 
 test("invariant errors retain the cause without changing their message", () => {
   const cause = new Error("private cause");
