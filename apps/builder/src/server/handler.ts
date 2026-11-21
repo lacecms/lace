@@ -73,16 +73,19 @@ function parsePreviewRequest(value: unknown): PreviewJob | undefined {
   return { generationId, reservationId };
 }
 
-export function createBuilderHandler(input: {
-  readonly secret: string;
-  readonly build: (request: BuildRequest) => Promise<BuildResult>;
-  readonly preview?: {
-    readonly secret: string;
-    readonly pin: () => Promise<string>;
-    readonly execute: (job: PreviewJob, commit: string, signal: AbortSignal) => Promise<void>;
-  };
-}): (request: IncomingMessage, response: ServerResponse) => Promise<void> {
-  if (input.secret.length < 32)
+export function createBuilderHandler(
+  input: {
+    readonly preview?: {
+      readonly secret: string;
+      readonly pin: () => Promise<string>;
+      readonly execute: (job: PreviewJob, commit: string, signal: AbortSignal) => Promise<void>;
+    };
+  } & (
+    | { readonly secret: string; readonly build: (request: BuildRequest) => Promise<BuildResult> }
+    | { readonly secret?: never; readonly build?: never }
+  ),
+): (request: IncomingMessage, response: ServerResponse) => Promise<void> {
+  if (input.secret !== undefined && input.secret.length < 32)
     throw new TypeError("Builder secret must be at least 32 characters.");
   const schedule = new BuilderSchedule(input.build);
   return async (request, response) => {
@@ -91,9 +94,11 @@ export function createBuilderHandler(input: {
       return;
     }
     const preview = request.url === "/preview" && input.preview;
+    const secret = preview ? preview.secret : input.secret;
     if (
-      !(preview && ["PUT", "POST", "DELETE"].includes(request.method ?? "")) &&
-      (request.url !== "/build" || request.method !== "POST")
+      secret === undefined ||
+      (!(preview && ["PUT", "POST", "DELETE"].includes(request.method ?? "")) &&
+        (request.url !== "/build" || request.method !== "POST"))
     ) {
       send(response, 404, { status: "not_found" });
       return;
@@ -102,7 +107,7 @@ export function createBuilderHandler(input: {
     if (
       typeof auth !== "string" ||
       !auth.startsWith("Bearer ") ||
-      !sameSecret(auth.slice(7), preview ? preview.secret : input.secret)
+      !sameSecret(auth.slice(7), secret)
     ) {
       send(response, 401, { status: "unauthorized" });
       return;

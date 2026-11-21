@@ -56,7 +56,6 @@ import type { D1Database } from "../d1/database.js";
 import { WorkerImageInspector } from "../media/image-inspector.js";
 import { CloudflareR2ObjectStorage } from "../media/r2-storage.js";
 import { composeCloudflarePreview } from "./preview.js";
-import { previewHttpsUrl } from "./preview-settings.js";
 import { CloudflarePreviewBlobStorage } from "../media/preview-r2.js";
 import {
   CloudflareEnvironmentError,
@@ -85,9 +84,7 @@ export interface WorkerOperationalLogger {
 }
 
 export interface CreateCloudflareWorkerInput {
-  /** Enable admin preview only in checkpoint test composition. */
-  readonly previewAdminEnabled?: boolean;
-  /** Internal preview delivery composition. Environment activation is handled separately. */
+  /** Internal preview delivery fixtures can supply a viewer without admission. */
   readonly previewOrigin?: URL;
   readonly previewExecutor?: Pick<PreviewRunner, "stop">;
   readonly previewGitHubFetch?: typeof fetch;
@@ -340,6 +337,9 @@ export function createCloudflareRuntime(
     });
   const app = createLaceApp({
     ...services.appInput,
+    ...(settings.reservedPreviewHostname && {
+      reservedPreviewHostname: settings.reservedPreviewHostname,
+    }),
     ...(previewOrigin && {
       previewArtifacts: previewPackages!,
       preview: createPreviewAccess({
@@ -352,7 +352,7 @@ export function createCloudflareRuntime(
       }),
     }),
     ...(preview && { previewRunner: preview.transport }),
-    ...(input.previewAdminEnabled && {
+    ...((preview || settings.previewRequested) && {
       adminPreview:
         preview && previewOrigin
           ? { origin: previewOrigin.origin, create: preview.create, status: preview.status }
@@ -475,17 +475,6 @@ export function createCloudflareWorker(input: CreateCloudflareWorkerInput): Clou
     async fetch(request: Request, env: CloudflareWorkerEnv, ctx: WorkerExecutionContext) {
       const runtime = configured(env);
       if (runtime === undefined) return unavailableResponse();
-      const previewOrigin = previewHttpsUrl(env.LACE_PREVIEW_ORIGIN);
-      if (
-        !runtime.settings.preview &&
-        previewOrigin?.hostname !== runtime.settings.publicBaseUrl.hostname &&
-        previewOrigin?.host === new URL(request.url).host
-      ) {
-        return new Response(null, {
-          status: 404,
-          headers: { "cache-control": "private, no-store" },
-        });
-      }
       // Only the Worker ingress accepts Cloudflare's edge-supplied header.
       // Direct runtime.app calls have no trusted client identity.
       runtime.clients.set(request, request.headers.get("cf-connecting-ip"));

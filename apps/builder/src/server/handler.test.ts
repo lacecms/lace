@@ -68,6 +68,20 @@ test("builder accepts only authorized closed-shape requests", async () => {
   expect(calls).toEqual([{ buildId: "a_1", targetVersion: 2 }]);
 });
 
+test("a preview-only builder serves health and authenticated reservation without publication", async () => {
+  const pin = vi.fn(async () => "a".repeat(40));
+  const handler = createBuilderHandler({ preview: { secret, pin, execute: async () => {} } });
+  expect((await invoke(handler, {}, secret, "GET", "/health")).status).toBe(200);
+  expect((await invoke(handler, { buildId: "one", targetVersion: 2 })).status).toBe(404);
+  const job = { generationId: "one", reservationId: "private" };
+  expect((await invoke(handler, job, "wrong", "PUT", "/preview")).status).toBe(401);
+  expect(pin).not.toHaveBeenCalled();
+  expect(await invoke(handler, job, secret, "PUT", "/preview")).toEqual({
+    status: 200,
+    body: { status: "reserved", commit: "a".repeat(40) },
+  });
+});
+
 test("private preview reserves, deduplicates transport and releases provisional admission", async () => {
   const previewSecret = "p".repeat(32);
   const pin = vi.fn(async () => "a".repeat(40));

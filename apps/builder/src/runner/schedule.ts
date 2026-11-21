@@ -26,15 +26,17 @@ export class BuilderSchedule {
   #reservation: Reservation | undefined;
   #preview: ActivePreview | undefined;
 
-  public constructor(private readonly publish: (request: BuildRequest) => Promise<BuildResult>) {}
+  public constructor(private readonly publish?: (request: BuildRequest) => Promise<BuildResult>) {}
 
   public build(request: BuildRequest): Promise<BuildResult> {
+    const publish = this.publish;
+    if (!publish) throw new Error("Publication is unavailable.");
     this.#publications++;
     this.#reservation = undefined;
     const preview = this.#preview?.done;
     const job = this.#queue.then(async () => {
       await preview;
-      return this.publish(request);
+      return publish(request);
     });
     this.#queue = job.then(
       () => {

@@ -36,7 +36,6 @@ export async function nodePreviewFixture(
     readonly bucket?: string;
     readonly admin?: string;
     readonly preview?: string;
-    readonly previewAdminEnabled?: boolean;
     readonly assets?: BuiltAdminResponder;
     readonly runnerEnvironment?: Readonly<Record<string, string>>;
   } = {},
@@ -52,8 +51,9 @@ export async function nodePreviewFixture(
   const runtime = createNodeRuntime({
     config,
     logger: { log() {} },
-    previewOrigin: new URL(options.preview ?? draftPreviewOrigin),
-    ...(options.previewAdminEnabled && { previewAdminEnabled: true }),
+    ...(options.runnerEnvironment === undefined && {
+      previewOrigin: new URL(options.preview ?? draftPreviewOrigin),
+    }),
     ...(options.assets && { adminAssets: options.assets }),
     settings: parseNodeRuntimeSettings({
       LACE_AUTH_SECRET: "test-auth-secret-that-is-long-enough-for-better-auth",

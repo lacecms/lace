@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
-import { copyFile, mkdir, mkdtemp, open, readFile, rm } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, open, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { promisify } from "node:util";
@@ -83,10 +83,13 @@ export async function runPreview({
   const signal = remaining > 0 ? AbortSignal.timeout(remaining) : AbortSignal.abort();
   const endpoint = new URL(`api/v1/preview-runner/${generation}/`, origin);
   const scratch = await mkdtemp(join(env.RUNNER_TEMP, "lace-preview-"));
-  const project = join(scratch, "project");
+  const buildDirectory = join(scratch, "build");
+  const project = join(buildDirectory, "project");
   const data = join(scratch, "data");
   const staged = join(data, "input");
   const inputFile = join(staged, "input.json");
+  const renderInputFile = join(buildDirectory, "input.json");
+  const originals = "_lace_preview_media";
   const name = `lace-preview-${env.GITHUB_RUN_ID}`;
   const putJson = (path, body) =>
     send(path, {
@@ -150,6 +153,7 @@ export async function runPreview({
   }
   try {
     signal.throwIfAborted();
+    await mkdir(buildDirectory);
     await source(commit, project, signal);
     await mkdir(data);
     phase = "toolchain";
@@ -171,17 +175,17 @@ export async function runPreview({
       claim: token,
     });
     phase = "render";
+    // Astro renames prerender assets into the output, so both need the same mount.
     const build = await run([
-      ...mount(project),
-      ...mount(staged),
+      ...mount(buildDirectory),
       "--volume",
-      `${inputFile}:${inputFile}:ro`,
+      `${inputFile}:${renderInputFile}:ro`,
       "--volume",
-      `${join(staged, "_lace_preview_media")}:${join(staged, "_lace_preview_media")}:ro`,
+      `${join(staged, originals)}:${join(buildDirectory, originals)}:ro`,
       "--workdir",
       project,
       "--env",
-      `LACE_PREVIEW_INPUT_FILE=${inputFile}`,
+      `LACE_PREVIEW_INPUT_FILE=${renderInputFile}`,
       "--env",
       "ASTRO_TELEMETRY_DISABLED=1",
       image,
@@ -197,10 +201,21 @@ export async function runPreview({
     if (build.code !== 0)
       throw new Error(build.code === 42 ? "PREVIEW_DEPENDENCY_FAILED" : "PREVIEW_RENDER_FAILED");
     phase = "package";
+    await rename(
+      join(buildDirectory, "render-report.json"),
+      join(staged, "render-report.json"),
+    ).catch((error) => {
+      throw new Error(
+        error.code === "ENOENT" ? "PREVIEW_CONFIGURATION_UNAVAILABLE" : "PREVIEW_STORAGE_FAILED",
+      );
+    });
+    await rename(join(buildDirectory, "render"), join(staged, "render")).catch((error) => {
+      throw new Error(error.code === "ENOENT" ? "PREVIEW_RENDER_FAILED" : "PREVIEW_STORAGE_FAILED");
+    });
     const { directory, manifest, mediaIds } = await trusted({
       action: "package",
       inputFile,
-      forbiddenValues: [token],
+      forbiddenValues: [token, buildDirectory],
     });
     if (directory !== join(staged, "render")) throw new Error("PREVIEW_RENDER_FAILED");
     phase = "upload";

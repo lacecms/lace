@@ -104,6 +104,9 @@ setup → `astro-draft-preview`.
 - [draft-preview](draft-preview/spec.md)
 - [draft-preview-delivery](draft-preview-delivery/spec.md)
 - [astro-draft-preview](astro-draft-preview/spec.md)
+- [local-node-development](local-node-development/spec.md)
+- [project-generator](project-generator/spec.md)
+- [generated-project-acceptance](generated-project-acceptance/spec.md)
 
 ## API, accounts and MCP
 

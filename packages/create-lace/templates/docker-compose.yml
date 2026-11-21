@@ -45,6 +45,7 @@ services:
       LACE_BUILD_SITE_ID: ${LACE_BUILD_SITE_ID:-main-site}
       LACE_BUILD_SITE_LABEL: ${LACE_BUILD_SITE_LABEL:-Main site}
       LACE_BUILD_SITE_URL: ${LACE_BUILD_SITE_URL:-}
+      LACE_PREVIEW_ENABLED: ${LACE_PREVIEW_ENABLED:-false}
       LACE_PREVIEW_ORIGIN: ${LACE_PREVIEW_ORIGIN:-}
       LACE_PREVIEW_RUNNER_ORIGIN: http://api:3000/
       LACE_PREVIEW_BUILDER_URL: http://builder:8788/
@@ -145,6 +146,7 @@ services:
       LACE_BUILD_SITE_LABEL: ${LACE_BUILD_SITE_LABEL:-Main site}
       LACE_BUILDER_SECRET: ${LACE_BUILDER_SECRET:?set LACE_BUILDER_SECRET}
       LACE_API_BASE_URL: http://api:3000/
+      LACE_PREVIEW_ENABLED: ${LACE_PREVIEW_ENABLED:-false}
       LACE_PREVIEW_BUILDER_SECRET: ${LACE_PREVIEW_BUILDER_SECRET:-}
       LACE_PREVIEW_RUNNER_SECRET: ${LACE_PREVIEW_RUNNER_SECRET:-}
       LACE_BUILD_TOKEN: ${LACE_BUILD_TOKEN:-}
@@ -188,15 +190,21 @@ services:
   web:
     image: nginx:1.27.5-alpine
     # lace-site: starter existing
+    entrypoint: ["sh", "/etc/lace/preview-ingress.sh"]
+    command: ["nginx", "-g", "daemon off;"]
     environment:
-      NGINX_ENVSUBST_FILTER: ^LACE_PREVIEW_HOST$$
-      LACE_PREVIEW_HOST: ${LACE_PREVIEW_HOST:-lace-preview-disabled.invalid}
+      NGINX_ENVSUBST_FILTER: ^LACE_PREVIEW_HOSTNAMES$$
+      LACE_PUBLIC_BASE_URL: ${LACE_PUBLIC_BASE_URL:?set LACE_PUBLIC_BASE_URL}
+      LACE_BUILD_SITE_URL: ${LACE_BUILD_SITE_URL:-}
+      LACE_PREVIEW_ORIGIN: ${LACE_PREVIEW_ORIGIN:-}
+      LACE_PREVIEW_HOST: ${LACE_PREVIEW_HOST:-}
     # lace-site: end
     ports:
       - "${LACE_HTTP_BIND_ADDRESS:-127.0.0.1}:${LACE_HTTP_PORT:-8080}:8080"
     volumes:
       - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       # lace-site: starter existing
+      - ./deploy/preview-ingress.sh:/etc/lace/preview-ingress.sh:ro
       - ./deploy/nginx-preview.conf:/etc/nginx/templates/preview.conf.template:ro
       # lace-site: end
       - static-output:/output:ro

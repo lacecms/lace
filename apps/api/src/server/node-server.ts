@@ -4,12 +4,21 @@ import { request as httpsRequest } from "node:https";
 import type { IncomingMessage, Server } from "node:http";
 import type { Duplex } from "node:stream";
 import type { NodeRuntime, NodeRuntimeSettings } from "@lacecms/platform-node";
+import { previewHostname } from "@lacecms/server";
 
 const mcpLocalPaths = [
   "/mcp",
   "/.well-known/oauth-protected-resource/mcp",
   "/.well-known/oauth-authorization-server/api/auth",
 ];
+
+function isPreviewHost(url: URL, settings: NodeRuntimeSettings): boolean {
+  return previewHostname(url) === settings.reservedPreviewHostname;
+}
+
+function headerOrigin(host: string | null | undefined): URL | undefined {
+  return host ? (URL.parse(`http://${host}`) ?? undefined) : undefined;
+}
 
 function gatewayResponse(status: number, message: string): Response {
   return Response.json({ error: { code: "UPSTREAM_UNAVAILABLE", message } }, { status });
@@ -52,8 +61,14 @@ export function proxyNodeDevelopmentUpgrade(
   head: Buffer,
   settings: NodeRuntimeSettings,
 ): void {
-  const source = new URL(request.url ?? "/", "http://lace.local");
-  if (isLocalPath(source.pathname)) {
+  const origin = headerOrigin(request.headers.host);
+  const source = origin && URL.parse(request.url ?? "/", origin.href);
+  if (
+    !source ||
+    isLocalPath(source.pathname) ||
+    isPreviewHost(source, settings) ||
+    (origin && isPreviewHost(origin, settings))
+  ) {
     socket.destroy();
     return;
   }
@@ -114,6 +129,10 @@ export function createNodeDevelopmentGateway(
 ): (request: Request) => Promise<Response> {
   return async (request) => {
     const source = new URL(request.url);
+    if (isPreviewHost(source, settings)) return apiFetch(request);
+    const origin = headerOrigin(request.headers.get("host"));
+    if (origin && isPreviewHost(origin, settings))
+      return new Response(null, { status: 404, headers: { "cache-control": "private, no-store" } });
     if (isLocalPath(source.pathname)) return apiFetch(request);
     const target = proxyTarget(settings, source.pathname);
     if (target === undefined) {
@@ -131,7 +150,24 @@ export function createNodeDevelopmentGateway(
               headers: proxyHeaders(request),
               method: request.method,
             };
-      return await fetch(new Request(destination, init));
+      const response = await fetch(new Request(destination, init));
+      if (
+        settings.preview &&
+        target === settings.adminDevOrigin &&
+        response.headers.get("content-type")?.startsWith("text/html")
+      ) {
+        const headers = new Headers(response.headers);
+        headers.append(
+          "content-security-policy",
+          `frame-src ${settings.preview.origin.origin}; frame-ancestors 'none'`,
+        );
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+        });
+      }
+      return response;
     } catch {
       return gatewayResponse(502, "Development upstream is unavailable.");
     }

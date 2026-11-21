@@ -124,7 +124,7 @@ classes and hidden state but not its anchor.
 
 ## Preview a saved draft
 
-On an installation with protected draft preview configured, save a page or
+On an installation where the operator has enabled protected draft preview, save a page or
 routed collection entry, then choose **Create preview**. Admins and editors
 can create and replace previews. Viewers can open an existing preview with
 their Lace session. Complete required fields and visible blocks first.

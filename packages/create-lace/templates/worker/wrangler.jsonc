@@ -62,7 +62,8 @@
     "LACE_BUILD_SITE_LABEL": "Main site",
     // Optional public site base URL for "Open on site" links in the editor:
     // "LACE_BUILD_SITE_URL": "https://site.example.com/journal/", // Include your public base path.
-    // Optional protected preview settings (requires LACE_BUILD_SITE_URL and both preview secrets):
+    // Optional protected preview (requires LACE_BUILD_SITE_URL and both preview secrets).
+    "LACE_PREVIEW_ENABLED": "false",
     // "LACE_PREVIEW_ORIGIN": "https://preview.example.com/",
     // "LACE_PREVIEW_GITHUB_REPOSITORY": "<owner>/<repository>",
     // "LACE_PREVIEW_GITHUB_REF": "main",

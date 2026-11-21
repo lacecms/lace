@@ -122,7 +122,8 @@ export function renderRootPackage(text: string, site: SiteSelection, cloudflare 
     manifest.scripts.build = `pnpm --dir ${site.path} exec astro build`;
     delete manifest.scripts.typecheck;
   } else if (site.mode === "none") {
-    for (const name of ["dev", "build", "typecheck"]) delete manifest.scripts[name];
+    for (const name of ["dev", "dev:api:preview", "build", "typecheck"])
+      delete manifest.scripts[name];
   }
   return `${JSON.stringify(manifest, null, 2)}\n`;
 }

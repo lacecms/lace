@@ -34,6 +34,11 @@ uses HTTPS. Set `LACE_BUILD_SITE_URL` to the public site URL, and set distinct
 `LACE_PREVIEW_BUILDER_SECRET` and `LACE_PREVIEW_RUNNER_SECRET` values in the
 ignored environment file. Preview requires the selected build source to be
 mounted at the root of a clean Git checkout and the site to adopt `lacePreview()`.
+After applying the migrations and configuring those prerequisites, opt in with
+`LACE_PREVIEW_ENABLED=true` and recreate the API, dispatcher, builder and web
+services. To withdraw, close the preview ingress, set the flag to `false` and
+recreate the services. Verify withdrawal before resolving outstanding jobs and
+rotating dedicated credentials. Retain the public release and storage volumes.
 
 ## Switch the object storage image
 

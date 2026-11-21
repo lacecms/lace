@@ -15,3 +15,4 @@ dev-data/
 .release-artifacts/
 packages/platform-cloudflare/admin/
 packages/platform-node/*.sqlite*
+.lace/tls/

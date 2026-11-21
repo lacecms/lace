@@ -1,3 +1,4 @@
+import { previewHostname, reservedPreviewHostname } from "@lacecms/server";
 export interface NodePreviewSettings {
   readonly origin: URL;
   readonly runnerOrigin: URL;
@@ -8,7 +9,7 @@ export interface NodePreviewSettings {
 }
 
 function httpUrl(value: string | undefined, originOnly: boolean): URL | undefined {
-  if (!value || value.includes("?") || value.includes("#")) return undefined;
+  if (!value || /[?#\\\s]/u.test(value)) return undefined;
   try {
     const url = new URL(value);
     if (
@@ -28,6 +29,7 @@ export function parseNodePreviewSettings(
   env: Readonly<Record<string, string | undefined>>,
   admin: URL,
 ): NodePreviewSettings | undefined {
+  if (env.LACE_PREVIEW_ENABLED !== "true") return undefined;
   const origin = httpUrl(env.LACE_PREVIEW_ORIGIN, true);
   const runnerOrigin = httpUrl(env.LACE_PREVIEW_RUNNER_ORIGIN, true);
   const builderOrigin = httpUrl(env.LACE_PREVIEW_BUILDER_URL, true);
@@ -39,10 +41,12 @@ export function parseNodePreviewSettings(
     !origin ||
     origin.protocol !== "https:" ||
     admin.protocol !== "https:" ||
+    admin.pathname !== "/" ||
     !runnerOrigin ||
     !builderOrigin ||
     !site ||
-    new Set([admin.hostname, origin.hostname, runnerOrigin.hostname]).size !== 3 ||
+    !reservedPreviewHostname(env.LACE_PREVIEW_ORIGIN, admin, env.LACE_BUILD_SITE_URL) ||
+    new Set([admin, origin, runnerOrigin].map(previewHostname)).size !== 3 ||
     !builderSecret ||
     !bootstrapSecret ||
     !credential.test(builderSecret) ||

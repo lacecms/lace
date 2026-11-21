@@ -10,6 +10,7 @@ import { previewViewer } from "../preview/viewer.js";
 import { withRoutePolicy } from "../routing/route-matching.js";
 import { previewRoutes } from "../routing/preview-routes.js";
 import { API_V1 } from "../routing/v1-routes.js";
+import { previewHostname } from "../runtime/preview-host.js";
 
 /** Preview ingress never falls through to CMS routes, even for unknown methods and paths. */
 export function previewIngress(
@@ -17,6 +18,7 @@ export function previewIngress(
   input: Pick<
     LaceAppInput,
     | "preview"
+    | "reservedPreviewHostname"
     | "previewArtifacts"
     | "previewRunner"
     | "previewRawPath"
@@ -25,7 +27,22 @@ export function previewIngress(
     | "requestIds"
   >,
 ) {
-  if (!input.preview) return () => {};
+  if (!input.preview) {
+    const reserved = input.reservedPreviewHostname;
+    if (reserved)
+      app.use(async (context, next) => {
+        const request = context.req.raw;
+        const host = request.headers.get("host");
+        const header = host && URL.parse(`http://${host}`);
+        if (
+          previewHostname(new URL(request.url)) === reserved ||
+          (header && previewHostname(header) === reserved)
+        )
+          return previewResponse(404);
+        return next();
+      });
+    return () => {};
+  }
   const access = input.preview;
   const { adminOrigin, previewOrigin } = access;
   const previewHost = new URL(previewOrigin).host;

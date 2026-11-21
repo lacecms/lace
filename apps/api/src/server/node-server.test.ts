@@ -436,6 +436,7 @@ test("routes frontend requests to same-origin development upstreams without prox
     LACE_AUTH_SECRET: "test-auth-secret-that-is-long-enough-for-better-auth",
     LACE_PUBLIC_BASE_URL: "https://public.lace.test/",
     LACE_SITE_DEV_ORIGIN: origin,
+    LACE_PREVIEW_ORIGIN: "https://preview.lace.test/",
   });
   const gateway = createNodeDevelopmentGateway(async () => new Response("local"), settings);
   try {
@@ -452,6 +453,15 @@ test("routes frontend requests to same-origin development upstreams without prox
         )
       ).text(),
     ).toBe("upstream");
+    for (const path of ["/", "/admin/", "/access/start", "/p/sample/index.html"]) {
+      expect(
+        await (await gateway(new Request(`https://preview.lace.test:4443${path}`))).text(),
+      ).toBe("local");
+    }
+    const mismatch = await gateway(
+      new Request("https://public.lace.test/", { headers: { host: "preview.lace.test" } }),
+    );
+    expect(mismatch.status).toBe(404);
     expect(requests).toEqual([
       { body: "", path: "/admin/content?view=list" },
       { body: "draft", path: "/admin/draft" },
@@ -492,6 +502,7 @@ test("forwards frontend development upgrades and closes connections on gateway s
     LACE_AUTH_SECRET: "test-auth-secret-that-is-long-enough-for-better-auth",
     LACE_PUBLIC_BASE_URL: "https://public.lace.test/",
     LACE_SITE_DEV_ORIGIN: upstreamOrigin,
+    LACE_PREVIEW_ORIGIN: "https://preview.lace.test/",
   });
   const gateway = createServer((request, response) => response.end("local"));
   gateway.on("upgrade", (request, socket, head) =>
@@ -515,6 +526,14 @@ test("forwards frontend development upgrades and closes connections on gateway s
       "GET /admin/@vite/client?token=test HTTP/1.1\r\nHost: lace.test\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Key: test\r\nSec-WebSocket-Version: 13\r\n\r\n",
     );
     await expect(opened).resolves.toContain("101 Switching Protocols");
+    const preview = connect(gatewayAddress.port, "127.0.0.1");
+    preview.write(
+      "GET /admin/@vite/client?token=test HTTP/1.1\r\nHost: preview.lace.test:4443\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n",
+    );
+    await new Promise<void>((resolve, reject) => {
+      preview.once("close", () => resolve());
+      preview.once("error", reject);
+    });
     expect(upgradeRequests).toBe(1);
   } finally {
     const clientClosed = new Promise<void>((resolve) => client.once("close", resolve));

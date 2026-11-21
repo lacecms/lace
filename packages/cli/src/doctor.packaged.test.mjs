@@ -623,9 +623,15 @@ test("Compose preview reports partial setup and checks the selected workspace me
     LACE_BUILD_SITE_URL: "https://site.example.com/journal/",
     LACE_PUBLIC_BASE_URL: "https://cms.example.com/",
     LACE_PREVIEW_HOST: "preview.example.com",
+    LACE_PREVIEW_ENABLED: "true",
     LACE_PREVIEW_ORIGIN: "https://preview.example.com/",
     LACE_PREVIEW_BUILDER_SECRET: sentinel.repeat(2),
   };
+  const off = getCheck(
+    await execute(root, { ...environment, LACE_PREVIEW_ENABLED: "invalid" }, options),
+    "preview",
+  );
+  expect(off).toMatchObject({ status: "skipped", code: "PREVIEW_DISABLED" });
   const partial = getCheck(await execute(root, environment, options), "preview");
   expect(partial).toMatchObject({ status: "skipped", code: "PREVIEW_CONFIGURATION_REQUIRED" });
   expect(partial.reason).toContain("LACE_PREVIEW_RUNNER_SECRET");
@@ -646,12 +652,39 @@ test("Compose preview reports partial setup and checks the selected workspace me
   expect(configured.output).not.toContain("https://site.example.com/journal/");
 });
 
+test("loopback preview checks for the Compose certificate files without exposing their contents", async () => {
+  const { root } = await siteProject({ mode: "starter", path: "site" }, true);
+  await previewPackages(join(root, "site"));
+  await writeFile(join(root, "site/package.json"), '{"dependencies":{"astro":"^7.4.12"}}');
+  const tls = join(root, ".lace/tls");
+  const environment = {
+    ...settings,
+    LACE_PREVIEW_ENABLED: "true",
+    LACE_DEV_PREVIEW_BUILDER_SECRET: "t".repeat(64),
+    LACE_DEV_PREVIEW_RUNNER_SECRET: "u".repeat(64),
+  };
+  const options = { ...baseOptions, mode: "compose" };
+  const partial = getCheck(await execute(root, environment, options), "preview");
+  expect(partial).toMatchObject({ status: "skipped", code: "PREVIEW_CONFIGURATION_REQUIRED" });
+  expect(partial.reason).toContain("LACE_DEV_TLS_KEY");
+  await mkdir(tls, { recursive: true });
+  await writeFile(join(tls, "cert.pem"), "fixture certificate");
+  await writeFile(join(tls, "key.pem"), sentinel);
+  const configured = await execute(root, environment, options);
+  expect(getCheck(configured, "preview")).toMatchObject({
+    status: "pass",
+    code: "PREVIEW_STATIC_CHECK_PASSED",
+  });
+  expect(configured.output).not.toContain(sentinel);
+});
+
 test("Cloudflare preview checks its private binding, cron and Git-root-relative Astro selection", async () => {
   const { root, parent } = await siteProject({ mode: "existing", path: ".." }, true);
   await previewPackages(parent);
   const vars = {
     LACE_PUBLIC_BASE_URL: "https://cms.example.com/",
     LACE_BUILD_SITE_URL: "https://site.example.com/journal/",
+    LACE_PREVIEW_ENABLED: "true",
     LACE_PREVIEW_ORIGIN: "https://preview.example.com/",
     LACE_PREVIEW_GITHUB_REPOSITORY: "example/site",
     LACE_PREVIEW_GITHUB_REF: "main",

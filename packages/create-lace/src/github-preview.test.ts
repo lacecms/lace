@@ -1,6 +1,6 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { expect, test, vi } from "vitest";
 import { generateProject } from "./generator/project.js";
 
@@ -49,6 +49,7 @@ test("trusted steps stage and upload while the site container receives only sour
       }),
     );
     let data: string;
+    let project: string;
     const manifest = { files: [{ path: "index.html", bytes: 7, sha256: "d".repeat(64) }] };
     const docker = vi.fn(async (args: string[], _signal: AbortSignal, input?: string) => {
       let stdout = "";
@@ -61,17 +62,27 @@ test("trusted steps stage and upload while the site container receives only sour
           await mkdir(data);
           await writeFile(join(data, "input.json"), "{}");
         } else {
-          expect(action.forbiddenValues).toEqual([token]);
+          expect(action.inputFile).toBe(join(data, "input.json"));
+          expect(action.forbiddenValues).toEqual([token, dirname(project)]);
           const directory = join(data, "render");
-          await mkdir(directory);
-          await writeFile(join(directory, "index.html"), "preview");
+          expect(await readFile(join(directory, "index.html"), "utf8")).toBe("preview");
+          expect(await readFile(join(data, "render-report.json"), "utf8")).toBe("{}");
           stdout = JSON.stringify({ directory, manifest, mediaIds: [] });
         }
       } else if (args[0] === "run") {
-        expect(args).toContain(`LACE_PREVIEW_INPUT_FILE=${join(data!, "input.json")}`);
+        const build = dirname(project!);
+        expect(args).toContain(`LACE_PREVIEW_INPUT_FILE=${join(build, "input.json")}`);
+        expect(args.filter((_, index) => args[index - 1] === "--volume")).toEqual([
+          `${build}:${build}`,
+          `${join(data!, "input.json")}:${join(build, "input.json")}:ro`,
+          `${join(data!, "_lace_preview_media")}:${join(build, "_lace_preview_media")}:ro`,
+        ]);
         expect(args).toContain("site");
         expect(args.join(" ")).not.toContain(token);
         expect(args.join(" ")).not.toContain("/var/run/docker.sock");
+        await mkdir(join(build, "render"));
+        await writeFile(join(build, "render", "index.html"), "preview");
+        await writeFile(join(build, "render-report.json"), "{}");
       }
       return { code: 0, stdout };
     });
@@ -97,7 +108,10 @@ test("trusted steps stage and upload while the site container receives only sour
           GITHUB_RUN_ID: "123",
           LACE_PREVIEW_IMAGE: "lace-fixture",
         },
-        source: async (_commit: string, project: string) => mkdir(project),
+        source: async (_commit: string, destination: string) => {
+          project = destination;
+          await mkdir(destination);
+        },
         docker,
         request,
       }),

@@ -51,7 +51,7 @@ test("the optional preview virtual host proxies only protected viewer routes", a
   expect(values(parse(main).locations.get("^~ /api/v1/preview-runner/"), "return")).toEqual([
     ["404"],
   ]);
-  expect(preview).toContain("server_name ${LACE_PREVIEW_HOST};");
+  expect(preview).toContain("server_name ${LACE_PREVIEW_HOSTNAMES};");
   const { locations } = parse(preview);
   const route = locations.get("~ ^/(?:access/(?:start|callback)$|view/|p/)");
   expect(locations.size).toBe(2);

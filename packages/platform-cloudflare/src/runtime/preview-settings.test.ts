@@ -5,6 +5,7 @@ const admin = new URL("https://cms.example.com/");
 const bucket = { get() {}, put() {}, head() {}, list() {}, delete() {} };
 const env = {
   PREVIEW: bucket,
+  LACE_PREVIEW_ENABLED: "true",
   LACE_PREVIEW_ORIGIN: "https://preview.example.com/",
   LACE_BUILD_SITE_URL: "https://www.example.com/blog/",
   LACE_PREVIEW_SITE_PATH: "apps/site",
@@ -23,6 +24,10 @@ test("preview requires isolated HTTPS ingress, private binding and complete oper
   });
   expect(parseCloudflarePreviewSettings({}, admin)).toBeUndefined();
   for (const change of [
+    { LACE_PREVIEW_ENABLED: undefined },
+    { LACE_PREVIEW_ENABLED: "false" },
+    { LACE_PREVIEW_ENABLED: true },
+    { LACE_PREVIEW_ENABLED: "TRUE" },
     { PREVIEW: undefined },
     { PREVIEW: { get() {} } },
     { MEDIA: bucket },

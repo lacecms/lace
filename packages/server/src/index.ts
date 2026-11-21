@@ -4,6 +4,7 @@ export const packageName = "@lacecms/server";
 
 // Runtime
 export { parseBuildSiteIdentity } from "./runtime/build-site.js";
+export { previewHostname, reservedPreviewHostname } from "./runtime/preview-host.js";
 export * from "./runtime/email.js";
 export * from "./runtime/mcp-settings.js";
 export * from "./runtime/feature-flags.js";

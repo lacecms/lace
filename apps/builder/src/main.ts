@@ -10,9 +10,12 @@ import { builderNamespaceIsSupervised } from "./runner/process.js";
 const secret = process.env.LACE_BUILDER_SECRET;
 const apiBaseUrl = process.env.LACE_API_BASE_URL;
 const buildToken = process.env.LACE_BUILD_TOKEN;
-if (secret === undefined || apiBaseUrl === undefined || buildToken === undefined)
+const previewOnly = process.env.LACE_BUILDER_MODE === "preview";
+if (apiBaseUrl === undefined)
+  throw new Error("Missing builder configuration: LACE_API_BASE_URL is required.");
+if (!previewOnly && (secret === undefined || buildToken === undefined))
   throw new Error(
-    "Missing builder configuration: LACE_BUILDER_SECRET, LACE_API_BASE_URL, and LACE_BUILD_TOKEN are required.",
+    "Missing builder configuration: LACE_BUILDER_SECRET and LACE_BUILD_TOKEN are required.",
   );
 
 const siteOutput = parseSiteOutputSettings(process.env);
@@ -25,13 +28,15 @@ const settings = {
   outputRoot: "/output",
   cacheRoot: "/cache",
   apiBaseUrl,
-  buildToken,
   ...(process.env.LACE_PUBLIC_BASE_URL === undefined
     ? {}
     : { publicBaseUrl: process.env.LACE_PUBLIC_BASE_URL }),
   ...siteOutput,
 };
-const builder = new FixedCommandBuilder(settings);
+const publication =
+  !previewOnly && secret !== undefined && buildToken !== undefined
+    ? { secret, builder: new FixedCommandBuilder({ ...settings, buildToken }), buildToken }
+    : undefined;
 let preview = builderNamespaceIsSupervised()
   ? parsePreviewRunnerSettings(process.env, siteOutput.siteUrl)
   : undefined;
@@ -46,8 +51,10 @@ if (preview) {
   }
 }
 const handler = createBuilderHandler({
-  secret,
-  build: (request) => builder.build(request),
+  ...(publication && {
+    secret: publication.secret,
+    build: (request) => publication.builder.build(request),
+  }),
   ...(preview && {
     preview: {
       secret: preview.secret,
@@ -55,7 +62,7 @@ const handler = createBuilderHandler({
       execute: fixedPreviewRunner({
         ...settings,
         settings: preview,
-        publicationSecrets: [secret, buildToken],
+        publicationSecrets: publication ? [publication.secret, publication.buildToken] : [],
       }),
     },
   }),

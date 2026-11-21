@@ -6,6 +6,7 @@ import { mediaOriginSetting, previewInputFile, readPreviewBuildInput } from "./b
 import { servePreviewOriginals } from "./originals.js";
 import { renderOrigin } from "./urls.js";
 import { singleRoutePrerenderer } from "./prerender.js";
+import { finishPreviewRender } from "./render-output.js";
 
 export function assertPreviewAstroVersion(version: string): void {
   const patch = /^7\.4\.(\d+)$/u.exec(version)?.[1];
@@ -106,7 +107,6 @@ export function lacePreview(): AstroIntegration {
             throw new Error(
               "PREVIEW_RENDER_FAILED: the configured Astro build must render exactly one preview page.",
             );
-          const { finishPreviewRender } = await import("./render-output.js");
           await finishPreviewRender(dirname(file), input, media?.used ?? new Set());
         } finally {
           media?.close();

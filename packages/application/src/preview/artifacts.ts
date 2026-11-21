@@ -58,8 +58,12 @@ export class PreviewPackages {
     if (body.byteLength > this.#limits.manifestBytes) return null;
     const object = await describePreviewBytes(body);
     if (!(await this.running(claim))) return null;
-    const result = await this.blobs.put({ key: manifestKey(claim.id), body, ...object });
-    return result === "created" || (await this.manifest(claim.id, object)) ? object : null;
+    const key = manifestKey(claim.id);
+    const result = await this.blobs.put({ key, body, ...object });
+    if (result === "created") return object;
+    // Refuse a conflicting retry before opening a stream for the sealed manifest.
+    if ((await this.blobs.head(key)) !== object.bytes) return null;
+    return (await this.manifest(claim.id, object)) ? object : null;
   }
 
   public async stage(

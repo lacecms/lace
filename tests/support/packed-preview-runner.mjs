@@ -1,5 +1,5 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { copyFile, cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { adminOrigin, bootstrapSecret, exec } from "./packed-preview-platforms.mjs";
 
@@ -37,6 +37,7 @@ export async function runLocalPreviewWorkflow({ project, scratch, platform, id, 
     }),
   );
   let passed = false;
+  let staged;
   try {
     // The generated wrapper owns staging order, upload and completion. Local
     // command adapters use the packed toolchain and Workerd service directly.
@@ -70,6 +71,7 @@ export async function runLocalPreviewWorkflow({ project, scratch, platform, id, 
                 fetch: request,
               });
               await astro.stageAstroPreviewInput(action.directory, client, signal);
+              staged = action.directory;
               return { code: 0, stdout: "{}" };
             }
             if (action.action === "package") {
@@ -81,7 +83,17 @@ export async function runLocalPreviewWorkflow({ project, scratch, platform, id, 
             throw new Error("Unexpected preview tool operation");
           }
           if (args.at(-1) !== "site") throw new Error("Incorrect Git-root-relative site selection");
-          const input = args.find((arg) => arg.startsWith("LACE_PREVIEW_INPUT_FILE="));
+          const input = args
+            .find((arg) => arg.startsWith("LACE_PREVIEW_INPUT_FILE="))
+            .split("=")[1];
+          await copyFile(join(staged, "input.json"), input);
+          await cp(
+            join(staged, "_lace_preview_media"),
+            join(dirname(input), "_lace_preview_media"),
+            {
+              recursive: true,
+            },
+          );
           await exec("pnpm", ["exec", "astro", "build"], {
             cwd: site,
             signal,
@@ -89,7 +101,7 @@ export async function runLocalPreviewWorkflow({ project, scratch, platform, id, 
               PATH: process.env.PATH,
               HOME: runnerTemp,
               ASTRO_TELEMETRY_DISABLED: "1",
-              LACE_PREVIEW_INPUT_FILE: input.split("=")[1],
+              LACE_PREVIEW_INPUT_FILE: input,
             },
           });
           return { code: 0, stdout: "" };

@@ -2429,6 +2429,7 @@ async function main() {
     );
     console.info(`Packed Lace tarball bytes ${JSON.stringify(Object.fromEntries(sizes))}`);
     const project = join(parent, "preview-consumer");
+    const deployments = join(parent, "preview-deployments");
     const measurements = join(parent, "preview-measurements");
     await mkdir(measurements);
     await run("generate-preview", process.execPath, [
@@ -2439,9 +2440,27 @@ async function main() {
     ]);
     // Preview stages the Git tree and excludes .lace. Keep the fixture tarballs in source.
     await installPackedConsumer(project, tarballs, "vendor");
+    await run("generate-preview-deployments", process.execPath, [
+      generatorBin,
+      "create",
+      deployments,
+      "--cloudflare",
+    ]);
+    await installPackedConsumer(deployments, tarballs, "vendor");
     const builder = process.env.LACE_ACCEPTANCE_BUILDER_IMAGE;
+    const api = process.env.LACE_ACCEPTANCE_API_IMAGE;
     const image = builder ?? `lace-preview-acceptance-${randomUUID()}:local`;
+    const apiImage = api ?? `lace-preview-api-${randomUUID()}:local`;
     try {
+      if (!api)
+        await run(
+          "image-api",
+          "docker",
+          ["build", "-f", "apps/api/Dockerfile", "-t", apiImage, "."],
+          {
+            timeoutMs: 20 * 60_000,
+          },
+        );
       if (!builder)
         await run(
           "image-builder",
@@ -2462,10 +2481,16 @@ async function main() {
           "vitest.verification.config.mjs",
           "--project",
           "packed-draft-preview",
+          "--project",
+          "preview-deployments",
+          "--project",
+          "preview-node-development",
         ],
         {
           env: {
             LACE_VERIFY_PACKED_ROOT: project,
+            LACE_VERIFY_PREVIEW_DEPLOYMENTS_ROOT: deployments,
+            LACE_TEST_PREVIEW_API_IMAGE: apiImage,
             LACE_TEST_PREVIEW_BUILDER_IMAGE: image,
             LACE_TEST_PREVIEW_MEASUREMENTS: measurements,
           },
@@ -2477,6 +2502,7 @@ async function main() {
         console.info(`Packed preview measurement ${result}`);
       }
     } finally {
+      if (!api) spawnSync("docker", ["image", "rm", apiImage], { stdio: "ignore" });
       if (!builder) spawnSync("docker", ["image", "rm", image], { stdio: "ignore" });
     }
     return;

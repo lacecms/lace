@@ -1,4 +1,4 @@
-import { createAstroSiteLoader } from "@lacecms/astro";
+import { createAstroPreviewSiteLoader } from "@lacecms/astro/preview";
 import type { LaceFetch } from "@lacecms/sdk";
 import fixtureExport from "../fixtures/published-export.json" with { type: "json" };
 
@@ -10,7 +10,8 @@ const onLinkDiagnostics = (diagnostics: import("@lacecms/sdk").LinkDiagnostics) 
 
 const env: Readonly<Record<string, string | undefined>> = { ...import.meta.env, ...process.env };
 const mode = env.LACE_SITE_DATA_MODE ?? "fixture";
-if (mode !== "fixture" && mode !== "live")
+const preview = Boolean(process.env.LACE_PREVIEW_INPUT_FILE);
+if (!preview && mode !== "fixture" && mode !== "live")
   throw new TypeError("LACE_SITE_DATA_MODE must be fixture or live.");
 
 // Fixture mode runs the same loader against the committed export without a request.
@@ -28,8 +29,8 @@ const hints = {
 };
 
 export const getSite =
-  mode === "fixture"
-    ? createAstroSiteLoader({
+  !preview && mode === "fixture"
+    ? createAstroPreviewSiteLoader({
         onLinkDiagnostics,
         env: {
           LACE_API_BASE_URL: env.LACE_API_BASE_URL || DEFAULT_API_BASE_URL,
@@ -42,7 +43,7 @@ export const getSite =
         hints,
         optimizeImages: (env.LACE_API_BASE_URL ?? "") !== "",
       })
-    : createAstroSiteLoader({
+    : createAstroPreviewSiteLoader({
         onLinkDiagnostics,
         env,
         dev: import.meta.env.DEV,

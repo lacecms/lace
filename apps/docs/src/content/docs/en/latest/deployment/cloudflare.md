@@ -83,8 +83,8 @@ A scheduled Worker invocation runs every minute and recovers build and media wor
 
 Apply the remote D1 migrations. Use the starter or
 [adopt the Astro integration](../../astro-integration/#adopt-protected-draft-preview).
-Preview creation is disabled in the deployment entry points during acceptance.
-Prepare the following settings for a release that enables it.
+Preview is off by default. Configure the following settings for the deployed
+Worker.
 
 1. Place the generated `.github/workflows/lace-preview.yml` and
    `.github/scripts/lace-preview.mjs` at the trusted site repository root.
@@ -118,11 +118,12 @@ Prepare the following settings for a release that enables it.
    commit permissions](https://docs.github.com/en/rest/commits/commits#get-a-commit),
    [workflow dispatch permissions](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event),
    [Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
-5. Review the generated `docs/lace-cloudflare.md` for commands. Run
+5. Set `"LACE_PREVIEW_ENABLED": "true"` in `worker/wrangler.jsonc` under
+   `vars`. Review the generated `docs/lace-cloudflare.md` for commands. Run
    `lace doctor --target cloudflare-remote --stage setup` with the remote
    operator settings. The `preview` row checks the selected Wrangler file
-   and local site packages. Verify deployed secrets, the route, bucket privacy,
-   and the workflow/ref with an authorized test build. Bucket creation,
+   and local site packages. Deploy the Worker and verify deployed secrets,
+   the route, bucket privacy and the workflow/ref with a saved-draft build. Bucket creation,
    hostname registration, secret updates, pushes, deployment and preview
    requests are explicit operator actions.
 
@@ -134,9 +135,10 @@ Lace reconcile the run, then use **Retry preview** in Lace. Use the generation
 ID and recorded GitHub run ID to identify the job. See the
 [preview lifetime and retry rules](../../editing-content/#preview-a-saved-draft).
 
-Before rollback, close preview ingress, cancel the recorded preview run and
-confirm termination. Disable the preview configuration, revoke both dedicated
-credentials (including the GitHub secret) and redeploy without preview. Use
+To withdraw, close preview ingress, set `"LACE_PREVIEW_ENABLED": "false"`
+and redeploy. Confirm old viewer and runner requests are denied. Cancel
+outstanding Actions work and confirm termination before re-enabling. Revoke
+dedicated credentials if old access must remain revoked. Use
 **Sign out everywhere** for affected accounts to revoke the Lace sessions
 that authorize preview. Remove private output once delivery is closed and
 runners have stopped. Preserve the `MEDIA` bucket and follow the D1/R2 backup

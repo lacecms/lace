@@ -170,7 +170,7 @@ test("SQLite exchanges one-use preview handoffs against real Better Auth session
   });
 });
 
-test("Node only advertises configured preview admission in explicit checkpoint composition", async () => {
+test("Node derives preview admission and diagnostics from environment activation", async () => {
   const runnerEnvironment = {
     LACE_PREVIEW_ORIGIN: draftPreviewOrigin,
     LACE_PREVIEW_RUNNER_ORIGIN: "http://preview-runner.lace.test/",
@@ -181,17 +181,52 @@ test("Node only advertises configured preview admission in explicit checkpoint c
     LACE_BUILD_SITE_LABEL: "Main site",
     LACE_BUILD_SITE_URL: "https://public.lace.test/",
   };
-  for (const previewAdminEnabled of [false, true]) {
-    const fixture = await nodePreviewFixture(cleanups, { previewAdminEnabled, runnerEnvironment });
+  for (const activation of [undefined, "false", "True", "true", "incomplete"]) {
+    const fixture = await nodePreviewFixture(cleanups, {
+      runnerEnvironment: {
+        ...runnerEnvironment,
+        ...(activation && {
+          LACE_PREVIEW_ENABLED: activation === "incomplete" ? "true" : activation,
+        }),
+        ...(activation === "incomplete" && { LACE_PREVIEW_BUILDER_SECRET: "" }),
+      },
+    });
+    expect(fixture.runtime.createPreview === undefined).toBe(activation !== "true");
     const cookie = await fixture.signIn();
     const response = await fixture.runtime.app.fetch(
       new Request(`${nodePreviewAdmin}/api/v1/admin/preview/config`, { headers: { cookie } }),
     );
     expect(response.status).toBe(200);
+    for (const path of [
+      "/admin/",
+      "/api/auth/get-session",
+      "/api/v1/preview-runner/test/claim",
+      "/",
+    ]) {
+      const closed = await fixture.runtime.app.fetch(new Request(draftPreviewOrigin + path));
+      expect(closed.status).toBe(404);
+      expect(closed.headers.get("cache-control")).toBe("private, no-store");
+    }
+    expect(
+      (await fixture.runtime.app.fetch(new Request(nodePreviewAdmin + "/health/live"))).status,
+    ).toBe(200);
     expect(await response.json()).toEqual(
-      previewAdminEnabled
+      activation === "true"
         ? { ready: true, origin: draftPreviewOrigin, viewMode: "new-tab" }
-        : { ready: false, missing: ["preview-disabled"] },
+        : {
+            ready: false,
+            missing: [activation === "incomplete" ? "preview-configuration" : "preview-disabled"],
+          },
     );
+  }
+  for (const overrides of [
+    { LACE_PREVIEW_ORIGIN: nodePreviewAdmin },
+    { LACE_BUILD_SITE_URL: draftPreviewOrigin },
+  ]) {
+    const env = { ...runnerEnvironment, ...overrides, LACE_PREVIEW_ENABLED: "true" };
+    const { runtime } = await nodePreviewFixture(cleanups, { runnerEnvironment: env });
+    expect(runtime.createPreview).toBeUndefined();
+    const alias = await runtime.app.fetch(new Request(`${env.LACE_PREVIEW_ORIGIN}/health/live`));
+    expect(alias.status).toBe(200);
   }
 });

@@ -6,6 +6,21 @@ export default defineConfig({
     projects: [
       {
         test: {
+          name: "preview-node-development",
+          include: ["tests/preview-node-development.acceptance.mjs"],
+          testTimeout: 420000,
+        },
+      },
+      {
+        test: {
+          name: "preview-deployments",
+          include: ["tests/preview-deployments.acceptance.mjs"],
+          testTimeout: 420000,
+          hookTimeout: 90000,
+        },
+      },
+      {
+        test: {
           name: "packed-draft-preview",
           include: ["tests/packed-draft-preview.acceptance.mjs"],
           testTimeout: 420000,

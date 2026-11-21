@@ -63,13 +63,18 @@ Doctor reads a regular `.env`, then lets exported process variables override it;
 
 `setup` marks absent databases/ledgers, pending migrations, an unavailable API and the not-yet-issued build token as `expected`; `ready` treats them as failures. Settings/permission/lock/tool/authorization errors and a reachable API returning not-ready fail in both stages. Other check statuses are `pass`, `fail` and `skipped`; skipped checks explain their dependency or inapplicability. A present token remains unverified and is never sent. Readiness does not verify content sync, object storage, publication or a successful site build.
 
-The `preview` row is advisory in both stages. For Compose it checks the
-private settings and the installed Astro packages in the selected mount.
-For Cloudflare it checks the selected Wrangler file and Git-root-relative
-site in the local checkout. Doctor neither evaluates Astro configuration nor
-contacts the preview executor or retrieves its secrets. Follow your
-deployment guide to verify the route, source and storage with an authorized
-test build when preview is enabled.
+<!-- lace-site: starter existing -->
+
+The `preview` row is advisory in both stages. It reports preview as off
+unless `LACE_PREVIEW_ENABLED` is the literal string `true`. For VPS Compose,
+doctor checks local settings and the installed Astro packages in the selected
+mount. With local preview settings and no VPS preview origin, it also checks
+the loopback TLS files. For Cloudflare it checks the Wrangler vars, private
+binding declaration, maintenance cron and Git-root-relative site packages.
+Verify integration, routing, certificate trust and private asset delivery
+with a signed-in saved-draft build after enabling.
+
+<!-- lace-site: end -->
 
 SQLite is inspected without writable runtime opening. WAL-mode databases report `DATABASE_UNAVAILABLE` rather than change SHM reader marks or create sidecars; consult the separate API readiness result. For an independent ledger inspection, stop all API/dispatcher/CLI database users, back up with trusted SQLite tooling, explicitly checkpoint successfully and switch to rollback journal mode (`PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode=DELETE;`), then repeat doctor. These are operator actions; doctor performs none of them. Ordinary Lace startup restores WAL. Never discard WAL/SHM files or use immutable mode on a live database.
 

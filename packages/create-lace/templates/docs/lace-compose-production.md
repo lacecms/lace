@@ -133,9 +133,9 @@ While the services run, `/health/ready` is the readiness authority: the API keep
 
 ## Prepare protected draft preview
 
-Preview creation stays disabled in the deployment entry points during acceptance.
-Prepare these settings for a matching release that enables creation. Apply the
-forward migrations and keep the API and builder images on the same release.
+Preview is off by default. Apply the forward migrations and keep the API and
+builder images on the same release. Configure the following prerequisites
+before opting in.
 
 <!-- lace-site: starter -->
 
@@ -161,6 +161,7 @@ Set these non-secret values in the root `.env`, using your actual origins
 and the site's public base path.
 
 ```dotenv
+LACE_PREVIEW_ENABLED=true
 LACE_PUBLIC_BASE_URL=https://cms.example.com/
 LACE_PREVIEW_HOST=preview.example.com
 LACE_PREVIEW_ORIGIN=https://preview.example.com/
@@ -178,15 +179,17 @@ private storage and the published site keeps its own static release.
 
 During a maintenance window, run
 `pnpm exec lace doctor --target node --mode compose --stage setup` and review
-the `preview` row. An authorized test build verifies the deployment after
-the feature is enabled. Publication gets the next builder slot. A running
+the `preview` row. Run `pnpm prod:start` to recreate changed services with
+the new setting. Sign in and create a saved-draft preview to verify delivery. Publication gets the next builder slot. A running
 preview has up to 10 minutes for execution and upload, within 15 minutes
 overall. Ready output expires after 24 hours. Fix source, storage or timeout
 issues and choose **Retry preview** on the current saved revision.
 
-Before rollback, block preview and runner ingress, stop the preview executor
-and confirm termination. Remove preview settings, revoke the dedicated
-secrets and recreate the affected services. Use **Sign out everywhere** for
+To withdraw, close preview ingress, set `LACE_PREVIEW_ENABLED=false` and
+recreate the API, dispatcher and builder. Confirm old viewer and runner
+requests are denied. During maintenance, stop outstanding preview work and
+confirm termination before re-enabling. Revoke the dedicated credentials
+if old access must remain revoked. Use **Sign out everywhere** for
 affected accounts to revoke linked preview sessions. Clean private preview
 objects after access and execution stop. Keep the public release and use the
 usual database and storage backup procedure.

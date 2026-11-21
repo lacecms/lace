@@ -305,7 +305,7 @@ async function journey(kind, platform, scratch, cleanups, runner) {
   const unavailable = async (entry) => {
     expect(await json(await cms("/preview/config"), 200)).toEqual({
       ready: false,
-      missing: ["preview-configuration"],
+      missing: ["preview-disabled"],
     });
     expect((await json(await request(entry, "configuration-disabled"), 503)).error.code).toBe(
       "PREVIEW_CONFIGURATION_UNAVAILABLE",

@@ -1,0 +1,85 @@
+services:
+  api:
+    ports: !reset []
+    environment:
+      LACE_PUBLIC_BASE_URL: https://${LACE_DEV_CMS_HOST:-cms.lace.test}:${LACE_DEV_HTTPS_PORT:-3443}/
+      LACE_BUILD_SITE_URL: ${LACE_DEV_PREVIEW_SITE_URL:-http://localhost:4321/}
+      LACE_PREVIEW_ENABLED: ${LACE_PREVIEW_ENABLED:-false}
+      LACE_PREVIEW_ORIGIN: https://${LACE_DEV_PREVIEW_HOST:-preview.lace.test}:${LACE_DEV_HTTPS_PORT:-3443}/
+      LACE_PREVIEW_RUNNER_ORIGIN: http://api:3000/
+      LACE_PREVIEW_BUILDER_URL: http://preview-builder:8788/
+      LACE_PREVIEW_BUILDER_SECRET: ${LACE_DEV_PREVIEW_BUILDER_SECRET:-}
+      LACE_PREVIEW_RUNNER_SECRET: ${LACE_DEV_PREVIEW_RUNNER_SECRET:-}
+
+  preview-builder:
+    image: ${LACE_BUILDER_IMAGE:?set LACE_BUILDER_IMAGE}
+    networks: [backend, build-egress]
+    environment:
+      LACE_BUILDER_MODE: preview
+      LACE_API_BASE_URL: http://api:3000/
+      # lace-site: starter
+      LACE_BUILD_SITE_DIR: ${LACE_BUILD_SITE_DIR:-site}
+      # lace-site: end
+      # lace-site: existing
+      LACE_BUILD_SITE_DIR: ${LACE_BUILD_SITE_DIR:-.}
+      # lace-site: end
+      LACE_BUILD_SITE_URL: ${LACE_DEV_PREVIEW_SITE_URL:-http://localhost:4321/}
+      LACE_PREVIEW_ENABLED: ${LACE_PREVIEW_ENABLED:-false}
+      LACE_PREVIEW_BUILDER_SECRET: ${LACE_DEV_PREVIEW_BUILDER_SECRET:-}
+      LACE_PREVIEW_RUNNER_SECRET: ${LACE_DEV_PREVIEW_RUNNER_SECRET:-}
+    volumes:
+      - type: bind
+        # lace-site: starter
+        source: ${LACE_BUILD_SOURCE_ROOT:-.}
+        # lace-site: end
+        # lace-site: existing
+        source: ${LACE_BUILD_SOURCE_ROOT:-{{SITE_PATH}}}
+        # lace-site: end
+        target: /source
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8788/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  preview-web:
+    networks: [frontend]
+    image: nginx:1.27.5-alpine
+    ports:
+      - "127.0.0.1:${LACE_DEV_HTTPS_PORT:-3443}:3443"
+    environment:
+      NGINX_ENVSUBST_FILTER: ^LACE_DEV_(CMS|PREVIEW)_HOST$$
+      LACE_DEV_CMS_HOST: ${LACE_DEV_CMS_HOST:-cms.lace.test}
+      LACE_DEV_PREVIEW_HOST: ${LACE_DEV_PREVIEW_HOST:-preview.lace.test}
+    volumes:
+      - ./deploy/nginx-dev-preview.conf:/etc/nginx/templates/default.conf.template:ro
+      - type: bind
+        source: ${LACE_DEV_TLS_CERT:-.lace/tls/cert.pem}
+        target: /etc/lace/tls/cert.pem
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${LACE_DEV_TLS_KEY:-.lace/tls/key.pem}
+        target: /etc/lace/tls/key.pem
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 5s
+      timeout: 3s
+      retries: 12

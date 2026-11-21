@@ -115,7 +115,16 @@ test.each(VARIANTS)(
     const production = await readFile(join(project.path, GUIDES[1]), "utf8");
     const environment = await readFile(join(project.path, ".env.example"), "utf8");
     const hasSite = site.mode !== "none";
+    expect(scripts["dev:api:preview"] !== undefined).toBe(hasSite);
+    expect(project.manifest.files["docker-compose.dev.preview.yml"]?.owner).toBe(
+      hasSite ? "managed" : undefined,
+    );
+    expect(project.manifest.files["deploy/nginx-dev-preview.conf"]?.owner).toBe(
+      hasSite ? "managed" : undefined,
+    );
+    expect(development.includes("## Enable protected draft preview")).toBe(hasSite);
     expect(production.includes("## Prepare protected draft preview")).toBe(hasSite);
+    expect(environment.includes("LACE_PREVIEW_ENABLED=false")).toBe(hasSite);
     expect(environment.includes("LACE_PREVIEW_RUNNER_SECRET=")).toBe(hasSite);
     if (hasSite) {
       expect(environment).toMatch(/^LACE_PREVIEW_ORIGIN=$/mu);
@@ -195,7 +204,8 @@ test.each(VARIANTS)(
       expect(project.manifest.files[".github/workflows/lace-preview.yml"] !== undefined).toBe(
         hasSite,
       );
-      expect(config).not.toMatch(/^\s*"LACE_PREVIEW_[A-Z_]+"\s*:/mu);
+      expect(/^\s*"LACE_PREVIEW_ENABLED"\s*:\s*"false"/mu.test(config)).toBe(hasSite);
+      expect(config).not.toMatch(/^\s*"LACE_PREVIEW_(?!ENABLED")[A-Z_]+"\s*:/mu);
       if (hasSite) {
         expect(config).toContain(
           site.mode === "starter"

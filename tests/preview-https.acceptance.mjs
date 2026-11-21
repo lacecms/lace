@@ -103,8 +103,8 @@ async function installPreview(cleanups, server, s3, adminName, previewName) {
     preview,
     endpoint: s3.endpoint,
     bucket,
-    previewAdminEnabled: true,
     runnerEnvironment: {
+      LACE_PREVIEW_ENABLED: "true",
       LACE_PREVIEW_ORIGIN: preview,
       LACE_PREVIEW_RUNNER_ORIGIN: "http://preview-runner.lace.test/",
       LACE_PREVIEW_BUILDER_URL: "http://builder.lace.test/",

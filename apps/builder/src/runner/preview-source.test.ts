@@ -58,6 +58,7 @@ test("preview stages the pinned Git tree and excludes worktree runtime data", as
 test("preview runner requires separate configured credentials and a public site URL", () => {
   const environment = {
     LACE_PREVIEW_BUILDER_SECRET: "b".repeat(32),
+    LACE_PREVIEW_ENABLED: "true",
     LACE_PREVIEW_RUNNER_SECRET: "r".repeat(32),
   };
   const site = "https://example.test/base";

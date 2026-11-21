@@ -116,9 +116,13 @@ builder, publication gets the next slot; an already running preview is bounded
 and is not preempted. The build pins the configured site's source commit, not
 necessarily the last deployed commit.
 
-A separate preview hostname can route to the same Worker or Node process, but
-host dispatch must exclude administrative routes. Existing installations
-without complete preview configuration keep preview disabled.
+A distinct HTTPS preview hostname can route to the same Worker or Node
+process. Its ingress serves only protected preview routes and stays closed
+when setup is incomplete or disabled. The VPS API and builder and the deployed
+Worker require the exact setting `LACE_PREVIEW_ENABLED=true` and valid local
+prerequisites before accepting preview work. Withdrawal denies existing viewer
+and runner requests when the updated runtime is serving. Rollout checks for
+executor access and private storage remain separate from runtime readiness.
 See [ADR 0033](../adr/0033-protected-static-draft-preview.md).
 
 ## 18. Development modes
@@ -140,6 +144,15 @@ Generated Cloudflare consumers use their own commands: `cf:dev` runs
 and `cf:db:migrate`, `cf:content:sync` and `cf:auth:bootstrap` use the explicit
 `cloudflare-local` target. Remote provisioning, migration and deployment remain
 explicit operator commands.
+
+The optional `pnpm dev:node -- --preview` and generated
+`pnpm dev:api:preview` workflows add loopback HTTPS and a private
+preview-only runner to the existing Node development project. The CMS and
+preview use distinct hostnames and locally trusted certificates. The gateway
+reserves the preview host before HTTP and WebSocket frontend routing. The
+runner pins committed Astro source and uses private SILO with the same local
+SQLite database. Normal development uses the existing startup and reload
+paths. The local Cloudflare development commands have no preview variant.
 
 The workspace also provides `pnpm build`, `typecheck`, `lint`, `test`,
 `db:generate`, `db:migrate:node`, `db:migrate:cloudflare` and `content:sync`.

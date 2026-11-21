@@ -101,8 +101,8 @@ Publication queues work through a durable outbox, and the dispatcher triggers th
 
 Use the starter or [adopt the integration in your existing site](../../astro-integration/#adopt-protected-draft-preview).
 Apply the forward database migrations and use matching packages and images.
-Preview creation is disabled in the deployment entry points during acceptance.
-Use these settings to prepare an installation for a release that enables it.
+Preview is off by default. Generated projects can use either a loopback
+development stack or the shared VPS builder.
 
 1. Mount the root of your clean Git checkout as `LACE_BUILD_SOURCE_ROOT`.
    The builder pins its current commit and installs the committed lockfile.
@@ -125,12 +125,14 @@ Use these settings to prepare an installation for a release that enables it.
    internal network and uses the private S3 bucket for preview objects.
    Keep the builder, runner ingress and object storage private. Sibling HTTPS
    hosts support the embedded viewer. Separate sites use **Open in new tab**.
-4. Run `pnpm exec lace doctor --target node --mode compose --stage setup`
+4. Set `LACE_PREVIEW_ENABLED=true` in the ignored Compose `.env` and run
+   `pnpm exec lace doctor --target node --mode compose --stage setup`
    during a database maintenance window. Its `preview` row reports local
    prerequisites. For native composition, supply the internal
    `LACE_PREVIEW_RUNNER_ORIGIN` and `LACE_PREVIEW_BUILDER_URL` yourself and
    check the builder source on its host. An authorized test build is needed
-   to verify ingress, S3 delivery and rendering.
+   to verify ingress, S3 delivery and rendering. Recreate the changed
+   services with `pnpm prod:start`, then create a preview in Admin.
 
 The builder shares one physical slot with publication. Pending publication
 gets the next slot, and a running preview can finish within its deadline.
@@ -138,13 +140,26 @@ If a preview is busy, wait for the running work. For a source, storage or
 timeout failure, fix the cause and retry from the saved entry. See the
 [preview lifetime and retry rules](../../editing-content/#preview-a-saved-draft).
 
-To disable before rollback, block the preview hostname and runner ingress,
-clear preview settings and recreate the affected services. Stop the preview
-executor and confirm termination during the maintenance window, then revoke
-the dedicated secrets. Use **Sign out everywhere** for affected accounts to
+To withdraw, close preview ingress, set `LACE_PREVIEW_ENABLED=false` and
+recreate the API, dispatcher and builder. Confirm old viewer and runner
+requests are denied. Resolve outstanding builds and confirm termination
+before re-enabling. Revoke dedicated credentials if old access must remain
+revoked. Use **Sign out everywhere** for affected accounts to
 revoke the Lace sessions that authorize preview. Remove private preview
 objects after access is closed and builds have stopped. Keep the public
 release volume and follow the normal database and storage backup procedure.
+
+### Local HTTPS preview
+
+Follow the generated `docs/lace-compose-dev.md` to configure locally trusted
+TLS for `cms.lace.test` and `preview.lace.test`, resolved to `127.0.0.1`.
+Set `LACE_PREVIEW_ENABLED=true` and the two local preview credentials in
+the ignored `.env`. Commit the Astro source and lockfile, then start
+`pnpm dev:api:preview` and open `https://cms.lace.test:3443/admin/`.
+The local runner and SILO have no host ports, and the ordinary Astro
+development server remains available through `pnpm dev`. Stop with
+`pnpm dev:stop`. Restore the ordinary HTTP URLs and run `pnpm dev:api`
+after disabling the flag to return to HTTP development.
 
 ## Configure uploads and build caches
 

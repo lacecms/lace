@@ -1,8 +1,10 @@
+import { reservedPreviewHostname } from "@lacecms/server";
 import type { GitHubPreviewSettings } from "../deploy/preview-github.js";
 import type { R2Bucket } from "../media/r2-storage.js";
 
 export interface CloudflarePreviewEnv {
   readonly PREVIEW?: unknown;
+  readonly LACE_PREVIEW_ENABLED?: unknown;
   readonly LACE_PREVIEW_ORIGIN?: unknown;
   readonly LACE_PREVIEW_GITHUB_REPOSITORY?: unknown;
   readonly LACE_PREVIEW_GITHUB_REF?: unknown;
@@ -71,9 +73,8 @@ export function parseCloudflarePreviewVars(env: CloudflarePreviewVars, admin: UR
     origin.pathname !== "/" ||
     admin.pathname !== "/" ||
     admin.protocol !== "https:" ||
-    origin.hostname === admin.hostname ||
     !site ||
-    site.hostname === origin.hostname ||
+    !reservedPreviewHostname(env.LACE_PREVIEW_ORIGIN, admin, env.LACE_BUILD_SITE_URL) ||
     !repository ||
     !ref ||
     ref.split("/").some((part) => !part || part.endsWith(".") || part.endsWith(".lock")) ||
@@ -95,6 +96,7 @@ export function parseCloudflarePreviewSettings(
     },
   admin: URL,
 ): CloudflarePreviewSettings | undefined {
+  if (env.LACE_PREVIEW_ENABLED !== "true") return undefined;
   const vars = parseCloudflarePreviewVars(env, admin);
   const token = matches(env.LACE_PREVIEW_GITHUB_TOKEN, secret);
   const bootstrapSecret = matches(env.LACE_PREVIEW_RUNNER_SECRET, secret);

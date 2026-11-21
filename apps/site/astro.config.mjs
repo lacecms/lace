@@ -1,31 +1,40 @@
 import { defineConfig } from "astro/config";
 import { fileURLToPath } from "node:url";
-// The adapter's source, like the aliases below; Astro loads the config through Vite.
+import { runnerImport } from "vite";
 import { laceImageConfig } from "../../packages/astro/src/media/images.ts";
 
+// Resolve workspace packages from a committed checkout without compiled dist files.
+const source = (path) => fileURLToPath(new URL(`../../packages/${path}`, import.meta.url));
+const resolve = {
+  alias: [
+    ...["astro", "render", "sdk", "contracts", "content", "domain"].map((name) => ({
+      find: new RegExp(`^@lacecms/${name}$`, "u"),
+      replacement: source(`${name}/src/index.ts`),
+    })),
+    ...["astro", "sdk", "contracts"].map((name) => ({
+      find: `@lacecms/${name}/preview`,
+      replacement: source(`${name}/src/preview.ts`),
+    })),
+    {
+      find: /^@lacecms\/astro\/(\w+\.astro)$/u,
+      replacement: source("astro/src/") + "$1",
+    },
+  ],
+};
+
+const integrations = [];
+if (process.env.LACE_PREVIEW_INPUT_FILE !== undefined) {
+  // Astro's initial config loader runs before it has the site's Vite aliases.
+  const { module } = await runnerImport(source("astro/src/preview/integration.ts"), { resolve });
+  integrations.push(module.lacePreview());
+}
+
 export default defineConfig({
-  // Lets the build fetch media originals from the API for image variants.
   image: laceImageConfig(process.env),
+  integrations,
   output: "static",
   vite: {
     server: { allowedHosts: ["site"] },
-    // The reference workspace uses source packages. Direct Astro builds must
-    // not depend on old dist files or invoke dependency package build scripts.
-    // Component subpaths such as `@lacecms/astro/LaceBlocks.astro` resolve to
-    // the adapter's source components for the same reason.
-    resolve: {
-      alias: [
-        ...["astro", "render", "sdk", "contracts", "content", "domain"].map((name) => ({
-          find: new RegExp(`^@lacecms/${name}$`, "u"),
-          replacement: fileURLToPath(
-            new URL(`../../packages/${name}/src/index.ts`, import.meta.url),
-          ),
-        })),
-        {
-          find: /^@lacecms\/astro\/(\w+\.astro)$/u,
-          replacement: `${fileURLToPath(new URL("../../packages/astro/src/", import.meta.url))}$1`,
-        },
-      ],
-    },
+    resolve,
   },
 });

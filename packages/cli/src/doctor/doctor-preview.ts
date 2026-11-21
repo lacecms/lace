@@ -41,21 +41,78 @@ async function nodePreviewSource(
   values: Values,
   cwd: string,
   site: Exclude<Site, { mode: "none" }>,
+  io: DoctorIO,
+  signal: AbortSignal,
 ): Promise<Source | Observation> {
   const compose = options.mode === "compose";
-  const action = "See protected draft preview in docs/lace-compose-production.md.";
+  const local =
+    compose &&
+    !values.LACE_PREVIEW_ORIGIN &&
+    ["LACE_DEV_TLS_CERT", "LACE_DEV_TLS_KEY", "LACE_DEV_PREVIEW_BUILDER_SECRET"].some(
+      (key) => values[key],
+    );
+  const guide = local ? "lace-compose-dev.md" : "lace-compose-production.md";
+  const action = `See protected draft preview in docs/${guide}.`;
+  const { parseNodePreviewSettings } = await import("@lacecms/platform-node");
+  const root = values.LACE_BUILD_SOURCE_ROOT || (site.mode === "starter" ? "." : site.path);
+  const directory = values.LACE_BUILD_SITE_DIR || (site.mode === "starter" ? "site" : ".");
+  if (
+    compose &&
+    directory !== "." &&
+    (isAbsolute(directory) || directory.split("/").includes(".."))
+  )
+    return configurationRequired(["LACE_BUILD_SITE_DIR"], action);
+
+  if (local) {
+    const port = values.LACE_DEV_HTTPS_PORT || "3443";
+    const cms = values.LACE_DEV_CMS_HOST || "cms.lace.test";
+    const preview = values.LACE_DEV_PREVIEW_HOST || "preview.lace.test";
+    const previewFields = [
+      "LACE_DEV_PREVIEW_HOST",
+      "LACE_DEV_CMS_HOST",
+      "LACE_DEV_HTTPS_PORT",
+      "LACE_DEV_PREVIEW_SITE_URL",
+      "LACE_DEV_PREVIEW_BUILDER_SECRET",
+      "LACE_DEV_PREVIEW_RUNNER_SECRET",
+    ];
+    const admin = apiUrl(`https://${cms}:${port}/`);
+    const settings =
+      admin &&
+      parseNodePreviewSettings(
+        {
+          ...values,
+          LACE_BUILD_SITE_URL: values.LACE_DEV_PREVIEW_SITE_URL || "http://localhost:4321/",
+          LACE_PREVIEW_ORIGIN: `https://${preview}:${port}/`,
+          LACE_PREVIEW_RUNNER_ORIGIN: "http://api:3000/",
+          LACE_PREVIEW_BUILDER_URL: "http://preview-builder:8788/",
+          LACE_PREVIEW_BUILDER_SECRET: values.LACE_DEV_PREVIEW_BUILDER_SECRET,
+          LACE_PREVIEW_RUNNER_SECRET: values.LACE_DEV_PREVIEW_RUNNER_SECRET,
+        },
+        admin,
+      );
+    if (!settings) return configurationRequired(previewFields, action);
+    const files = [
+      ["LACE_DEV_TLS_CERT", ".lace/tls/cert.pem"],
+      ["LACE_DEV_TLS_KEY", ".lace/tls/key.pem"],
+    ] as const;
+    const available = await Promise.all(
+      files.map(([key, fallback]) =>
+        io.file(resolve(cwd, values[key] || fallback), signal).catch(() => undefined),
+      ),
+    );
+    const missing = files.filter((_, index) => !available[index]).map(([key]) => key);
+    if (missing.length > 0) return configurationRequired(missing, action);
+    return { root: resolve(cwd, root, directory), action };
+  }
   const fields = [
     SITE_URL,
     "LACE_PUBLIC_BASE_URL",
     ...NODE_SETTINGS,
-    ...(compose
-      ? ["LACE_PREVIEW_HOST"]
-      : ["LACE_PREVIEW_RUNNER_ORIGIN", "LACE_PREVIEW_BUILDER_URL"]),
+    ...(compose ? [] : ["LACE_PREVIEW_RUNNER_ORIGIN", "LACE_PREVIEW_BUILDER_URL"]),
   ];
   const missing = fields.filter((key) => !values[key]?.trim());
   if (missing.length > 0) return configurationRequired(missing, action);
 
-  const { parseNodePreviewSettings } = await import("@lacecms/platform-node");
   const admin = apiUrl(values.LACE_PUBLIC_BASE_URL);
   const runtimeValues = compose
     ? {
@@ -66,7 +123,7 @@ async function nodePreviewSource(
     : values;
   const settings = admin && parseNodePreviewSettings(runtimeValues, admin);
   if (!settings) return configurationRequired(fields, action);
-  if (compose && values.LACE_PREVIEW_HOST !== settings.origin.hostname)
+  if (compose && values.LACE_PREVIEW_HOST && values.LACE_PREVIEW_HOST !== settings.origin.hostname)
     return configurationRequired(["LACE_PREVIEW_HOST", "LACE_PREVIEW_ORIGIN"], action);
 
   if (!compose)
@@ -75,10 +132,6 @@ async function nodePreviewSource(
       "Local API settings pass. The separately operated builder owns the selected source and its Astro installation.",
       `${action} Check the builder checkout, dependencies and integration there.`,
     );
-  const root = values.LACE_BUILD_SOURCE_ROOT || (site.mode === "starter" ? "." : site.path);
-  const directory = values.LACE_BUILD_SITE_DIR || (site.mode === "starter" ? "site" : ".");
-  if (directory !== "." && (isAbsolute(directory) || directory.split("/").includes("..")))
-    return configurationRequired(["LACE_BUILD_SITE_DIR"], action);
   return { root: resolve(cwd, root, directory), action };
 }
 
@@ -103,10 +156,10 @@ async function cloudflarePreviewSource(
   const buckets = config?.r2_buckets;
   const previewBucket =
     Array.isArray(buckets) && buckets.find((entry) => entry?.binding === "PREVIEW")?.bucket_name;
-  if (!CLOUDFLARE_VARS.some((key) => vars?.[key]) && !previewBucket)
+  if (vars?.LACE_PREVIEW_ENABLED !== "true")
     return previewNotice(
       "PREVIEW_DISABLED",
-      "Protected draft preview is optional and unconfigured.",
+      "Protected draft preview is off. Set LACE_PREVIEW_ENABLED to the string true in Worker vars to opt in.",
       action,
     );
 
@@ -155,20 +208,16 @@ export async function previewCheck(
         "No Astro site is selected for protected draft preview.",
         "Connect an Astro site before configuring preview.",
       );
-    if (
-      options.target === "node" &&
-      !NODE_SETTINGS.some((key) => values[key]) &&
-      !values.LACE_PREVIEW_HOST
-    )
+    if (options.target === "node" && values.LACE_PREVIEW_ENABLED !== "true")
       return previewNotice(
         "PREVIEW_DISABLED",
-        "Protected draft preview is optional and unconfigured.",
+        "Protected draft preview is off. Set LACE_PREVIEW_ENABLED=true to opt in.",
         "See protected draft preview in docs/lace-compose-production.md if you want to configure it.",
       );
 
     const source =
       options.target === "node"
-        ? await nodePreviewSource(options, values, cwd, site)
+        ? await nodePreviewSource(options, values, cwd, site, io, signal)
         : await cloudflarePreviewSource(io, values, cwd, signal);
     if ("kind" in source) return source;
     const manifest = JSON.parse(

@@ -95,6 +95,7 @@ test("the fixed container builds private snapshots and resumes normal publicatio
       bucket,
       preview: previewOrigin,
       runnerEnvironment: {
+        LACE_PREVIEW_ENABLED: "true",
         LACE_PREVIEW_ORIGIN: previewOrigin,
         LACE_PREVIEW_RUNNER_ORIGIN: runnerOrigin,
         LACE_PREVIEW_BUILDER_URL: builderOrigin,
@@ -113,6 +114,7 @@ test("the fixed container builds private snapshots and resumes normal publicatio
       LACE_BUILD_TOKEN: build.token,
       LACE_BUILD_SITE_DIR: ".",
       LACE_BUILD_SITE_URL: siteUrl,
+      LACE_PREVIEW_ENABLED: "true",
       LACE_PREVIEW_BUILDER_SECRET: builderSecret,
       LACE_PREVIEW_RUNNER_SECRET: bootstrapSecret,
     };

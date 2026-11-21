@@ -13,6 +13,7 @@ const commit = "a".repeat(40);
 const bootstrap = "b".repeat(40);
 const providerToken = "c".repeat(40);
 const env = {
+  LACE_PREVIEW_ENABLED: "true",
   LACE_PREVIEW_ORIGIN: draftPreviewOrigin,
   LACE_PREVIEW_GITHUB_REPOSITORY: "org/site",
   LACE_PREVIEW_GITHUB_WORKFLOW: "lace-preview.yml",
@@ -115,11 +116,10 @@ async function bundlePreviewWorker(): Promise<string> {
   return compiled.outputFiles[0]!.text;
 }
 
-async function previewFixture(script?: string, previewAdminEnabled = false) {
+async function previewFixture(script?: string) {
   const github = fakeGitHub();
   const fixture = await createWorkerFixture(createCloudflareWorker, cleanups, {
     privatePreviewBucket: true,
-    previewAdminEnabled,
     previewGitHubFetch: github.fetcher,
     env,
     ...(script && {
@@ -437,7 +437,7 @@ test("the disposable acceptance entry requires an enabled CMS host and same-orig
 });
 
 test("the activated admin API validates the saved revision before dispatch and replays acceptance", async () => {
-  const fixture = await previewFixture(undefined, true);
+  const fixture = await previewFixture();
   const config = await fixture.call("/api/v1/admin/preview/config");
   expect(config.body).toEqual({ ready: true, origin: draftPreviewOrigin, viewMode: "new-tab" });
   const target = (id = fixture.entry) => `/api/v1/admin/entries/${id}/preview`;
@@ -506,4 +506,52 @@ test("the activated admin API validates the saved revision before dispatch and r
     fixture.github.fetcher.mock.calls.filter(([url]) => String(url).endsWith("/dispatches")),
   ).toHaveLength(1);
   expect(fixture.triggers).toEqual([]);
+});
+
+test("the standard Worker denies admission when disabled or incomplete", async () => {
+  const fixture = await previewFixture();
+  const call = (bindingOverrides: Record<string, unknown>, path: string, method = "GET") =>
+    fixture.worker.fetch(
+      new Request(origin + path, {
+        method,
+        headers: { cookie: fixture.cookie!, origin, "content-type": "application/json" },
+        ...(method === "POST" && {
+          body: JSON.stringify({ expectedRevision: 1, idempotencyKey: "disabled" }),
+        }),
+      }),
+      { ...fixture.env, ...bindingOverrides },
+      fixture.ctx,
+    );
+  for (const [overrides, reason] of [
+    [{ LACE_PREVIEW_ENABLED: undefined }, "preview-disabled"],
+    [{ LACE_PREVIEW_ENABLED: "false" }, "preview-disabled"],
+    [{ LACE_PREVIEW_ENABLED: "True" }, "preview-disabled"],
+    [{ LACE_PREVIEW_RUNNER_SECRET: undefined }, "preview-configuration"],
+  ] as const) {
+    const status = await call(overrides, "/api/v1/admin/preview/config");
+    expect(await status.json()).toEqual({ ready: false, missing: [reason] });
+    const create = await call(overrides, `/api/v1/admin/entries/${fixture.entry}/preview`, "POST");
+    expect(await create.json()).toMatchObject({
+      error: { code: "PREVIEW_CONFIGURATION_UNAVAILABLE" },
+    });
+    expect((await call(overrides, "/api/auth/get-session")).status).toBe(200);
+  }
+  for (const overrides of [
+    { LACE_PREVIEW_ORIGIN: origin },
+    { LACE_BUILD_SITE_URL: draftPreviewOrigin },
+  ]) {
+    const settings = { ...fixture.env, ...overrides };
+    expect(fixture.worker.runtime(settings).createPreview).toBeUndefined();
+    expect(
+      (
+        await fixture.worker.fetch(
+          new Request(`${settings.LACE_PREVIEW_ORIGIN}/health/ready`),
+          settings,
+          fixture.ctx,
+        )
+      ).status,
+    ).toBe(200);
+  }
+  expect(await fixture.status()).toBeNull();
+  expect(fixture.github.fetcher).not.toHaveBeenCalled();
 });

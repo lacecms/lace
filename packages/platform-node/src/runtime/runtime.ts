@@ -45,6 +45,7 @@ import {
   createLaceApp,
   jsonRequestLogger,
   parseBuildSiteIdentity,
+  reservedPreviewHostname,
   parseRuntimeFeatureFlags,
   parseEmailSettings,
   type EmailSettings,
@@ -107,6 +108,8 @@ export interface NodeRuntimeSettings {
   readonly siteDevOrigin?: URL;
   readonly builder?: Pick<NodeBuilderTriggerSettings, "baseUrl" | "secret">;
   readonly preview?: NodePreviewSettings;
+  readonly previewRequested?: boolean;
+  readonly reservedPreviewHostname?: string;
 }
 
 function requiredString(
@@ -267,6 +270,11 @@ export function parseNodeRuntimeSettings(environment: NodeEnvironment): NodeRunt
     throw new NodeEnvironmentError(Object.freeze(issues));
   }
   const preview = parseNodePreviewSettings(environment, publicBaseUrl);
+  const reserved = reservedPreviewHostname(
+    environment.LACE_PREVIEW_ORIGIN,
+    publicBaseUrl,
+    environment.LACE_BUILD_SITE_URL,
+  );
   return Object.freeze({
     apiDocsEnabled: features.flags.apiDocsEnabled,
     mcpEnabled: features.flags.mcpEnabled,
@@ -289,6 +297,8 @@ export function parseNodeRuntimeSettings(environment: NodeEnvironment): NodeRunt
     port,
     publicBaseUrl,
     ...(preview === undefined ? {} : { preview }),
+    previewRequested: environment.LACE_PREVIEW_ENABLED === "true",
+    ...(reserved && { reservedPreviewHostname: reserved }),
     ...(siteDevOrigin === undefined ? {} : { siteDevOrigin }),
     ...(builderUrl === undefined || builderSecret === undefined
       ? {}
@@ -388,9 +398,7 @@ const nodeOperationalLogger = Object.freeze({
 });
 
 export interface CreateNodeRuntimeInput {
-  /** Enable admin preview only in checkpoint test composition. */
-  readonly previewAdminEnabled?: boolean;
-  /** Internal preview delivery composition. Environment activation is handled separately. */
+  /** Internal preview delivery fixtures can supply a viewer without admission. */
   readonly previewOrigin?: URL;
   readonly previewBlobs?: PreviewBlobStorage;
   readonly previewExecutor?: Pick<import("@lacecms/application").PreviewRunner, "stop">;
@@ -598,6 +606,9 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     });
   const app = createLaceApp({
     ...services.appInput,
+    ...(input.settings.reservedPreviewHostname && {
+      reservedPreviewHostname: input.settings.reservedPreviewHostname,
+    }),
     ...(previewOrigin && {
       previewArtifacts: previewPackages!,
       previewRawPath: (request) => requestTargets.get(request)?.split("?", 1)[0],
@@ -611,7 +622,7 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
       }),
     }),
     ...(nodePreview && { previewRunner: nodePreview.transport }),
-    ...(input.previewAdminEnabled && {
+    ...((nodePreview || input.settings.previewRequested) && {
       adminPreview:
         nodePreview && previewOrigin
           ? { origin: previewOrigin.origin, create: nodePreview.create, status: nodePreview.status }

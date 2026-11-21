@@ -80,10 +80,11 @@ export type AdminPreview = Pick<PreviewAdmissionService, "status" | "create"> & 
 };
 
 export interface LaceAppInput {
-  /** Explicit test composition until the PV1 release gates pass. */
+  /** Preview readiness and admission supplied by the runtime. */
   readonly adminPreview?: AdminPreview | "configuration-required";
   /** Present only for complete preview delivery composition or a checkpoint fixture. */
   readonly preview?: PreviewBrowserAccess<Request>;
+  readonly reservedPreviewHostname?: string;
   readonly previewArtifacts?: PreviewArtifactReader;
   readonly previewRunner?: {
     readonly origin: URL;

@@ -49,6 +49,49 @@ hostname or object-store credentials. API and health paths stay in the Node
 application; `/admin/*` and site routes are proxied through the same origin,
 including supported Vite/Astro upgrade connections.
 
+### Preview a saved draft locally
+
+The preview stack uses the same local SQLite and SILO data and starts an
+HTTPS gateway and a private preview-only builder. Commit changes to the site,
+workspace packages and lockfile before requesting a preview. The builder pins
+the commit from the clean checkout. Astro and Admin dev servers still load
+the working tree for ordinary development and reloads.
+
+Resolve `cms.lace.test` and `preview.lace.test` to `127.0.0.1` in your local
+hosts file or resolver. With [mkcert](https://github.com/FiloSottile/mkcert),
+create a certificate trusted by your browser for both names:
+
+```sh
+mkdir -p .lace/tls
+mkcert -install
+mkcert -cert-file .lace/tls/cert.pem -key-file .lace/tls/key.pem cms.lace.test preview.lace.test
+```
+
+In the ignored `.env`, set `LACE_PREVIEW_ENABLED=true` and independent random
+`LACE_DEV_PREVIEW_BUILDER_SECRET` and `LACE_DEV_PREVIEW_RUNNER_SECRET` values
+(at least 32 printable characters each). The default TLS port is `3443`; see
+`.env.example` for hostname, port and certificate overrides. The public links
+in preview use the normal site on the HTTPS CMS origin unless you set
+`LACE_DEV_PREVIEW_SITE_URL`.
+
+```sh
+pnpm dev:node -- --preview
+pnpm content:sync
+```
+
+Sign in at `https://cms.lace.test:3443/admin/` (use `pnpm dev:bootstrap` for a
+new installation). Open a routed draft, save it and choose **Create preview**.
+The runner and SILO have no host ports. If preview is unavailable, check the
+flag, credentials and distinct origins. For a source error, commit the site
+changes and retry. If TLS fails, check local DNS, file mounts and browser trust.
+
+Run `pnpm dev:stop` to stop both the gateway and runner. Set
+`LACE_PREVIEW_ENABLED=false` and run `pnpm dev:node` for ordinary HTTP
+development. Existing preview sessions and runner requests are denied after
+withdrawal. Before re-enabling, resolve outstanding work and revoke linked
+sessions or rotate the dedicated credentials if previously issued access
+must remain revoked.
+
 ### Switch an existing development store
 
 The ignored `.env` can select a compatible full image reference with

@@ -167,7 +167,7 @@ checkpoint at a time and record its evidence and remaining tasks. On 2026-11-18,
 the owner approved implementing task 6.1 against the locally verified PV1E
 protocol before the disposable real-provider run in 5.5. Task 5.5 passed on
 2026-11-21. The final PV1F gate passed on the same date. Preview creation
-is disabled in the deployment entry points.
+was disabled in the deployment entry points at archive time.
 
 | Checkpoint | Scope | Completion evidence |
 | --- | --- | --- |
@@ -192,6 +192,20 @@ Architecture §§3–5/10/13/14 and ADR 0033 record the selected scope before co
 The verified deltas are synchronized into the
 [accepted specs](../openspec/specs/README.md#protected-draft-preview).
 The existing release-preparation change remains separate.
+
+### PV1 deployment follow-up
+
+**Status:** Implemented and verified locally and on the hosted Cloudflare
+Worker on 2026-11-21. The change is archived and its deltas are in the
+[accepted specs](../openspec/specs/README.md#protected-draft-preview).
+**Session unit:**
+[`enable-opt-in-draft-preview-deployments`](../openspec/changes/archive/2026-11-21-enable-opt-in-draft-preview-deployments/proposal.md).
+The follow-up delivers explicit opt-in for the repository and generated Node
+development stacks, Node VPS and the deployed Cloudflare Worker. Local Node
+adds loopback HTTPS and a private preview-only runner using committed source.
+The [verification record](../openspec/changes/archive/2026-11-21-enable-opt-in-draft-preview-deployments/verification.md)
+covers the shipped entry points, including hosted activation, a successful
+saved-draft build through GitHub Actions and withdrawal on `test-homepage`.
 
 ## 5. Owner decisions (2026-11-14)
 

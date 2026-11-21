@@ -224,7 +224,6 @@ export async function openNode({ project, scratch, commit, cleanups, intercept }
     runtime = undefined;
     runtime = platform.createNodeRuntime({
       config,
-      previewAdminEnabled: true,
       logger: { log() {} },
       settings: platform.parseNodeRuntimeSettings({
         LACE_AUTH_SECRET: authSecret,
@@ -236,15 +235,14 @@ export async function openNode({ project, scratch, commit, cleanups, intercept }
         LACE_MINIO_SECRET_KEY: storageSecret,
         LACE_MINIO_REGION: "us-east-1",
         LACE_MINIO_TIMEOUT_MS: "10000",
-        ...(enabled && {
-          LACE_PREVIEW_ORIGIN: previewOrigin,
-          LACE_PREVIEW_BUILDER_URL: builderOrigin,
-          LACE_PREVIEW_RUNNER_ORIGIN: runnerOrigin,
-          LACE_PREVIEW_BUILDER_SECRET: builderSecret,
-          LACE_PREVIEW_RUNNER_SECRET: rotateRunnerSecret
-            ? bootstrapSecret + "-rotated"
-            : bootstrapSecret,
-        }),
+        LACE_PREVIEW_ENABLED: String(enabled),
+        LACE_PREVIEW_ORIGIN: previewOrigin,
+        LACE_PREVIEW_BUILDER_URL: builderOrigin,
+        LACE_PREVIEW_RUNNER_ORIGIN: runnerOrigin,
+        LACE_PREVIEW_BUILDER_SECRET: builderSecret,
+        LACE_PREVIEW_RUNNER_SECRET: rotateRunnerSecret
+          ? bootstrapSecret + "-rotated"
+          : bootstrapSecret,
         LACE_BUILD_SITE_URL: siteUrl,
         LACE_BUILD_SITE_ID: "main-site",
         LACE_BUILD_SITE_LABEL: "Main site",
@@ -279,6 +277,7 @@ export async function openNode({ project, scratch, commit, cleanups, intercept }
       LACE_BUILDER_SECRET: publicationSecret,
       LACE_BUILD_SITE_URL: siteUrl,
       ...(previewEnabled && {
+        LACE_PREVIEW_ENABLED: "true",
         LACE_PREVIEW_BUILDER_SECRET: builderSecret,
         LACE_PREVIEW_RUNNER_SECRET: bootstrapSecret,
       }),
@@ -402,7 +401,7 @@ export async function openWorker({ project, commit, cleanups }) {
         const clock = { now: () => Date.now() + offset };
         const workers = new WeakMap();
         const compose = (env) => createCloudflareWorker({
-          config, clock, previewAdminEnabled: true, postCommitBuildDelayMs: 0,
+          config, clock, postCommitBuildDelayMs: 0,
           logger: { log() {} },
           previewGitHubFetch: (url, init) => env.GITHUB.fetch(url, init),
           buildTrigger: () => ({ trigger: () => env.PUBLICATION.fetch("https://build.lace.test/").then(() => ({ status: "accepted" })) }),
@@ -414,12 +413,8 @@ export async function openWorker({ project, commit, cleanups }) {
           // Miniflare replaces Host with its local listener. Preserve the virtual edge host.
           const headers = new Headers(request.headers);
           headers.set("host", url.host);
-          settings ??= Object.fromEntries(Object.entries(env).filter(([key]) =>
-            enabled || (!key.startsWith("LACE_PREVIEW_") && key !== "PREVIEW")));
+          settings ??= { ...env, LACE_PREVIEW_ENABLED: String(enabled) };
           if (enabled && rotated) settings.LACE_PREVIEW_RUNNER_SECRET = env.LACE_PREVIEW_RUNNER_SECRET + "-rotated";
-          // Simulate closing the custom preview hostname before the new Worker config rolls out.
-          if (!enabled && url.origin === env.LACE_PREVIEW_ORIGIN)
-            return new Response(null, { status: 404 });
           if (url.pathname === "/__fixture") {
             const fields = await request.json();
             const { operation, ms, now, removePosts } = fields;
@@ -488,6 +483,7 @@ export async function openWorker({ project, commit, cleanups }) {
       bindings: {
         LACE_AUTH_SECRET: authSecret,
         LACE_PUBLIC_BASE_URL: adminOrigin + "/",
+        LACE_PREVIEW_ENABLED: "true",
         LACE_PREVIEW_ORIGIN: previewOrigin,
         LACE_BUILD_SITE_URL: siteUrl,
         LACE_BUILD_SITE_ID: "main-site",

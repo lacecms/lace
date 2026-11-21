@@ -36,8 +36,10 @@ starts the bundled SILO service and its idempotent private bucket initializer,
 and starts the admin and Astro development servers. The command SHALL make persistent
 development database and object data explicit, preserve it across ordinary
 stops, and report a non-zero outcome when a required service cannot become
-healthy. It SHALL not use a production builder, release directory, or public
-object bucket.
+healthy. The development workflow SHALL NOT use a production builder,
+release directory, or public object bucket. An explicitly selected preview
+variant SHALL be allowed to start a private development runner that only
+performs preview work.
 
 #### Scenario: A contributor starts a fresh local stack
 - **WHEN** a contributor has installed the documented prerequisites, created a
@@ -230,3 +232,24 @@ The documented `dev:node` Compose stack SHALL pass `LACE_MCP_ENABLED` from the s
 #### Scenario: MCP paths pass through the development gateway
 - **WHEN** a client requests `/mcp`, an MCP child path, or either root MCP discovery namespace through the documented development origin
 - **THEN** the API handles the request with its normal authentication/allowlist/enablement rules, and no request or WebSocket upgrade reaches Astro or Vite
+
+### Requirement: Contributors can opt in to protected preview locally
+The Node development workflow SHALL document an opt-in startup that uses
+trusted local HTTPS for the CMS and a separate preview hostname, with
+loopback-only browser ingress and no published runner or storage ports.
+The runner SHALL build the selected eligible Astro route from a committed
+source tree using PV1 validation and capture. It SHALL require no production
+build token or hosted runner. Existing local SQLite and private SILO data,
+frontend reload, and ordinary Astro development SHALL remain available.
+
+#### Scenario: Preview a saved draft in the reference site
+- **WHEN** a contributor starts the opt-in stack with trusted local HTTPS and compatible committed source and opens a saved draft in Admin
+- **THEN** the normal UI can create and view the single-page revision and its protected assets with the contributor's Lace session
+
+#### Scenario: Local source changes after checkout
+- **WHEN** relevant source changes are uncommitted and an editor requests a preview
+- **THEN** the runner reports a safe source error instead of building from the mutable tree
+
+#### Scenario: Ordinary local startup stays lightweight
+- **WHEN** a contributor starts the standard stack without the preview variant
+- **THEN** the existing local editing and site development workflow starts without a preview runner or a local TLS prerequisite
