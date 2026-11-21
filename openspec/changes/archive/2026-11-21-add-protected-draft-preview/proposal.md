@@ -67,7 +67,7 @@ These checkpoints do not combine any previously selected EX session units.
 No implementation or release of the existing RC5 preparation change is implied.
 
 Governing sections: architecture §§3–7, 9–10, 12–17, 20–22 and
-[ADR 0033](../../../docs/adr/0033-protected-static-draft-preview.md). Related
+[ADR 0033](../../../../docs/adr/0033-protected-static-draft-preview.md). Related
 accepted capabilities: `content-validation`, `content-use-cases`,
 `media-use-cases`, `authentication-and-actor-boundary`,
 `admin-draft-editor-publication`, `published-site-loader`, `astro-adapter`,

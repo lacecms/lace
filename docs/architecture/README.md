@@ -114,9 +114,9 @@ static assets without the CMS API.
 
 An optional, explicitly requested draft preview builds one routed page with the
 site-owned Astro components into private, expiring storage. It never changes
-the public export or deployment. This is the selected pre-1.0 scope, pending
-implementation in [PV1](../../openspec/changes/add-protected-draft-preview/proposal.md);
-[ADR 0033](../adr/0033-protected-static-draft-preview.md) records the boundary.
+the public export or deployment. [ADR 0033](../adr/0033-protected-static-draft-preview.md)
+records the pre-1.0 scope. [PV1](../../openspec/changes/archive/2026-11-21-add-protected-draft-preview/verification.md)
+records the implementation checks.
 
 ### 4.3 Code-first structure, CMS-managed content
 

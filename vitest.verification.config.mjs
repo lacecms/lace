@@ -6,6 +6,14 @@ export default defineConfig({
     projects: [
       {
         test: {
+          name: "packed-draft-preview",
+          include: ["tests/packed-draft-preview.acceptance.mjs"],
+          testTimeout: 420000,
+          hookTimeout: 90000,
+        },
+      },
+      {
+        test: {
           name: "preview-astro",
           include: ["tests/preview-astro.acceptance.mjs"],
         },

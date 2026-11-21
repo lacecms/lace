@@ -1,5 +1,190 @@
 # Preview implementation verification
 
+## PV1F final acceptance on 2026-11-21
+
+Tasks 6.1–6.7 passed. `pnpm acceptance:draft-preview` reproduced all six
+generated-project snapshots and passed both packed-consumer journeys in 50.43 seconds
+on Node 24.22.1 and pnpm 12.3.4. The rerun reproduced the 49-statement local
+D1 creation request and verified public-output preservation through upgrade
+and preview rollback. The [hosted provider evidence](#pv1e-real-provider-acceptance-on-2026-11-21)
+comes from the disposable GitHub Actions, Worker, D1 and R2 run in task 5.5.
+
+- The `preview-astro`, `preview-https` and `preview-vps` projects in
+  `vitest.verification.config.mjs` passed all 14 cases. They used Chromium,
+  a pinned disposable SILO container and the builder image from this checkout.
+- Admin entry and OpenAPI client tests passed 154 cases. Server preview
+  routing and transport passed 16 and preview request contracts passed five.
+  Astro, SDK and builder suites passed 87, 115 and 62 cases respectively.
+- Node passed four preview runtime tests with SQLite and SILO and 30 preview
+  repository contracts. Cloudflare passed 20 runtime, settings, GitHub and
+  D1 migration tests and 15 preview repository contracts on local D1/R2.
+- Generator guide and workflow tests passed 11 cases. Packaged onboarding
+  passed three. Packaged CLI doctor tests passed 29, and packaged import
+  schema and migration tests passed nine. Database schema and SQL drift
+  checks passed nine. The architecture, documentation, generator acceptance,
+  boundary and proxy suites passed 254 tests.
+- The architecture check caught ten preview tables missing from the
+  ER diagram. The diagram now includes those tables and the primary and
+  foreign keys declared by Drizzle.
+- Root `pnpm typecheck`, `pnpm lint` including dependency boundaries and
+  Drizzle snapshots, `pnpm format:check`, `pnpm openapi:check` and strict
+  OpenSpec change validation passed.
+
+The review covered the cumulative PV1 diff from the parent of `e043f725`,
+including untracked acceptance files. Credential-pattern checks found no
+matches. The literal credential values reviewed were local test fixtures.
+The changes fall within PV1 implementation, documentation, and acceptance.
+All 37 tasks are checked. Preview creation is disabled in the deployment
+entry points. The change was archived on 2026-11-21 after the verified
+deltas were synchronized into the
+[accepted specs](../../../specs/README.md#protected-draft-preview).
+
+## PV1F task 6.6 upgrade, rollback and measurements
+
+`pnpm acceptance:draft-preview` applies the four packed migrations that
+precede draft preview to a disposable SQLite database and local D1. On both
+runtimes it bootstraps and signs in an administrator, seeds separate draft
+and published snapshots and applies the remaining forward migrations with
+preview settings absent. The test compares the existing entries, snapshots,
+routes and publication version before and after migration. The earlier
+session still works, preview readiness is false and creation returns
+`PREVIEW_CONFIGURATION_UNAVAILABLE` with zero generations. Ordinary
+publication, the build export and a packed Astro build work with preview
+unconfigured.
+
+With an accessible ready generation, the rollback drill closes preview
+ingress and removes runtime preview settings. Node also recreates the
+builder without its preview secrets and retains its public release volume.
+The old preview cookie, runner claim and runner completion cannot use the
+closed endpoints. **Sign out everywhere** revokes the linked Lace sessions.
+After the fixture reopens preview with a rotated runner secret, the old
+cookie and runner bootstrap credential still fail. The complete published
+export and the public build's file hashes are unchanged. The Node release
+pointer is unchanged as well. This drill withdraws the feature on the
+migrated schema. Engine downgrade follows the coordinated backup and
+restore procedure in [Operations](../../../../apps/docs/src/content/docs/en/latest/operations/index.md).
+
+The successful sample used the generated starter, two published pages and a
+saved target with one private PNG. The test suite passed both scenarios in
+45.48 seconds on Node 24.22.1 and pnpm 12.3.4. Build durations are from the
+generation timestamps. The local Worker used Workerd, D1/R2 and the local
+workflow command adapters. The hosted run measurements are under
+[PV1E](#pv1e-real-provider-acceptance-on-2026-11-21).
+
+| Runtime | Admission to ready | Claim to ready | Sample HTTP requests | Artifact files | Artifact file bytes | Output manifest bytes |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Node, Docker builder and SILO | 5,553 ms | 5,535 ms | 41 | 4 | 11,400 | 752 |
+| Local Worker and workflow | 582 ms | 572 ms | 19 | 4 | 11,404 | 754 |
+
+Both frozen input manifests were 490 bytes. Each sample had one create
+request, nine runner requests including the four file uploads, and seven
+handoff and viewing requests. The test used 250 ms status polls, accounting
+for the remaining 24 Node requests and two Worker requests. The sample
+viewer fetched the wrapper, HTML, one optimized image and the original.
+
+The largest D1 request was creation with 49 SQL statements, 209 rows read,
+43 rows written and at most 16 bound parameters. Claim used eight statements,
+frozen input two, input media four, manifest upload four, a file upload three,
+completion ten and each status poll three. The handoff used one, seven and
+eight statements across its three requests. The viewer and each artifact
+request used one indexed query, with six rows read and nine bound parameters.
+The checks assert at most 50 statements per measured invocation and 100
+parameters per statement. This one-page capture leaves one statement of
+headroom. Additional context pages require more reads. The capture-only
+tests below have separate scope. These counts describe the sampled site's
+requests and do not establish capacity for other sites or provider plans.
+
+The 15 compressed Lace tarballs installed by the consumer totaled 2,451,283
+bytes. The Node platform tarball was 122,497 bytes, the Cloudflare platform
+1,054,403 bytes, Astro 36,064 bytes and the SDK 35,197 bytes. The acceptance
+command prints all tarball sizes and per-route measurements.
+
+The focused D1/R2 and migration suites passed six tests. Generated acceptance
+and documentation checks passed 16 tests. Root typecheck, lint including
+boundaries and Drizzle, format check, OpenAPI and strict OpenSpec validation
+passed.
+
+## PV1F task 6.5 verified locally on 2026-11-21
+
+From the repository root, run `pnpm acceptance:draft-preview` with the pinned
+pnpm and a running Docker daemon. The command builds the workspace, packs the
+Lace dependency graph, generates and installs a disposable Astro consumer,
+commits the selected source and builds the fixed builder image. It runs both
+scenarios and cleans up its project, containers and builder tag. Preview
+creation is enabled only in the acceptance composition.
+
+Both scenarios use the packaged runtime, actual forward migrations, real
+Lace sessions and the generated site's Astro build. Node uses SQLite, private
+SILO and the fixed builder container. Cloudflare runs the packed Worker in
+local Workerd with D1 and separate private R2. A local GitHub service controls
+dispatch and run status. The generated runner script stages, uploads and
+completes against the Worker, with local command adapters for its container
+steps. The real-provider run remains recorded under task 5.5.
+
+On each runtime the suite froze an unpublished revision during a concurrent
+save, rejected overlapping admission and replayed the existing request. It
+forced an upload failure and verified that a manual retry rendered the newer
+saved revision. An authorized handoff served the target HTML, an optimized
+image and the byte-identical original. Public links included `/journal/`, and
+another HTML route and unauthenticated requests were denied. The complete
+published export, the static output file hashes and publication build counts
+stayed unchanged during preview. The Node public release pointer also stayed
+unchanged, and the Cloudflare preview provider called only commit and Actions
+endpoints.
+
+Saving and unpublishing retained the captured preview. Media deletion removed
+access to the copied original. Publication while completion was held fenced
+the late result and maintenance released the executor slot. Replaying a
+successful completion preserved the expiry. A sign-out revoked the associated
+preview session and both runtimes denied delivery at the exact 24-hour
+boundary. Because configuration sync only removes empty models, the model
+case restored retained generation metadata after deleting the entries to
+exercise the independent removal guard. Removing and re-adding the model
+left the real artifact inaccessible.
+
+The default command passed both tests without skips. The scenario run took
+47.12 seconds on Node 24.22.1 and pnpm 12.3.4, from working-tree changes on
+base commit `8c0f4880`. Focused generated acceptance and documentation link
+tests passed eight cases. Root typecheck, lint with boundaries and Drizzle,
+format check, OpenAPI and strict OpenSpec validation passed.
+
+## PV1F task 6.4 verified locally on 2026-11-21
+
+The generator keeps preview settings unconfigured and omits preview
+infrastructure and deployment steps in no-site mode. The guides cover the
+starter, a standalone Astro root and a workspace member, with separate
+CMS-relative Compose and Git-root-relative Cloudflare examples. The public
+and generated guides explain the public base path, private delivery, source
+pinning, quota and runtime limits, expiry, retry, disabling and rollback.
+They describe how site owners handle analytics, forms, browser requests and
+other external effects through the preview flag and their own site code.
+
+Doctor reports preview separately from installation readiness. It validates
+local settings and checks the selected Astro installation in Compose or the
+local Git checkout for Cloudflare. It does not evaluate site code, retrieve
+deployed credentials or verify remote resources. Missing preview settings
+leave the optional check skipped, and diagnostic output excludes setting
+values. Creation in deployed entry points remains disabled.
+
+- Generator guide/workflow suites passed 11 tests. All six generated projects
+  matched two byte-stable regenerations with the updated snapshots.
+- Packaged CLI doctor, report, environment and migration suites passed 42
+  tests. They cover partial configuration, credential redaction and site
+  selection for Compose and Cloudflare. The two optional-peer loading tests
+  passed with the packed CLI.
+- Cloudflare settings and GitHub runner tests passed six cases with local
+  D1/R2. Node passed two SQLite cases. The two optional S3 cases were skipped
+  in this run because no disposable S3 fixture was configured.
+- The packed starter and independent existing-site cases passed in the
+  `preview-astro` project, including Chromium resource loading under two
+  prefixes and public navigation below `/journal/`.
+- `pnpm docs:check`, documentation reference and link tests, root typecheck,
+  lint (including workspace boundaries and Drizzle schema), format check,
+  OpenAPI regeneration and strict OpenSpec change validation passed.
+
+Task 6.5 is next. Full packed cross-runtime acceptance and rollback
+verification are still pending.
+
 ## PV1F task 6.3 verified locally on 2026-11-21
 
 Open preview shows a full-screen read-only dialog with the entry title, captured
@@ -203,7 +388,7 @@ Record the real run correlation, resource access, deadline cancellation and
 publication isolation there before declaring PV1E verified on real providers.
 Admin preview creation remains disabled pending the final checkpoints.
 
-The [disposable Worker adapter](../../../packages/platform-cloudflare/src/test-support/preview-acceptance.ts)
+The [disposable Worker adapter](../../../../packages/platform-cloudflare/src/test-support/preview-acceptance.ts)
 was prepared and verified locally against D1 and Better Auth. Use it only in the
 stand's Worker entry by exporting `previewAcceptanceWorker(createCloudflareWorker({ config }))`
 and setting `LACE_PV1E_ACCEPTANCE` to `true` there. It uses the normal CMS admin

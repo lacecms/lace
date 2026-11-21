@@ -224,6 +224,37 @@ The site's server-side build reads these, for example from the site's ignored `.
 | ------------------- | ------------- | ------ | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `LACE_IMPORT_TOKEN` | `lace import` | Yes    | Required except `--validate-only` | Short-lived import token from Admin Settings. Set it for the shell session only; never in `.env` or source control. See [Import content](../../editing-content/import/). |
 
+### Protected draft preview
+
+The optional `preview` row in `lace doctor` reports local setup and compatibility.
+For configuration and verification after deployment, see [Node preview setup](../../deployment/node/#prepare-protected-draft-preview)
+and [Cloudflare preview setup](../../deployment/cloudflare/#prepare-protected-draft-preview).
+
+#### Node
+
+| Setting                       | Used by      | Secret | Default / required                          | Purpose                                                                                          |
+| ----------------------------- | ------------ | ------ | ------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `LACE_PREVIEW_HOST`           | Nginx        | No     | Empty, uses a disabled placeholder hostname | HTTPS preview hostname for Compose ingress, without scheme, path or port.                        |
+| `LACE_PREVIEW_ORIGIN`         | API          | No     | Required for preview                        | Distinct bare HTTPS preview origin with a trailing slash.                                        |
+| `LACE_PREVIEW_RUNNER_ORIGIN`  | API          | No     | Compose sets `http://api:3000/`             | Private API origin used by the preview runner on Node.                                           |
+| `LACE_PREVIEW_BUILDER_URL`    | API          | No     | Compose sets `http://builder:8788/`         | Private fixed-command builder origin for Node preview.                                           |
+| `LACE_PREVIEW_BUILDER_SECRET` | API, builder | Yes    | Empty, required for preview                 | Dedicated API-to-builder credential.                                                             |
+| `LACE_PREVIEW_RUNNER_SECRET`  | API, builder | Yes    | Empty, required for preview                 | Dedicated runner claim credential, separate from the builder secret and publication credentials. |
+
+#### Cloudflare and GitHub Actions
+
+| Setting                          | Used by                | Secret | Default / required   | Purpose                                                                   |
+| -------------------------------- | ---------------------- | ------ | -------------------- | ------------------------------------------------------------------------- |
+| `LACE_PREVIEW_ORIGIN`            | Worker                 | No     | Required for preview | Bare HTTPS preview origin on its own hostname.                            |
+| `LACE_PREVIEW_GITHUB_REPOSITORY` | Worker                 | No     | Required for preview | Trusted source repository in `owner/repository` format.                   |
+| `LACE_PREVIEW_GITHUB_REF`        | Worker                 | No     | Required for preview | Branch or tag resolved to an immutable source commit.                     |
+| `LACE_PREVIEW_GITHUB_WORKFLOW`   | Worker                 | No     | Required for preview | Dedicated workflow filename, normally `lace-preview.yml`.                 |
+| `LACE_PREVIEW_SITE_PATH`         | Worker                 | No     | Required for preview | Astro path relative to the Git root, or `.` for that root.                |
+| `LACE_PREVIEW_GITHUB_TOKEN`      | Worker                 | Yes    | Required for preview | Repository-scoped commit and Actions credential.                          |
+| `LACE_PREVIEW_RUNNER_SECRET`     | Worker, GitHub Actions | Yes    | Required for preview | Dedicated generation claim secret with the same value in both locations.  |
+| `LACE_PREVIEW_API_ORIGIN`        | GitHub Actions         | No     | Required for preview | Bare CMS HTTPS origin where the workflow claims and uploads a generation. |
+| `PREVIEW`                        | Worker                 | No     | Required for preview | Dedicated private R2 binding for preview input and output.                |
+
 ## Secrets and configuration changes
 
 Node storage, builder and mail settings belong to the service that reads them; D1, R2 and KV are Worker bindings. Remote management credentials belong in the operator file, not in the Worker's application vars. Never copy secrets into `VITE_*` or `PUBLIC_*` variables, client JavaScript, HTML, screenshots or source control. Invalid settings are diagnosed by name without echoing supplied secrets.

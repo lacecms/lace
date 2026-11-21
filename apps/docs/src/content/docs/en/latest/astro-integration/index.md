@@ -154,6 +154,57 @@ The gallery registry item installs `GalleryBlock.astro`, `ListLayout.css` and `G
 
 When you upgrade from rc2, configuration sync keeps `player` playback on stored gallery video items that relied on the earlier default (new items start `ambient`) and rewrites the removed `featured-first` preset to `columns-2` with a `full` first item. Remove competing structural gallery rules from your CSS as described in [Style your site](styling/#lay-out-lists-and-galleries). Then check draft, published and hidden lists, links that override the lightbox, every layout and a site build.
 
+## Adopt protected draft preview
+
+The generated starter already includes the integration. For an existing site,
+install the matching Lace packages and use Astro 7.4.12 or a later 7.4 patch.
+Commit a pnpm lockfile. The preview build requires static directory output,
+with no adapter, i18n routing, CDN asset prefix or incremental builds.
+Keep the site's page routes, layouts and block map. The collection's
+`getStaticPaths()` must use the same loader as the page so a newly saved,
+unpublished slug can be enumerated.
+
+Import `lacePreview` from `@lacecms/astro/preview` in `astro.config.*` and
+append `lacePreview()` to your existing `integrations` array. In your
+server-only loader, replace `createAstroSiteLoader` with the following and
+keep your existing loader options.
+
+```ts
+import { createAstroPreviewSiteLoader } from "@lacecms/astro/preview";
+
+export const getSite = createAstroPreviewSiteLoader({
+  env: { ...import.meta.env, ...process.env },
+  dev: import.meta.env.DEV,
+});
+```
+
+Normal builds and Astro dev still read the published export. A preview runner
+supplies frozen input for one saved revision and the captured published
+context. Use `site.byPath(Astro.url.pathname)` for a fixed route that looks
+up its entry by URL. Preview renders one site HTML page, while compilation
+and route enumeration can visit other site code.
+
+Use Astro imports for styles, fonts, images and JavaScript. Literal local
+resources must exist in the preview package. For URLs assembled by browser
+code or emitted in custom data attributes, account for `import.meta.env.BASE_URL`,
+which points to the generation prefix during preview. Check dynamic imports,
+CSS backgrounds, downloads and original images. A fragment-only link stays
+in the page. Site-page links open the public site in a new tab, including its
+configured base path, such as `/journal/`.
+
+The site owner controls external effects from site code. Use
+`(await getSite()).preview` in server code to omit analytics tags, tracking
+pixels, live embeds and form submission code where appropriate. Also guard
+build-time API calls and browser `fetch` calls, and avoid service workers on
+the preview origin. Never forward runner secrets or frozen input into
+browser variables or inline scripts. Review these behaviors before routing
+editors to the preview host.
+
+Follow [VPS setup](../deployment/node/#prepare-protected-draft-preview) or
+[Cloudflare setup](../deployment/cloudflare/#prepare-protected-draft-preview)
+for the source root, credentials and private delivery. A project generated with
+`--no-site` requires connecting a site before it can use preview.
+
 ## Develop and build
 
 `pnpm dev` revalidates the export on each render, so published changes to existing routes appear on reload. Restart it after changing tokens or other environment values, after adding or renaming slugs, and when route data passes through `getStaticPaths` props. `pnpm build` writes a new static site to `dist/`. Hosting it is a separate step: [deployment](../deployment/) explains automatic and manual rebuilds after publication.

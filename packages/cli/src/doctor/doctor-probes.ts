@@ -4,6 +4,7 @@ import { satisfies, valid } from "semver";
 import { boundedJson, ProbeError, type DoctorIO } from "./doctor-io.js";
 import { apiUrl, type Values } from "./doctor-settings.js";
 import type { Observation } from "./doctor-report.js";
+import { parseJsonc } from "../shared/jsonc.js";
 
 export function observation(
   kind: Observation["kind"],
@@ -95,13 +96,9 @@ export async function bindingPrerequisite(
 ): Promise<Observation> {
   try {
     const text = await io.file(resolve(cwd, values.LACE_WRANGLER_CONFIG as string), signal);
-    const config = JSON.parse(
-      text
-        .split("\n")
-        .filter((line) => !line.trim().startsWith("//"))
-        .join("\n")
-        .replace(/,(\s*[}\]])/gu, "$1"),
-    ) as { d1_databases?: { binding?: string; database_id?: string }[] };
+    const config = parseJsonc(text) as {
+      d1_databases?: { binding?: string; database_id?: string }[];
+    };
     if (
       !Array.isArray(config.d1_databases) ||
       config.d1_databases.find((entry) => entry?.binding === "DB")?.database_id !==

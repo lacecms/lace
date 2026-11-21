@@ -1,6 +1,6 @@
 # ADR 0033: Protected static preview of one saved draft
 
-- Status: Accepted (implementation pending PV1)
+- Status: Accepted
 - Date: 2026-11-17
 - Governing architecture: §§3–5, 10, 13 and 14
 
@@ -39,4 +39,6 @@ did not verify a deployed GitHub/Workers pipeline; that is an implementation
 acceptance gate, not an already established production claim.
 
 Detailed behavior and delivery tasks live in
-[PV1](../../openspec/changes/add-protected-draft-preview/proposal.md).
+[PV1](../../openspec/changes/archive/2026-11-21-add-protected-draft-preview/proposal.md). The
+[verification record](../../openspec/changes/archive/2026-11-21-add-protected-draft-preview/verification.md)
+includes the hosted GitHub/Workers acceptance and the final PV1F checks.

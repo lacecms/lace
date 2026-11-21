@@ -113,6 +113,19 @@ test.each(VARIANTS)(
 
     const development = await readFile(join(project.path, GUIDES[0]), "utf8");
     const production = await readFile(join(project.path, GUIDES[1]), "utf8");
+    const environment = await readFile(join(project.path, ".env.example"), "utf8");
+    const hasSite = site.mode !== "none";
+    expect(production.includes("## Prepare protected draft preview")).toBe(hasSite);
+    expect(environment.includes("LACE_PREVIEW_RUNNER_SECRET=")).toBe(hasSite);
+    if (hasSite) {
+      expect(environment).toMatch(/^LACE_PREVIEW_ORIGIN=$/mu);
+      expect(environment).toMatch(/^LACE_PREVIEW_RUNNER_SECRET=$/mu);
+      expect(environment).toMatch(/^LACE_PREVIEW_BUILDER_SECRET=$/mu);
+      expect(production).toContain("LACE_BUILD_SITE_URL=https://site.example.com/journal/");
+      expect(production).toContain(
+        site.mode === "starter" ? "LACE_BUILD_SITE_DIR=site" : "LACE_BUILD_SOURCE_ROOT=..",
+      );
+    }
     for (const [guide, text] of [
       [GUIDES[0], development],
       [GUIDES[1], production],
@@ -177,6 +190,20 @@ test.each(VARIANTS)(
 
     if (cloudflare) {
       const guide = await readFile(join(project.path, "docs/lace-cloudflare.md"), "utf8");
+      const config = await readFile(join(project.path, "worker/wrangler.jsonc"), "utf8");
+      expect(guide.includes("## Prepare protected draft preview")).toBe(hasSite);
+      expect(project.manifest.files[".github/workflows/lace-preview.yml"] !== undefined).toBe(
+        hasSite,
+      );
+      expect(config).not.toMatch(/^\s*"LACE_PREVIEW_[A-Z_]+"\s*:/mu);
+      if (hasSite) {
+        expect(config).toContain(
+          site.mode === "starter"
+            ? '"LACE_PREVIEW_SITE_PATH": "site"'
+            : '"LACE_PREVIEW_SITE_PATH": "."',
+        );
+        expect(guide).toContain("LACE_BUILD_SITE_URL=https://site.example.com/journal/");
+      }
       expectOrder(`${name}: cloudflare`, guide, [
         "pnpm install",
         "pnpm env:prepare",

@@ -17,6 +17,12 @@ remain authoritative; public prose does not replace them.
 | Operations | auth-operations.md, database-migrations.md, compatibility.md, [verification.md](verification.md) (commands, coverage and owner checks), MCP specs (MCP page), generated lace-operations.md and lace-mcp.md |
 | Reference | CLI help, generated configuration files, configuration input types, `apps/api/openapi/api-v1.json`, contracts MCP tool schemas; guarded by `tests/docs-reference.test.mjs` |
 
+Protected draft preview spans Editing content, Astro integration, Deployment,
+Operations and Reference. The behavior and setup sources are ADR 0033 and the
+draft-preview, draft-preview-delivery and astro-draft-preview specifications
+in the PV1 change until synchronization. Check the generated Astro and
+deployment guides and the doctor preview check when revising those pages.
+
 Each user-facing topic has one owner. User procedures, settings and examples
 live on public pages; a remaining internal note keeps engineering content and
 links to its public owner (named in the [index](README.md)). A note left with

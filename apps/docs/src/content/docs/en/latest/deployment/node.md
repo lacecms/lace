@@ -2,7 +2,7 @@
 title: Deploy on Docker or a VPS
 description: Run the packaged Node CMS with SQLite and SILO, a private static-site builder and a web proxy on your own server.
 kind: guide
-verifiedAgainst: 0.1.0-rc2
+verifiedAgainst: 0.1.0-rc6
 ---
 
 The generated Docker Compose topology runs the packaged API and Admin, SQLite, a private S3 bucket served by SILO, a dispatcher, a fixed-command site builder and an Nginx web proxy on one server. Publishing content queues a site build; the builder rebuilds your Astro site and switches the served release only after a successful build. This guide prepares a server, starts the stack, configures builds, uploads, email and the proxy, and verifies the result.
@@ -96,6 +96,55 @@ credentials and disk format and include a shell and curl for the health check.
 The builder uses a fixed command and fixed mounts defined by its image. It mounts the selected site source read-only, runs a frozen install and `astro build`, and ignores any command, path or environment supplied with a build request. `LACE_BUILD_SOURCE_ROOT`, `LACE_BUILD_SITE_DIR`, `LACE_BUILD_OUTPUT_DIR`, `LACE_BUILD_SITE_ID` and `LACE_BUILD_SITE_LABEL` select what it builds; the generated `docs/lace-operations.md` explains selecting the build site.
 
 Publication queues work through a durable outbox, and the dispatcher triggers the builder. Nearby publications coalesce into one build. The builder stages a release, builds it and switches the served output atomically after success; a failed build keeps the previous release online. **Builds** records the result; the new release can be served a moment before its success is recorded, and only **Succeeded** proves the switch. Changes to site code or CSS also need a build: deploy the new source, then **Request build**.
+
+## Prepare protected draft preview
+
+Use the starter or [adopt the integration in your existing site](../../astro-integration/#adopt-protected-draft-preview).
+Apply the forward database migrations and use matching packages and images.
+Preview creation is disabled in the deployment entry points during acceptance.
+Use these settings to prepare an installation for a release that enables it.
+
+1. Mount the root of your clean Git checkout as `LACE_BUILD_SOURCE_ROOT`.
+   The builder pins its current commit and installs the committed lockfile.
+   Set `LACE_BUILD_SITE_DIR=site` for the starter and `.` when a standalone
+   Astro site is the mounted root. For a workspace select the member
+   directory relative to that root. Commit relevant tracked and untracked
+   site changes before requesting preview. Use regular files and a full
+   checkout with no submodules, LFS pointers or source symlinks.
+2. In the private Compose `.env`, set `LACE_PREVIEW_HOST=preview.example.com`,
+   `LACE_PREVIEW_ORIGIN=https://preview.example.com/` and
+   `LACE_BUILD_SITE_URL=https://example.com/journal/`, replacing the example
+   values and retaining any public base path. Set `LACE_PUBLIC_BASE_URL` to
+   the distinct HTTPS CMS origin. Generate independent random values for
+   `LACE_PREVIEW_BUILDER_SECRET` and `LACE_PREVIEW_RUNNER_SECRET`. Keep them
+   outside source control and site build variables.
+3. Configure DNS and TLS for the preview hostname. Forward it to the
+   generated Nginx `web` service with the original Host header and cache
+   bypass. The generated preview vhost forwards viewer and handoff requests
+   to the API. Compose supplies the private API and builder URLs on the
+   internal network and uses the private S3 bucket for preview objects.
+   Keep the builder, runner ingress and object storage private. Sibling HTTPS
+   hosts support the embedded viewer. Separate sites use **Open in new tab**.
+4. Run `pnpm exec lace doctor --target node --mode compose --stage setup`
+   during a database maintenance window. Its `preview` row reports local
+   prerequisites. For native composition, supply the internal
+   `LACE_PREVIEW_RUNNER_ORIGIN` and `LACE_PREVIEW_BUILDER_URL` yourself and
+   check the builder source on its host. An authorized test build is needed
+   to verify ingress, S3 delivery and rendering.
+
+The builder shares one physical slot with publication. Pending publication
+gets the next slot, and a running preview can finish within its deadline.
+If a preview is busy, wait for the running work. For a source, storage or
+timeout failure, fix the cause and retry from the saved entry. See the
+[preview lifetime and retry rules](../../editing-content/#preview-a-saved-draft).
+
+To disable before rollback, block the preview hostname and runner ingress,
+clear preview settings and recreate the affected services. Stop the preview
+executor and confirm termination during the maintenance window, then revoke
+the dedicated secrets. Use **Sign out everywhere** for affected accounts to
+revoke the Lace sessions that authorize preview. Remove private preview
+objects after access is closed and builds have stopped. Keep the public
+release volume and follow the normal database and storage backup procedure.
 
 ## Configure uploads and build caches
 

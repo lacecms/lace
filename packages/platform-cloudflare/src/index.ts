@@ -19,6 +19,7 @@ export * from "./media/image-inspector.js";
 export * from "./security/service.js";
 export * from "./runtime/cache.js";
 export * from "./runtime/settings.js";
+export { parseCloudflarePreviewVars } from "./runtime/preview-settings.js";
 export * from "./runtime/email.js";
 export * from "./runtime/admin-assets.js";
 export * from "./runtime/worker.js";

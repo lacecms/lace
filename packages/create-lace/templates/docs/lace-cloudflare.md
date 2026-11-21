@@ -153,6 +153,79 @@ Without tracking, a hook the provider accepts is recorded as **Accepted**, which
 
 <!-- lace-site: end -->
 
+<!-- lace-site: starter existing -->
+
+## Prepare protected draft preview
+
+Preview creation stays disabled in the deployment entry points during acceptance.
+Prepare these settings for a matching release that enables creation. Apply
+the remote D1 migrations first.
+
+<!-- lace-site: starter -->
+
+The starter includes the preview integration. When the generated project is
+the Git root, keep the two preview files at their generated paths and set
+`LACE_PREVIEW_SITE_PATH={{SITE_PATH}}`. If the generated project is under
+`cms/`, place both preview files at the same paths from the Git root and
+set `LACE_PREVIEW_SITE_PATH=cms/{{SITE_PATH}}`.
+
+<!-- lace-site: end -->
+<!-- lace-site: existing -->
+
+The existing Astro site is recorded as `{{SITE_PATH}}` relative to this CMS.
+Follow [Adopt protected draft preview](lace-astro-site.md#adopt-protected-draft-preview).
+Move or copy the generated `.github/workflows/lace-preview.yml` and
+`.github/scripts/lace-preview.mjs` to those paths at the site repository's
+Git root. Set `LACE_PREVIEW_SITE_PATH` relative to that root, for example
+`.` if Astro lives at the Git root or `web` for a workspace member.
+
+<!-- lace-site: end -->
+
+Commit the workflow to the default branch and the branch or tag configured
+for preview. Commit the lockfile and use the workflow's matching Lace builder
+image. Use regular source files without symlinks, submodules or LFS pointers.
+
+1. Create a private preview bucket with
+   `pnpm exec wrangler r2 bucket create <name>-preview --config worker/wrangler.jsonc`.
+   Append `{ "binding": "PREVIEW", "bucket_name": "<name>-preview" }` to
+   `r2_buckets`. Keep public bucket access off. Add `*/2 * * * *` to
+   `triggers.crons` alongside the current cron.
+2. Route a separate HTTPS custom hostname, such as `preview.example.com`,
+   to the same Worker. Bypass caching there. Add the commented preview vars
+   from `worker/wrangler.jsonc`, including bare HTTPS
+   `LACE_PREVIEW_ORIGIN=https://preview.example.com/` and a public
+   `LACE_BUILD_SITE_URL=https://site.example.com/journal/` using the actual
+   base path. Set the GitHub repository, ref, workflow filename and site path.
+3. Set the Worker secrets using
+   `pnpm exec wrangler secret put <NAME> --config worker/wrangler.jsonc`.
+   Store a repository-scoped token with Contents read and Actions read/write
+   as `LACE_PREVIEW_GITHUB_TOKEN`. Set a separate random
+   `LACE_PREVIEW_RUNNER_SECRET` in the Worker and GitHub Actions secrets.
+   Set the GitHub Actions variable `LACE_PREVIEW_API_ORIGIN` to the bare
+   HTTPS CMS origin. Keep secrets out of source, Wrangler vars, dispatch
+   inputs and the site subprocess environment.
+4. Run remote `lace doctor --target cloudflare-remote --stage setup` with
+   the explicit operator environment and review the `preview` row. It checks
+   the local Wrangler file and installed site packages. Confirm deployed
+   routing, private R2, secrets and the GitHub ref with an authorized test
+   build after enabling. Resource creation, registration, secret changes,
+   Git pushes and deployment are explicit operator actions.
+
+Preview consumes Actions capacity and Workers, D1 and R2 usage without
+creating a Pages deployment. Use the generation and recorded run ID to
+investigate quota, dispatch or storage failures. The overall deadline is
+15 minutes, including any provider wait, with up to 10 minutes for execution
+and upload. Ready output expires after 24 hours. After provider recovery,
+use **Retry preview** in Lace to build the current saved revision.
+
+Before rollback, close preview ingress, cancel the recorded preview job
+and confirm it stopped, revoke the dedicated Worker and GitHub credentials,
+and deploy with preview disabled. Use **Sign out everywhere** for affected
+accounts to revoke linked preview sessions. Remove private preview objects
+after delivery and execution stop. Preserve the media bucket and D1 backups.
+
+<!-- lace-site: end -->
+
 ## Repeat account operations
 
 After editing `lace.config.ts`: run preflight, `pnpm exec lace content sync --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`, then `pnpm exec wrangler deploy --config worker/wrangler.jsonc`, because the Worker bundles the configuration. After upgrading Lace packages: preflight, remote migrate, deploy. Local `cf:*` scripts never change remote data.

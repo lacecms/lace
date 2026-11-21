@@ -146,7 +146,7 @@ The dependency-boundary verification SHALL permit the render core to import only
 - **THEN** the dependency-boundary verification fails and names the forbidden import
 
 ### Requirement: The Astro adapter stays a thin framework binding
-The dependency-boundary verification SHALL scan the frontmatter of `.astro` components as well as TypeScript sources and SHALL resolve package subpath imports to their package. It SHALL permit the Astro adapter to import only the render core, the SDK, `astro` and its `astro:` virtual modules, Node builtins through the `node:` scheme, and its own modules; it SHALL reject Node builtins imported without the `node:` scheme, SHALL reject adapter re-exports of any Lace package, and SHALL permit the reference site to import only the adapter, render core, SDK, and content packages among Lace packages.
+The dependency-boundary verification SHALL scan the frontmatter of `.astro` components as well as TypeScript sources and SHALL resolve package subpath imports to their package. It SHALL permit the Astro adapter to import only the render core, the SDK, `astro` and its `astro:` virtual modules, Node builtins through the `node:` scheme, its own modules, and `parse5` only within its server-only preview HTML transformation module; it SHALL reject Node builtins imported without the `node:` scheme, SHALL reject adapter re-exports of any Lace package, and SHALL permit the reference site to import only the adapter, render core, SDK, and content packages among Lace packages.
 
 #### Scenario: Adapter imports content directly
 - **WHEN** an adapter source or component imports `@lacecms/content`
@@ -167,6 +167,10 @@ The dependency-boundary verification SHALL scan the frontmatter of `.astro` comp
 #### Scenario: Adapter imports a bare Node builtin
 - **WHEN** an adapter module imports `fs/promises`
 - **THEN** the dependency-boundary verification fails and names the forbidden import
+
+#### Scenario: Preview HTML parsing is isolated
+- **WHEN** the server-only preview HTML transformation module imports `parse5`
+- **THEN** the boundary check accepts it, while the same dependency in an Astro component or other adapter module is rejected
 
 ### Requirement: Documentation is an isolated private workspace application
 

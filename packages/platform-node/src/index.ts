@@ -19,6 +19,7 @@ export * from "./media/media-deletion-dispatcher.js";
 export * from "./builds/site-build-dispatcher.js";
 export * from "./builds/builder-trigger.js";
 export * from "./runtime/runtime.js";
+export { parseNodePreviewSettings } from "./runtime/preview-settings.js";
 export * from "./runtime/client-address.js";
 export * from "./database/host-database-safety.js";
 export * from "./security/service.js";

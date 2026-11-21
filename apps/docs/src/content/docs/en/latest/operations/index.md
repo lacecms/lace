@@ -2,7 +2,7 @@
 title: Operate and recover Lace
 description: Observe, back up, restore, upgrade and roll back an installation, and rotate its credentials.
 kind: guide
-verifiedAgainst: 0.1.0-rc2
+verifiedAgainst: 0.1.0-rc6
 ---
 
 Running Lace means keeping its database, media and configuration consistent, telling content publication apart from site deployment, and changing versions and credentials deliberately. This guide covers observation, backup and restore, upgrades from rc2, rollback and credential rotation for both runtimes. The generated `docs/lace-operations.md` contains the exact commands for your project's layout.
@@ -73,6 +73,45 @@ Review user sessions after an account compromise. If setup is complete, do not t
 ## Enable optional features
 
 MCP is disabled by default. [Connect an AI assistant](mcp/) explains enabling it after migrations, proxy routing, client setup, separately consented publication and revocation. The optional interactive API reference at `/api/docs` is described in the [API documentation](../reference/api/).
+
+For protected draft preview, use the [Node setup](../deployment/node/#prepare-protected-draft-preview)
+or [Cloudflare setup](../deployment/cloudflare/#prepare-protected-draft-preview).
+Doctor reports safe local preview prerequisites under `preview` in both setup
+stages. An unconfigured or incomplete optional preview check is skipped and
+does not change the normal exit status. For Compose it reads the selected
+mount and site directory. For Cloudflare it checks the selected Wrangler
+file and the Git-root-relative site in the local checkout. Doctor never
+evaluates Astro configuration or downloads deployed secrets. The deployed
+configuration and a successful authorized build verify readiness.
+
+Existing installations can apply the forward migrations with preview settings
+unset. To withdraw preview while retaining current published content, close
+its ingress, stop any preview run and revoke the dedicated credentials and
+linked Lace sessions as described in the deployment guides. Leave the additive
+preview tables in place. For an engine downgrade, follow the coordinated
+backup and restore procedure above.
+
+### Draft preview limits
+
+One preview can build at a time. The 15-minute overall deadline includes capture
+and waiting for the runner. Execution and upload share up to 10 minutes within
+that deadline. A ready preview expires after 24 hours.
+
+Lace captures up to three pages of published context, with up to 100 entries
+and records per page, plus globals on the first page. Capture supports up to
+128 models, 8 MiB of stored input and 2,000 media dependencies. The runner
+stages originals up to 10 MiB each and 100 MiB in total. Each output package
+contains one target HTML page and its resources, with limits of 2,000 files,
+32 MiB per file, 100 MiB total and 1 MiB for the manifest.
+
+The runner sends each artifact file in a separate request. The gateway checks
+current authorization before serving each page or asset, including conditional,
+range and HEAD requests. Site code, dependency installation and Astro's
+route enumeration and compilation affect build duration. On Cloudflare,
+budget for Actions runner time and Workers, D1 and R2 usage. A successful
+preview creation in the local starter test used 49 D1 statements with two
+published pages. Capturing more context pages adds reads. Check your
+site's workload and your account's available capacity before enabling preview.
 
 ## Reference
 

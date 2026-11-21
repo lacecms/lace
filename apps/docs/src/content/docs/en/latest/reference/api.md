@@ -2,7 +2,7 @@
 title: API reference
 description: Every REST endpoint of the versioned API with its audience and required credential, the OpenAPI contract and the query grammar.
 kind: reference
-verifiedAgainst: 0.1.0-rc2
+verifiedAgainst: 0.1.0-rc6
 ---
 
 The REST contract is versioned under `/api/v1`. Admin and account operations require a signed-in browser session with the listed permission; public reads are anonymous except the build export. Runtime validation, revisions and concurrency checks apply to direct requests too. The [MCP content server](../mcp/) is a separate OAuth endpoint.
@@ -98,6 +98,14 @@ Every account endpoint acts on the signed-in user and needs a session of any rol
 | GET    | `/api/v1/admin/entries/{entryId}/link-impact` | List published links to the entry before delete or unpublish.                                                        | `content:read`                                                      |
 | GET    | `/api/v1/admin/link-targets`                  | Search pages and collection entries that a URL field can link to.                                                    | `content:read`                                                      |
 | POST   | `/api/v1/admin/link-targets/resolve`          | Resolve up to 200 distinct destination IDs.                                                                          | `content:read`                                                      |
+
+### Protected draft preview
+
+| Method | Path                                      | Purpose                                                                     | Credential                           |
+| ------ | ----------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------ |
+| GET    | `/api/v1/admin/preview/config`            | Read safe preview readiness and supported viewer mode.                      | Browser session with `content:read`  |
+| GET    | `/api/v1/admin/entries/{entryId}/preview` | Read the current preview's state and captured revision.                     | Browser session with `content:read`  |
+| POST   | `/api/v1/admin/entries/{entryId}/preview` | Request a preview of the expected saved revision with an `Idempotency-Key`. | Browser session with `content:write` |
 
 ### Media
 

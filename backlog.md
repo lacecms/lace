@@ -183,6 +183,6 @@ would affect snapshot and route keys.
 
 Saved-draft preview was selected on 2026-11-17 as pre-1.0 priority PV1 in the
 [active roadmap](docs/extensibility-roadmap.md#pre-10-priority-pv1--protected-saved-draft-preview).
-[The proposal](openspec/changes/add-protected-draft-preview/proposal.md) covers
+[The proposal](openspec/changes/archive/2026-11-21-add-protected-draft-preview/proposal.md) covers
 protected static single-page preview. Live editing and guest preview links
 remain deferred.

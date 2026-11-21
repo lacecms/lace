@@ -21,6 +21,15 @@ export interface CloudflarePreviewSettings {
   readonly github: GitHubPreviewSettings;
 }
 
+type CloudflarePreviewVars = Pick<
+  CloudflarePreviewEnv,
+  | "LACE_PREVIEW_ORIGIN"
+  | "LACE_PREVIEW_GITHUB_REPOSITORY"
+  | "LACE_PREVIEW_GITHUB_REF"
+  | "LACE_PREVIEW_GITHUB_WORKFLOW"
+  | "LACE_PREVIEW_SITE_PATH"
+> & { readonly LACE_BUILD_SITE_URL?: unknown };
+
 function matches(value: unknown, pattern: RegExp): string | undefined {
   return typeof value === "string" && pattern.test(value) ? value : undefined;
 }
@@ -37,16 +46,8 @@ export function previewHttpsUrl(value: unknown): URL | undefined {
 
 const secret = /^[\x21-\x7e]{32,256}(?![\s\S])/u;
 
-/** Optional preview settings fail closed without interrupting existing publication. */
-export function parseCloudflarePreviewSettings(
-  env: CloudflarePreviewEnv & {
-    readonly MEDIA?: unknown;
-    readonly LACE_AUTH_SECRET?: unknown;
-    readonly LACE_BUILD_SITE_URL?: unknown;
-    readonly LACE_PAGES_API_TOKEN?: unknown;
-  },
-  admin: URL,
-): CloudflarePreviewSettings | undefined {
+/** Validate the non-secret configuration without requiring deployed credentials or bindings. */
+export function parseCloudflarePreviewVars(env: CloudflarePreviewVars, admin: URL) {
   const origin = previewHttpsUrl(env.LACE_PREVIEW_ORIGIN);
   const site = previewHttpsUrl(env.LACE_BUILD_SITE_URL);
   const repository = matches(
@@ -65,9 +66,6 @@ export function parseCloudflarePreviewSettings(
     env.LACE_PREVIEW_SITE_PATH,
     /^(?:\.|[A-Za-z0-9_-][A-Za-z0-9._-]*(?:\/[A-Za-z0-9_-][A-Za-z0-9._-]*)*)(?![\s\S])/u,
   );
-  const token = matches(env.LACE_PREVIEW_GITHUB_TOKEN, secret);
-  const bootstrapSecret = matches(env.LACE_PREVIEW_RUNNER_SECRET, secret);
-  const bucket = env.PREVIEW as (Partial<R2Bucket> & { readonly list?: unknown }) | undefined;
   if (
     !origin ||
     origin.pathname !== "/" ||
@@ -81,7 +79,28 @@ export function parseCloudflarePreviewSettings(
     ref.split("/").some((part) => !part || part.endsWith(".") || part.endsWith(".lock")) ||
     !workflow ||
     !sitePath ||
-    sitePath.length > 256 ||
+    sitePath.length > 256
+  )
+    return undefined;
+  return { origin, siteUrl: site.href, sitePath, repository, ref, workflow };
+}
+
+/** Optional preview settings fail closed without interrupting existing publication. */
+export function parseCloudflarePreviewSettings(
+  env: CloudflarePreviewEnv &
+    CloudflarePreviewVars & {
+      readonly MEDIA?: unknown;
+      readonly LACE_AUTH_SECRET?: unknown;
+      readonly LACE_PAGES_API_TOKEN?: unknown;
+    },
+  admin: URL,
+): CloudflarePreviewSettings | undefined {
+  const vars = parseCloudflarePreviewVars(env, admin);
+  const token = matches(env.LACE_PREVIEW_GITHUB_TOKEN, secret);
+  const bootstrapSecret = matches(env.LACE_PREVIEW_RUNNER_SECRET, secret);
+  const bucket = env.PREVIEW as (Partial<R2Bucket> & { readonly list?: unknown }) | undefined;
+  if (
+    !vars ||
     !token ||
     !bootstrapSecret ||
     token === bootstrapSecret ||
@@ -95,9 +114,10 @@ export function parseCloudflarePreviewSettings(
     )
   )
     return undefined;
+  const { origin, siteUrl, sitePath, repository, ref, workflow } = vars;
   return {
     origin,
-    siteUrl: site.href,
+    siteUrl,
     sitePath,
     bootstrapSecret,
     bucket: bucket as R2Bucket,
