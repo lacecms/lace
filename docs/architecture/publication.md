@@ -87,3 +87,16 @@ show "published, build pending" or "published, build failed".
   draft without touching public output, the version or build work. Duplicate
   (`content:write`, collections only) creates an unpublished copy at revision
   1.
+
+### Draft preview boundary (selected PV1 scope)
+
+Creating a preview is a separate `content:write` browser-session command. It
+freezes one saved routed draft and published context into an expiring build
+input; it creates neither a published snapshot nor publication build work.
+Successful publication of that entity atomically invalidates its ready and
+in-flight preview. Saving, reverting and unpublishing retain the preview; it
+continues to identify the captured revision. Entity/model removal and deletion
+of media included in a preview invalidate the corresponding preview packages.
+Logical invalidation precedes asynchronous object cleanup. These temporary
+build inputs do not introduce content revision history or a third content state.
+See [ADR 0033](../adr/0033-protected-static-draft-preview.md).

@@ -134,3 +134,62 @@ test("D1 upgrade and account batches maintain content actor profiles atomically"
     await dispose();
   }
 });
+
+test("preview migration upgrades existing D1 rows and isolates credential and generation references", async () => {
+  const { database, dispose } = await openLocalCloudflare({ migrate: false });
+  try {
+    const batch = (statements: string[]) =>
+      database.batch(statements.map((sql) => database.prepare(sql)));
+    const rows = async (sql: string) => (await database.prepare(sql).all()).results;
+    await batch(await migrationStatements((name) => name < "0004_"));
+    await batch([
+      "insert into user (id,name,email,created_at,updated_at) values ('editor','Editor','editor@lace.test',1,1)",
+      "insert into session (id,token,expires_at,created_at,updated_at,user_id) values ('s','old-auth-token',100,1,1,'editor')",
+      "insert into media (id,storage_key,filename,mime_type,size,metadata_json,status,created_by,created_at,updated_at) values ('asset','key','image.png','image/png',1,'{}','active','editor',1,1)",
+    ]);
+    await batch(await migrationStatements((name) => name.startsWith("0004_")));
+    expect(await rows("select token from session")).toEqual([{ token: "old-auth-token" }]);
+    expect(await rows("select * from preview_generations")).toEqual([]);
+    await batch([
+      "insert into preview_generations (id,entry_id,model_key,revision,path,public_version,configuration,source_commit,executor,created_by,idempotency_key,state,created_at,overall_deadline) values ('g','entry','posts',1,'/post',1,'cfg','commit','runner','editor','key','preparing',1,100)",
+      "insert into preview_current values ('entry','g')",
+      "insert into preview_execution_slot values (1,'g')",
+      "insert into preview_media_dependencies values ('g','asset',1)",
+      "insert into preview_sessions values ('hash','s','https://preview.test',100)",
+      "insert into preview_handoffs values ('h','nonce','code','https://admin.test','https://preview.test','/view/g','g','s',50,null)",
+    ]);
+    await batch(await migrationStatements((name) => name.startsWith("0005_")));
+    expect(await rows("select singleton_key,epoch from preview_capture_state")).toEqual([
+      { singleton_key: 1, epoch: 0 },
+    ]);
+    expect(await rows("select capture_epoch from preview_generations where id='g'")).toEqual([
+      { capture_epoch: 0 },
+    ]);
+    await expect(batch(["insert into preview_current values ('other','g')"])).rejects.toThrow(
+      /foreign key/iu,
+    );
+    await expect(batch(["insert into preview_execution_slot values (2,'g')"])).rejects.toThrow(
+      /check/iu,
+    );
+    expect(
+      await rows(
+        "explain query plan select generation_id from preview_media_dependencies where media_id='asset'",
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          detail: expect.stringMatching(/SEARCH .*preview_media_dependency_lookup_idx/u),
+        }),
+      ]),
+    );
+    await batch(["delete from media where id='asset'", "delete from session where id='s'"]);
+    expect(await rows("select * from preview_handoffs")).toEqual([]);
+    expect(await rows("select * from preview_sessions")).toEqual([]);
+    expect(await rows("select media_id from preview_media_dependencies")).toEqual([
+      { media_id: "asset" },
+    ]);
+    expect(await rows("pragma foreign_key_check")).toEqual([]);
+  } finally {
+    await dispose();
+  }
+});

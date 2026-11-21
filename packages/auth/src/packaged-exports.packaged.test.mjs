@@ -14,6 +14,7 @@ test("packaged entry point keeps its public exports", async () => {
     "createMcpOAuthHttpBoundary",
     "createMcpOAuthProvider",
     "createOAuthRequestGuard",
+    "createPreviewAccess",
     "importTokenAuthority",
     "isMcpOAuthRoute",
     "mcpAuthorizationMetadata",

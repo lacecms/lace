@@ -13,6 +13,7 @@ import {
   BuildExportCursorError,
   BlockOrderError,
   CollectionQueryValidationError,
+  PreviewContextLimitError,
   StaleSynchronizationError,
 } from "@lacecms/domain";
 import {
@@ -292,6 +293,15 @@ export const errorMatrixCases: readonly ErrorMatrixCase[] = [
         },
       },
       status: 422,
+    },
+  },
+  {
+    name: "PreviewContextLimitError",
+    errorClass: PreviewContextLimitError,
+    create: () => new PreviewContextLimitError(),
+    expected: {
+      body: { error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } },
+      status: 500,
     },
   },
   {

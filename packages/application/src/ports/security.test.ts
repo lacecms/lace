@@ -14,6 +14,7 @@ test("pins every sensitive rate-limit policy", () => {
     "oauth-register": { limit: 10, windowMs: 15 * minute },
     "oauth-revoke": { limit: 20, windowMs: hour },
     "oauth-token": { limit: 60, windowMs: minute },
+    "preview-access": { limit: 60, windowMs: minute },
     reset: { limit: 3, windowMs: hour },
     setup: { limit: 5, windowMs: hour },
     token: { limit: 20, windowMs: hour },

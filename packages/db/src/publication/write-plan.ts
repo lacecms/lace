@@ -1,3 +1,4 @@
+import { invalidatePreviews } from "../write-plan/preview-invalidation.js";
 import { withPublishedProjection } from "@lacecms/application";
 import type { PublishContentEntryCommand } from "@lacecms/application";
 import { contentPublicPath, DomainError } from "@lacecms/domain";
@@ -234,6 +235,7 @@ export function publishWritePlan(
         expectedChanges: 1,
       });
       s.push(
+        invalidatePreviews("entry", input.entryId, input.publishedAt, condition),
         publicStateIncrementStatement(condition, input.publishedAt),
         ...enqueueRequests(input.events, eventIds, condition).filter(
           (statement) => statement.slot !== "queue",

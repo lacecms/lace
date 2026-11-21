@@ -1,9 +1,9 @@
 // Directory dependencies: shared ← schema, security, links; links ← content, sync;
 // write-plan ← content, media, builds, publication, outbox, sync; content ← sync;
 // content ← media ← delivery ← builds; builds, content, links ← publication;
-// shared ← outbox; builds, links ← reads.
+// shared ← outbox; builds, links ← reads; content, media, reads, shared, write-plan ← preview.
 // builds, content, links, media, outbox, publication, reads, shared, sync,
-// write-plan ← node-repository.
+// preview, write-plan ← node-repository.
 export * from "./security/oauth.js";
 export * from "./security/api-tokens.js";
 export { readInvitationPage, readManagedUserPage } from "./security/account-pages.js";
@@ -24,6 +24,8 @@ export * from "./schema/operations.js";
 export * from "./schema/security.js";
 export * from "./schema/auth.js";
 export * from "./schema/oauth.js";
+export * from "./schema/preview.js";
+export { SqlPreviewRepository } from "./preview/repository.js";
 export * from "./schema/better-auth.js";
 export * from "./sync/model-state.js";
 export * from "./sync/scan.js";

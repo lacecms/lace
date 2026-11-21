@@ -153,6 +153,60 @@ CORS on public reads (needed by SSR, preview or mobile clients); one public
 endpoint family per content kind; a generated admin API client; pruning
 `openspec/changes/archive`.
 
+## Pre-1.0 priority PV1 — Protected saved-draft preview
+
+**Selected:** 2026-11-17. **Status:** Verified through PV1F and archived on
+2026-11-21. **Session unit:** PV1,
+[`add-protected-draft-preview`](../openspec/changes/archive/2026-11-21-add-protected-draft-preview/proposal.md).
+The owner selected this as the first product priority before Lace 1.0, outside
+EX1–EX7. It does not depend on the unfinished EX5/EX7 work or combine their
+sessions. PV1 is an explicit staged exception to one session per change: one
+proposal defines the complete contract, with six independently verified
+checkpoints and an initial estimate of 6–10 working sessions. Apply one
+checkpoint at a time and record its evidence and remaining tasks. On 2026-11-18,
+the owner approved implementing task 6.1 against the locally verified PV1E
+protocol before the disposable real-provider run in 5.5. Task 5.5 passed on
+2026-11-21. The final PV1F gate passed on the same date. Preview creation
+was disabled in the deployment entry points at archive time.
+
+| Checkpoint | Scope | Completion evidence |
+| --- | --- | --- |
+| PV1A | Lifecycle, immutable inputs, SQLite/D1 persistence | [Verified on SQLite and local D1](../openspec/changes/archive/2026-11-21-add-protected-draft-preview/verification.md) |
+| PV1B | Session handoff and protected artifact delivery | [Verified on SQLite/SILO, local D1/R2 and Chromium](../openspec/changes/archive/2026-11-21-add-protected-draft-preview/verification.md#pv1b-verified-on-2026-11-17) |
+| PV1C | Astro single-route integration | [Verified with packed sites and Chromium](../openspec/changes/archive/2026-11-21-add-protected-draft-preview/verification.md#pv1c-verified-on-2026-11-17) |
+| PV1D | Fixed VPS runner and publication priority | [Verified with Docker, SILO, Nginx and Chromium](../openspec/changes/archive/2026-11-21-add-protected-draft-preview/verification.md#pv1d-verified-on-2026-11-17) |
+| PV1E | GitHub runner and private R2 | [Verified on GitHub Actions, Worker, D1 and private R2](../openspec/changes/archive/2026-11-21-add-protected-draft-preview/verification.md#pv1e-real-provider-acceptance-on-2026-11-21) |
+| PV1F | Admin, documentation and complete acceptance | [Tasks 6.1–6.7 verified](../openspec/changes/archive/2026-11-21-add-protected-draft-preview/verification.md#pv1f-final-acceptance-on-2026-11-21), including packed Node and local Worker acceptance, Chromium, upgrade, rollback and the root quality checks. |
+
+Scope: saved routed pages/collection entries, explicit single-page generation,
+one preview per entity, one active generation per installation, protected
+resources and a session-bound iframe with new-tab fallback. GitHub Actions
+plus private R2 on Cloudflare; a fixed local builder on VPS. Ready artifacts
+live for 24 hours. Execution/upload is bounded to 10 minutes and the operation
+to 15 minutes including provider waiting. Save/revert/unpublish retain the
+preview; publication, entity/model deletion and included-media deletion
+invalidate it. Retries are manual for the current saved revision. No live
+editing, guest links, automatic rebuilds or preview queue.
+
+Architecture §§3–5/10/13/14 and ADR 0033 record the selected scope before code.
+The verified deltas are synchronized into the
+[accepted specs](../openspec/specs/README.md#protected-draft-preview).
+The existing release-preparation change remains separate.
+
+### PV1 deployment follow-up
+
+**Status:** Implemented and verified locally and on the hosted Cloudflare
+Worker on 2026-11-21. The change is archived and its deltas are in the
+[accepted specs](../openspec/specs/README.md#protected-draft-preview).
+**Session unit:**
+[`enable-opt-in-draft-preview-deployments`](../openspec/changes/archive/2026-11-21-enable-opt-in-draft-preview-deployments/proposal.md).
+The follow-up delivers explicit opt-in for the repository and generated Node
+development stacks, Node VPS and the deployed Cloudflare Worker. Local Node
+adds loopback HTTPS and a private preview-only runner using committed source.
+The [verification record](../openspec/changes/archive/2026-11-21-enable-opt-in-draft-preview-deployments/verification.md)
+covers the shipped entry points, including hosted activation, a successful
+saved-draft build through GitHub Actions and withdrawal on `test-homepage`.
+
 ## 5. Owner decisions (2026-11-14)
 
 1. The refactoring roadmap is archived; its unfinished sessions and the open

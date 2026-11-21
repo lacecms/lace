@@ -98,6 +98,7 @@ services:
       LACE_MINIO_TIMEOUT_MS: ${LACE_MINIO_TIMEOUT_MS:?set LACE_MINIO_TIMEOUT_MS}
       LACE_PORT: 3000
       LACE_PUBLIC_BASE_URL: ${LACE_PUBLIC_BASE_URL:?set LACE_PUBLIC_BASE_URL}
+      LACE_PREVIEW_ORIGIN: https://${LACE_DEV_PREVIEW_HOST:-preview.lace.test}:${LACE_DEV_HTTPS_PORT:-3443}/
       LACE_SITE_DEV_ORIGIN: ${LACE_SITE_DEV_ORIGIN:?set LACE_SITE_DEV_ORIGIN}
       LACE_MCP_ENABLED: ${LACE_MCP_ENABLED:-false}
     healthcheck:
@@ -124,6 +125,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     command: >-
       sh -ec 'pnpm --filter @lacecms/app-admin... install --frozen-lockfile && pnpm --filter @lacecms/app-admin run dev:container'
     environment:

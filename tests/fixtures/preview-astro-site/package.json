@@ -1,0 +1,10 @@
+{
+  "name": "lace-preview-existing-site",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@lacecms/astro": "0.1.0-rc6",
+    "astro": "7.4.12",
+    "sharp": "0.35.5"
+  }
+}

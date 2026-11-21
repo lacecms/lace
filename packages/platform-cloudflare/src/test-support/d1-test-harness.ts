@@ -1,23 +1,24 @@
 // Plain Node scripts load this module through type stripping: erasable
 // syntax only, and sibling modules are imported for types only.
 import { readdir, readFile } from "node:fs/promises";
-import { Miniflare, convertV4MiniflareOptions } from "miniflare";
+import type { Miniflare } from "miniflare";
 import type { KVNamespace } from "../runtime/cache.js";
 import type { D1Database, D1PreparedStatement } from "../d1/database.js";
 import type { R2Bucket } from "../media/r2-storage.js";
 
-const migrationsDirectory = new URL("../../../db/drizzle/", import.meta.url);
+const migrationsDirectory = () => new URL("../../../db/drizzle/", import.meta.url);
 
 /** Checked-in forward migrations split into D1-executable statements. */
 export async function migrationStatements(
   include: (file: string) => boolean = () => true,
 ): Promise<string[]> {
-  const files = (await readdir(migrationsDirectory))
+  const directory = migrationsDirectory();
+  const files = (await readdir(directory))
     .filter((file) => file.endsWith(".sql") && include(file))
     .sort();
   const statements: string[] = [];
   for (const file of files) {
-    const sql = await readFile(new URL(file, migrationsDirectory), "utf8");
+    const sql = await readFile(new URL(file, directory), "utf8");
     statements.push(
       ...sql
         .split("--> statement-breakpoint")
@@ -30,6 +31,8 @@ export async function migrationStatements(
 
 export interface LocalCloudflare {
   readonly bucket: R2Bucket;
+  readonly previewBucket: R2Bucket;
+  readonly dispatchFetch: Miniflare["dispatchFetch"];
   readonly database: D1Database;
   readonly dispose: () => Promise<void>;
   readonly kv: KVNamespace;
@@ -37,17 +40,27 @@ export interface LocalCloudflare {
 
 /** Starts isolated in-memory local D1 (migrated), R2, and KV bindings. */
 export async function openLocalCloudflare(
-  options: { readonly migrate?: boolean; readonly persistTo?: string } = {},
+  options: {
+    readonly migrate?: boolean;
+    readonly persistTo?: string;
+    readonly script?: string;
+    readonly bindings?: Readonly<Record<string, string>>;
+  } = {},
 ): Promise<LocalCloudflare> {
+  const { Miniflare, convertV4MiniflareOptions } = await import("miniflare");
   const miniflare = new Miniflare(
     convertV4MiniflareOptions({
       compatibilityDate: "2026-09-01",
+      compatibilityFlags: ["nodejs_compat"],
+      ...(options.bindings && { bindings: options.bindings }),
       d1Databases: ["DB"],
       ...(options.persistTo ? { resourcePersistencePath: options.persistTo } : {}),
       kvNamespaces: ["CACHE"],
       modules: true,
-      r2Buckets: ["MEDIA"],
-      script: "export default { fetch() { return new Response(null, { status: 404 }); } };",
+      r2Buckets: ["MEDIA", "PREVIEW"],
+      script:
+        options.script ??
+        "export default { fetch() { return new Response(null, { status: 404 }); } };",
     }),
   );
   const database: D1Database = await miniflare.getD1Database("DB");
@@ -57,7 +70,7 @@ export async function openLocalCloudflare(
     await database
       .prepare("create table d1_migrations (id integer primary key, name text not null)")
       .run();
-    const files = (await readdir(migrationsDirectory))
+    const files = (await readdir(migrationsDirectory()))
       .filter((file) => file.endsWith(".sql"))
       .sort();
     for (const [index, name] of files.entries())
@@ -69,8 +82,16 @@ export async function openLocalCloudflare(
   // Miniflare's declared binding types do not name the Workers interfaces
   // Lace's adapters accept; the bindings implement them at runtime.
   const bucket = (await miniflare.getR2Bucket("MEDIA")) as unknown as R2Bucket;
+  const previewBucket = (await miniflare.getR2Bucket("PREVIEW")) as unknown as R2Bucket;
   const kv = (await miniflare.getKVNamespace("CACHE")) as unknown as KVNamespace;
-  return { bucket, database, dispose: () => miniflare.dispose(), kv };
+  return {
+    bucket,
+    previewBucket,
+    database,
+    dispatchFetch: miniflare.dispatchFetch.bind(miniflare),
+    dispose: () => miniflare.dispose(),
+    kv,
+  };
 }
 
 /** Starts an isolated in-memory local D1 database with every migration applied. */

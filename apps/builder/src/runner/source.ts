@@ -2,7 +2,7 @@ import { lstat, readFile, readdir, mkdir, open } from "node:fs/promises";
 import { constants, createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { safeBuildSourcePath, type SiteBuildFailureReason } from "./diagnostics.js";
-import { basename, join, relative, resolve, sep } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 
 export interface SourceSelection {
   readonly siteDirectory: string;
@@ -28,6 +28,17 @@ const skipped = new Set([
   ".claude",
   "test-results",
 ]);
+
+export function excludedBuildSource(location: string, output: string): boolean {
+  return (
+    location === "AGENTS.md" ||
+    location === "CLAUDE.md" ||
+    location === output ||
+    location.startsWith(`${output}/`) ||
+    location.split("/").some((name) => skipped.has(name) || /^\.env(?:\.|$)/u.test(name)) ||
+    /(?:^|\/)\.lace\/data(?:\/|$)/u.test(location)
+  );
+}
 
 export function validDirectory(value: string, root = false): boolean {
   return (
@@ -150,20 +161,10 @@ export async function copySource(
   selection: SourceSelection,
 ): Promise<void> {
   await validateSource(root, selection);
-  const output = join(selection.siteDirectory, selection.outputDirectory);
+  const output = join(selection.siteDirectory, selection.outputDirectory).split(sep).join("/");
   async function copyEntry(source: string, target: string): Promise<void> {
-    const name = basename(source);
-    const location = relative(root, source);
-    const parts = location.split(sep);
-    if (
-      location === "AGENTS.md" ||
-      location === "CLAUDE.md" ||
-      location === output ||
-      location.startsWith(`${output}${sep}`) ||
-      parts.some((part, index) => part === ".lace" && parts[index + 1] === "data") ||
-      (source !== root && (skipped.has(name) || name === ".env" || name.startsWith(".env.")))
-    )
-      return;
+    const location = relative(root, source).split(sep).join("/");
+    if (excludedBuildSource(location, output)) return;
     const stat = await sourceStat(root, source);
     if (stat.isDirectory()) {
       let entries: string[];

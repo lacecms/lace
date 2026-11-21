@@ -22,6 +22,8 @@ export type WorkerFixtureOptions = {
     | undefined;
 } & {
   readonly buildResult?: BuildTriggerResult;
+  readonly privatePreviewBucket?: boolean;
+  readonly localWorker?: Parameters<typeof openLocalCloudflare>[0];
   readonly env?: { readonly [Key in keyof CloudflareWorkerEnv]?: unknown };
 };
 
@@ -50,12 +52,18 @@ export async function createWorkerFixture(
   options: WorkerFixtureOptions = {},
 ) {
   const clientAddress = `203.0.113.${++fixtureAddress}`;
-  const local = await openLocalCloudflare();
+  const local = await openLocalCloudflare(options.localWorker);
   cleanups.push(local.dispose);
   const logs: Array<Parameters<WorkerOperationalLogger["error"]>[0]> = [];
   const triggers: SiteBuildRequest[] = [];
   let offset = 0;
-  const { buildResult, env: extraEnv, ...overrides } = options;
+  const {
+    buildResult,
+    env: extraEnv,
+    privatePreviewBucket,
+    localWorker: _localWorker,
+    ...overrides
+  } = options;
   const input: Record<string, unknown> = {
     buildTrigger: () => ({
       trigger: async (request: SiteBuildRequest) => {
@@ -79,6 +87,7 @@ export async function createWorkerFixture(
     LACE_AUTH_SECRET: secret,
     LACE_PUBLIC_BASE_URL: `${origin}/`,
     MEDIA: local.bucket,
+    ...(privatePreviewBucket && { PREVIEW: local.previewBucket }),
     ...extraEnv,
   };
   const runtime = worker.runtime(env);

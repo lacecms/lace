@@ -7,6 +7,8 @@ import {
   SITE_BUILD_REQUESTED,
   createOutboxDispatchers,
   SiteBuildTracker,
+  PreviewPackages,
+  maintainPreviewDelivery,
 } from "@lacecms/application";
 import type {
   BuildTriggerResult,
@@ -17,12 +19,14 @@ import type {
   SiteBuildDispatcher,
   SiteBuildTrigger,
   EmailSender,
+  PreviewRunner,
 } from "@lacecms/application";
 import { createCloudflareEmailSender, type SendEmailBinding } from "./email.js";
 import {
   TrustedClientAddresses,
   createBetterAuthBoundary,
   createImportActorResolver,
+  createPreviewAccess,
 } from "@lacecms/auth";
 // Load the auth graph before the SDK: their shared Zod ESM initialization
 // otherwise runs after SDK schemas in a combined esbuild bundle.
@@ -51,6 +55,8 @@ import { D1FixedWindowRateLimiter, D1SecurityService } from "../security/service
 import type { D1Database } from "../d1/database.js";
 import { WorkerImageInspector } from "../media/image-inspector.js";
 import { CloudflareR2ObjectStorage } from "../media/r2-storage.js";
+import { composeCloudflarePreview } from "./preview.js";
+import { CloudflarePreviewBlobStorage } from "../media/preview-r2.js";
 import {
   CloudflareEnvironmentError,
   parseCloudflareSettings,
@@ -68,13 +74,20 @@ export const SCHEDULED_SITE_BUILD_CLAIMS = 1;
 export const SCHEDULED_MEDIA_DELETION_CLAIMS = 5;
 /** Tracked provider deployments checked per scheduled run (one Pages request each). */
 export const SCHEDULED_TRACKING_CHECKS = 5;
+/** Dedicated invocation leaves the publication and preview query budgets independent. */
+export const PREVIEW_MAINTENANCE_CRON = "*/2 * * * *";
 const POST_COMMIT_BUILD_DELAY_MS = SITE_BUILD_DEBOUNCE_MS + 250;
 
 export interface WorkerOperationalLogger {
+  info?(entry: Record<string, string>): void;
   error(entry: Record<string, string>): void;
 }
 
 export interface CreateCloudflareWorkerInput {
+  /** Internal preview delivery fixtures can supply a viewer without admission. */
+  readonly previewOrigin?: URL;
+  readonly previewExecutor?: Pick<PreviewRunner, "stop">;
+  readonly previewGitHubFetch?: typeof fetch;
   readonly buildTrigger?: (settings: CloudflareSettings) => SiteBuildTrigger;
   readonly clock?: Clock;
   readonly config: NormalizedConfig<readonly ContentModelDefinition[]>;
@@ -87,6 +100,10 @@ export interface CreateCloudflareWorkerInput {
 }
 
 export interface CloudflareRuntime {
+  readonly previewPackages?: PreviewPackages;
+  /** Internal composition for checkpoint acceptance and the later admin surface. */
+  readonly createPreview?: ReturnType<typeof composeCloudflarePreview>["create"];
+  readonly maintainPreview: () => Promise<void>;
   readonly clients: TrustedClientAddresses;
   readonly maintainOAuth: () => Promise<void>;
   /** Purges one bounded batch of expired idempotency records, on OAuth phase-2 minutes only. */
@@ -141,6 +158,7 @@ class D1Readiness implements ReadinessProbe {
 }
 
 const defaultOperationalLogger: WorkerOperationalLogger = Object.freeze({
+  info: (entry: Record<string, string>) => console.info(JSON.stringify(entry)),
   error: (entry: Record<string, string>) => console.error(JSON.stringify(entry)),
 });
 
@@ -291,8 +309,75 @@ export function createCloudflareRuntime(
     security,
     storage,
   });
-  const app = createLaceApp(services.appInput);
+  const previewOrigin = settings.preview?.origin ?? input.previewOrigin;
+  const previewBlobs =
+    previewOrigin &&
+    new CloudflarePreviewBlobStorage(
+      settings.preview?.bucket ?? settings.media,
+      settings.storageTimeoutMs,
+    );
+  const previewPackages =
+    previewBlobs && new PreviewPackages(previewBlobs, repository.preview, clock);
+  const preview =
+    settings.preview &&
+    previewBlobs &&
+    previewPackages &&
+    composeCloudflarePreview({
+      adminOrigin: settings.publicBaseUrl,
+      config: input.config,
+      settings: settings.preview,
+      repository,
+      clock,
+      idGenerator: ids,
+      blobs: previewBlobs,
+      packages: previewPackages,
+      media: services.media,
+      ...(input.previewGitHubFetch && { fetcher: input.previewGitHubFetch }),
+      log: (level, event) => logger[level]?.({ component: "preview", ...event }),
+    });
+  const app = createLaceApp({
+    ...services.appInput,
+    ...(settings.reservedPreviewHostname && {
+      reservedPreviewHostname: settings.reservedPreviewHostname,
+    }),
+    ...(previewOrigin && {
+      previewArtifacts: previewPackages!,
+      preview: createPreviewAccess({
+        admin: settings.publicBaseUrl,
+        preview: previewOrigin,
+        clock,
+        secret: settings.authSecret,
+        actors: auth.actors,
+        persistence: repository.preview.access,
+      }),
+    }),
+    ...(preview && { previewRunner: preview.transport }),
+    ...((preview || settings.previewRequested) && {
+      adminPreview:
+        preview && previewOrigin
+          ? { origin: previewOrigin.origin, create: preview.create, status: preview.status }
+          : ("configuration-required" as const),
+    }),
+  });
   return Object.freeze({
+    ...(preview && { createPreview: preview.create }),
+    ...(previewPackages && { previewPackages }),
+    maintainPreview: async () => {
+      if (!previewBlobs) return;
+      await preview
+        ?.reconcile()
+        .catch(() => logger.error({ component: "preview", reason: "reconciliation_failed" }));
+      const failures = await maintainPreviewDelivery({
+        repository: repository.preview,
+        clock,
+        blobs: previewBlobs,
+        cleanupGraceMs: settings.storageTimeoutMs,
+        runner: input.previewExecutor ?? preview ?? { stop: async () => "unconfirmed" },
+        purgeExpiredAccess: (now, limit) =>
+          repository.preview.access.purgeExpiredAccess(now, limit),
+      });
+      if (failures > 0) logger.error({ component: "preview", reason: "cleanup_failed" });
+    },
     clients,
     maintainOAuth: () => {
       const now = Number(clock.now());
@@ -365,7 +450,8 @@ export function createCloudflareWorker(input: CreateCloudflareWorkerInput): Clou
       | "site-build"
       | "site-build-tracking"
       | "oauth-cleanup"
-      | "operations-cleanup",
+      | "operations-cleanup"
+      | "preview-cleanup",
     run: () => Promise<void>,
   ): Promise<void> {
     try {
@@ -410,9 +496,18 @@ export function createCloudflareWorker(input: CreateCloudflareWorkerInput): Clou
       if (value instanceof CloudflareEnvironmentError) throw value;
       return value;
     },
-    async scheduled(_controller: unknown, env: CloudflareWorkerEnv) {
+    async scheduled(controller: unknown, env: CloudflareWorkerEnv) {
       const runtime = configured(env);
       if (runtime === undefined) return;
+      if (
+        controller &&
+        typeof controller === "object" &&
+        "cron" in controller &&
+        controller.cron === PREVIEW_MAINTENANCE_CRON
+      ) {
+        await dispatch("preview-cleanup", () => runtime.maintainPreview());
+        return;
+      }
       await dispatch("oauth-cleanup", () => runtime.maintainOAuth());
       await dispatch("operations-cleanup", () => runtime.maintainOperations());
       await dispatch("site-build", () =>

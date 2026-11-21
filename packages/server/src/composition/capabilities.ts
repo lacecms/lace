@@ -159,6 +159,7 @@ export function createCapabilities(input: LaceAppInput) {
       ),
     accounts,
     adminEntryDto,
+    adminPreview: input.adminPreview,
     apiDocsEnabled: input.apiDocsEnabled ?? false,
     auth: input.auth,
     buildTokenVerifier:

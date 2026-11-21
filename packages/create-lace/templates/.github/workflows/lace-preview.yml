@@ -1,0 +1,88 @@
+name: Build protected Lace preview
+run-name: Lace preview ${{ inputs.generation }}
+on:
+  workflow_dispatch:
+    inputs:
+      generation:
+        required: true
+        type: string
+      commit:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  preview:
+    if: github.run_attempt == 1 && github.sha == inputs.commit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      LACE_PREVIEW_API_ORIGIN: ${{ vars.LACE_PREVIEW_API_ORIGIN }}
+      LACE_PREVIEW_GENERATION: ${{ inputs.generation }}
+      LACE_PREVIEW_COMMIT: ${{ inputs.commit }}
+    steps:
+      - name: Claim generation
+        id: claim
+        env:
+          LACE_PREVIEW_RUNNER_SECRET: ${{ secrets.LACE_PREVIEW_RUNNER_SECRET }}
+        run: |
+          node --input-type=module <<'JS'
+          import { appendFile, writeFile } from 'node:fs/promises';
+          import { join } from 'node:path';
+          import { setTimeout as delay } from 'node:timers/promises';
+
+          async function claim() {
+            const env = process.env;
+            const started = Date.now();
+            const origin = new URL(env.LACE_PREVIEW_API_ORIGIN);
+            const generation = env.LACE_PREVIEW_GENERATION;
+            const commit = env.LACE_PREVIEW_COMMIT;
+            if (origin.protocol !== 'https:' || origin.href !== origin.origin + '/' ||
+                !/^[A-Za-z0-9_-]{1,128}$/.test(generation) || !/^[a-f0-9]{40}$/.test(commit) ||
+                commit !== env.GITHUB_SHA || env.GITHUB_RUN_ATTEMPT !== '1' ||
+                !/^[1-9][0-9]{0,15}$/.test(env.GITHUB_RUN_ID) || !env.LACE_PREVIEW_RUNNER_SECRET)
+              throw new Error();
+            const url = new URL('/api/v1/preview-runner/' + generation + '/claim', origin);
+            for (let attempt = 0; attempt < 12; attempt++) {
+              const response = await fetch(url, {
+                method: 'POST', redirect: 'error', signal: AbortSignal.timeout(12000),
+                headers: { authorization: 'Bearer ' + env.LACE_PREVIEW_RUNNER_SECRET, 'content-type': 'application/json' },
+                body: JSON.stringify({ commit, runId: env.GITHUB_RUN_ID }),
+              });
+              if (response.status === 409) {
+                await response.body?.cancel();
+                await delay(500);
+                continue;
+              }
+              if (!response.ok) throw new Error();
+              const { token, deadline, sitePath } = await response.json();
+              if (!/^[A-Za-z0-9_.-]{100,256}$/.test(token) || !Number.isSafeInteger(deadline) ||
+                  typeof sitePath !== 'string' || deadline <= Date.now()) throw new Error();
+              await writeFile(join(env.RUNNER_TEMP, 'lace-preview-claim.json'),
+                JSON.stringify({ token, deadline: Math.min(deadline, started + 600000), sitePath, startedAt: started }),
+                { mode: 0o600, flag: 'wx' });
+              await appendFile(env.GITHUB_OUTPUT, 'granted=true\n');
+              return;
+            }
+          }
+
+          try { await claim(); } catch { console.error('PREVIEW_PROVIDER_UNAVAILABLE'); process.exitCode = 1; }
+          JS
+      - name: Check out admitted source
+        if: steps.claim.outputs.granted == 'true'
+        timeout-minutes: 1
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        if: steps.claim.outputs.granted == 'true'
+        with:
+          node-version: 24.22.3
+          package-manager-cache: false
+      - name: Build and upload
+        if: steps.claim.outputs.granted == 'true'
+        run: node .github/scripts/lace-preview.mjs
+        env:
+          LACE_PREVIEW_IMAGE: ghcr.io/lacecms/builder:0.1.0-rc6

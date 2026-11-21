@@ -55,6 +55,7 @@ export const checkOrder = [
   "migrations",
   "api-readiness",
   "build-token",
+  "preview",
 ] as const;
 export type CheckId = (typeof checkOrder)[number];
 export interface DoctorCheck {

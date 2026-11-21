@@ -9,6 +9,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "Lace",
+      logo: { src: "./src/assets/main-logo.png", replacesTitle: true },
       description: "A lightweight, self-hosted headless CMS for Astro websites.",
       defaultLocale: catalog.defaultLocale,
       locales: catalog.locales,

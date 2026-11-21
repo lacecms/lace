@@ -1,13 +1,13 @@
 ---
 import LaceBlocks from "@lacecms/astro/LaceBlocks.astro";
 import LaceSeo from "@lacecms/astro/LaceSeo.astro";
-import type { PublishedEntry, PublishedSite } from "@lacecms/sdk";
+import type { SiteEntry, SiteView } from "@lacecms/sdk";
 import { blocks } from "../lace/blocks";
 import "../styles/global.css";
 
 interface Props {
-  readonly entry: PublishedEntry;
-  readonly site: PublishedSite;
+  readonly entry: SiteEntry;
+  readonly site: SiteView;
   /** The Open Graph type; blog posts render as articles. */
   readonly type?: "article" | "website";
 }

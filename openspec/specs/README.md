@@ -94,6 +94,22 @@ build executors → `fixed-command-vps-builder`,
 - [cloudflare-deploy-hook-trigger](cloudflare-deploy-hook-trigger/spec.md)
 - [cloudflare-pages-deployment-tracking](cloudflare-pages-deployment-tracking/spec.md)
 
+## Protected draft preview
+
+Saved-draft admission, lifecycle and editor actions → `draft-preview`;
+session handoff, private artifacts and resource access →
+`draft-preview-delivery`; Astro rendering, build execution and operator
+setup → `astro-draft-preview`.
+
+- [draft-preview](draft-preview/spec.md)
+- [draft-preview-delivery](draft-preview-delivery/spec.md)
+- [astro-draft-preview](astro-draft-preview/spec.md)
+
+See [local Node development](local-node-development/spec.md) for loopback
+setup, [project generation](project-generator/spec.md) for generated Compose
+configuration and [generated project acceptance](generated-project-acceptance/spec.md)
+for end-to-end verification.
+
 ## API, accounts and MCP
 
 HTTP composition → `hono-app-factory`; request and response shapes →

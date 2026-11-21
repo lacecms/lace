@@ -77,16 +77,3 @@ export function streamBytes(bytes: Uint8Array): ByteStream {
     },
   };
 }
-
-/** WebCrypto exists in every supported runtime but not in this package's portable lib types. */
-const webCrypto = globalThis as unknown as {
-  readonly crypto: {
-    readonly subtle: { digest(algorithm: "SHA-256", data: Uint8Array): Promise<ArrayBuffer> };
-  };
-};
-
-/** Lowercase-hex SHA-256 of the exact bytes that object storage receives. */
-export async function mediaSha256(bytes: Uint8Array): Promise<string> {
-  const digest = new Uint8Array(await webCrypto.crypto.subtle.digest("SHA-256", bytes));
-  return Array.from(digest, (value) => value.toString(16).padStart(2, "0")).join("");
-}

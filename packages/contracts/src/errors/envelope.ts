@@ -1,3 +1,4 @@
+import { previewFailureReasons } from "@lacecms/domain";
 import { ContentValidationError } from "@lacecms/content";
 import * as v from "valibot";
 import { jsonObjectSchema } from "../shared/json.js";
@@ -35,6 +36,7 @@ export const errorCodeSchema = v.picklist([
   "RATE_LIMITED",
   "RESET_INVALID",
   "VALIDATION_FAILED",
+  ...previewFailureReasons,
 ]);
 
 export const errorEnvelopeSchema = v.strictObject({
@@ -84,7 +86,7 @@ export function toContentValidationIssues(
 
 export interface ClassifiedError {
   readonly body: ErrorEnvelope;
-  readonly status: 400 | 401 | 403 | 404 | 409 | 410 | 413 | 422 | 429 | 500;
+  readonly status: 400 | 401 | 403 | 404 | 409 | 410 | 413 | 422 | 429 | 500 | 503;
   readonly headers?: Readonly<Record<string, string>>;
 }
 

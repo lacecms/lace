@@ -63,6 +63,19 @@ Doctor reads a regular `.env`, then lets exported process variables override it;
 
 `setup` marks absent databases/ledgers, pending migrations, an unavailable API and the not-yet-issued build token as `expected`; `ready` treats them as failures. Settings/permission/lock/tool/authorization errors and a reachable API returning not-ready fail in both stages. Other check statuses are `pass`, `fail` and `skipped`; skipped checks explain their dependency or inapplicability. A present token remains unverified and is never sent. Readiness does not verify content sync, object storage, publication or a successful site build.
 
+<!-- lace-site: starter existing -->
+
+The `preview` row is advisory in both stages. It reports preview as off
+unless `LACE_PREVIEW_ENABLED` is the literal string `true`. For VPS Compose,
+doctor checks local settings and the installed Astro packages in the selected
+mount. With local preview settings and no VPS preview origin, it also checks
+the loopback TLS files. For Cloudflare it checks the Wrangler vars, private
+binding declaration, maintenance cron and Git-root-relative site packages.
+Verify integration, routing, certificate trust and private asset delivery
+with a signed-in saved-draft build after enabling.
+
+<!-- lace-site: end -->
+
 SQLite is inspected without writable runtime opening. WAL-mode databases report `DATABASE_UNAVAILABLE` rather than change SHM reader marks or create sidecars; consult the separate API readiness result. For an independent ledger inspection, stop all API/dispatcher/CLI database users, back up with trusted SQLite tooling, explicitly checkpoint successfully and switch to rollback journal mode (`PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode=DELETE;`), then repeat doctor. These are operator actions; doctor performs none of them. Ordinary Lace startup restores WAL. Never discard WAL/SHM files or use immutable mode on a live database.
 
 Cloudflare needs an installed project-local Wrangler and an explicitly selected `LACE_WRANGLER_CONFIG` with a CMS `DB` binding matching `LACE_D1_DATABASE_ID`; a Pages-only Wrangler file lacks that binding. Projects generated with `--cloudflare` select their CMS Worker configuration `worker/wrangler.jsonc`. `--target cloudflare-local` additionally needs `LACE_CLOUDFLARE_PERSIST_TO` and a loopback API URL, normally the local Worker origin; migration readiness comes from the running Worker's readiness and is skipped while offline, without creating local state. `--target cloudflare-remote` needs `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` and performs only the selected D1 ledger read. Never substitute a remote target for an unavailable local Worker.

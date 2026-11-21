@@ -4,7 +4,6 @@ import { assertTimestamp, parseObject, storedRole } from "../shared/values.js";
 import type { JsonObject } from "@lacecms/content";
 import {
   actorId,
-  blockKey,
   cloneEntrySeo,
   contentEntryId,
   contentSnapshotId,
@@ -21,6 +20,7 @@ import type {
 } from "@lacecms/domain";
 import type { ContentModelResolver, EntryRow } from "./entries.js";
 import type { BlockRow } from "./blocks.js";
+import { storedBlock } from "./block-row.js";
 
 export interface SnapshotRow {
   readonly created_at: number;
@@ -158,17 +158,7 @@ export function storedSnapshots(
   const grouped = new Map<string, ContentBlock[]>();
   for (const row of blockRows) {
     const blocks = grouped.get(row.snapshot_id) ?? [];
-    blocks.push({
-      ...(row.anchor === null ? {} : { anchor: row.anchor }),
-      ...(row.class_name === null ? {} : { className: row.class_name }),
-      data: parseObject(row.data_json, "Block data"),
-      hidden: row.hidden === 1,
-      key: blockKey(row.block_key),
-      position: row.position,
-      schemaVersion: row.schema_version,
-      settings: parseObject(row.settings_json, "Block settings"),
-      type: row.block_type,
-    });
+    blocks.push(storedBlock(row));
     grouped.set(row.snapshot_id, blocks);
   }
   for (const [id, snapshot] of snapshots) {

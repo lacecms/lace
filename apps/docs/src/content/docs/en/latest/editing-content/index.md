@@ -2,7 +2,7 @@
 title: Edit and publish content
 description: Create entries, edit fields and blocks, publish drafts, and search collection lists in Admin.
 kind: guide
-verifiedAgainst: 0.1.0-rc2
+verifiedAgainst: 0.1.0-rc6
 ---
 
 Admin edits the content that `lace.config.ts` defines: one draft for each page
@@ -121,6 +121,34 @@ A hidden block shows a **Hidden** badge. It stays in the draft and in the
 published content but is not rendered on the site, and its missing required
 values do not block publication. Duplicating a block copies its settings,
 classes and hidden state but not its anchor.
+
+## Preview a saved draft
+
+On an installation where the operator has enabled protected draft preview, save a page or
+routed collection entry, then choose **Create preview**. Admins and editors
+can create and replace previews. Viewers can open an existing preview with
+their Lace session. Complete required fields and visible blocks first.
+Unsaved edits disable create, recreate and retry. You can still open an
+existing preview while keeping your unsaved edits.
+
+Open the ready result to see the captured revision and expiry. With compatible
+HTTPS origins you can switch between desktop and narrow widths. **Open in new
+tab** also works when the browser needs a top-level sign-in. A preview URL
+requires a current authorized Lace session.
+
+Each result expires 24 hours after it becomes ready. Save, revert and
+unpublish retain the captured result and its original expiry. Publishing the
+entry, deleting it or its model, or deleting included media invalidates the
+preview. An admitted replacement immediately closes the previous preview.
+
+One preview can build at a time across the installation, without a queue.
+The overall limit is 15 minutes including runner wait, and checkout, dependency
+installation, rendering and upload share at most 10 minutes within that limit.
+After a failure or timeout, fix the reported issue, then choose **Retry
+preview** to build the current saved revision. A run never retries itself.
+The package allows up to 2,000 files, 32 MiB per file, 100 MiB total and a
+1 MiB manifest. Ask your operator about provider capacity and configuration
+if retries continue to fail.
 
 ## Publish and manage entries
 

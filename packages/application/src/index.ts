@@ -1,4 +1,4 @@
-// Directory dependencies: shared ← ports ← content, media, accounts, builds, outbox, configuration.
+// Directory dependencies: shared ← ports ← content, media, accounts, builds, outbox, configuration; content, ports, shared ← preview.
 export const packageName = "@lacecms/application";
 
 /** Build-export page failures the HTTP boundary maps to stable responses. */
@@ -29,6 +29,9 @@ export * from "./ports/content.js";
 export * from "./ports/media.js";
 export * from "./ports/builds.js";
 export * from "./ports/security.js";
+export * from "./ports/preview.js";
+export * from "./ports/preview-access.js";
+export * from "./ports/preview-storage.js";
 
 // Content
 export * from "./content/authority.js";
@@ -89,3 +92,12 @@ export { contentSyncActor } from "./configuration/model-state.js";
 export * from "./configuration/plan.js";
 export * from "./configuration/report.js";
 export * from "./configuration/apply.js";
+
+// Preview
+export * from "./preview/admission.js";
+export { PreviewFrozenInputs } from "./preview/frozen-inputs.js";
+export * from "./preview/capture.js";
+export * from "./preview/maintenance.js";
+export * from "./preview/manifest.js";
+export * from "./preview/artifacts.js";
+export * from "./preview/delivery-maintenance.js";

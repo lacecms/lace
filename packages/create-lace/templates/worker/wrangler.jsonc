@@ -23,6 +23,14 @@
   ],
   // Create with `pnpm exec wrangler r2 bucket create {{PROJECT_NAME}}-media`.
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "{{PROJECT_NAME}}-media" }],
+  // lace-site: starter existing
+  // See docs/lace-cloudflare.md for protected draft preview. Add a separate private
+  // bucket to r2_buckets: { "binding": "PREVIEW", "bucket_name": "{{PROJECT_NAME}}-preview" }.
+  // Route the preview hostname to this Worker and bypass edge caching on that hostname.
+  // Add "*/2 * * * *" alongside the existing cron and configure LACE_PREVIEW_GITHUB_TOKEN
+  // and LACE_PREVIEW_RUNNER_SECRET as Worker secrets. In GitHub, set the same
+  // runner secret and the variable LACE_PREVIEW_API_ORIGIN to the CMS origin.
+  // lace-site: end
   // Optional derived cache. Without a CACHE binding the Worker uses a no-op cache.
   // To enable it, create a namespace with `pnpm exec wrangler kv namespace create CACHE`
   // and add: "kv_namespaces": [{ "binding": "CACHE", "id": "<namespace-id>" }],
@@ -53,7 +61,19 @@
     "LACE_BUILD_SITE_ID": "main-site",
     "LACE_BUILD_SITE_LABEL": "Main site",
     // Optional public site base URL for "Open on site" links in the editor:
-    // "LACE_BUILD_SITE_URL": "https://<pages-project>.pages.dev/",
+    // "LACE_BUILD_SITE_URL": "https://site.example.com/journal/", // Include your public base path.
+    // Optional protected preview (requires LACE_BUILD_SITE_URL and both preview secrets).
+    "LACE_PREVIEW_ENABLED": "false",
+    // "LACE_PREVIEW_ORIGIN": "https://preview.example.com/",
+    // "LACE_PREVIEW_GITHUB_REPOSITORY": "<owner>/<repository>",
+    // "LACE_PREVIEW_GITHUB_REF": "main",
+    // "LACE_PREVIEW_GITHUB_WORKFLOW": "lace-preview.yml",
+    // lace-site: starter
+    // "LACE_PREVIEW_SITE_PATH": "{{SITE_PATH}}",
+    // lace-site: end
+    // lace-site: existing
+    // "LACE_PREVIEW_SITE_PATH": ".", // Use "." if the site is the Git root, or e.g. "web" for a workspace member.
+    // lace-site: end
     // lace-site: end
     // Optional Pages deployment tracking (with the LACE_PAGES_API_TOKEN secret, Pages Read only):
     // "LACE_PAGES_ACCOUNT_ID": "<32-hex account ID>",

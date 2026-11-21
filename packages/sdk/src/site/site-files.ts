@@ -1,4 +1,4 @@
-import type { PublishedEntry, PublishedSite } from "./published-site.js";
+import type { PublishedEntry, PublishedSite } from "./types.js";
 
 export interface SitemapOptions {
   /** Keeps only the entries the site renders; every published entry by default. */

@@ -4,8 +4,9 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm --dir site dev",
-    "dev:api": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d minio minio-init migrate api",
-    "dev:stop": "docker compose down",
+    "dev:api": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --remove-orphans minio minio-init migrate api",
+    "dev:api:preview": "docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.dev.preview.yml up -d --wait minio minio-init migrate api preview-builder preview-web",
+    "dev:stop": "docker compose down --remove-orphans",
     "prod:start": "docker compose up -d",
     "prod:stop": "docker compose down",
     "build": "pnpm --dir site build",

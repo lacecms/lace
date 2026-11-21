@@ -11,7 +11,7 @@ const SITE_PACKAGES = ["@lacecms/astro", "@lacecms/render"] as const;
 const missing = (error: unknown): boolean => (error as { code?: string })?.code === "ENOENT";
 
 /** Reads a bounded regular file; undefined when absent, throws on other failures. */
-async function optional(io: DoctorIO, path: string, signal: AbortSignal) {
+export async function optionalFile(io: DoctorIO, path: string, signal: AbortSignal) {
   try {
     return await io.file(path, signal);
   } catch (error) {
@@ -31,15 +31,25 @@ async function exists(io: DoctorIO, path: string, signal: AbortSignal): Promise<
 }
 
 /** Nearest installed package, walking up from the site like Node resolution. */
-async function installed(io: DoctorIO, site: string, name: string, signal: AbortSignal) {
+export async function installedPackage(
+  io: DoctorIO,
+  site: string,
+  name: string,
+  signal: AbortSignal,
+) {
   for (let directory = site; ; directory = dirname(directory)) {
-    if (
-      (await optional(io, join(directory, "node_modules", name, "package.json"), signal)) !==
-      undefined
-    )
-      return true;
-    if (dirname(directory) === directory) return false;
+    const manifest = await optionalFile(
+      io,
+      join(directory, "node_modules", name, "package.json"),
+      signal,
+    );
+    if (manifest !== undefined || dirname(directory) === directory) return manifest;
   }
+}
+
+export async function readSiteSelection(io: DoctorIO, cwd: string, signal: AbortSignal) {
+  const text = await optionalFile(io, resolve(cwd, ".lace/manifest.json"), signal);
+  if (text !== undefined) return manifestSite(validateUpgradeManifest(JSON.parse(text)));
 }
 
 /** Manifest-driven site check; reads only, never follows a final symbolic link. */
@@ -48,22 +58,9 @@ export async function siteCheck(
   cwd: string,
   signal: AbortSignal,
 ): Promise<Observation> {
-  let text: string | undefined;
-  try {
-    text = await optional(io, resolve(cwd, ".lace/manifest.json"), signal);
-  } catch {
-    text = "";
-  }
-  if (text === undefined)
-    return observation(
-      "skipped",
-      "SITE_NOT_APPLICABLE",
-      "No .lace/manifest.json in this directory; the site mode is unknown.",
-      "Run doctor from a generated project root to check its site.",
-    );
   let site;
   try {
-    site = manifestSite(validateUpgradeManifest(JSON.parse(text)));
+    site = await readSiteSelection(io, cwd, signal);
   } catch {
     return observation(
       "config",
@@ -72,6 +69,13 @@ export async function siteCheck(
       "Restore .lace/manifest.json from version control or regenerate the project with a compatible create-lace, then repeat doctor.",
     );
   }
+  if (site === undefined)
+    return observation(
+      "skipped",
+      "SITE_NOT_APPLICABLE",
+      "No .lace/manifest.json in this directory; the site mode is unknown.",
+      "Run doctor from a generated project root to check its site.",
+    );
   if (site.mode === "none")
     return observation(
       "pass",
@@ -80,7 +84,7 @@ export async function siteCheck(
       "Connect a site later with docs/lace-astro-site.md if the project should build one.",
     );
   const root = resolve(cwd, site.path);
-  const packageJson = await optional(io, join(root, "package.json"), signal);
+  const packageJson = await optionalFile(io, join(root, "package.json"), signal);
   let astro = false;
   try {
     const manifest = JSON.parse(packageJson ?? "null") as {
@@ -95,7 +99,7 @@ export async function siteCheck(
   }
   let config = false;
   for (const name of ASTRO_CONFIGS)
-    if ((await optional(io, join(root, name), signal)) !== undefined) config = true;
+    if ((await optionalFile(io, join(root, name), signal)) !== undefined) config = true;
   if (!astro || !config) {
     if (packageJson === undefined && !(await exists(io, root, signal)))
       return observation(
@@ -113,13 +117,13 @@ export async function siteCheck(
   }
   const packages: string[] = [];
   for (const name of SITE_PACKAGES)
-    if (!(await installed(io, root, name, signal))) packages.push(name);
+    if ((await installedPackage(io, root, name, signal)) === undefined) packages.push(name);
   let blocks = false;
-  const lockText = await optional(io, join(root, LOCK_FILE), signal);
+  const lockText = await optionalFile(io, join(root, LOCK_FILE), signal);
   if (lockText !== undefined) {
     try {
       const lock = validateLock(JSON.parse(lockText));
-      blocks = (await optional(io, join(root, lock.blockMap), signal)) !== undefined;
+      blocks = (await optionalFile(io, join(root, lock.blockMap), signal)) !== undefined;
     } catch {
       blocks = false;
     }

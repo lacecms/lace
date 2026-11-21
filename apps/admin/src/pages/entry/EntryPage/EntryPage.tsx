@@ -63,6 +63,7 @@ import { EntryActionsMenu } from "../EntryActionsMenu.js";
 import { EntryConflictAlert } from "../EntryConflictAlert.js";
 import { EntrySeoCard } from "../EntrySeoCard.js";
 import { EntryEditorActions, type SaveState } from "../EntryEditorActions.js";
+import { EntryPreviewActions } from "../EntryPreviewActions.js";
 import { EntryValidationSummary } from "../EntryValidationSummary.js";
 import { useEntryMutations } from "../use-entry-mutations.js";
 import { EntryPublicationDetails } from "../EntryPublicationDetails/index.js";
@@ -570,6 +571,19 @@ export function EntryPage() {
                     </div>
                   ) : undefined}
                 </EntryPublicationDetails>
+                {can(session, "content:read") && (model.kind === "page" || hasSlug) && (
+                  <EntryPreviewActions
+                    key={entryId}
+                    entryId={entryId}
+                    title={currentEntry.draft.title}
+                    revision={currentEntry.draft.revision}
+                    canWrite={!readOnly}
+                    dirty={dirty}
+                    busy={busy}
+                    eligible={model.kind === "page" || Boolean(currentEntry.draft.slug)}
+                    onIssues={editor.applyServerIssues}
+                  />
+                )}
                 {hasBlockSection ? fieldsCard : undefined}
                 {model.seo === undefined ? undefined : (
                   <fieldset className="min-w-0 border-0 p-0" disabled={readOnly || busy}>

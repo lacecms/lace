@@ -1,4 +1,4 @@
-// Directory dependencies: shared ← access, media, builds ← content.
+// Directory dependencies: shared ← access, media, builds ← content; preview.
 export { LaceError } from "@lacecms/content";
 export type { ContentModelKind } from "@lacecms/content";
 export { isContentSlug } from "@lacecms/content";
@@ -23,6 +23,10 @@ export * from "./builds/diagnostics.js";
 export * from "./builds/status.js";
 export * from "./builds/state.js";
 export * from "./builds/export-errors.js";
+
+// preview
+export * from "./preview/state.js";
+export * from "./preview/artifacts.js";
 
 // content
 export * from "./content/routes.js";

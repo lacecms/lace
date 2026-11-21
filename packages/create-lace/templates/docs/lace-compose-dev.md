@@ -144,6 +144,56 @@ Published content is readable with a build token through the authenticated build
 
 <!-- lace-site: end -->
 
+<!-- lace-site: starter existing -->
+
+## Enable protected draft preview
+
+Use a compatible API and builder image and apply the forward migrations.
+Commit the selected site and its pnpm lockfile in a clean Git checkout. The
+starter uses its project root; for an existing workspace set
+`LACE_BUILD_SOURCE_ROOT` to its Git and lockfile root and `LACE_BUILD_SITE_DIR`
+to its member directory. Existing sites must [adopt the Astro integration](lace-astro-site.md#adopt-protected-draft-preview).
+
+Resolve `cms.lace.test` and `preview.lace.test` to `127.0.0.1` with your local
+hosts file or resolver. Use [mkcert](https://github.com/FiloSottile/mkcert)
+to issue a locally trusted certificate for both names.
+
+```sh
+mkdir -p .lace/tls
+mkcert -install
+mkcert -cert-file .lace/tls/cert.pem -key-file .lace/tls/key.pem cms.lace.test preview.lace.test
+```
+
+1. In the ignored `.env`, set `LACE_PREVIEW_ENABLED=true` and independent
+   random `LACE_DEV_PREVIEW_BUILDER_SECRET` and `LACE_DEV_PREVIEW_RUNNER_SECRET`
+   values of at least 32 printable characters each. See `.env.example` for
+   optional DNS names, TLS port and certificate paths. Set
+   `LACE_DEV_PREVIEW_SITE_URL` if the public links in preview should point
+   somewhere other than the default local Astro site, `http://localhost:4321/`.
+2. Run the normal migration, sync and bootstrap steps while the services are
+   stopped. To target the HTTPS CMS from host commands or `pnpm dev`, use
+   `https://cms.lace.test:3443/` for `LACE_PUBLIC_BASE_URL` and
+   `LACE_API_BASE_URL`. For commands that fetch the HTTPS API, trust the local
+   CA in Node as well, for example with `NODE_EXTRA_CA_CERTS` pointing to its
+   public CA certificate.
+3. Start the variant with `pnpm dev:api:preview`. Open
+   `https://cms.lace.test:3443/admin/` and sign in. Save a routed draft and
+   choose **Create preview**. The new services share the existing SQLite
+   and SILO data. Only the TLS gateway binds to loopback. The builder uses
+   a read-only Git mount and private scratch space.
+
+If creation is unavailable, check the flag, distinct origins and credentials.
+`lace doctor` checks local files and packages; the signed-in build verifies
+the full path. Fix dirty source by committing it before retrying.
+
+Stop with `pnpm dev:stop`. To withdraw, set `LACE_PREVIEW_ENABLED=false`,
+restore your HTTP CMS and API URLs and run `pnpm dev:api`. This withdraws
+viewing and runner access and retains SQLite and SILO data. Resolve outstanding
+work before re-enabling. Revoke linked Lace sessions and rotate dedicated
+secrets if old access must remain revoked.
+
+<!-- lace-site: end -->
+
 ## Repeat and restart
 
 Daily start and stop:

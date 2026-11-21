@@ -9,6 +9,7 @@ import {
 } from "@lacecms/platform-node";
 import { missingLedger } from "../diagnostics/diagnostics.js";
 import { CliError, EXIT, type Target } from "../shared/cli.js";
+import { parseJsonc } from "../shared/jsonc.js";
 
 const UNSUPPORTED_DATABASE =
   "The selected database was migrated by a Lace engine older than the baseline migration and cannot be upgraded; recreate it (export its content first if you need to keep it).";
@@ -26,16 +27,6 @@ export async function assertD1Baseline(database: D1Database): Promise<void> {
   }
   if (uncheckedD1Migrations(names).length > 0)
     throw new CliError("SCHEMA_UNSUPPORTED", UNSUPPORTED_DATABASE, EXIT.SCHEMA);
-}
-
-function parseJsonc(value: string): unknown {
-  return JSON.parse(
-    value
-      .split("\n")
-      .filter((line) => !line.trim().startsWith("//"))
-      .join("\n")
-      .replace(/,(\s*[}\]])/gu, "$1"),
-  );
 }
 
 export async function verifyD1Config(configPath: string, databaseId: string): Promise<void> {

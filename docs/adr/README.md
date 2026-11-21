@@ -40,3 +40,6 @@ An `amended` or `superseded` decision must identify its amendment or successor.
 | 0030 | [rc2 is the oldest supported release](0030-rc2-oldest-supported.md) | accepted | — |
 | 0031 | [Route-less collections](0031-route-less-collections.md) | accepted | — |
 | 0032 | [Share durable outbox contracts through a dedicated subpath](0032-outbox-contract-boundary.md) | accepted | — |
+| 0033 | [Protected static preview of one saved draft](0033-protected-static-draft-preview.md) | accepted | — |
+
+ADR 0033 implementation progress is tracked in the [PV1 roadmap](../extensibility-roadmap.md#pre-10-priority-pv1--protected-saved-draft-preview).

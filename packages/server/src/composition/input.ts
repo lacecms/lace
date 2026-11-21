@@ -14,6 +14,9 @@ import type {
   PublicContentReadPort,
   EmailSender,
   SensitiveRateLimiter,
+  PreviewBrowserAccess,
+  PreviewAdmissionService,
+  PreviewArtifactReader,
 } from "@lacecms/application";
 import type { BuildSiteIdentityDto } from "@lacecms/contracts";
 import type { ServerConfig } from "../shared/content-config.js";
@@ -72,7 +75,23 @@ export interface BuiltAdminResponder {
   fetch(request: Request): Promise<Response>;
 }
 
+export type AdminPreview = Pick<PreviewAdmissionService, "status" | "create"> & {
+  readonly origin: string;
+};
+
 export interface LaceAppInput {
+  /** Preview readiness and admission supplied by the runtime. */
+  readonly adminPreview?: AdminPreview | "configuration-required";
+  /** Present only for complete preview delivery composition or a checkpoint fixture. */
+  readonly preview?: PreviewBrowserAccess<Request>;
+  readonly reservedPreviewHostname?: string;
+  readonly previewArtifacts?: PreviewArtifactReader;
+  readonly previewRunner?: {
+    readonly origin: URL;
+    readonly fetch: (request: Request) => Promise<Response>;
+  };
+  /** Original request-target supplied by Node ingress before URL normalization. */
+  readonly previewRawPath?: (request: Request) => string | undefined;
   /** Reads trusted ingress metadata from the original request. */
   readonly clientAddress?: (request: Request) => string;
   /** Setup, user administration, invitations, recovery and self-service. */

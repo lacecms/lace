@@ -144,6 +144,12 @@ export function stubClient(overrides: Partial<AdminClient> = {}): AdminClient {
     loadSetupState: async () => ({ setupComplete: true }),
     setupAdmin: async () => undefined,
     loadBuildSite: async () => ({ site: null }),
+    loadPreviewConfig: async () => ({ ready: false }),
+    loadPreviewStatus: async () => null,
+    createPreview: async (_entryId, input) => ({
+      id: "preview-1",
+      revision: input.expectedRevision,
+    }),
     listBuilds: async () => ({ items: [] }),
     getBuild: async () => ({}) as never,
     requestBuild: async () => ({ coalesced: false, eventId: "event-1", targetVersion: 0 }),

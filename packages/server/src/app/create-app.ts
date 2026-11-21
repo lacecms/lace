@@ -9,6 +9,7 @@ import { createSetupSessionRoutes } from "../routes/setup-session.js";
 import { createAccountRoutes } from "../routes/accounts.js";
 import { createAdminUserRoutes } from "../routes/admin-users.js";
 import { createCredentialRoutes } from "../routes/credentials.js";
+import { createAdminPreviewRoutes } from "../routes/admin-preview.js";
 import { createBuildRoutes } from "../routes/builds.js";
 import { createActorContext } from "../composition/actor-context.js";
 import { createCapabilities } from "../composition/capabilities.js";
@@ -29,6 +30,10 @@ import { bodyLimit } from "hono/body-limit";
 import { Hono } from "hono";
 import { API_V1 } from "../routing/v1-routes.js";
 import { matchedRoutePolicy } from "../routing/route-matching.js";
+import { previewIngress } from "./preview.js";
+import { privatePreviewHeaders } from "../preview/handoff.js";
+import { supportsPreviewFrame } from "../preview/view-mode.js";
+import { previewRoutes } from "../routing/preview-routes.js";
 import {
   acceptsImport,
   authenticationChallenge,
@@ -53,6 +58,7 @@ export function createLaceApp(input: LaceAppInput) {
   if (!Number.isSafeInteger(input.maxBodyBytes) || input.maxBodyBytes < 1)
     throw new TypeError("maxBodyBytes must be a positive safe integer.");
   const app = new Hono();
+  const registerPreviewAuthorization = previewIngress(app, input);
   const actors = createActorContext(input.actors);
   const routeContext: RouteContext = Object.freeze({
     actors,
@@ -60,11 +66,17 @@ export function createLaceApp(input: LaceAppInput) {
   });
   const { actor } = actors;
 
-  app.onError((error, context) =>
-    isProtocolErrorPath(context.req.path)
+  app.onError((error, context) => {
+    if (
+      input.preview &&
+      (new URL(context.req.raw.url).host === new URL(input.preview.previewOrigin).host ||
+        context.req.path === API_V1 + previewRoutes.admin.authorize.path)
+    )
+      return errorResponse(classifyError(error), privatePreviewHeaders());
+    return isProtocolErrorPath(context.req.path)
       ? protocolErrorResponse("server_error", 503, noStore)
-      : errorResponse(classifyError(error)),
-  );
+      : errorResponse(classifyError(error));
+  });
 
   app.use(async (context, next) => {
     context.set("lace.clientAddress", input.clientAddress?.(context.req.raw) ?? "0.0.0.0");
@@ -217,17 +229,21 @@ export function createLaceApp(input: LaceAppInput) {
 
   registerProtocolRoutes(app, routeContext);
   registerHealthRoutes(app, routeContext);
+  const frameOrigin =
+    input.preview && supportsPreviewFrame(input.preview) ? input.preview.previewOrigin : undefined;
   const v1 = new Hono()
     .route("/", createSetupSessionRoutes(routeContext))
     .route("/", createAccountRoutes(routeContext))
     .route("/", createAdminUserRoutes(routeContext))
     .route("/", createCredentialRoutes(routeContext))
     .route("/", createBuildRoutes(routeContext))
+    .route("/", createAdminPreviewRoutes(routeContext, frameOrigin))
     .route("/", createMediaRoutes(routeContext))
     .route("/", createContentRoutes(routeContext))
     .route("/", createPublicRoutes(routeContext));
   registerOpenApiRoute(v1, app, routeContext);
   const appWithV1 = app.route(API_V1, v1);
+  registerPreviewAuthorization();
   registerDocsRoutes(app, routeContext);
 
   app.notFound(async (context) => {
@@ -236,8 +252,22 @@ export function createLaceApp(input: LaceAppInput) {
       !context.req.path.startsWith("/api/") &&
       context.req.path !== "/health/live" &&
       context.req.path !== "/health/ready"
-    )
-      return input.adminAssets.fetch(context.req.raw);
+    ) {
+      const response = await input.adminAssets.fetch(context.req.raw);
+      if (
+        input.preview &&
+        context.req.path.startsWith("/admin/") &&
+        response.headers.get("content-type")?.startsWith("text/html")
+      ) {
+        const headers = new Headers(response.headers);
+        headers.append(
+          "content-security-policy",
+          `frame-src ${input.preview.previewOrigin}; frame-ancestors 'none'`,
+        );
+        return new Response(response.body, { status: response.status, headers });
+      }
+      return response;
+    }
     return notFound();
   });
 

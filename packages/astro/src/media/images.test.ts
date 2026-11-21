@@ -10,7 +10,7 @@ import {
   prepareLaceImage,
   variantWidths,
   webpHasAlpha,
-} from "./index.js";
+} from "../index.js";
 
 const temporaryDirectories: string[] = [];
 

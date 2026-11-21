@@ -71,6 +71,7 @@ catalog:
   lucide-react: 1.73.0
   miniflare: 5.20260903.0-alpha
   nodemailer: 10.5.0
+  parse5: 8.0.1
   oxfmt: 0.66.0
   oxlint: 1.81.0
   react: 19.3.1
@@ -81,6 +82,7 @@ catalog:
   sonner: 2.0.8
   tailwind-merge: 3.7.0
   tailwindcss: 4.3.3
+  tldts: 7.4.13
   turbo: 2.11.11
   typescript: 7.0.2
   ulid: 3.0.2

@@ -1,6 +1,8 @@
 import { mcpContentOperations } from "@lacecms/application";
 import { defineRoute, type RoutePolicy } from "./route-policy.js";
 
+import { previewRoutes } from "./preview-routes.js";
+
 export const API_V1 = "/api/v1";
 
 export const v1Routes = {
@@ -135,6 +137,11 @@ export const v1Routes = {
     emailTest: defineRoute("POST", "/admin/settings/email-test", "session", {
       rateLimit: { operation: "email", scope: "actor" },
     }),
+  },
+  preview: {
+    config: previewRoutes.admin.config,
+    status: previewRoutes.admin.status,
+    create: previewRoutes.admin.create,
   },
   documentation: { openApi: defineRoute("GET", "/openapi.json", "public") },
 } as const;

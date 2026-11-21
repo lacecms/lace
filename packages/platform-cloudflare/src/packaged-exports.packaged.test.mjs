@@ -21,6 +21,7 @@ test("packaged entry point keeps its public exports", async () => {
     "DeployHookSiteBuildTrigger",
     "NoopCloudflareCache",
     "PAGES_API_MAX_RESPONSE_BYTES",
+    "PREVIEW_MAINTENANCE_CRON",
     "PagesDeploymentStatusReader",
     "SCHEDULED_MEDIA_DELETION_CLAIMS",
     "SCHEDULED_SITE_BUILD_CLAIMS",
@@ -37,6 +38,7 @@ test("packaged entry point keeps its public exports", async () => {
     "d1ContentRepository",
     "packageName",
     "pagesDeploymentObservation",
+    "parseCloudflarePreviewVars",
     "parseCloudflareSettings",
   ]);
 });

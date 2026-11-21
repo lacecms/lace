@@ -27,6 +27,7 @@ import type {
   PublicRecordContent,
   SiteBuildRecord,
 } from "@lacecms/application";
+import { PreviewContextLimitError } from "@lacecms/domain";
 import type {
   ActorId,
   ContentEntry,
@@ -380,6 +381,7 @@ export class SqlContentReader implements ContentLinkReadPort {
    */
   public async exportBuildContentPage(
     input: ExportBuildContentPageInput,
+    maxGlobalsBytes?: number,
   ): Promise<BuildContentExportPage> {
     const limit = assertBuildExportPageSize(input.limit);
     const after = input.after === undefined ? undefined : decodeBuildExportCursor(input.after);
@@ -406,6 +408,8 @@ export class SqlContentReader implements ContentLinkReadPort {
           };
           expected = after?.version ?? state.version;
           assertBuildExportVersion(expected, state.version);
+          if (maxGlobalsBytes !== undefined && (state.globals_bytes ?? 0) > maxGlobalsBytes)
+            throw new PreviewContextLimitError();
           const pageRange = buildExportPageRange(
             from,
             candidateRows as readonly BuildExportCandidateRow[],

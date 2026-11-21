@@ -729,6 +729,38 @@ while pages keep revalidating. On Cloudflare Pages the starter site's
 A site that changes Astro's `build.assets` directory gets no long-lived
 caching: its assets keep revalidating.
 
+## Adopt protected draft preview
+
+The starter comes with the two integration points below. For an existing
+site, install Astro 7.4.12 or a later 7.4 patch and matching Lace packages.
+Use static directory output without an adapter, asset CDN prefix, i18n
+routing or incremental builds. Commit a reproducible pnpm lockfile.
+
+In `astro.config.*`, import `lacePreview` from `@lacecms/astro/preview` and
+append `lacePreview()` to your existing `integrations`. In the server-only
+loader from step 3, use `createAstroPreviewSiteLoader` from that subpath
+in place of `createAstroSiteLoader`, keeping its options. Read entries
+through the same loader in `getStaticPaths()` and in page frontmatter.
+This includes a saved draft with a new route. Fixed pages can use
+`site.byPath(Astro.url.pathname)`. Normal builds still read published content.
+
+Import assets through Astro. Literal local assets must be present in the
+package. Use `import.meta.env.BASE_URL` for runtime paths to packaged assets
+so they work below the generation prefix. Verify CSS, scripts, fonts, images
+and downloads. In-page fragment links stay local. Other site-page links
+open the public URL under its configured base path, for example `/journal/`.
+
+Check the server-only `(await getSite()).preview` flag before emitting
+analytics tags, form submission code and live embeds. You own those external
+side effects, plus any custom browser requests and build-time calls.
+Avoid service workers on the preview origin. Keep frozen input and runner
+credentials in the build process and out of browser-visible variables.
+An unsupported integration or missing route fails the preview.
+
+Follow the generated deployment guide for HTTPS, source selection, storage
+and credentials. A project with no site must first connect an Astro site.
+Preview setup in the CMS does not edit existing site files.
+
 ## 13. Build
 
 ```sh

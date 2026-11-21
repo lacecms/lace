@@ -313,6 +313,9 @@ retry each insert a distinct event available at the request time.
 - A model with entries and a referenced media row cannot be deleted.
 - `content_entries.model_key` uses `ON UPDATE CASCADE`, so an explicit
   `renamedFrom` sync changes the model key atomically.
+- Preview generation identities and media dependency IDs can outlive the
+  source rows. Preview handoffs and sessions cascade with the parent Lace
+  session.
 - Foreign-key enforcement is enabled on every Node SQLite connection and
   verified in D1 contract tests.
 
@@ -485,6 +488,45 @@ erDiagram
     text grant_id FK
     text issuance_id FK
   }
+  %% preview.ts
+  preview_generations {
+    text id PK
+    text entry_id
+  }
+  preview_current {
+    text entry_id PK, FK
+    text generation_id FK
+  }
+  preview_execution_slot {
+    integer singleton_key PK
+    text generation_id FK
+  }
+  preview_targets {
+    text generation_id PK, FK
+  }
+  preview_target_blocks {
+    text generation_id PK, FK
+    text block_key PK
+  }
+  preview_media_dependencies {
+    text generation_id PK, FK
+    text media_id PK
+  }
+  preview_runner_credentials {
+    text generation_id PK, FK
+  }
+  preview_handoffs {
+    text id PK
+    text generation_id FK
+    text session_id FK
+  }
+  preview_sessions {
+    text token_hash PK
+    text session_id FK
+  }
+  preview_capture_state {
+    integer singleton_key PK
+  }
   content_entries }o--|| content_models : "model_key"
   content_entries }o--o| content_snapshots : "draft_snapshot_id"
   content_entries }o--o| content_snapshots : "published_snapshot_id"
@@ -518,4 +560,13 @@ erDiagram
   oauth_issuances }o--|| oauth_grants : "grant_id"
   oauth_token_bindings }o--|| oauth_grants : "grant_id"
   oauth_token_bindings }o--|| oauth_issuances : "issuance_id"
+  preview_current |o--|| preview_generations : "entry_id, generation_id"
+  preview_execution_slot |o--|| preview_generations : "generation_id"
+  preview_targets |o--|| preview_generations : "generation_id"
+  preview_target_blocks }o--|| preview_targets : "generation_id"
+  preview_media_dependencies }o--|| preview_generations : "generation_id"
+  preview_runner_credentials |o--|| preview_generations : "generation_id"
+  preview_handoffs }o--|| preview_generations : "generation_id"
+  preview_handoffs }o--o| session : "session_id"
+  preview_sessions }o--|| session : "session_id"
 ```

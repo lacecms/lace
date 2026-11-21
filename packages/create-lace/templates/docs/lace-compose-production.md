@@ -129,6 +129,73 @@ Wait until `docker compose ps` lists every service as running (`healthy` where a
 
 While the services run, `/health/ready` is the readiness authority: the API keeps SQLite in write-ahead-log mode, which doctor's `ready` stage refuses to inspect, so it reports the database as unavailable. To run it, stop the database users and switch the journal mode first as described in [doctor limits](lace-operations.md#read-only-environment-checks).
 
+<!-- lace-site: starter existing -->
+
+## Prepare protected draft preview
+
+Preview is off by default. Apply the forward migrations and keep the API and
+builder images on the same release. Configure the following prerequisites
+before opting in.
+
+<!-- lace-site: starter -->
+
+The default `LACE_BUILD_SOURCE_ROOT=.` and `LACE_BUILD_SITE_DIR=site` select the
+starter. The starter already includes the Astro preview integration.
+
+<!-- lace-site: end -->
+<!-- lace-site: existing -->
+
+The default `LACE_BUILD_SOURCE_ROOT={{SITE_PATH}}` and `LACE_BUILD_SITE_DIR=.`
+select the existing Astro root. If that site is a workspace member, mount its
+Git and lockfile root and set `LACE_BUILD_SITE_DIR` to the member's relative
+path. Follow [Adopt protected draft preview](lace-astro-site.md#adopt-protected-draft-preview)
+in the existing site.
+
+<!-- lace-site: end -->
+
+The mount must be a clean Git checkout at its repository root with a committed
+`pnpm-lock.yaml`. Commit the selected source before preview. Use regular
+source files without symlinks, submodules or Git LFS pointers.
+
+Set these non-secret values in the root `.env`, using your actual origins
+and the site's public base path.
+
+```dotenv
+LACE_PREVIEW_ENABLED=true
+LACE_PUBLIC_BASE_URL=https://cms.example.com/
+LACE_PREVIEW_HOST=preview.example.com
+LACE_PREVIEW_ORIGIN=https://preview.example.com/
+LACE_BUILD_SITE_URL=https://site.example.com/journal/
+```
+
+Set independent random `LACE_PREVIEW_BUILDER_SECRET` and
+`LACE_PREVIEW_RUNNER_SECRET` values privately in the same ignored file.
+Configure DNS and TLS for the distinct preview hostname and forward it to
+`web` with the original Host header and with caching bypassed. The generated
+`deploy/nginx-preview.conf` forwards preview access to the API. Compose
+wires private API-to-builder and runner-to-API URLs and uses private S3.
+Keep that traffic and storage off public ingress. The preview package uses
+private storage and the published site keeps its own static release.
+
+During a maintenance window, run
+`pnpm exec lace doctor --target node --mode compose --stage setup` and review
+the `preview` row. Run `pnpm prod:start` to recreate changed services with
+the new setting. Sign in and create a saved-draft preview to verify delivery. Publication gets the next builder slot. A running
+preview has up to 10 minutes for execution and upload, within 15 minutes
+overall. Ready output expires after 24 hours. Fix source, storage or timeout
+issues and choose **Retry preview** on the current saved revision.
+
+To withdraw, close preview ingress, set `LACE_PREVIEW_ENABLED=false` and
+recreate the API, dispatcher and builder. Confirm old viewer and runner
+requests are denied. During maintenance, stop outstanding preview work and
+confirm termination before re-enabling. Revoke the dedicated credentials
+if old access must remain revoked. Use **Sign out everywhere** for
+affected accounts to revoke linked preview sessions. Clean private preview
+objects after access and execution stop. Keep the public release and use the
+usual database and storage backup procedure.
+
+<!-- lace-site: end -->
+
 ## Configure email (optional)
 
 Account email is disabled until you set `LACE_EMAIL_PROVIDER` in `.env`. Use `smtp` with STARTTLS or implicit TLS, or `resend` with `LACE_RESEND_API_KEY`, plus `LACE_EMAIL_FROM`; see [Email delivery](lace-operations.md#email-delivery). Run `pnpm exec lace doctor --target node --mode compose`, recreate the API with `docker compose up -d --force-recreate api`, then send a test from Settings → Email delivery.

@@ -46,6 +46,7 @@ test("packaged entry point keeps its public exports", async () => {
     "openNodeDatabase",
     "packageName",
     "parseNodeEmailSettings",
+    "parseNodePreviewSettings",
     "parseNodeRuntimeSettings",
     "resolveNodeClientAddress",
     "runLocalContentSync",

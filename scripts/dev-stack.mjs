@@ -7,8 +7,9 @@ import { basename, join, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const composeFile = join(root, "docker-compose.dev.yml");
+const previewComposeFile = join(root, "docker-compose.dev.preview.yml");
 const localEnvironment = join(root, ".env");
-const localProject = "lace-dev";
+const localProject = process.env.COMPOSE_PROJECT_NAME || "lace-dev";
 const acceptanceDirectory = join(root, ".lace-acceptance");
 const acceptanceEnvironment = join(acceptanceDirectory, ".env");
 const acceptanceState = join(acceptanceDirectory, "state.json");
@@ -20,7 +21,7 @@ function run(command, args, options = {}) {
   return result.status ?? 1;
 }
 
-function compose(project, environment, args) {
+function compose(project, environment, args, preview = false) {
   return [
     "compose",
     "--project-name",
@@ -29,6 +30,7 @@ function compose(project, environment, args) {
     environment,
     "--file",
     composeFile,
+    ...(preview ? ["--file", previewComposeFile] : []),
     ...args,
   ];
 }
@@ -320,18 +322,27 @@ async function main() {
   }
   await requireLocalEnvironment();
   if (command === "start") {
+    const args = process.argv.slice(3).filter((value, index) => index !== 0 || value !== "--");
+    if (args.length > 1 || (args.length === 1 && args[0] !== "--preview"))
+      throw new Error("Usage: pnpm dev:node [-- --preview]");
+    const preview = args[0] === "--preview";
     run(
       "docker",
-      compose(localProject, localEnvironment, ["up", "--build", "--wait", "--wait-timeout", "180"]),
+      compose(
+        localProject,
+        localEnvironment,
+        ["up", "--build", "--remove-orphans", "--wait", "--wait-timeout", "180"],
+        preview,
+      ),
     );
     return;
   }
   if (command === "stop") {
-    run("docker", compose(localProject, localEnvironment, ["stop"]));
+    run("docker", compose(localProject, localEnvironment, ["stop"], true));
     return;
   }
   if (command === "logs") {
-    run("docker", compose(localProject, localEnvironment, ["logs", "--follow"]));
+    run("docker", compose(localProject, localEnvironment, ["logs", "--follow"], true));
     return;
   }
   if (command === "bootstrap") {

@@ -591,7 +591,131 @@ test("site check passes for a headless project without probing site/", async () 
     },
   });
   expect(getCheck(result, "site")).toMatchObject({ status: "pass", code: "SITE_NONE" });
+  expect(getCheck(result, "preview")).toMatchObject({
+    status: "skipped",
+    code: "PREVIEW_SITE_UNAVAILABLE",
+  });
   expect(paths.some((path) => path.includes(`${join(root, "site")}`))).toBe(false);
+});
+
+async function previewPackages(site, version = "7.4.12") {
+  for (const [name, manifest] of [
+    ["astro", { version }],
+    ["@lacecms/astro", { exports: { "./preview": "./dist/preview.js" } }],
+  ]) {
+    const path = join(site, "node_modules", name);
+    await mkdir(path, { recursive: true });
+    await writeFile(join(path, "package.json"), JSON.stringify(manifest));
+  }
+}
+
+test("Compose preview reports partial setup and checks the selected workspace member without leaking credentials", async () => {
+  const { root, parent } = await siteProject({ mode: "existing", path: ".." }, true);
+  const web = join(parent, "web");
+  await mkdir(web);
+  await writeFile(join(web, "package.json"), '{"dependencies":{"astro":"^7.4.12"}}');
+  await previewPackages(web, "7.4.11");
+  const options = { ...baseOptions, mode: "compose" };
+  const environment = {
+    ...settings,
+    LACE_BUILD_SOURCE_ROOT: "..",
+    LACE_BUILD_SITE_DIR: "web",
+    LACE_BUILD_SITE_URL: "https://site.example.com/journal/",
+    LACE_PUBLIC_BASE_URL: "https://cms.example.com/",
+    LACE_PREVIEW_HOST: "preview.example.com",
+    LACE_PREVIEW_ENABLED: "true",
+    LACE_PREVIEW_ORIGIN: "https://preview.example.com/",
+    LACE_PREVIEW_BUILDER_SECRET: sentinel.repeat(2),
+  };
+  const off = getCheck(
+    await execute(root, { ...environment, LACE_PREVIEW_ENABLED: "invalid" }, options),
+    "preview",
+  );
+  expect(off).toMatchObject({ status: "skipped", code: "PREVIEW_DISABLED" });
+  const partial = getCheck(await execute(root, environment, options), "preview");
+  expect(partial).toMatchObject({ status: "skipped", code: "PREVIEW_CONFIGURATION_REQUIRED" });
+  expect(partial.reason).toContain("LACE_PREVIEW_RUNNER_SECRET");
+  environment.LACE_PREVIEW_RUNNER_SECRET = "r".repeat(64);
+  const incompatible = await execute(root, environment, options);
+  expect(getCheck(incompatible, "preview")).toMatchObject({
+    status: "skipped",
+    code: "PREVIEW_SITE_INCOMPATIBLE",
+  });
+  await previewPackages(web);
+  const configured = await execute(root, environment, options);
+  expect(getCheck(configured, "preview")).toMatchObject({
+    status: "pass",
+    code: "PREVIEW_STATIC_CHECK_PASSED",
+  });
+  expect(configured.exitCode).toBe(incompatible.exitCode);
+  expect(configured.output).not.toContain(sentinel);
+  expect(configured.output).not.toContain("https://site.example.com/journal/");
+});
+
+test("loopback preview checks for the Compose certificate files without exposing their contents", async () => {
+  const { root } = await siteProject({ mode: "starter", path: "site" }, true);
+  await previewPackages(join(root, "site"));
+  await writeFile(join(root, "site/package.json"), '{"dependencies":{"astro":"^7.4.12"}}');
+  const tls = join(root, ".lace/tls");
+  const environment = {
+    ...settings,
+    LACE_PREVIEW_ENABLED: "true",
+    LACE_DEV_PREVIEW_BUILDER_SECRET: "t".repeat(64),
+    LACE_DEV_PREVIEW_RUNNER_SECRET: "u".repeat(64),
+  };
+  const options = { ...baseOptions, mode: "compose" };
+  const partial = getCheck(await execute(root, environment, options), "preview");
+  expect(partial).toMatchObject({ status: "skipped", code: "PREVIEW_CONFIGURATION_REQUIRED" });
+  expect(partial.reason).toContain("LACE_DEV_TLS_KEY");
+  await mkdir(tls, { recursive: true });
+  await writeFile(join(tls, "cert.pem"), "fixture certificate");
+  await writeFile(join(tls, "key.pem"), sentinel);
+  const configured = await execute(root, environment, options);
+  expect(getCheck(configured, "preview")).toMatchObject({
+    status: "pass",
+    code: "PREVIEW_STATIC_CHECK_PASSED",
+  });
+  expect(configured.output).not.toContain(sentinel);
+});
+
+test("Cloudflare preview checks its private binding, cron and Git-root-relative Astro selection", async () => {
+  const { root, parent } = await siteProject({ mode: "existing", path: ".." }, true);
+  await previewPackages(parent);
+  const vars = {
+    LACE_PUBLIC_BASE_URL: "https://cms.example.com/",
+    LACE_BUILD_SITE_URL: "https://site.example.com/journal/",
+    LACE_PREVIEW_ENABLED: "true",
+    LACE_PREVIEW_ORIGIN: "https://preview.example.com/",
+    LACE_PREVIEW_GITHUB_REPOSITORY: "example/site",
+    LACE_PREVIEW_GITHUB_REF: "main",
+    LACE_PREVIEW_GITHUB_WORKFLOW: "lace-preview.yml",
+    LACE_PREVIEW_SITE_PATH: ".",
+  };
+  const configPath = join(root, cloudflare.LACE_WRANGLER_CONFIG);
+  const options = { ...baseOptions, target: "cloudflare-remote", mode: null };
+  const probes = {
+    process: async (command) => (command === "git" ? parent : "12.3.4"),
+  };
+  const config = { vars, r2_buckets: [{ binding: "MEDIA", bucket_name: "media" }] };
+  await writeFile(configPath, JSON.stringify(config));
+  const partial = getCheck(await execute(root, cloudflare, options, probes), "preview");
+  expect(partial.reason).toContain("private PREVIEW R2 binding");
+  expect(partial.reason).toContain("preview maintenance cron");
+  config.r2_buckets.push({ binding: "PREVIEW", bucket_name: "preview" });
+  config.triggers = { crons: ["* * * * *", "*/2 * * * *"] };
+  // Wrangler JSONC accepts inline comments and URLs containing //.
+  await writeFile(
+    configPath,
+    JSON.stringify(config, null, 2).replace('"vars": {', '"vars": { // Worker vars'),
+  );
+  const configured = await execute(root, cloudflare, options, probes);
+  expect(getCheck(configured, "preview")).toMatchObject({
+    status: "pass",
+    code: "PREVIEW_STATIC_CHECK_PASSED",
+    nextAction: expect.stringContaining("deployed Worker/GitHub credentials"),
+  });
+  expect(configured.output).not.toContain(sentinel);
+  expect(configured.output).not.toContain("example/site");
 });
 
 test("an existing site without packages or blocks is expected at setup and fails at ready", async () => {

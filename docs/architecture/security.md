@@ -205,3 +205,21 @@ cannot replace it.
 - audit-friendly actor IDs on all content mutations;
 - the Cloudflare bundle enables the Better Auth compatibility flag required
   for `AsyncLocalStorage`, covered by the Cloudflare smoke test.
+
+### Protected draft preview (selected PV1 scope)
+
+Preview creation requires a browser session with `content:write`; viewing
+requires current `content:read`. Guest, import, MCP and public build credentials
+do not authorize preview access. An origin-bound, browser-bound, one-use
+handoff creates a host-only preview cookie tied to the original Lace session.
+Every private preview HTML or resource request checks the live parent session,
+current permission and generation validity before storage access. Logout,
+revocation and account disablement deny subsequent requests without waiting
+for the cookie or package to expire. The preview hostname exposes no admin API.
+
+Site-owned preview scripts run on a different origin from the admin. The
+admin may embed that origin in an iframe when both HTTPS origins are same-site;
+other configurations open a top-level tab. Private resources use `no-store`,
+never an unauthenticated bucket URL or a public CDN cache. Public content and
+its media endpoints retain their existing policy.
+See [ADR 0033](../adr/0033-protected-static-draft-preview.md).

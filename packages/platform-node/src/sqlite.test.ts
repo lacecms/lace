@@ -168,6 +168,8 @@ test("migrates an empty file, reopens with SQLite invariants, and enforces const
           "outbox_events",
           "installation_state",
           "mutation_guards",
+          "preview_generations",
+          "preview_execution_slot",
           "user",
         ]),
       );

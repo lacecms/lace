@@ -2,7 +2,7 @@
 title: Deploy on Cloudflare
 description: Run the CMS as a Worker with D1 and R2, and deploy the static site separately on Pages.
 kind: guide
-verifiedAgainst: 0.1.0-rc2
+verifiedAgainst: 0.1.0-rc6
 ---
 
 On Cloudflare, the CMS API and Admin run as a Worker with D1 for content and accounts and a private R2 bucket for media. Your Astro site is a separate static deployment, usually on Cloudflare Pages, that reads published content from the Worker at build time. This guide runs the Worker locally, prepares your account, deploys the Worker and connects the site's deployment.
@@ -78,6 +78,71 @@ Either way, set `LACE_BUILD_SITE_URL` to the served site URL (also in the Worker
 A hook result of **Accepted** means only that the provider accepted the request, not that readers see new content. Optional Pages deployment tracking uses `LACE_PAGES_ACCOUNT_ID`, `LACE_PAGES_PROJECT_NAME` and a separate Pages-read-only `LACE_PAGES_API_TOKEN` secret; set all three or none. Builds then follows the exact deployment to **Succeeded**, **Failed**, **Cancelled** or **Unknown** at its deadline (`LACE_PAGES_TRACKING_TIMEOUT_MINUTES`, default 60).
 
 A scheduled Worker invocation runs every minute and recovers build and media work left unfinished; you do not need to configure it beyond the generated cron trigger.
+
+## Prepare protected draft preview
+
+Apply the remote D1 migrations. Use the starter or
+[adopt the Astro integration](../../astro-integration/#adopt-protected-draft-preview).
+Preview is off by default. Configure the following settings for the deployed
+Worker.
+
+1. Place the generated `.github/workflows/lace-preview.yml` and
+   `.github/scripts/lace-preview.mjs` at the trusted site repository root.
+   Commit the workflow to the default branch and the configured ref. Use
+   matching release packages and the workflow's compatible builder image.
+   The Worker resolves that ref to a commit before dispatch.
+2. Create a dedicated private R2 bucket and bind it as `PREVIEW` alongside
+   `MEDIA`. Leave public bucket access off. Add `*/2 * * * *` to
+   `triggers.crons` alongside the publication cron. Point the preview custom
+   hostname to the same Worker and bypass edge caching for it. [Cloudflare
+   Worker Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)
+3. In Worker vars set `LACE_PUBLIC_BASE_URL=https://cms.example.com/`,
+   `LACE_PREVIEW_ORIGIN=https://preview.example.com/` and
+   `LACE_BUILD_SITE_URL=https://site.example.com/journal/`. Use distinct
+   preview, CMS and public site hostnames. Include the actual public site
+   base path. Set `LACE_PREVIEW_GITHUB_REPOSITORY` to `owner/repository`,
+   `LACE_PREVIEW_GITHUB_REF` to the branch or tag, and
+   `LACE_PREVIEW_GITHUB_WORKFLOW=lace-preview.yml`. Set
+   `LACE_PREVIEW_SITE_PATH=site` for a starter at the Git root, `.` for
+   a site at the Git root, or a Git-root-relative path such as `web` for
+   a workspace member. If the starter is under `cms/`, use `cms/site`.
+   Commit the frozen lockfile needed by that layout.
+4. Put a repository-scoped GitHub token with **Contents: Read** and
+   **Actions: Read and write** into the Worker secret
+   `LACE_PREVIEW_GITHUB_TOKEN`. It resolves commits, dispatches, checks
+   and cancels workflow runs. Set an independent random
+   `LACE_PREVIEW_RUNNER_SECRET` as both a Worker secret and a GitHub
+   Actions secret. Set the GitHub Actions variable `LACE_PREVIEW_API_ORIGIN`
+   to the bare CMS HTTPS origin. Keep secret values out of Wrangler `vars`,
+   git, the workflow's dispatch inputs and the site's environment. [GitHub
+   commit permissions](https://docs.github.com/en/rest/commits/commits#get-a-commit),
+   [workflow dispatch permissions](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event),
+   [Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
+5. Set `"LACE_PREVIEW_ENABLED": "true"` in `worker/wrangler.jsonc` under
+   `vars`. Review the generated `docs/lace-cloudflare.md` for commands. Run
+   `lace doctor --target cloudflare-remote --stage setup` with the remote
+   operator settings. The `preview` row checks the selected Wrangler file
+   and local site packages. Deploy the Worker and verify deployed secrets,
+   the route, bucket privacy and the workflow/ref with a saved-draft build. Bucket creation,
+   hostname registration, secret updates, pushes, deployment and preview
+   requests are explicit operator actions.
+
+The workflow writes private output through the Worker and consumes GitHub
+Actions runner time plus Workers, D1 and R2 resources. Check account quotas,
+billing and Actions policy if dispatch or execution fails. A preview creates
+no Pages deployment. To recover, fix the settings or available quota, let
+Lace reconcile the run, then use **Retry preview** in Lace. Use the generation
+ID and recorded GitHub run ID to identify the job. See the
+[preview lifetime and retry rules](../../editing-content/#preview-a-saved-draft).
+
+To withdraw, close preview ingress, set `"LACE_PREVIEW_ENABLED": "false"`
+and redeploy. Confirm old viewer and runner requests are denied. Cancel
+outstanding Actions work and confirm termination before re-enabling. Revoke
+dedicated credentials if old access must remain revoked. Use
+**Sign out everywhere** for affected accounts to revoke the Lace sessions
+that authorize preview. Remove private output once delivery is closed and
+runners have stopped. Preserve the `MEDIA` bucket and follow the D1/R2 backup
+procedure.
 
 ## Apply configuration changes and upgrades
 

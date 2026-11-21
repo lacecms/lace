@@ -224,7 +224,23 @@
                   "PAYLOAD_TOO_LARGE",
                   "RATE_LIMITED",
                   "RESET_INVALID",
-                  "VALIDATION_FAILED"
+                  "VALIDATION_FAILED",
+                  "PREVIEW_CONFIGURATION_UNAVAILABLE",
+                  "PREVIEW_INELIGIBLE",
+                  "PREVIEW_REVISION_CONFLICT",
+                  "PREVIEW_IDEMPOTENCY_CONFLICT",
+                  "PREVIEW_BUSY",
+                  "PREVIEW_CONTEXT_CHANGED",
+                  "PREVIEW_VALIDATION_FAILED",
+                  "PREVIEW_SOURCE_UNAVAILABLE",
+                  "PREVIEW_DEPENDENCY_FAILED",
+                  "PREVIEW_ROUTE_CONFLICT",
+                  "PREVIEW_RENDER_FAILED",
+                  "PREVIEW_STORAGE_FAILED",
+                  "PREVIEW_RESOURCE_LIMIT",
+                  "PREVIEW_PROVIDER_UNAVAILABLE",
+                  "PREVIEW_PROVIDER_QUOTA",
+                  "PREVIEW_TIMED_OUT"
                 ],
                 "type": "string"
               },
@@ -4565,6 +4581,282 @@
           }
         ],
         "summary": "Review incoming links before delete or unpublish",
+        "tags": ["admin"]
+      }
+    },
+    "/api/v1/admin/entries/{entryId}/preview": {
+      "get": {
+        "operationId": "getApiV1AdminEntriesByEntryIdPreview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entryId",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "createdAt": {},
+                        "expiresAt": {},
+                        "id": {
+                          "pattern": "^[A-Za-z0-9_-]{1,128}(?![\\s\\S])",
+                          "type": "string"
+                        },
+                        "readyAt": {},
+                        "reason": {
+                          "enum": [
+                            "PREVIEW_CONFIGURATION_UNAVAILABLE",
+                            "PREVIEW_INELIGIBLE",
+                            "PREVIEW_REVISION_CONFLICT",
+                            "PREVIEW_IDEMPOTENCY_CONFLICT",
+                            "PREVIEW_BUSY",
+                            "PREVIEW_CONTEXT_CHANGED",
+                            "PREVIEW_VALIDATION_FAILED",
+                            "PREVIEW_SOURCE_UNAVAILABLE",
+                            "PREVIEW_DEPENDENCY_FAILED",
+                            "PREVIEW_ROUTE_CONFLICT",
+                            "PREVIEW_RENDER_FAILED",
+                            "PREVIEW_STORAGE_FAILED",
+                            "PREVIEW_RESOURCE_LIMIT",
+                            "PREVIEW_PROVIDER_UNAVAILABLE",
+                            "PREVIEW_PROVIDER_QUOTA",
+                            "PREVIEW_TIMED_OUT"
+                          ],
+                          "type": "string"
+                        },
+                        "revision": {
+                          "maximum": 9007199254740991,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "state": {
+                          "enum": [
+                            "preparing",
+                            "dispatched",
+                            "running",
+                            "ready",
+                            "failed",
+                            "timed_out",
+                            "invalidated",
+                            "expired"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "revision", "state", "createdAt"],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Current preview or null"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The request did not satisfy the API contract (VALIDATION_FAILED)"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Draft preview is unavailable"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Read the current saved-draft preview",
+        "tags": ["admin"]
+      },
+      "post": {
+        "operationId": "postApiV1AdminEntriesByEntryIdPreview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entryId",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "expectedRevision": {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "idempotencyKey": {
+                    "pattern": "^[\\x21-\\x7e]{1,255}$",
+                    "type": "string"
+                  }
+                },
+                "required": ["expectedRevision", "idempotencyKey"],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "pattern": "^[A-Za-z0-9_-]{1,128}(?![\\s\\S])",
+                      "type": "string"
+                    },
+                    "revision": {
+                      "maximum": 9007199254740991,
+                      "minimum": 1,
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["id", "revision"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Existing preview request replayed"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "pattern": "^[A-Za-z0-9_-]{1,128}(?![\\s\\S])",
+                      "type": "string"
+                    },
+                    "revision": {
+                      "maximum": 9007199254740991,
+                      "minimum": 1,
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["id", "revision"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Saved revision accepted for preview"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Draft revision, eligibility, idempotency or preview capacity conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The request did not satisfy the API contract (VALIDATION_FAILED)"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Draft preview is unavailable"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Create a preview of the specified saved revision",
         "tags": ["admin"]
       }
     },
@@ -9964,6 +10256,85 @@
           }
         ],
         "summary": "Create content entry",
+        "tags": ["admin"]
+      }
+    },
+    "/api/v1/admin/preview/config": {
+      "get": {
+        "operationId": "getApiV1AdminPreviewConfig",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "missing": {
+                          "items": {
+                            "enum": ["preview-disabled", "preview-configuration"],
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "ready": {
+                          "const": false
+                        }
+                      },
+                      "required": ["ready"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "origin": {
+                          "type": "string"
+                        },
+                        "ready": {
+                          "const": true
+                        },
+                        "viewMode": {
+                          "enum": ["iframe", "new-tab"],
+                          "type": "string"
+                        }
+                      },
+                      "required": ["ready", "origin", "viewMode"],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Local configuration readiness"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Read draft preview configuration readiness",
         "tags": ["admin"]
       }
     },

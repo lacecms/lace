@@ -13,6 +13,9 @@ import {
   type InvitationListDto,
   type SessionRevocationResultDto,
   type BuildSiteSelectionDto,
+  type PreviewReadinessDto,
+  type PreviewReceiptDto,
+  type PreviewStatusDto,
   type SetupStateDto,
   type EmailTestResultDto,
   type MediaTagCatalogDto,
@@ -151,6 +154,12 @@ export interface AdminClient {
     },
     signal?: AbortSignal,
   ): Promise<LinkImpactPageDto>;
+  loadPreviewConfig(): Promise<PreviewReadinessDto>;
+  loadPreviewStatus(entryId: string, signal?: AbortSignal): Promise<PreviewStatusDto>;
+  createPreview(
+    entryId: string,
+    input: { readonly expectedRevision: number; readonly idempotencyKey: string },
+  ): Promise<PreviewReceiptDto>;
   loadEntry(entryId: string): Promise<AdminContentEntryDto>;
   listEntries(
     modelKey: string,

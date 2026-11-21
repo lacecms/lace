@@ -1,8 +1,10 @@
-// Directory dependencies: routing ← shared, security. shared ← runtime. routing, runtime, security, shared ← composition ← routes ← app.
+// Directory dependencies: routing ← shared, security, preview. shared ← runtime, preview.
+// routing, runtime, security, shared ← composition ← routes ← app; preview ← app.
 export const packageName = "@lacecms/server";
 
 // Runtime
 export { parseBuildSiteIdentity } from "./runtime/build-site.js";
+export { previewHostname, reservedPreviewHostname } from "./runtime/preview-host.js";
 export * from "./runtime/email.js";
 export * from "./runtime/mcp-settings.js";
 export * from "./runtime/feature-flags.js";
@@ -44,3 +46,4 @@ export {
 
 // Application
 export { createLaceApp } from "./app/create-app.js";
+export { createPreviewRunner } from "./preview/runner.js";

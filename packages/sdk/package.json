@@ -17,6 +17,11 @@
       "@lacecms/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./preview": {
+      "@lacecms/source": "./src/preview.ts",
+      "types": "./dist/preview.d.ts",
+      "import": "./dist/preview.js"
     }
   },
   "publishConfig": {
