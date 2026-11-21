@@ -30,6 +30,8 @@ export async function migrationStatements(
 
 export interface LocalCloudflare {
   readonly bucket: R2Bucket;
+  readonly previewBucket: R2Bucket;
+  readonly dispatchFetch: Miniflare["dispatchFetch"];
   readonly database: D1Database;
   readonly dispose: () => Promise<void>;
   readonly kv: KVNamespace;
@@ -37,17 +39,26 @@ export interface LocalCloudflare {
 
 /** Starts isolated in-memory local D1 (migrated), R2, and KV bindings. */
 export async function openLocalCloudflare(
-  options: { readonly migrate?: boolean; readonly persistTo?: string } = {},
+  options: {
+    readonly migrate?: boolean;
+    readonly persistTo?: string;
+    readonly script?: string;
+    readonly bindings?: Readonly<Record<string, string>>;
+  } = {},
 ): Promise<LocalCloudflare> {
   const miniflare = new Miniflare(
     convertV4MiniflareOptions({
       compatibilityDate: "2026-09-01",
+      compatibilityFlags: ["nodejs_compat"],
+      ...(options.bindings && { bindings: options.bindings }),
       d1Databases: ["DB"],
       ...(options.persistTo ? { resourcePersistencePath: options.persistTo } : {}),
       kvNamespaces: ["CACHE"],
       modules: true,
-      r2Buckets: ["MEDIA"],
-      script: "export default { fetch() { return new Response(null, { status: 404 }); } };",
+      r2Buckets: ["MEDIA", "PREVIEW"],
+      script:
+        options.script ??
+        "export default { fetch() { return new Response(null, { status: 404 }); } };",
     }),
   );
   const database: D1Database = await miniflare.getD1Database("DB");
@@ -69,8 +80,16 @@ export async function openLocalCloudflare(
   // Miniflare's declared binding types do not name the Workers interfaces
   // Lace's adapters accept; the bindings implement them at runtime.
   const bucket = (await miniflare.getR2Bucket("MEDIA")) as unknown as R2Bucket;
+  const previewBucket = (await miniflare.getR2Bucket("PREVIEW")) as unknown as R2Bucket;
   const kv = (await miniflare.getKVNamespace("CACHE")) as unknown as KVNamespace;
-  return { bucket, database, dispose: () => miniflare.dispose(), kv };
+  return {
+    bucket,
+    previewBucket,
+    database,
+    dispatchFetch: miniflare.dispatchFetch.bind(miniflare),
+    dispose: () => miniflare.dispose(),
+    kv,
+  };
 }
 
 /** Starts an isolated in-memory local D1 database with every migration applied. */

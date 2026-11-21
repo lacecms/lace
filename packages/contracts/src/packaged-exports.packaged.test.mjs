@@ -207,6 +207,8 @@ test("packaged entry point keeps its public exports", async () => {
     "previewGenerationIdSchema",
     "previewLogicalPathSchema",
     "previewObjectSchema",
+    "previewReadinessSchema",
+    "previewReceiptSchema",
     "previewSourceCommitSchema",
     "previewStatusSchema",
     "publicBlockSchema",

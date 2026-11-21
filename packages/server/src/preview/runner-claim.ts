@@ -50,7 +50,7 @@ export async function runnerJson(request: Request, limit: number): Promise<unkno
 export interface PreviewRunnerClaimSettings {
   readonly executor: string;
   readonly bootstrapSecret: string;
-  readonly acceptsRun: (id: string, run: string) => boolean;
+  readonly acceptsRun: (id: string, run: string, commit: string) => boolean | Promise<boolean>;
   readonly clock: Clock;
   readonly commands: Pick<PreviewCommandPort, "claimPreview">;
 }
@@ -69,7 +69,7 @@ export function previewRunnerClaim(settings: PreviewRunnerClaimSettings) {
     const body = v.safeParse(previewClaimRequestSchema, await runnerJson(request, 1024));
     if (!v.is(previewGenerationIdSchema, id) || !body.success) return { status: 400 } as const;
     const { commit, runId: run } = body.output;
-    if (!settings.acceptsRun(id, run)) return { status: 409 } as const;
+    if (!(await settings.acceptsRun(id, run, commit))) return { status: 409 } as const;
     const token = `${run}.${commit}.${hex(crypto.getRandomValues(new Uint8Array(32)))}`;
     const digest = await credentialHash(token);
     const claim = await commands.claimPreview({

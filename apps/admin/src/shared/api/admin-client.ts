@@ -8,6 +8,7 @@ import {
   type MediaUploader,
 } from "./admin-transport.js";
 import { COLLECTION_MATCHING_VERSION, NODE_LIST_QUERY_LIMITS } from "@lacecms/contracts";
+import { previewClient } from "./admin-client/preview.js";
 import { buildsClient } from "./admin-client/builds.js";
 import { accountsClient } from "./admin-client/accounts.js";
 import { settingsClient } from "./admin-client/settings.js";
@@ -38,6 +39,8 @@ export const adminQueryKeys = Object.freeze({
   accountCapabilities: ["admin", "account", "capabilities"] as const,
   mcpConnections: ["admin", "account", "mcp-connections"] as const,
   mcpConsent: (transaction: string) => ["admin", "mcp-consent", transaction] as const,
+  previewConfig: ["admin", "preview", "config"] as const,
+  previewStatus: (entryId: string) => ["admin", "preview", "status", entryId] as const,
   buildSite: ["admin", "build-site"] as const,
   builds: ["admin", "builds"] as const,
   buildHistory: ["admin", "builds", "history"] as const,
@@ -122,6 +125,7 @@ export function createAdminClient(injected?: Fetcher, uploader?: MediaUploader):
       : fetchUploader(fetcher));
   return Object.freeze({
     ...buildsClient(fetcher),
+    ...previewClient(fetcher),
     ...accountsClient(fetcher),
     ...settingsClient(fetcher),
     ...contentClient(fetcher),

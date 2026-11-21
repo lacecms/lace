@@ -9,6 +9,7 @@ import { createSetupSessionRoutes } from "../routes/setup-session.js";
 import { createAccountRoutes } from "../routes/accounts.js";
 import { createAdminUserRoutes } from "../routes/admin-users.js";
 import { createCredentialRoutes } from "../routes/credentials.js";
+import { createAdminPreviewRoutes } from "../routes/admin-preview.js";
 import { createBuildRoutes } from "../routes/builds.js";
 import { createActorContext } from "../composition/actor-context.js";
 import { createCapabilities } from "../composition/capabilities.js";
@@ -31,6 +32,7 @@ import { API_V1 } from "../routing/v1-routes.js";
 import { matchedRoutePolicy } from "../routing/route-matching.js";
 import { previewIngress } from "./preview.js";
 import { privatePreviewHeaders } from "../preview/handoff.js";
+import { supportsPreviewFrame } from "../preview/view-mode.js";
 import { previewRoutes } from "../routing/preview-routes.js";
 import {
   acceptsImport,
@@ -227,12 +229,15 @@ export function createLaceApp(input: LaceAppInput) {
 
   registerProtocolRoutes(app, routeContext);
   registerHealthRoutes(app, routeContext);
+  const frameOrigin =
+    input.preview && supportsPreviewFrame(input.preview) ? input.preview.previewOrigin : undefined;
   const v1 = new Hono()
     .route("/", createSetupSessionRoutes(routeContext))
     .route("/", createAccountRoutes(routeContext))
     .route("/", createAdminUserRoutes(routeContext))
     .route("/", createCredentialRoutes(routeContext))
     .route("/", createBuildRoutes(routeContext))
+    .route("/", createAdminPreviewRoutes(routeContext, frameOrigin))
     .route("/", createMediaRoutes(routeContext))
     .route("/", createContentRoutes(routeContext))
     .route("/", createPublicRoutes(routeContext));

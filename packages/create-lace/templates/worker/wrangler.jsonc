@@ -23,6 +23,13 @@
   ],
   // Create with `pnpm exec wrangler r2 bucket create {{PROJECT_NAME}}-media`.
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "{{PROJECT_NAME}}-media" }],
+  // lace-site: starter existing
+  // For protected preview, add a separate private R2 bucket with binding PREVIEW,
+  // and route the chosen preview hostname to this Worker. Keep public R2 access disabled.
+  // Add "*/2 * * * *" to triggers.crons and configure LACE_PREVIEW_GITHUB_TOKEN
+  // and LACE_PREVIEW_RUNNER_SECRET as Worker secrets. In GitHub, set the same
+  // runner secret and the variable LACE_PREVIEW_API_ORIGIN to the CMS origin.
+  // lace-site: end
   // Optional derived cache. Without a CACHE binding the Worker uses a no-op cache.
   // To enable it, create a namespace with `pnpm exec wrangler kv namespace create CACHE`
   // and add: "kv_namespaces": [{ "binding": "CACHE", "id": "<namespace-id>" }],
@@ -54,6 +61,17 @@
     "LACE_BUILD_SITE_LABEL": "Main site",
     // Optional public site base URL for "Open on site" links in the editor:
     // "LACE_BUILD_SITE_URL": "https://<pages-project>.pages.dev/",
+    // Optional protected preview settings (requires LACE_BUILD_SITE_URL and both preview secrets):
+    // "LACE_PREVIEW_ORIGIN": "https://preview.example.com/",
+    // "LACE_PREVIEW_GITHUB_REPOSITORY": "<owner>/<repository>",
+    // "LACE_PREVIEW_GITHUB_REF": "main",
+    // "LACE_PREVIEW_GITHUB_WORKFLOW": "lace-preview.yml",
+    // lace-site: starter
+    // "LACE_PREVIEW_SITE_PATH": "{{SITE_PATH}}",
+    // lace-site: end
+    // lace-site: existing
+    // "LACE_PREVIEW_SITE_PATH": "<site path relative to the Git repository root>", // Use "." for its root.
+    // lace-site: end
     // lace-site: end
     // Optional Pages deployment tracking (with the LACE_PAGES_API_TOKEN secret, Pages Read only):
     // "LACE_PAGES_ACCOUNT_ID": "<32-hex account ID>",

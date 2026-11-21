@@ -388,6 +388,8 @@ const nodeOperationalLogger = Object.freeze({
 });
 
 export interface CreateNodeRuntimeInput {
+  /** Enable admin preview only in checkpoint test composition. */
+  readonly previewAdminEnabled?: boolean;
   /** Internal preview delivery composition. Environment activation is handled separately. */
   readonly previewOrigin?: URL;
   readonly previewBlobs?: PreviewBlobStorage;
@@ -609,6 +611,12 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
       }),
     }),
     ...(nodePreview && { previewRunner: nodePreview.transport }),
+    ...(input.previewAdminEnabled && {
+      adminPreview:
+        nodePreview && previewOrigin
+          ? { origin: previewOrigin.origin, create: nodePreview.create, status: nodePreview.status }
+          : ("configuration-required" as const),
+    }),
   });
   const { content, media } = services;
   let nextPreviewMaintenance = 0;

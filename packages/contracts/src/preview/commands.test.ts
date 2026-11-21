@@ -7,6 +7,8 @@ import {
   previewClaimRequestSchema,
   previewCompletionRequestSchema,
   previewLogicalPathSchema,
+  previewReadinessSchema,
+  previewReceiptSchema,
   previewStatusSchema,
 } from "./commands.js";
 
@@ -66,7 +68,8 @@ describe("preview transport contracts", () => {
       reason: "PREVIEW_STORAGE_FAILED",
     };
     expect(v.is(previewStatusSchema, status)).toBe(true);
-    expect(v.is(previewStatusSchema, { ...status, runId: "private-run" })).toBe(false);
+    for (const field of ["runId", "sourceCommit", "token", "bootstrapSecret", "repository"])
+      expect(v.is(previewStatusSchema, { ...status, [field]: "private-value" })).toBe(false);
     expect(v.is(previewStatusSchema, { ...status, reason: "raw provider error" })).toBe(false);
     expect(v.is(previewCompletionRequestSchema, { outcome: "failed", reason: status.reason })).toBe(
       true,
@@ -81,4 +84,22 @@ describe("preview transport contracts", () => {
       }),
     ).toBe(false);
   });
+});
+
+it("validates the preview origin and keeps provider details out of admin receipts", () => {
+  const configured = { ready: true, origin: "https://preview.lace.test", viewMode: "new-tab" };
+  expect(v.parse(previewReadinessSchema, configured)).toEqual(configured);
+  const framed = { ...configured, viewMode: "iframe" };
+  expect(v.parse(previewReadinessSchema, framed)).toEqual(framed);
+  for (const origin of [
+    "invalid",
+    "http://preview.lace.test",
+    "https://secret@preview.lace.test",
+    "https://preview.lace.test/child",
+    "https://preview.lace.test?signature=secret",
+  ])
+    expect(v.is(previewReadinessSchema, { ...configured, origin })).toBe(false);
+  const receipt = { id: "preview-1", revision: 4 };
+  expect(v.parse(previewReceiptSchema, receipt)).toEqual(receipt);
+  expect(v.is(previewReceiptSchema, { ...receipt, runId: "123", commit: "secret" })).toBe(false);
 });

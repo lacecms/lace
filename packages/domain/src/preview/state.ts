@@ -25,6 +25,7 @@ export const previewFailureReasons = [
   "PREVIEW_STORAGE_FAILED",
   "PREVIEW_RESOURCE_LIMIT",
   "PREVIEW_PROVIDER_UNAVAILABLE",
+  "PREVIEW_PROVIDER_QUOTA",
   "PREVIEW_TIMED_OUT",
 ] as const;
 export type PreviewFailureReason = (typeof previewFailureReasons)[number];

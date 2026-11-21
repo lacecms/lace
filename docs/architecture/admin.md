@@ -87,6 +87,10 @@ fields, media lists and blocks have their own `admin-draft-editor-*` capabilitie
   copy. Dates are parsed textually so days never shift.
 - Viewers see the editor read-only: native controls sit in a disabled
   fieldset, rich text is not editable and there is no Save or Publish.
+- Protected draft preview opens a separate read-only screen while the editor
+  stays mounted. The server selects framing for distinct HTTPS hosts that share
+  a registrable domain under the public and private suffix rules. The screen
+  always offers a fresh top-level handoff. See [ADR 0033](../adr/0033-protected-static-draft-preview.md).
 - A global has no title input and saves its stored title unchanged
   ([ADR 0010](../adr/0010-global-models.md)). The admin cannot see
   `LACE_SITE_INDEXING`, so the SEO preview describes the entry, not the

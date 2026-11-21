@@ -58,7 +58,8 @@ export function createPreviewRunner(input: {
   readonly media: Pick<MediaUseCases, "openBinary">;
   readonly executor: string;
   readonly bootstrapSecret: string;
-  readonly acceptsRun: (id: string, run: string) => boolean;
+  readonly acceptsRun: Parameters<typeof previewRunnerClaim>[0]["acceptsRun"];
+  readonly sitePath?: string;
   readonly clock: Clock;
 }) {
   const { clock, commands, executor, packages } = input;
@@ -77,7 +78,11 @@ export function createPreviewRunner(input: {
     if (operation === "claim" && request.method === "POST" && !url.search) {
       const result = await claim(request, id);
       return result.status === 200
-        ? json({ token: result.token, deadline: result.deadline })
+        ? json({
+            token: result.token,
+            deadline: result.deadline,
+            ...(input.sitePath && { sitePath: input.sitePath }),
+          })
         : previewResponse(result.status);
     }
     const scope = await readRunnerClaim(request, id, executor, clock);
@@ -165,17 +170,22 @@ export function createPreviewRunner(input: {
       const length = request.headers.get("content-length");
       const bytes = Number(length);
       if (
-        !request.body ||
+        (bytes > 0 && !request.body) ||
         request.headers.get("content-type") !== "application/octet-stream" ||
         !v.is(previewArtifactPathSchema, path) ||
         !v.is(mediaSha256Schema, sha256) ||
         !Number.isSafeInteger(bytes) ||
-        bytes < 1 ||
+        bytes < 0 ||
         bytes > PREVIEW_FILE_BYTES ||
         length !== String(bytes)
       )
         return previewResponse(400);
-      const result = await packages.stage(scope, path, { bytes, sha256 }, fileBytes(request.body));
+      const result = await packages.stage(
+        scope,
+        path,
+        { bytes, sha256 },
+        request.body && bytes > 0 ? fileBytes(request.body) : new Uint8Array(0),
+      );
       return previewResponse(result ? 204 : 409);
     }
     return previewResponse(404);

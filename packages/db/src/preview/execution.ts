@@ -25,9 +25,10 @@ export function claimPreviewPlan(input: PreviewClaim) {
       sql: `exists(select 1 from ${PREVIEW_CURRENT_JOIN}
       join preview_execution_slot slot on slot.generation_id = g.id
       where g.id = ? and g.state = 'dispatched' and g.executor = ? and g.source_commit = ?
+      and (g.run_id is null or g.run_id = ?)
       and g.overall_deadline > ? and g.input_sha256 is not null)
       and not exists(select 1 from preview_runner_credentials where token_hash = ?)`,
-      params: [id, executor, commit, now, credentialHash],
+      params: [id, executor, commit, run, now, credentialHash],
     },
     (g) => [
       {
@@ -46,6 +47,25 @@ export function claimPreviewPlan(input: PreviewClaim) {
         slot: EXECUTION_ROW,
         sql: RUNNING_PREVIEW_SQL,
         params: [...claimParams(input), now, now, now],
+      },
+    ],
+  );
+}
+
+/** Bind the dispatch response before the provider is allowed to claim. */
+export function bindPreviewRunPlan(id: string, run: string) {
+  return previewMutation(
+    {
+      sql: `exists(select 1 from preview_generations g
+        join preview_execution_slot slot on slot.generation_id = g.id
+        where g.id = ? and g.state = 'dispatched' and g.run_id is null)`,
+      params: [id],
+    },
+    (g) => [
+      {
+        sql: `update preview_generations set run_id = ? where id = ? and ${g.sql}`,
+        params: [run, id, ...g.params],
+        expectedChanges: 1,
       },
     ],
   );
@@ -155,6 +175,38 @@ export function failPreviewExecutionPlan(
         sql: `update preview_generations set state = 'failed', reason = ?, ended_at = ?
           where id = ? and ${g.sql}`,
         params: [reason, now, id, ...g.params],
+        expectedChanges: 1,
+      },
+      revokePreviewCredential(id, now, g),
+    ],
+  );
+}
+
+export function failPreviewRunPlan(
+  id: string,
+  run: string,
+  reason: PreviewFailureReason,
+  now: number,
+) {
+  return previewMutation(
+    {
+      sql: `exists(select 1 from ${PREVIEW_CURRENT_JOIN}
+        join preview_execution_slot s on s.generation_id = g.id
+        where g.id = ? and g.run_id = ? and g.state in ('dispatched','running')
+          and g.overall_deadline > ? and (g.execution_deadline is null or g.execution_deadline > ?))`,
+      params: [id, run, now, now],
+    },
+    (g) => [
+      {
+        sql: `update preview_generations set state = ?, reason = ?, ended_at = ?
+          where id = ? and ${g.sql}`,
+        params: [
+          reason === "PREVIEW_TIMED_OUT" ? "timed_out" : "failed",
+          reason,
+          now,
+          id,
+          ...g.params,
+        ],
         expectedChanges: 1,
       },
       revokePreviewCredential(id, now, g),

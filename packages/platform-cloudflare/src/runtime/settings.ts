@@ -7,6 +7,11 @@ import {
   type EmailSettings,
   type LaceAppInput,
 } from "@lacecms/server";
+import {
+  parseCloudflarePreviewSettings,
+  type CloudflarePreviewEnv,
+  type CloudflarePreviewSettings,
+} from "./preview-settings.js";
 import type { SendEmailBinding } from "./email.js";
 import type { KVNamespace } from "./cache.js";
 import { DEFAULT_DEPLOY_HOOK_TIMEOUT_MS } from "../deploy/deploy-hook.js";
@@ -20,7 +25,7 @@ export interface AssetsFetcher {
 }
 
 /** Bindings, plain variables, and secrets the Worker reads from `env`. */
-export interface CloudflareWorkerEnv {
+export interface CloudflareWorkerEnv extends CloudflarePreviewEnv {
   readonly LACE_API_DOCS_ENABLED?: unknown;
   readonly LACE_MCP_ENABLED?: unknown;
   readonly LACE_BUILD_SITE_ID?: unknown;
@@ -88,6 +93,7 @@ export interface CloudflareSettings {
   readonly media: R2Bucket;
   readonly pagesTracking?: PagesTrackingSettings;
   readonly production: boolean;
+  readonly preview?: CloudflarePreviewSettings;
   readonly publicBaseUrl: URL;
   readonly storageTimeoutMs: number;
 }
@@ -369,7 +375,9 @@ export function parseCloudflareSettings(env: CloudflareWorkerEnv): CloudflareSet
   ) {
     throw new CloudflareEnvironmentError(Object.freeze(issues));
   }
+  const preview = parseCloudflarePreviewSettings(env, publicBaseUrl);
   return Object.freeze({
+    ...(preview && { preview }),
     apiDocsEnabled: features.flags.apiDocsEnabled,
     mcpEnabled: features.flags.mcpEnabled,
     buildSite,

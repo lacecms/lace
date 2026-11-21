@@ -41,7 +41,11 @@ hosting capacity or a fixed percentage reduction in build time.
 
 ### 1. One plan, six implementation checkpoints
 
-PV1A–PV1F in [tasks.md](tasks.md) are verified in order, one checkpoint at a time.
+PV1A–PV1F in [tasks.md](tasks.md) are verified one checkpoint at a time. The
+owner approved applying 6.1 after 5.1–5.4 and before real-provider acceptance
+in 5.5. The admin HTTP and UI surfaces can be verified with explicit local test
+composition. Deployed preview creation stays disabled; 5.5 remains an acceptance
+gate and precedes the remaining PV1F tasks.
 The initial estimate is 6–10 working sessions, not a single apply turn. A session
 may finish only part of a checkpoint; completed task boxes and concise evidence
 must distinguish what is complete from what remains. The feature stays disabled

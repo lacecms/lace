@@ -3,7 +3,7 @@ import { previewRoutes } from "./preview-routes.js";
 import { acceptsImport, type RoutePolicy } from "./route-policy.js";
 import { v1RoutePolicies } from "./v1-routes.js";
 
-it("defines preview credential boundaries without activating any preview routes", () => {
+it("defines preview credential boundaries with a session-only admin surface", () => {
   const routes = Object.values(previewRoutes).flatMap((family) =>
     Object.values<RoutePolicy>(family),
   );
@@ -13,5 +13,9 @@ it("defines preview credential boundaries without activating any preview routes"
   expect(previewRoutes.runner.claim.auth).toBe("preview-bootstrap");
   expect(previewRoutes.runner.upload.auth).toBe("preview-claim");
   expect(previewRoutes.builder.dispatch.auth).toBe("preview-builder");
-  expect(routes.some((route) => v1RoutePolicies.includes(route))).toBe(false);
+  expect(routes.filter((route) => v1RoutePolicies.includes(route))).toEqual([
+    previewRoutes.admin.config,
+    previewRoutes.admin.status,
+    previewRoutes.admin.create,
+  ]);
 });

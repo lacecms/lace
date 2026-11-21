@@ -38,6 +38,7 @@ type ConfigInput = Parameters<typeof defineConfig>[0];
 type FixtureOptions = Partial<
   Pick<
     LaceAppInput,
+    | "adminPreview"
     | "apiDocsEnabled"
     | "publicBaseUrl"
     | "auth"
@@ -75,6 +76,7 @@ export { admin, editor };
 
 export async function fixture({
   actor = admin,
+  adminPreview,
   apiDocsEnabled,
   publicBaseUrl = "https://lace.test/",
   resolveActor,
@@ -175,6 +177,7 @@ export async function fixture({
   const securityPort =
     security === undefined ? undefined : fakePort<SecurityService>("SecurityService", security);
   const app = createLaceApp({
+    ...(adminPreview === undefined ? {} : { adminPreview }),
     ...(apiDocsEnabled === undefined ? {} : { apiDocsEnabled }),
     ...(auth === undefined ? {} : { auth }),
     actors: {

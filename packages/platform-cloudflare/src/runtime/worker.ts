@@ -55,6 +55,8 @@ import { D1FixedWindowRateLimiter, D1SecurityService } from "../security/service
 import type { D1Database } from "../d1/database.js";
 import { WorkerImageInspector } from "../media/image-inspector.js";
 import { CloudflareR2ObjectStorage } from "../media/r2-storage.js";
+import { composeCloudflarePreview } from "./preview.js";
+import { previewHttpsUrl } from "./preview-settings.js";
 import { CloudflarePreviewBlobStorage } from "../media/preview-r2.js";
 import {
   CloudflareEnvironmentError,
@@ -78,13 +80,17 @@ export const PREVIEW_MAINTENANCE_CRON = "*/2 * * * *";
 const POST_COMMIT_BUILD_DELAY_MS = SITE_BUILD_DEBOUNCE_MS + 250;
 
 export interface WorkerOperationalLogger {
+  info?(entry: Record<string, string>): void;
   error(entry: Record<string, string>): void;
 }
 
 export interface CreateCloudflareWorkerInput {
+  /** Enable admin preview only in checkpoint test composition. */
+  readonly previewAdminEnabled?: boolean;
   /** Internal preview delivery composition. Environment activation is handled separately. */
   readonly previewOrigin?: URL;
   readonly previewExecutor?: Pick<PreviewRunner, "stop">;
+  readonly previewGitHubFetch?: typeof fetch;
   readonly buildTrigger?: (settings: CloudflareSettings) => SiteBuildTrigger;
   readonly clock?: Clock;
   readonly config: NormalizedConfig<readonly ContentModelDefinition[]>;
@@ -98,6 +104,8 @@ export interface CreateCloudflareWorkerInput {
 
 export interface CloudflareRuntime {
   readonly previewPackages?: PreviewPackages;
+  /** Internal composition for checkpoint acceptance and the later admin surface. */
+  readonly createPreview?: ReturnType<typeof composeCloudflarePreview>["create"];
   readonly maintainPreview: () => Promise<void>;
   readonly clients: TrustedClientAddresses;
   readonly maintainOAuth: () => Promise<void>;
@@ -153,6 +161,7 @@ class D1Readiness implements ReadinessProbe {
 }
 
 const defaultOperationalLogger: WorkerOperationalLogger = Object.freeze({
+  info: (entry: Record<string, string>) => console.info(JSON.stringify(entry)),
   error: (entry: Record<string, string>) => console.error(JSON.stringify(entry)),
 });
 
@@ -303,35 +312,67 @@ export function createCloudflareRuntime(
     security,
     storage,
   });
+  const previewOrigin = settings.preview?.origin ?? input.previewOrigin;
   const previewBlobs =
-    input.previewOrigin &&
-    new CloudflarePreviewBlobStorage(settings.media, settings.storageTimeoutMs);
+    previewOrigin &&
+    new CloudflarePreviewBlobStorage(
+      settings.preview?.bucket ?? settings.media,
+      settings.storageTimeoutMs,
+    );
   const previewPackages =
     previewBlobs && new PreviewPackages(previewBlobs, repository.preview, clock);
+  const preview =
+    settings.preview &&
+    previewBlobs &&
+    previewPackages &&
+    composeCloudflarePreview({
+      adminOrigin: settings.publicBaseUrl,
+      config: input.config,
+      settings: settings.preview,
+      repository,
+      clock,
+      idGenerator: ids,
+      blobs: previewBlobs,
+      packages: previewPackages,
+      media: services.media,
+      ...(input.previewGitHubFetch && { fetcher: input.previewGitHubFetch }),
+      log: (level, event) => logger[level]?.({ component: "preview", ...event }),
+    });
   const app = createLaceApp({
     ...services.appInput,
-    ...(input.previewOrigin && {
+    ...(previewOrigin && {
       previewArtifacts: previewPackages!,
       preview: createPreviewAccess({
         admin: settings.publicBaseUrl,
-        preview: input.previewOrigin,
+        preview: previewOrigin,
         clock,
         secret: settings.authSecret,
         actors: auth.actors,
         persistence: repository.preview.access,
       }),
     }),
+    ...(preview && { previewRunner: preview.transport }),
+    ...(input.previewAdminEnabled && {
+      adminPreview:
+        preview && previewOrigin
+          ? { origin: previewOrigin.origin, create: preview.create, status: preview.status }
+          : ("configuration-required" as const),
+    }),
   });
   return Object.freeze({
+    ...(preview && { createPreview: preview.create }),
     ...(previewPackages && { previewPackages }),
     maintainPreview: async () => {
       if (!previewBlobs) return;
+      await preview
+        ?.reconcile()
+        .catch(() => logger.error({ component: "preview", reason: "reconciliation_failed" }));
       const failures = await maintainPreviewDelivery({
         repository: repository.preview,
         clock,
         blobs: previewBlobs,
         cleanupGraceMs: settings.storageTimeoutMs,
-        runner: input.previewExecutor ?? { stop: async () => "unconfirmed" },
+        runner: input.previewExecutor ?? preview ?? { stop: async () => "unconfirmed" },
         purgeExpiredAccess: (now, limit) =>
           repository.preview.access.purgeExpiredAccess(now, limit),
       });
@@ -434,6 +475,17 @@ export function createCloudflareWorker(input: CreateCloudflareWorkerInput): Clou
     async fetch(request: Request, env: CloudflareWorkerEnv, ctx: WorkerExecutionContext) {
       const runtime = configured(env);
       if (runtime === undefined) return unavailableResponse();
+      const previewOrigin = previewHttpsUrl(env.LACE_PREVIEW_ORIGIN);
+      if (
+        !runtime.settings.preview &&
+        previewOrigin?.hostname !== runtime.settings.publicBaseUrl.hostname &&
+        previewOrigin?.host === new URL(request.url).host
+      ) {
+        return new Response(null, {
+          status: 404,
+          headers: { "cache-control": "private, no-store" },
+        });
+      }
       // Only the Worker ingress accepts Cloudflare's edge-supplied header.
       // Direct runtime.app calls have no trusted client identity.
       runtime.clients.set(request, request.headers.get("cf-connecting-ip"));

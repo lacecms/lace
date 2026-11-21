@@ -6,7 +6,12 @@ import {
   CollectionQueryValidationError,
   BuildExportVersionChangedError,
 } from "@lacecms/domain";
-import type { AccountErrorCode, DomainErrorCode, InternalDomainErrorCode } from "@lacecms/domain";
+import type {
+  AccountErrorCode,
+  DomainErrorCode,
+  InternalDomainErrorCode,
+  PreviewFailureReason,
+} from "@lacecms/domain";
 import { AuthenticationRequiredError } from "./authentication.js";
 import { ContractValidationError, toContentValidationIssues, validationError } from "./envelope.js";
 import type { ClassifiedError, LaceErrorCode } from "./envelope.js";
@@ -20,7 +25,8 @@ export type TransportErrorCode =
   | "NOT_FOUND"
   | "PAYLOAD_TOO_LARGE"
   | "RATE_LIMITED"
-  | "RESET_INVALID";
+  | "RESET_INVALID"
+  | PreviewFailureReason;
 
 type MappedErrorCode = Exclude<LaceErrorCode, "INTERNAL_ERROR">;
 type AssertMapped<Code extends MappedErrorCode> = Code;
@@ -114,6 +120,43 @@ const errorMappings = {
   },
   RESET_INVALID: { status: 410, message: "The password reset link is invalid or has expired." },
   VALIDATION_FAILED: { status: 422, message: "The request did not satisfy the API contract." },
+  PREVIEW_CONFIGURATION_UNAVAILABLE: {
+    status: 503,
+    message: "Preview configuration is unavailable.",
+  },
+  PREVIEW_INELIGIBLE: { status: 409, message: "Preview requires a saved draft with a site route." },
+  PREVIEW_REVISION_CONFLICT: {
+    status: 409,
+    message: "The saved draft changed. Reload it before creating a preview.",
+  },
+  PREVIEW_IDEMPOTENCY_CONFLICT: {
+    status: 409,
+    message: "This request was already used for another preview.",
+  },
+  PREVIEW_BUSY: {
+    status: 409,
+    message: "Another preview is in progress. Try again after it finishes.",
+  },
+  PREVIEW_CONTEXT_CHANGED: { status: 409, message: "The preview inputs changed. Try again." },
+  PREVIEW_VALIDATION_FAILED: { status: 422, message: "The saved draft could not be previewed." },
+  PREVIEW_SOURCE_UNAVAILABLE: {
+    status: 503,
+    message: "The configured site source is unavailable.",
+  },
+  PREVIEW_DEPENDENCY_FAILED: {
+    status: 503,
+    message: "The preview dependencies could not be prepared.",
+  },
+  PREVIEW_ROUTE_CONFLICT: { status: 409, message: "The draft route is already in use." },
+  PREVIEW_RENDER_FAILED: { status: 503, message: "The site could not render the preview." },
+  PREVIEW_STORAGE_FAILED: { status: 503, message: "Preview storage is unavailable." },
+  PREVIEW_RESOURCE_LIMIT: { status: 409, message: "This preview exceeds the resource limits." },
+  PREVIEW_PROVIDER_UNAVAILABLE: { status: 503, message: "The preview builder is unavailable." },
+  PREVIEW_PROVIDER_QUOTA: {
+    status: 503,
+    message: "The preview provider has reached a limit. Try again later.",
+  },
+  PREVIEW_TIMED_OUT: { status: 503, message: "The preview timed out. Try again." },
 } as const satisfies Record<
   AssertMapped<
     | MappedErrorCode

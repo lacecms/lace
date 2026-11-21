@@ -23,7 +23,7 @@ export async function claimPreviewFixture(
     executor: "fixture",
     run: "fixture-run",
     commit: "a".repeat(40),
-    credentialHash: "b".repeat(64),
+    credentialHash: (await describePreviewBytes(new TextEncoder().encode(id))).sha256,
   };
   await expect(
     repository.claimPreview({ ...claim, now: unixMilliseconds(now) }),

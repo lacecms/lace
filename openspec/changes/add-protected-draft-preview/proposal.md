@@ -60,7 +60,9 @@ The plan has six separately verified implementation checkpoints (PV1A–PV1F),
 with an initial estimate of 6–10 working sessions. This is an explicit staged
 exception to one roadmap session per change: the common protocol and complete
 acceptance contract stay in one proposal; each checkpoint can be applied and
-reviewed independently, while the feature remains disabled until complete.
+reviewed independently. The owner approved applying 6.1 after local verification
+of 5.1–5.4 while the real-provider run in 5.5 is pending. The remaining PV1F work
+and deployed feature activation retain their acceptance gates.
 These checkpoints do not combine any previously selected EX session units.
 No implementation or release of the existing RC5 preparation change is implied.
 

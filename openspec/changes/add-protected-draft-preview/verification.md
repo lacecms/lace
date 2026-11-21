@@ -1,5 +1,226 @@
 # Preview implementation verification
 
+## PV1F task 6.3 verified locally on 2026-11-21
+
+Open preview shows a full-screen read-only dialog with the entry title, captured
+revision, saved revision when different, readiness time and expiry. The editor
+stays mounted. The dialog has keyboard-operable desktop and 390 px narrow
+widths, and closing it restores focus to its trigger or the preview card.
+
+Readiness uses the catalog-pinned Public Suffix List through `tldts`, including
+private suffixes. Only distinct HTTPS hostnames with a known common registrable
+domain get iframe mode. The iframe and the new-tab link each start a fresh
+handoff on the preview host. The iframe status channel checks the sending
+window, exact origin, generation and message shape.
+
+The compiled Admin passed the HTTPS Chromium fixture with real Better Auth
+sessions, SQLite and disposable SILO. It exercised same-site framing,
+site scripts and styles, blocked parent access and service workers, desktop and
+narrow widths including a 375 px window, and cross-site new-tab access. Two
+generations remained available in separate tabs. The fixture also verified
+frame recovery after loss of the preview cookie, normal sign-in in a new tab
+after loss of the CMS cookie, keyboard operation and preservation of unsaved
+text. The final browser command was
+`pnpm exec vitest run --config vitest.verification.config.mjs --project preview-https`.
+
+The editor and API suites passed 184 tests, and the final targeted Admin rerun
+passed 26. The preview contract and server suites passed 20, and local
+Cloudflare D1/R2 passed eight. The two optional Node/S3 tests passed in isolation.
+The combined Node/S3 run reported an asynchronous AWS SDK checksum error after
+its assertions passed. The reported checksum matches the original manifest
+in the existing manifest-size mismatch exercise, whose read returns before
+consuming the body. The storage handling is outside this checkpoint.
+
+Root typecheck, lint, formatting and strict OpenSpec validation passed. The
+OpenAPI artifact includes both view modes and passed regeneration using a
+temporary Git index. Task 6.4 is next.
+
+## PV1F task 6.2 verified locally on 2026-11-21
+
+The entry editor shows preparation, builder waiting, execution and terminal
+outcomes. It displays the captured revision and the current saved revision when
+they differ, with request time, readiness time and expiry where applicable.
+The ready link disappears when its expiry passes in the open editor. Build
+failure guidance uses the closed preview reason codes and includes the
+generation ID in technical details. Status and admission request errors expose
+safe guidance and the request ID when available.
+
+The foreground editor reads active status every five seconds for up to 15
+minutes from its first active response. Polling stops on a terminal response or
+read failure. A manual status refresh can recover a failed read. Tests with
+controlled timers covered all active phases, terminal outcomes, expiry and the
+polling limit. They also verified that readiness opens no tab, that polling
+sends only status requests, and that an explicit Retry after a save submits the
+new saved revision while unsaved edits keep Retry disabled.
+
+The admin entry and API suites passed 181 tests across 26 files, including the
+OpenAPI client guard. Root typecheck, lint (including boundaries and schema),
+format check and strict OpenSpec change validation passed. Task 6.3 is next.
+
+## PV1E real-provider acceptance on 2026-11-21
+
+With the corrected PAT, the packed candidate Worker dispatched GitHub Actions
+run `44917152693` from D1 generation `01M7ZA50YB0XAT9XZB288C094M` for the
+saved Home revision 3 at source SHA `22cb77c16387c28a099bc930af1b742729aeb50c`.
+D1, GitHub's Actions API and the trusted runner log matched all three IDs.
+The first run attempt finished successfully. The package contained five files
+and 7,607 bytes. The runner took 47.9 seconds, the generation became ready after
+56.8 seconds, and its lifetime was 24 hours from readiness.
+
+With a normal Lace admin session and the preview handoff, the real gateway
+served the draft HTML with its CSS, a generation-scoped asset and the original
+image with the expected SHA-256. The image supported authenticated HEAD and
+range requests. Without the preview cookie, the three resources were refused
+including an anonymous conditional range request. The ordinary CMS media URL
+returned 404 for the unpublished original. Pages deployment IDs and published
+HTML were unchanged after the ready run. The publication version was 2 and
+the build history still contained two records.
+
+Generation `01M7ZA9FKACN4WXNBMW0G17ADP` dispatched run `44917378559` at the same
+source SHA. A test-only job kept the GitHub run active without claiming the
+preview. The API reported `PREVIEW_TIMED_OUT` after the 15-minute deadline.
+The scheduled Worker made the timeout durable on its next pass and requested
+cancellation of that run. D1 held the slot while GitHub still reported the run
+in progress. GitHub confirmed cancellation before the preview job could claim.
+A later maintenance pass released the slot and removed the private inputs.
+A late claim using the correct runner secret, SHA and run ID returned 409.
+There was one GitHub run per generation and no automatic retry.
+
+After the deadline run, Pages still reported the same production and preview
+deployment IDs. The published HTML and public CMS home response matched the
+baseline. The publication version and build count stayed at 2. The R2 bucket
+had `r2.dev` access disabled and no custom domains. The original RC5 Worker
+version and cron were restored. The temporary acceptance entry returned 404
+on both hosts, and the GitHub workflow and its temporary settings were
+deactivated after the run.
+
+The 14 focused Cloudflare and GitHub tests, root typecheck, lint, format check
+and strict OpenSpec validation passed. Task 5.5 is complete.
+
+## PV1E real-provider attempt on 2026-11-21
+
+The authorized `test-homepage` stand used the RC5 public-content baseline in a
+separate D1 database, new private media and preview R2 buckets, and a temporary
+candidate Worker version. All six migrations were present. The test used a
+normal Lace administrator session created through setup on the isolated copy.
+It saved revision 3 of Home with a synthetic draft-only image. The public
+media endpoint returned 404, and the publication version stayed at 2.
+
+GitHub Actions built the private Linux amd64 candidate builder image in run
+`44910860424`. The acceptance source ref resolved to
+`22cb77c16387c28a099bc930af1b742729aeb50c`. Real Workers exposed three transport
+gaps: an empty HTTP POST can arrive as a stream, the global `fetch` requires
+its Workerd receiver, and Workerd accepts `manual` redirect handling instead of
+the `error` option. The test adapter now checks for bytes in the request body.
+The GitHub client binds `fetch` and treats redirects as errors without
+following them. Focused tests exercise each case.
+
+With the corrected transport behavior, GitHub returned 200 for commit lookup
+and 403 for workflow dispatch with the configured Worker PAT. GitHub classified
+the failure as a PAT permission denial. The same dispatch endpoint returned
+200 with the operator CLI authorization for the inert workflow registration
+on `main` (run `44915826494`, skipped). The preview generation had no provider
+run and reported `PREVIEW_CONFIGURATION_UNAVAILABLE`. The Pages deployment
+inventory was unchanged from the baseline recorded after workflow registration
+and branch pushes. The temporary preview bucket had public `r2.dev` access off.
+
+This attempt left task 5.5 open. The pre-test RC5 Worker and its original
+schedule were restored. Both the CMS and Pages returned 200, and the temporary
+acceptance route returned 404 on both hostnames. The acceptance run above
+reused the isolated resources and test branches with a corrected credential.
+
+## PV1F task 6.1 verified locally on 2026-11-18
+
+The owner approved applying 6.1 after the local PV1E checks and before the
+real-provider acceptance in 5.5. Both runtime compositions
+advertise preview readiness and allow admission only when explicitly enabled
+in the checkpoint fixture and the runner settings are complete. The default
+deployment reports preview unavailable.
+
+The session-only API returns safe readiness, preview status and admission
+receipts. Admins and editors can create, recreate or retry the saved revision.
+Viewers can inspect and open a ready preview in a new tab. The actions preserve
+unsaved values and map field and block issues to the existing validation flow.
+Local D1 tests verified stale revision, missing field/block data, cross-origin
+mutation, busy admission and idempotent replay with a single dispatch.
+
+- Admin editor and client suites passed 147 tests. The relocated preview-action
+  companion and OpenAPI client check passed 15 tests on rerun.
+- Cloudflare preview suites passed nine tests on local D1/R2. The Node suite
+  passed two SQLite/session cases. Two existing S3 integration cases require the
+  separate `LACE_TEST_PREVIEW_S3_URL` fixture.
+- Contracts passed 13 tests and two packaged export checks. Server routes and
+  OpenAPI coverage passed 12 tests.
+- Root typecheck, lint, format check and strict OpenSpec validation passed.
+  OpenAPI regenerated byte-for-byte and its check passed using a temporary Git
+  index containing the regenerated artifact.
+
+## PV1E local verification on 2026-11-18
+
+Tasks 5.1–5.4 passed locally. The Worker resolves the configured GitHub ref,
+records the dispatch response's exact run ID in D1, and checks the workflow
+path, generation, source SHA and initial run attempt before granting a claim.
+Changing the configured site selection fences outstanding claims. The generated
+workflow checks the claim before checkout, uses a 10-minute job timeout and
+runs the fixed Astro build in a separate container with frozen dependencies and
+detached preview input. The trusted wrapper holds the scoped upload credential.
+
+The consumer Worker uses a private `PREVIEW` R2 binding and a distinct HTTPS
+preview hostname. The local fixture issued runner requests against a migrated D1
+and private R2, including a native streaming upload in Workerd. Concurrent
+claims yielded one authorization. The checks covered mismatched runs and source,
+private originals, unauthenticated delivery, prefix isolation, oversized input,
+partial output and duplicate completion with fixed TTL. The publication version
+and build-trigger count stayed stable throughout the preview. The GitHub fixture
+observed only repository commit and Actions endpoints.
+
+The scheduled pass recognizes a completed run with a missing callback, handles
+late starts and deadlines, and requests cancellation of the exact run. It holds
+capacity until it can confirm termination, including when the GitHub credential
+is temporarily revoked. After confirmation it clears the lease and removes
+private inputs in bounded passes. The tests exercised late and duplicate
+callbacks and verified one dispatch without an automatic rebuild.
+
+### Test results
+
+- Focused Cloudflare and D1 suite (32 passing), SQLite preview repository
+  contracts (30 passing), generator tests (36 passing), server preview tests
+  (2 passing) and transport contract tests (4 passing).
+- `node scripts/generated-project-acceptance.mjs snapshots` verified byte-stable
+  regeneration for six variants. The fixture refresh also picked up the PV1D
+  Compose and Nginx template changes already in the checkout.
+- `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm openapi:check` and
+  `pnpm exec openspec validate add-protected-draft-preview --type change --strict`.
+
+### Remaining release gate
+
+Task 5.5 remained open at the local checkpoint. The GitHub REST calls in the
+local tests use a fixture.
+Real acceptance requires an authorized disposable GitHub repository with the
+workflow, the candidate builder image, and a deployed Worker with migrated D1,
+private R2, the preview hostname and scoped provider and runner credentials.
+Record the real run correlation, resource access, deadline cancellation and
+publication isolation there before declaring PV1E verified on real providers.
+Admin preview creation remains disabled pending the final checkpoints.
+
+The [disposable Worker adapter](../../../packages/platform-cloudflare/src/test-support/preview-acceptance.ts)
+was prepared and verified locally against D1 and Better Auth. Use it only in the
+stand's Worker entry by exporting `previewAcceptanceWorker(createCloudflareWorker({ config }))`
+and setting `LACE_PV1E_ACCEPTANCE` to `true` there. It uses the normal CMS admin
+session and delegates preview delivery and scheduled maintenance to the Worker.
+
+- Start with an empty-body `POST /__lace-pv1e/entries/<entryId>/<revision>/<key>`
+  on the CMS origin with the admin cookie and matching `Origin` header. The
+  receipt contains the generation ID, commit and overall deadline. Reuse the
+  key only to check idempotent replay.
+- Poll `GET /__lace-pv1e/entries/<entryId>` with the same session for lifecycle
+  status and the publication version. Correlate the generation and commit with
+  the Worker dispatch log and GitHub run. Open `/view/<generationId>` on the
+  preview origin and check access with and without the session.
+- Capture the publication baseline before the first run and repeat the check
+  after the ready run and the deadline/cancellation run. Remove the temporary
+  adapter from the stand's entry after recording the evidence.
+
 ## PV1D verified on 2026-11-17
 
 Tasks 4.1–4.5 passed. The VPS builder pins the configured publication checkout

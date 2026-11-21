@@ -6,6 +6,7 @@ import {
 import type { PreviewBrowserAccess } from "@lacecms/application";
 import { previewRoutes } from "../routing/preview-routes.js";
 import { API_V1 } from "../routing/v1-routes.js";
+import { isPreviewFrameRequest, previewFrameSignal } from "./frame.js";
 
 export const PREVIEW_COOKIE = "__Host-lace-preview";
 const nonceCookie = (id: string) => `${PREVIEW_COOKIE}-${id}`;
@@ -34,6 +35,17 @@ export function privatePreviewHeaders() {
 
 export function previewResponse(status: number): Response {
   return new Response(null, { status, headers: privatePreviewHeaders() });
+}
+
+export function previewUnavailable(): Response {
+  const headers = privatePreviewHeaders();
+  headers.set("content-type", "text/html; charset=utf-8");
+  return new Response(
+    `<!doctype html><html lang="en"><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1"><title>Preview unavailable</title>
+    <main><h1>Preview unavailable</h1><p>Return to the entry editor to check the preview or create a new one.</p></main></html>`,
+    { status: 404, headers },
+  );
 }
 
 export function previewRedirect(target: URL, cookies: readonly string[] = []): Response {
@@ -70,24 +82,27 @@ function frameBootstrap(
     "content-security-policy",
     `default-src 'none'; script-src 'nonce-${nonce}'; connect-src ${access.adminOrigin}; frame-ancestors ${access.adminOrigin}; base-uri 'none'`,
   );
-  const fallback = freshPreviewAccess(access, `/view/${previewReturnGeneration(path)}`);
+  const generation = previewReturnGeneration(path);
+  const fallback = freshPreviewAccess(access, `/view/${generation}`);
   return new Response(
     `<!doctype html><html lang="en"><meta charset="utf-8"><title>Opening preview</title>
     <p id="status">Opening preview…</p>
     <a id="fallback" hidden href="${fallback.href}" target="_blank" rel="noopener noreferrer">Open preview in a new tab</a>
     <script nonce="${nonce}">
-    const denied = () => {
+    ${previewFrameSignal(access.adminOrigin)}
+    const denied = (status = "unavailable") => {
       document.getElementById("status").textContent = "This preview could not be opened in the frame.";
       document.getElementById("fallback").hidden = false;
+      notify(${JSON.stringify(generation)}, status);
     };
     fetch(${JSON.stringify(authorize.href)}, {
       credentials: "include", redirect: "error", headers: {Accept: "application/json"}
     }).then(async response => {
-      if (!response.ok) return denied();
+      if (!response.ok) return denied(response.status === 401 ? "sign-in" : "unavailable");
       const callback = await response.json();
       if (typeof callback !== "string" || !callback.startsWith(${JSON.stringify(callbackPath + "#")})) return denied();
       location.replace(callback);
-    }).catch(denied);
+    }).catch(() => denied());
     </script></html>`,
     { headers },
   );
@@ -103,7 +118,7 @@ export function previewHandoffRoutes(access: PreviewBrowserAccess<Request>) {
       const target = new URL(authorizePath, access.adminOrigin);
       target.searchParams.set("state", handoff.state);
       const cookie = `${nonceCookie(handoff.id)}=${handoff.nonce}; ${cookieScope}; Max-Age=${PREVIEW_HANDOFF_SECONDS}`;
-      return ["iframe", "frame"].includes(request.headers.get("sec-fetch-dest") ?? "")
+      return isPreviewFrameRequest(request)
         ? frameBootstrap(access, target, path, cookie)
         : previewRedirect(target, [cookie]);
     },
@@ -118,7 +133,7 @@ export function previewHandoffRoutes(access: PreviewBrowserAccess<Request>) {
         origin === access.previewOrigin && request.headers.get("accept") === "application/json";
       const resume = params.get("resume");
       if (resume !== null) {
-        return previewReturnGeneration(resume) && request.headers.get("sec-fetch-dest") !== "iframe"
+        return previewReturnGeneration(resume) && !isPreviewFrameRequest(request)
           ? previewRedirect(freshPreviewAccess(access, resume))
           : previewResponse(400);
       }
@@ -142,13 +157,15 @@ export function previewHandoffRoutes(access: PreviewBrowserAccess<Request>) {
           ? Response.json(target.pathname + target.hash, { headers: cors })
           : previewRedirect(target);
       }
-      if (json)
-        return new Response(null, { headers: cors, status: result.kind === "invalid" ? 404 : 401 });
+      if (json) {
+        const status = result.kind === "login" ? 401 : result.kind === "denied" ? 403 : 404;
+        return new Response(null, { headers: cors, status });
+      }
       if (result.kind === "login") {
         const id = previewReturnGeneration(result.returnPath);
         const login = new URL("/admin/login", access.adminOrigin);
         login.searchParams.set("previewReturn", `/view/${id}`);
-        if (["iframe", "frame"].includes(request.headers.get("sec-fetch-dest") ?? "")) {
+        if (isPreviewFrameRequest(request)) {
           const headers = privatePreviewHeaders();
           headers.set("content-type", "text/html; charset=utf-8");
           headers.set(
@@ -162,7 +179,7 @@ export function previewHandoffRoutes(access: PreviewBrowserAccess<Request>) {
         }
         return previewRedirect(login);
       }
-      return previewResponse(result.kind === "denied" ? 403 : 404);
+      return result.kind === "denied" ? previewResponse(403) : previewUnavailable();
     },
     callback() {
       const headers = privatePreviewHeaders();
@@ -176,6 +193,7 @@ export function previewHandoffRoutes(access: PreviewBrowserAccess<Request>) {
         `<!doctype html><meta charset="utf-8"><title>Opening preview</title><p id="status">Opening preview…</p>
         <a id="fallback" hidden target="_blank" rel="noopener noreferrer">Open preview in a new tab</a>
         <script nonce="${nonce}">
+        ${previewFrameSignal(access.adminOrigin)}
         const data = new URLSearchParams(location.hash.slice(1));
         const generation = data.get("generation");
         const body = new URLSearchParams({flow: data.get("flow") || "", code: data.get("code") || ""}).toString();
@@ -186,13 +204,15 @@ export function previewHandoffRoutes(access: PreviewBrowserAccess<Request>) {
             const link = document.getElementById("fallback");
             link.href = "/access/start?return=" + encodeURIComponent("/view/" + generation);
             link.hidden = false;
+            notify(generation, "unavailable");
           }
         };
         fetch(location.pathname, {method: "POST", headers: {"Content-Type": "application/x-www-form-urlencoded"}, body})
           .then(response => {
             const target = response.headers.get("Location");
-            if (response.ok && target) location.replace(target);
-            else denied();
+            if (!response.ok || !target) return denied();
+            if (target === location.origin + "/p/" + generation + "/") notify(generation, "ready");
+            location.replace(target);
           }, denied);
         </script>`,
         { headers },

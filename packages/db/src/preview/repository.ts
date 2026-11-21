@@ -9,6 +9,7 @@ import type {
   PreviewMaintenancePort,
   PreviewStopTarget,
   PreviewExecution,
+  PreviewGeneration,
   PreviewObject,
   PreviewReadPort,
   PreviewRequest,
@@ -38,9 +39,11 @@ import {
   trackPreviewMediaPlan,
 } from "./capture.js";
 import {
+  bindPreviewRunPlan,
   claimPreviewPlan,
   EXECUTION_ROW,
   failPreviewExecutionPlan,
+  failPreviewRunPlan,
   finalizePreviewPlan,
   finalizedPreviewRead,
   isPreviewFailureReason,
@@ -155,6 +158,54 @@ export class SqlPreviewRepository
   ): Promise<boolean> {
     return (
       (await this.execute(failPreviewPreparationPlan(id, reason, now), now)).kind === "committed"
+    );
+  }
+
+  public async bindPreviewRun(id: string, run: string, now: UnixMilliseconds): Promise<boolean> {
+    return (await this.execute(bindPreviewRunPlan(id, run), now)).kind === "committed";
+  }
+
+  public async dispatchedPreview(id: string, run: string): Promise<PreviewGeneration | null> {
+    const [row] = await this.sql.all<PreviewGenerationRow>(
+      `select ${GENERATION_COLUMNS} from preview_generations g
+       join preview_execution_slot s on s.generation_id = g.id
+       where g.id = ? and g.state = 'dispatched' and g.run_id = ?`,
+      id,
+      run,
+    );
+    return row === undefined ? null : generation(row);
+  }
+
+  public async hasPreviewExecutionSlot(): Promise<boolean> {
+    return (
+      (await this.sql.all("select 1 from preview_execution_slot where singleton_key = 1")).length >
+      0
+    );
+  }
+
+  public async activePreviewRun(
+    now: UnixMilliseconds,
+  ): Promise<(PreviewGeneration & { readonly run: string }) | null> {
+    const [row] = await this.sql.all<PreviewGenerationRow & { run_id: string }>(
+      `select ${GENERATION_COLUMNS},g.run_id from preview_execution_slot s
+       join preview_generations g on s.generation_id = g.id
+       where s.singleton_key = 1 and g.state in ('dispatched','running') and g.run_id is not null
+         and g.overall_deadline > ? and (g.execution_deadline is null or g.execution_deadline > ?)`,
+      now,
+      now,
+    );
+    return row === undefined ? null : { ...generation(row), run: row.run_id };
+  }
+
+  public async failPreviewRun(
+    id: string,
+    run: string,
+    reason: PreviewFailureReason,
+    now: UnixMilliseconds,
+  ): Promise<boolean> {
+    return (
+      isPreviewFailureReason(reason) &&
+      (await this.execute(failPreviewRunPlan(id, run, reason, now), now)).kind === "committed"
     );
   }
 

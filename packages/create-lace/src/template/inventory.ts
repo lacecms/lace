@@ -34,6 +34,8 @@ export const TEMPLATE_FILES: readonly TemplateFile[] = [
     modes: SITE,
     render: "markers",
   },
+  { path: ".github/workflows/lace-preview.yml", owner: "managed", cloudflare: true, modes: SITE },
+  { path: ".github/scripts/lace-preview.mjs", owner: "managed", cloudflare: true, modes: SITE },
   { path: "docker-compose.yml", owner: "managed", render: "markers" },
   { path: "docker-compose.dev.yml", owner: "managed" },
   { path: "deploy/nginx.conf", owner: "managed" },

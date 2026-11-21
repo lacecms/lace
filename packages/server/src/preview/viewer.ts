@@ -5,8 +5,10 @@ import {
   previewCookie,
   previewRedirect,
   previewResponse,
+  previewUnavailable,
   privatePreviewHeaders,
 } from "./handoff.js";
+import { isPreviewFrameRequest } from "./frame.js";
 
 /** Standalone first-party viewer. Site markup is a separate frame on the restricted origin. */
 export async function previewViewer(
@@ -18,11 +20,10 @@ export async function previewViewer(
   if (!id) return previewResponse(404);
   const delivery = await access.delivery(previewCookie(request), id);
   if (delivery === "denied") {
-    if (["iframe", "frame"].includes(request.headers.get("sec-fetch-dest") ?? ""))
-      return previewResponse(401);
+    if (isPreviewFrameRequest(request)) return previewResponse(401);
     return previewRedirect(freshPreviewAccess(access, pathname));
   }
-  if (!delivery) return previewResponse(404);
+  if (!delivery) return previewUnavailable();
   const expires = new Date(delivery.expiresAt).toISOString();
   const headers = privatePreviewHeaders();
   headers.set("content-type", "text/html; charset=utf-8");

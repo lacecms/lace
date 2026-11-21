@@ -40,6 +40,7 @@
     "@valibot/to-json-schema": "catalog:",
     "hono": "catalog:",
     "hono-openapi": "catalog:",
+    "tldts": "catalog:",
     "valibot": "catalog:"
   },
   "devDependencies": {

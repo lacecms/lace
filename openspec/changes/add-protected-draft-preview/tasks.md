@@ -54,20 +54,24 @@ Depends on PV1A–PV1C. Implements VPS/source/execution requirements in
 Depends on PV1A–PV1C; follow PV1D in this staged plan to reuse its proven protocol.
 Implements Cloudflare execution requirements and design §§9–10.
 
-- [ ] 5.1 Add validated Cloudflare preview configuration, secret references and GitHub dispatch/run-control adapter; verify exact source/workflow/run correlation, no Pages calls, safe provider/quota errors and zero credentials in status DTOs.
-- [ ] 5.2 Generate the dedicated fixed workflow with bootstrap/claim exchange before execution, pinned source/toolchain, scoped upload and completion, combined job deadline and credential isolation from site code; verify fixture protocol tests and duplicate dispatches starting at most one claimed build.
-- [ ] 5.3 Wire private R2 staging/streaming, host routing and D1 preview state into the consumer Worker; verify local D1/R2 parity, oversized uploads/manifests, late writes, prefix isolation and unpublished media never obtaining a public URL.
-- [ ] 5.4 Implement scheduled provider reconciliation, cancellation and bounded cleanup; verify delayed starts, missing callbacks, revoked credentials, process/lease fencing, callback duplication and timeout without automatic runner retries.
-- [ ] 5.5 Run an authorized real GitHub Actions → Worker/D1/R2 preview acceptance on a disposable installation; record exact generation/source/run correlation, private resources, no Pages deployment, deadline/cancellation and publication isolation. If credentials/infrastructure are unavailable, leave this task incomplete and report that release gate explicitly; run the checkpoint quality gate for completed local work.
+- [x] 5.1 Add validated Cloudflare preview configuration, secret references and GitHub dispatch/run-control adapter; verify exact source/workflow/run correlation, no Pages calls, safe provider/quota errors and zero credentials in status DTOs.
+- [x] 5.2 Generate the dedicated fixed workflow with bootstrap/claim exchange before execution, pinned source/toolchain, scoped upload and completion, combined job deadline and credential isolation from site code; verify fixture protocol tests and duplicate dispatches starting at most one claimed build.
+- [x] 5.3 Wire private R2 staging/streaming, host routing and D1 preview state into the consumer Worker; verify local D1/R2 parity, oversized uploads/manifests, late writes, prefix isolation and unpublished media never obtaining a public URL.
+- [x] 5.4 Implement scheduled provider reconciliation, cancellation and bounded cleanup; verify delayed starts, missing callbacks, revoked credentials, process/lease fencing, callback duplication and timeout without automatic runner retries.
+- [x] 5.5 Run an authorized real GitHub Actions → Worker/D1/R2 preview acceptance on a disposable installation; record exact generation/source/run correlation, private resources, no Pages deployment, deadline/cancellation and publication isolation. If credentials/infrastructure are unavailable, leave this task incomplete and report that release gate explicitly; run the checkpoint quality gate for completed local work.
 
 ## 6. PV1F — Admin, operator guidance and full acceptance
 
-Depends on PV1A–PV1E. Implements the remaining `draft-preview` UI requirements,
+Depends on PV1A–PV1E. The owner approved applying 6.1 after the local checks in
+5.1–5.4 and before 5.5. Verify 6.1 with explicit local test composition. Resume
+with 5.5, then apply 6.2–6.7 in order. Real-provider acceptance and the final
+PV1F gate are both required before enabling preview creation in deployments.
+This checkpoint implements the remaining `draft-preview` UI requirements,
 configuration guidance and complete cross-runtime acceptance.
 
-- [ ] 6.1 Add safe readiness/status/admin preview clients and saved-only Create/Recreate/Retry actions using server permissions; verify admin/editor/viewer behavior, hidden unconfigured actions, dirty/new/route-less entities, field/block validation, stale revision conflicts and busy/duplicate requests.
-- [ ] 6.2 Add preview lifecycle presentation and bounded polling that stops at terminal outcomes; verify captured revision/staleness/expiry, safe actionable errors, manual retry of the current saved revision and no automatic popup, save, rebuild or retry.
-- [ ] 6.3 Add the separate preview screen with revision/expiry metadata, responsive widths, isolated iframe and always-available new-tab access; verify public-suffix-aware domain classification, fresh handoff, login/expired-frame recovery, multi-tab use, preserved unsaved editor state and accessible keyboard/focus behavior.
+- [x] 6.1 Add safe readiness/status/admin preview clients and saved-only Create/Recreate/Retry actions using server permissions; verify admin/editor/viewer behavior, hidden unconfigured actions, dirty/new/route-less entities, field/block validation, stale revision conflicts and busy/duplicate requests.
+- [x] 6.2 Add preview lifecycle presentation and bounded polling that stops at terminal outcomes; verify captured revision/staleness/expiry, safe actionable errors, manual retry of the current saved revision and no automatic popup, save, rebuild or retry.
+- [x] 6.3 Add the separate preview screen with revision/expiry metadata, responsive widths, isolated iframe and always-available new-tab access; verify public-suffix-aware domain classification, fresh handoff, login/expired-frame recovery, multi-tab use, preserved unsaved editor state and accessible keyboard/focus behavior.
 - [ ] 6.4 Complete generator/CLI doctor/setup guidance and public docs for Node, Cloudflare and existing sites; verify generated examples use the selected site/base paths, missing settings remain fail-closed, secrets are excluded, quota/timeout/manual recovery/TTL behavior is documented and external-effect responsibilities are explicit.
 - [ ] 6.5 Add and run reproducible end-to-end acceptance using packed consumers on both runtimes: unpublished/new revision preview, full public-output isolation, assets/links, save/unpublish retention, publish/media/model invalidation, TTL, auth revocation, manual retry and concurrent/late results; record evidence without depending on temporary spike files.
 - [ ] 6.6 Verify upgrade without preview configuration and rollback disabling/revoking preview while retaining public content; measure representative run duration, request/query budgets and package sizes, and document limits without claiming universal free-tier capacity or speedups.

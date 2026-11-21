@@ -9,8 +9,10 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { describePreviewBytes } from "@lacecms/application";
+import { unixMilliseconds } from "@lacecms/domain";
 import { claimPreviewFixture } from "@lacecms/test-utils";
 import { nodePreviewFixture } from "../packages/platform-node/src/test-support/preview-fixture.ts";
+import { runLocalContentSync } from "../packages/platform-node/src/runtime/content-sync.ts";
 import { createNodeAdminAssets } from "../apps/api/src/server/admin-assets.ts";
 
 const adminRequire = createRequire(new URL("../apps/admin/package.json", import.meta.url));
@@ -101,6 +103,17 @@ async function installPreview(cleanups, server, s3, adminName, previewName) {
     preview,
     endpoint: s3.endpoint,
     bucket,
+    previewAdminEnabled: true,
+    runnerEnvironment: {
+      LACE_PREVIEW_ORIGIN: preview,
+      LACE_PREVIEW_RUNNER_ORIGIN: "http://preview-runner.lace.test/",
+      LACE_PREVIEW_BUILDER_URL: "http://builder.lace.test/",
+      LACE_PREVIEW_BUILDER_SECRET: "test-builder-only-credential-for-preview",
+      LACE_PREVIEW_RUNNER_SECRET: "test-executor-only-credential-for-preview",
+      LACE_BUILD_SITE_ID: "main-site",
+      LACE_BUILD_SITE_LABEL: "Main site",
+      LACE_BUILD_SITE_URL: "https://published.example.org/",
+    },
     assets: {
       fetch: async (request) =>
         new URL(request.url).pathname === "/admin/preview-fixture"
@@ -110,23 +123,56 @@ async function installPreview(cleanups, server, s3, adminName, previewName) {
           : adminAssets.fetch(request),
     },
   });
-  const { runtime, run } = fixture;
+  const { runtime, run, config } = fixture;
   for (const origin of [admin, preview]) {
     server.routes.set(new URL(origin).host, (request, target) => {
       runtime.setRequestPeer(request, "127.0.0.1", target);
       return runtime.app.fetch(request);
     });
   }
-  const claim = await claimPreviewFixture(runtime.repository.preview, run, Date.now(), "browser");
-  const markup = `<!doctype html><title>Site fixture</title><link rel="stylesheet" href="/p/browser/site.css">
-    <h1>Protected draft</h1><script src="/p/browser/site.js"></script>`;
+  let ids = 0;
+  expect(
+    await runLocalContentSync({
+      check: false,
+      clock: { now: () => unixMilliseconds(Date.now()) },
+      ids: { next: () => `browser-content-${++ids}` },
+      models: config.runtime.content,
+      target: runtime.repository,
+      write: () => undefined,
+    }),
+  ).toBe(0);
+  const { id: entryId } = runtime.database.connection
+    .prepare("select id from content_entries where model_key = 'home'")
+    .get();
+  await run("update content_snapshots set revision = 8 where entry_id = ?", [entryId]);
+  await stageBrowserDraft(runtime, run, "browser", "Protected draft");
+  await run("delete from preview_current where generation_id = 'browser'", []);
+  await run("update preview_generations set entry_id = ? where id = 'browser'", [entryId]);
+  await run("insert into preview_current (entry_id, generation_id) values (?, 'browser')", [
+    entryId,
+  ]);
+  return {
+    admin,
+    preview,
+    site: `${preview}/p/browser/`,
+    entry: `${admin}/admin/content/home/${entryId}`,
+    runtime,
+    run,
+  };
+}
+
+async function stageBrowserDraft(runtime, run, id, title) {
+  const claim = await claimPreviewFixture(runtime.repository.preview, run, Date.now(), id);
+  const prefix = `/p/${id}/`;
+  const markup = `<!doctype html><title>Site fixture</title><link rel="stylesheet" href="${prefix}site.css">
+    <h1>${title}</h1><script src="${prefix}site.js"></script>`;
   const script = `const heading = document.querySelector("h1");
     try { void parent.document.title; heading.dataset.parent = "read"; }
     catch { heading.dataset.parent = "isolated"; }
     if (heading.dataset.parent === "isolated") {
-      try { top.location.href = "/p/browser/"; } catch {}
+      try { top.location.href = ${JSON.stringify(prefix)}; } catch {}
     }
-    navigator.serviceWorker.register("/p/browser/site.js").then(
+    navigator.serviceWorker.register(${JSON.stringify(prefix + "site.js")}).then(
       () => heading.dataset.worker = "registered",
       () => heading.dataset.worker = "blocked",
     );`;
@@ -149,7 +195,6 @@ async function installPreview(cleanups, server, s3, adminName, previewName) {
   for (const { file, body } of content)
     expect(await packages.stage(claim, file.path, file, body)).toBe(true);
   expect(await packages.complete(claim, output, [])).toBe(true);
-  return { admin, preview, site: `${preview}/p/browser/` };
 }
 
 async function signedIn(context, admin) {
@@ -181,6 +226,100 @@ async function openFrame(page, preview) {
   return page.frameLocator("iframe");
 }
 
+async function signInOnScreen(page) {
+  await page.getByLabel("Email").fill("admin@lace.test");
+  await page.getByLabel("Password", { exact: true }).fill("correct horse battery staple");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+}
+
+async function assertAdminPreviewScreen(browser, same, cross) {
+  const context = await browser.newContext({
+    ignoreHTTPSErrors: true,
+    viewport: { width: 1280, height: 900 },
+  });
+  const page = await signedIn(context, same.admin);
+  await page.goto(same.entry);
+  const title = page.getByRole("textbox", { name: "Title" });
+  const unsaved = `${await title.inputValue()} unsaved`;
+  await title.fill(unsaved);
+  const open = page.getByRole("button", { name: "Open preview" });
+  await open.focus();
+  await page.keyboard.press("Enter");
+  const screen = page.getByRole("dialog");
+  await browserExpect(screen.getByRole("heading")).toBeFocused();
+  await browserExpect(screen).toContainText("Captured revision 7");
+  await browserExpect(screen).toContainText("The saved draft is revision 8.");
+  await browserExpect(screen.locator("time").last()).toHaveAttribute("datetime", /^\d{4}-/u);
+  const frame = screen.locator("iframe");
+  const draft = frame.contentFrame().getByRole("heading", { name: "Protected draft" });
+  await browserExpect(draft).toHaveAttribute("data-parent", "isolated");
+  await browserExpect(draft).toHaveCSS("color", "rgb(120, 13, 141)");
+  expect((await frame.boundingBox()).width).toBeGreaterThan(1_000);
+  const narrow = screen.getByRole("button", { name: "Narrow" });
+  await narrow.focus();
+  await page.keyboard.press("Space");
+  await browserExpect(narrow).toHaveAttribute("aria-pressed", "true");
+  expect((await frame.boundingBox()).width).toBe(390);
+  await page.setViewportSize({ width: 375, height: 800 });
+  expect((await frame.boundingBox()).width).toBeLessThanOrEqual(375);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await browserExpect(draft).toBeVisible();
+
+  await stageBrowserDraft(same.runtime, same.run, "browser-two", "Protected second draft");
+  const another = await context.newPage();
+  await another.goto(`${same.preview}/view/browser-two`);
+  await browserExpect(
+    another.frameLocator("iframe").getByText("Protected second draft"),
+  ).toBeVisible();
+  await browserExpect(draft).toBeVisible();
+  await another.close();
+
+  await context.clearCookies({ name: "__Host-lace-preview" });
+  await frame
+    .contentFrame()
+    .locator("body")
+    .evaluate(() => location.reload());
+  await browserExpect(screen.getByRole("status")).toContainText(
+    "The preview could not be opened here.",
+  );
+  const reload = screen.getByRole("button", { name: "Reload preview" });
+  await reload.click();
+  await browserExpect(draft).toBeVisible();
+
+  await context.clearCookies({ domain: new URL(same.admin).hostname });
+  await reload.click();
+  await browserExpect(screen.getByRole("status")).toContainText("Open in a new tab to sign in");
+  const loginOpened = context.waitForEvent("page");
+  await screen.getByRole("link", { name: "Open in new tab" }).click();
+  const login = await loginOpened;
+  await login.waitForURL((url) => url.pathname === "/admin/login");
+  await signInOnScreen(login);
+  await login.waitForURL(`${same.preview}/view/browser`);
+  await browserExpect(login.frameLocator("iframe").getByText("Protected draft")).toBeVisible();
+  expect(
+    await login.evaluate(() => ({ opener: window.opener, referrer: document.referrer })),
+  ).toEqual({
+    opener: null,
+    referrer: "",
+  });
+  await login.close();
+  await reload.click();
+  await browserExpect(draft).toBeVisible();
+  await page.keyboard.press("Control+s");
+  await page.keyboard.press("Escape");
+  await browserExpect(open).toBeFocused();
+  await browserExpect(title).toHaveValue(unsaved);
+  expect(page.url()).toBe(same.entry);
+
+  const other = await signedIn(context, cross.admin);
+  await other.goto(cross.entry);
+  await other.getByRole("button", { name: "Open preview" }).click();
+  const fallback = other.getByRole("dialog");
+  await browserExpect(fallback.locator("iframe")).toHaveCount(0);
+  await browserExpect(fallback.getByRole("link", { name: "Open in new tab" })).toBeVisible();
+  await context.close();
+}
+
 test("HTTPS preview handoff works in a same-site iframe and falls back to a first-party viewer", async () => {
   const endpoint = process.env.LACE_TEST_PREVIEW_S3_URL;
   if (!endpoint || new URL(endpoint).hostname !== "127.0.0.1")
@@ -199,8 +338,8 @@ test("HTTPS preview handoff works in a same-site iframe and falls back to a firs
       cleanups,
       server,
       { endpoint, client },
-      "cms.lace.test",
-      "preview.lace.test",
+      "cms.preview-check.example.com",
+      "preview.preview-check.example.com",
     );
     const cross = await installPreview(
       cleanups,
@@ -209,7 +348,7 @@ test("HTTPS preview handoff works in a same-site iframe and falls back to a firs
       "cms.other.test",
       "preview.example.net",
     );
-    const foreign = `https://foreign.lace.test:${server.port}`;
+    const foreign = `https://foreign.preview-check.example.com:${server.port}`;
     server.routes.set(new URL(foreign).host, () =>
       html(`<!doctype html><iframe src="${same.site}"></iframe>`),
     );
@@ -217,7 +356,7 @@ test("HTTPS preview handoff works in a same-site iframe and falls back to a firs
       headless: true,
       args: [
         "--no-proxy-server",
-        "--host-resolver-rules=MAP *.lace.test 127.0.0.1, MAP *.other.test 127.0.0.1, MAP preview.example.net 127.0.0.1",
+        "--host-resolver-rules=MAP *.preview-check.example.com 127.0.0.1, MAP *.other.test 127.0.0.1, MAP preview.example.net 127.0.0.1",
         "--test-third-party-cookie-phaseout",
       ],
     });
@@ -233,7 +372,7 @@ test("HTTPS preview handoff works in a same-site iframe and falls back to a firs
     const previewCookies = await context.cookies(same.preview);
     expect(previewCookies.map(({ name }) => name)).toEqual(["__Host-lace-preview"]);
     expect(previewCookies[0]).toMatchObject({
-      domain: "preview.lace.test",
+      domain: "preview.preview-check.example.com",
       secure: true,
       httpOnly: true,
       sameSite: "Lax",
@@ -272,11 +411,10 @@ test("HTTPS preview handoff works in a same-site iframe and falls back to a firs
     const login = await anonymous.newPage();
     await login.goto(`${cross.preview}/view/browser`);
     expect(new URL(login.url()).pathname).toBe("/admin/login");
-    await login.getByLabel("Email").fill("admin@lace.test");
-    await login.getByLabel("Password", { exact: true }).fill("correct horse battery staple");
-    await login.getByRole("button", { name: "Sign in", exact: true }).click();
+    await signInOnScreen(login);
     await login.waitForURL(`${cross.preview}/view/browser`);
     await browserExpect(login.frameLocator("iframe").getByText("Protected draft")).toBeVisible();
+    await assertAdminPreviewScreen(browser, same, cross);
   } finally {
     for (const cleanup of cleanups.reverse()) await cleanup();
   }

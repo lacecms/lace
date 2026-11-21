@@ -1,6 +1,7 @@
 import { pagePathFailure } from "@lacecms/content";
 import { isPreviewArtifactPath, previewFailureReasons, previewStates } from "@lacecms/domain";
 import * as v from "valibot";
+import { ParsedUrl } from "../shared/url.js";
 import {
   expectedRevisionSchema,
   idempotencyKeySchema,
@@ -57,3 +58,41 @@ export const previewStatusSchema = v.nullable(
   }),
 );
 export type PreviewStatusDto = v.InferOutput<typeof previewStatusSchema>;
+
+const previewOrigin = v.pipe(
+  v.string(),
+  v.check((value) => {
+    try {
+      const url = new ParsedUrl(value);
+      return (
+        url.protocol === "https:" && !url.username && !url.password && url.href === `${value}/`
+      );
+    } catch {
+      return false;
+    }
+  }, "Expected a canonical HTTPS origin."),
+);
+
+export const previewReadinessSchema = v.variant("ready", [
+  v.strictObject({
+    ready: v.literal(false),
+    missing: v.optional(v.array(v.picklist(["preview-disabled", "preview-configuration"]))),
+  }),
+  v.strictObject({
+    ready: v.literal(true),
+    origin: previewOrigin,
+    viewMode: v.picklist(["iframe", "new-tab"]),
+  }),
+]);
+
+export const previewFrameMessageType = "lace-preview-frame";
+export const previewFrameMessageSchema = v.strictObject({
+  type: v.literal(previewFrameMessageType),
+  generationId: previewGenerationIdSchema,
+  status: v.picklist(["ready", "sign-in", "unavailable"]),
+});
+export type PreviewFrameStatus = v.InferOutput<typeof previewFrameMessageSchema>["status"];
+
+export const previewReceiptSchema = v.strictObject({ id: previewGenerationIdSchema, revision });
+export type PreviewReadinessDto = v.InferOutput<typeof previewReadinessSchema>;
+export type PreviewReceiptDto = v.InferOutput<typeof previewReceiptSchema>;

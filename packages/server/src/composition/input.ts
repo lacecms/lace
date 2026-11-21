@@ -15,6 +15,7 @@ import type {
   EmailSender,
   SensitiveRateLimiter,
   PreviewBrowserAccess,
+  PreviewAdmissionService,
   PreviewArtifactReader,
 } from "@lacecms/application";
 import type { BuildSiteIdentityDto } from "@lacecms/contracts";
@@ -74,7 +75,13 @@ export interface BuiltAdminResponder {
   fetch(request: Request): Promise<Response>;
 }
 
+export type AdminPreview = Pick<PreviewAdmissionService, "status" | "create"> & {
+  readonly origin: string;
+};
+
 export interface LaceAppInput {
+  /** Explicit test composition until the PV1 release gates pass. */
+  readonly adminPreview?: AdminPreview | "configuration-required";
   /** Present only for complete preview delivery composition or a checkpoint fixture. */
   readonly preview?: PreviewBrowserAccess<Request>;
   readonly previewArtifacts?: PreviewArtifactReader;

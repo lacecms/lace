@@ -48,6 +48,7 @@ export function composeNodePreview(
   return {
     transport: { origin: settings.runnerOrigin, fetch: runner.fetch },
     builder,
+    status: admission.status.bind(admission),
     async create(...args: Parameters<PreviewAdmissionService["create"]>) {
       const result = await admission.create(...args);
       if (result.kind !== "admitted") return result;

@@ -135,6 +135,7 @@ export function useEntryMutations({
       setConflict(undefined);
       setPublishAttempt(undefined);
       setLatestBuild({ build: result.build, change: "published" });
+      void queryClient.invalidateQueries({ queryKey: adminQueryKeys.previewStatus(entryId) });
       await queryClient.invalidateQueries({ queryKey: adminQueryKeys.modelEntries(modelKey) });
     },
   });

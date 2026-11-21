@@ -5,6 +5,7 @@ import type {
   PreviewBrowserAccess,
 } from "@lacecms/application";
 import { binaryStream, isNotModified } from "../shared/binary.js";
+import { isPreviewFrameRequest, previewFrameSignal } from "./frame.js";
 import { previewCookie, previewResponse, privatePreviewHeaders } from "./handoff.js";
 
 const artifactPath = /^\/p\/([A-Za-z0-9_-]{1,128})\/(.*)(?![\s\S])/u;
@@ -36,13 +37,32 @@ export async function previewArtifact(
   const [, id, path] = artifactPath.exec(pathname) ?? [];
   if (!id || path === undefined || (path !== "" && !previewArtifactContentType(path)))
     return previewResponse(404);
+  const denied = (status: number) => {
+    if (path !== "" || request.method !== "GET" || !isPreviewFrameRequest(request))
+      return previewResponse(status);
+    const headers = privatePreviewHeaders();
+    const nonce = crypto.randomUUID();
+    headers.set("content-type", "text/html; charset=utf-8");
+    headers.set(
+      "content-security-policy",
+      `default-src 'none'; script-src 'nonce-${nonce}'; frame-ancestors ${access.adminOrigin} ${access.previewOrigin}; base-uri 'none'`,
+    );
+    return new Response(
+      `<!doctype html><html lang="en"><meta charset="utf-8"><title>Preview unavailable</title>
+      <p>This preview could not be opened.</p><script nonce="${nonce}">
+      ${previewFrameSignal(access.adminOrigin)}
+      notify(${JSON.stringify(id)}, "unavailable");
+      </script></html>`,
+      { status, headers },
+    );
+  };
   const delivery = await access.delivery(previewCookie(request), id);
-  if (delivery === "denied") return previewResponse(401);
-  if (!delivery) return previewResponse(404);
+  if (delivery === "denied") return denied(401);
+  if (!delivery) return denied(404);
   const manifest = await packages.manifest(id, delivery.manifest);
-  if (!manifest) return previewResponse(404);
+  if (!manifest) return denied(404);
   const file = manifest.files.find((file) => file.path === (path || manifest.html));
-  if (!file) return previewResponse(404);
+  if (!file) return denied(404);
   const headers = privatePreviewHeaders();
   const etag = `"sha256-${file.sha256}"`;
   headers.set("content-type", file.contentType);
@@ -74,7 +94,7 @@ export async function previewArtifact(
     return new Response(null, { status: 416, headers });
   }
   const bytes = await packages.read(id, file, range);
-  if (!bytes) return previewResponse(404);
+  if (!bytes) return denied(404);
   headers.set("content-length", String(range?.length ?? file.bytes));
   if (range)
     headers.set(

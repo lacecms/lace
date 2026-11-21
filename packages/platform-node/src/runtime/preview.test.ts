@@ -169,3 +169,29 @@ test("SQLite exchanges one-use preview handoffs against real Better Auth session
       ),
   });
 });
+
+test("Node only advertises configured preview admission in explicit checkpoint composition", async () => {
+  const runnerEnvironment = {
+    LACE_PREVIEW_ORIGIN: draftPreviewOrigin,
+    LACE_PREVIEW_RUNNER_ORIGIN: "http://preview-runner.lace.test/",
+    LACE_PREVIEW_BUILDER_URL: "http://builder.lace.test/",
+    LACE_PREVIEW_BUILDER_SECRET: "test-builder-only-credential-for-preview",
+    LACE_PREVIEW_RUNNER_SECRET: "test-executor-only-credential-for-preview",
+    LACE_BUILD_SITE_ID: "main-site",
+    LACE_BUILD_SITE_LABEL: "Main site",
+    LACE_BUILD_SITE_URL: "https://public.lace.test/",
+  };
+  for (const previewAdminEnabled of [false, true]) {
+    const fixture = await nodePreviewFixture(cleanups, { previewAdminEnabled, runnerEnvironment });
+    const cookie = await fixture.signIn();
+    const response = await fixture.runtime.app.fetch(
+      new Request(`${nodePreviewAdmin}/api/v1/admin/preview/config`, { headers: { cookie } }),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(
+      previewAdminEnabled
+        ? { ready: true, origin: draftPreviewOrigin, viewMode: "new-tab" }
+        : { ready: false, missing: ["preview-disabled"] },
+    );
+  }
+});
