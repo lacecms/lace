@@ -104,9 +104,11 @@ setup → `astro-draft-preview`.
 - [draft-preview](draft-preview/spec.md)
 - [draft-preview-delivery](draft-preview-delivery/spec.md)
 - [astro-draft-preview](astro-draft-preview/spec.md)
-- [local-node-development](local-node-development/spec.md)
-- [project-generator](project-generator/spec.md)
-- [generated-project-acceptance](generated-project-acceptance/spec.md)
+
+See [local Node development](local-node-development/spec.md) for loopback
+setup, [project generation](project-generator/spec.md) for generated Compose
+configuration and [generated project acceptance](generated-project-acceptance/spec.md)
+for end-to-end verification.
 
 ## API, accounts and MCP
 

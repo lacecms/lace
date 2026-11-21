@@ -240,12 +240,15 @@ and [Cloudflare preview setup](../../deployment/cloudflare/#prepare-protected-dr
 | `LACE_DEV_CMS_HOST`, `LACE_DEV_PREVIEW_HOST`, `LACE_DEV_HTTPS_PORT` | Local Node gateway     | No       | `cms.lace.test`, `preview.lace.test`, `3443`   | Distinct loopback HTTPS endpoints.                                                               |
 | `LACE_DEV_TLS_CERT`, `LACE_DEV_TLS_KEY`                             | Local Node gateway     | Key file | `.lace/tls/cert.pem`, `.lace/tls/key.pem`      | Mount a locally trusted certificate and its private key.                                         |
 | `LACE_DEV_PREVIEW_SITE_URL`                                         | Local Node API, runner | No       | `http://localhost:4321/` in generated projects | Public site base for preview navigation.                                                         |
-| `LACE_PREVIEW_HOST`                                                 | Nginx                  | No       | Empty, derived from `LACE_PREVIEW_ORIGIN`      | Optional hostname for Compose ingress, without scheme, path or port.                             |
+| `LACE_PREVIEW_HOST`                                                 | Compose ingress        | No       | Empty                                          | Optional extra hostname for Compose ingress, without scheme, path or port.                       |
 | `LACE_PREVIEW_ORIGIN`                                               | API                    | No       | Required for preview                           | Distinct bare HTTPS preview origin with a trailing slash.                                        |
 | `LACE_PREVIEW_RUNNER_ORIGIN`                                        | API                    | No       | Compose sets `http://api:3000/`                | Private API origin used by the preview runner on Node.                                           |
 | `LACE_PREVIEW_BUILDER_URL`                                          | API                    | No       | Compose sets `http://builder:8788/`            | Private fixed-command builder origin for Node preview.                                           |
 | `LACE_PREVIEW_BUILDER_SECRET`                                       | API, builder           | Yes      | Empty, required for preview                    | Dedicated API-to-builder credential.                                                             |
 | `LACE_PREVIEW_RUNNER_SECRET`                                        | API, builder           | Yes      | Empty, required for preview                    | Dedicated runner claim credential, separate from the builder secret and publication credentials. |
+
+The Compose entrypoint builds `LACE_PREVIEW_HOSTNAMES` for Nginx from
+`LACE_PREVIEW_ORIGIN` and `LACE_PREVIEW_HOST`, excluding the CMS and public site hostnames.
 
 #### Cloudflare and GitHub Actions
 

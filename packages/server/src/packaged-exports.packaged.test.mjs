@@ -20,11 +20,11 @@ test("packaged entry point keeps its public exports", async () => {
     "jsonRequestLogger",
     "packageName",
     "parseBuildSiteIdentity",
-    "previewHostname",
-    "reservedPreviewHostname",
     "parseEmailSettings",
     "parseMcpEnabled",
     "parseRuntimeFeatureFlags",
+    "previewHostname",
+    "reservedPreviewHostname",
     "sensitiveRequestLimit",
     "sensitiveRequestSubject",
   ]);
