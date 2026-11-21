@@ -28,6 +28,7 @@ import {
   contentModelStructure,
 } from "../structure/canonical.js";
 import { modelForHash, normalizedModelForHash } from "../structure/hash-input.js";
+import { assertReferenceTargetModels } from "./reference-target-models.js";
 
 function assertUniqueModels(models: readonly ContentModelDefinition[]): void {
   const currentKeys = new Map<string, ContentModelDefinition>();
@@ -159,6 +160,7 @@ export async function defineConfig<const Models extends readonly ContentModelDef
   const models = [...input.content];
   assertUniqueModels(models);
   assertRegisteredModelBlocks(models, registry);
+  assertReferenceTargetModels(models, registry);
 
   const normalizedModels = await Promise.all(
     models.map(async (model) => {

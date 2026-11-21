@@ -31,6 +31,7 @@ const keywords = new Set([
   "minimum",
   "maximum",
   "minLength",
+  "maxLength",
   "oneOf",
   "$ref",
 ]);
@@ -65,6 +66,7 @@ function accepts(schema: Schema, value: unknown): boolean {
   if (
     typeof value === "string" &&
     ((schema.minLength !== undefined && [...value].length < Number(schema.minLength)) ||
+      (schema.maxLength !== undefined && [...value].length > Number(schema.maxLength)) ||
       (schema.pattern && !new RegExp(String(schema.pattern), "u").test(value)))
   )
     return false;
@@ -142,6 +144,7 @@ const valid = {
     placeholder: "Video",
   }),
   media: field.media({ defaultValue: "media" }),
+  reference: field.reference({ models: ["authors", "reviews"], defaultValue: "A/b" }),
   group: field.group({ fields: { title: field.text() }, defaultValue: {}, layout }),
   list: field.list({
     item: field.group({ fields: { title: field.text() }, layout }),
@@ -181,6 +184,17 @@ test("descriptor schemas and shared normalization agree on the capability-genera
     if (kind === "group") {
       const { layout: _, ...withoutLayout } = definition as typeof valid.group;
       corpus.push(withoutLayout);
+    }
+    if (kind === "reference") {
+      const { models: _, ...withoutModels } = definition as typeof valid.reference;
+      corpus.push(
+        withoutModels,
+        { ...definition, models: [] },
+        { ...definition, models: ["authors", "authors"] },
+        { ...definition, models: ["Authors"] },
+        { ...definition, defaultValue: "" },
+        { ...definition, defaultValue: "x".repeat(256) },
+      );
     }
     expect(accepts(components.FieldDefinition!, definition), kind).toBe(true);
     for (const descriptor of corpus) {

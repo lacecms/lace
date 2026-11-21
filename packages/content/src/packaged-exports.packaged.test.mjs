@@ -52,6 +52,7 @@ test("packaged entry point keeps its public exports", async () => {
     "canonicalizeJson",
     "collectFieldInternalLinks",
     "collectFieldMedia",
+    "collectSnapshotEntryReferences",
     "collectSnapshotInternalLinks",
     "collectionPathFailure",
     "collectionRouteFailure",

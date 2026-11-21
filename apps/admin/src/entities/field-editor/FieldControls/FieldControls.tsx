@@ -444,6 +444,14 @@ function UnavailableMediaField() {
   );
 }
 
+function UnavailableReferenceField({ value }: FieldRendererProps) {
+  return (
+    <p className="m-0 font-normal text-muted-foreground">
+      {typeof value === "string" ? value : "Entry selection is not available here."}
+    </p>
+  );
+}
+
 /** Scalar controls reused by the recursive field renderer. */
 export const builtInRenderers: Record<
   Exclude<Exclude<FieldDefinition, GroupFieldDefinition | ListFieldDefinition>["type"], "richText">,
@@ -454,6 +462,7 @@ export const builtInRenderers: Record<
   datetime: DatetimeField,
   media: UnavailableMediaField,
   number: NumberField,
+  reference: UnavailableReferenceField,
   select: SelectField,
   text: TextField,
   textarea: TextareaField,

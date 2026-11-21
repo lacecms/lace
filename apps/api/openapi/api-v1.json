@@ -539,6 +539,40 @@
             "type": "object"
           },
           {
+            "additionalProperties": false,
+            "properties": {
+              "defaultValue": {
+                "description": "Opaque, case-sensitive entry ID. Shared runtime validation limits IDs to 255 UTF-16 code units and rejects control characters and invalid encoding.",
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "models": {
+                "items": {
+                  "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "type": {
+                "const": "reference"
+              }
+            },
+            "required": ["type", "required", "models"],
+            "type": "object"
+          },
+          {
             "$ref": "#/components/schemas/GroupFieldDefinition"
           },
           {
@@ -943,6 +977,40 @@
                   }
                 },
                 "required": ["type", "required"],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "defaultValue": {
+                    "description": "Opaque, case-sensitive entry ID. Shared runtime validation limits IDs to 255 UTF-16 code units and rejects control characters and invalid encoding.",
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "models": {
+                    "items": {
+                      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "required": {
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "const": "reference"
+                  }
+                },
+                "required": ["type", "required", "models"],
                 "type": "object"
               },
               {

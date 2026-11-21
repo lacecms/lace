@@ -69,7 +69,12 @@ function upperBoundChange(
   return after < before ? "tighten" : "relax";
 }
 
-function compareField(key: string, before: JsonObject, after: JsonObject): StructuralChange[] {
+function compareField(
+  key: string,
+  before: JsonObject,
+  after: JsonObject,
+  renamedModels: StructureHints["renamedModels"],
+): StructuralChange[] {
   if (before.type !== after.type) {
     return [{ class: "breaking", kind: "field-type-changed", scope: "field", target: key }];
   }
@@ -79,7 +84,12 @@ function compareField(key: string, before: JsonObject, after: JsonObject): Struc
   }
   const properties = new Set([...Object.keys(before), ...Object.keys(after)]);
   const unsupported = [...properties]
-    .filter((name) => !FIELD_PROPERTIES.has(name) && !same(before[name], after[name]))
+    .filter(
+      (name) =>
+        !FIELD_PROPERTIES.has(name) &&
+        !(name === "models" && after.type === "reference") &&
+        !same(before[name], after[name]),
+    )
     .sort();
   if (unsupported.length > 0) {
     return [
@@ -123,6 +133,13 @@ function compareField(key: string, before: JsonObject, after: JsonObject): Struc
   if (before.required !== after.required) {
     changed.push("required");
     if (after.required === true) tightened = true;
+  }
+  if (after.type === "reference") {
+    const prior = new Set(stringList(before.models).map((key) => renamedModels?.get(key) ?? key));
+    const next = new Set(stringList(after.models));
+    const removed = [...prior].some((key) => !next.has(key));
+    if (removed || prior.size !== next.size) changed.push("models");
+    if (removed) tightened = true;
   }
   let reordered = false;
   if (!same(before.options, after.options)) {
@@ -245,7 +262,7 @@ export function diffContentModelStructures(
     after: JsonObject,
   ): void => {
     const address = encodeSchemaPath(path);
-    changes.push(...compareField(address, before, after));
+    changes.push(...compareField(address, before, after, hints.renamedModels));
     if (before.type !== after.type) return;
     if (after.type === "group")
       compareMap(

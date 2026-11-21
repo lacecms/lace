@@ -88,6 +88,15 @@ show "published, build pending" or "published, build failed".
   (`content:write`, collections only) creates an unpublished copy at revision
   1.
 
+[ADR 0034](../adr/0034-acyclic-entry-reference-fields.md) sets the pre-1.0
+integrity rules for typed entry references. Draft writes preserve an acyclic
+graph across saved drafts. Publication independently preserves an acyclic
+graph across delivered published references, whose targets must be published.
+Each mutation checks the affected graph atomically. A direct delivered
+reference blocks target unpublication or deletion until the referring
+publication stops using it. Direct draft usage requires a reviewed warning
+before deletion.
+
 ### Draft preview boundary (selected PV1 scope)
 
 Creating a preview is a separate `content:write` browser-session command. It

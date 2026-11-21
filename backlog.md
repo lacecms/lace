@@ -108,13 +108,14 @@ when selected and do not yet have an implementation order or new CE numbers.
   and format-2 export are implemented; populated model removal stays forbidden.
   See `docs/internal-url-links.md` and its verification record. Specs synchronized
   and change archived on 2026-10-24 at
-  `openspec/changes/archive/2026-10-24-ce10-internal-url-links`. Reference fields
-  and rich-text internal links remain excluded.
-- **Entry reference fields and rich-text internal links (deferred from CE10):**
-  related-content fields and stable destinations inside rich text require their
-  own future scope/planning; no implementation order selected. Reviewed
-  2026-10-31 and kept deferred outside the site migration roadmap; a numeric
-  order field covers project ordering and "next" links for now.
+  `openspec/changes/archive/2026-10-24-ce10-internal-url-links`.
+- **Entry reference fields (selected 2026-11-21):** the owner selected
+  [REL1](docs/extensibility-roadmap.md#pre-10-priority-rel1--entry-reference-fields)
+  after saved-draft preview. One [active proposal](openspec/changes/add-entry-reference-fields/proposal.md)
+  covers typed selections, direct usage and lifecycle rules, SDK and editor
+  integration in six sessions.
+- **Rich-text internal links (deferred from CE10):** stable navigation
+  destinations inside rich text still need a separate scope and planning.
 - **CE11 Responsive images (C3):** width variants and `srcset` through
   Astro image optimization or Cloudflare Images, using CE3 dimensions and
   focal point.

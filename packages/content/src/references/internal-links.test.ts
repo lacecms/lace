@@ -3,7 +3,7 @@ import { field } from "../fields/builders.js";
 import { defineBlock } from "../blocks/definition.js";
 import { defineBlockRegistry } from "../blocks/registry.js";
 import { validateEntryAggregate } from "../entries/aggregate.js";
-import { collectSnapshotInternalLinks, collectFieldInternalLinks } from "./internal-links.js";
+import { collectSnapshotInternalLinks, collectFieldInternalLinks } from "./entry-references.js";
 import { issueFrom } from "../test-support/content-test-helpers.js";
 import { validateModelFields } from "../fields/validation.js";
 

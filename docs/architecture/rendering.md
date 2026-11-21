@@ -119,6 +119,11 @@ images, links, site URL, indexing, SEO, sitemap and robots) and the error codes
 are specified in
 [published-site-loader](../../openspec/specs/published-site-loader/spec.md).
 
+[ADR 0034](../adr/0034-acyclic-entry-reference-fields.md) specifies one
+explicit lookup per entry-reference hop against the complete version-bound
+export. In saved-draft preview the same lookup reads the frozen context.
+Only the selected routed entry contributes a draft.
+
 The loader's invariants:
 
 - The view exposes published content only, with no draft-shaped property.

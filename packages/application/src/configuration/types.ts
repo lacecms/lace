@@ -77,6 +77,8 @@ export interface StructureHints {
   readonly removedFields?: readonly string[];
   /** Current field key to former field key. */
   readonly renamedFields?: Readonly<Record<string, string>>;
+  /** Stored target model key to configured key for prospective reference comparisons. */
+  readonly renamedModels?: ReadonlyMap<string, string>;
   /** Stored SEO groups may be cleared after `seo` is disabled. */
   readonly removedSeo?: boolean;
 }

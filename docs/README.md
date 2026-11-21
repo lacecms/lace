@@ -40,7 +40,7 @@ the two indexes describe themselves and are excluded from the row count.
 | [documentation-maintenance.md](documentation-maintenance.md) | internal note | §6/§19/§20; public-documentation ownership, page rules and publication | — |
 | [internal-url-links.md](internal-url-links.md) | internal note | §8/§9.6/§13; link identities, guards, persistence and rollback | [Internal links](../apps/docs/src/content/docs/en/latest/content-modeling/links.md) |
 | [node-api.md](node-api.md) | internal note | §5/§12/§18; Node runtime boundaries and the engine-checkout stack | [Node deployment](../apps/docs/src/content/docs/en/latest/deployment/node.md), [CLI and environment](../apps/docs/src/content/docs/en/latest/reference/cli-environment.md) |
-| [extensibility-roadmap.md](extensibility-roadmap.md) | authoritative | Active EX1–EX6 delivery order, session boundaries and owner decisions | — |
+| [extensibility-roadmap.md](extensibility-roadmap.md) | authoritative | Extensibility and pre-1.0 priorities, session boundaries and owner decisions | — |
 | [verification.md](verification.md) | internal note | §3/§14/§20/§21; commands, limits, coverage, D1 budgets and owner checks | — |
 
 ### Promoted and deleted
@@ -114,6 +114,7 @@ Git history keeps the originals.
 | [0031-route-less-collections.md](adr/0031-route-less-collections.md) | authoritative | ADR 0031: Route-less collections |
 | [0032-outbox-contract-boundary.md](adr/0032-outbox-contract-boundary.md) | authoritative | ADR 0032: Share durable outbox contracts through a dedicated subpath |
 | [0033-protected-static-draft-preview.md](adr/0033-protected-static-draft-preview.md) | authoritative | ADR 0033: Protected single-page draft preview |
+| [0034-acyclic-entry-reference-fields.md](adr/0034-acyclic-entry-reference-fields.md) | authoritative | ADR 0034: Acyclic entry reference fields |
 
 ## docs/archive/
 

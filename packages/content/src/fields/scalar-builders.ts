@@ -11,6 +11,8 @@ import type {
   DateFieldDefinition,
   DatetimeFieldDefinition,
   MediaFieldDefinition,
+  ReferenceFieldDefinition,
+  ReferenceFieldOptions,
   UrlFieldDefinition,
   StringValueFieldOptions,
   FieldDefinition,
@@ -31,6 +33,8 @@ import { deepFreeze } from "../shared/objects.js";
 import { parseVideoEmbed, VIDEO_EMBED_PROVIDERS } from "./video-embeds.js";
 import { isSafeUrl, isSafeRichTextDocument } from "./rich-text.js";
 import { descriptorRecord } from "./descriptor-record.js";
+import { MODEL_KEY_PATTERN } from "../shared/identifiers.js";
+import { isInternalLinkTargetId } from "./internal-link-tokens.js";
 
 export function normalizeOptions(options: unknown): MutableJsonObject {
   const normalized = normalizeJsonValue(options, "options");
@@ -412,6 +416,29 @@ export const scalarField = {
     options?: Options,
   ): MediaFieldDefinition<Options> {
     return buildStringValueField("media", options) as MediaFieldDefinition<Options>;
+  },
+
+  /** Define a field holding one opaque ID from the declared models. */
+  reference<const Options extends ReferenceFieldOptions>(
+    input: Options & Record<Exclude<keyof Options, keyof ReferenceFieldOptions>, never>,
+  ): ReferenceFieldDefinition<Options> {
+    const options = normalizeOptions(input);
+    assertAllowedOptions(options, ["defaultValue", "description", "label", "models", "required"]);
+    const models = options.models;
+    if (
+      !Array.isArray(models) ||
+      models.length === 0 ||
+      !models.every(
+        (key): key is string => typeof key === "string" && MODEL_KEY_PATTERN.test(key),
+      ) ||
+      new Set(models).size !== models.length
+    )
+      fail("options.models", "must be a non-empty list of unique model keys.");
+
+    const definition: Record<string, unknown> = { type: "reference", models: models.sort() };
+    addCommonOptions(definition, options);
+    addDefault(definition, options, isInternalLinkTargetId, "must be a valid entry ID.");
+    return deepFreeze(definition) as ReferenceFieldDefinition<Options>;
   },
 } as const;
 

@@ -1,4 +1,4 @@
-/** The maximum number of internal URL occurrences in a normalized snapshot. */
+/** The combined limit for internal URL and typed entry occurrences in a normalized snapshot. */
 export const MAX_INTERNAL_LINK_REFERENCES = 200;
 
 /** C0 controls, DEL and C1 controls. */

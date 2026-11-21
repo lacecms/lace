@@ -8,6 +8,7 @@ import type { JsonObject } from "@lacecms/content";
 import { contentPort } from "../test-support/content-port.js";
 import { mediaRecord } from "../test-support/media-fixtures.js";
 import type { NormalizedDraftCandidate } from "./draft-normalization.js";
+import { validateDraft } from "./draft-validation.js";
 import {
   canonicalizeJson,
   ContentUseCases,
@@ -123,6 +124,55 @@ test("a global's title is replaced by its label", () => {
     model: settings,
   });
   expect(normalized.title).toBe("Site settings");
+});
+
+test("mixed entry references and media keep separate occurrence allowances", async () => {
+  const media = field.list({ item: field.media() });
+  const configuration = await defineConfig({
+    content: [
+      defineCollection({
+        key: "reviews",
+        version: 1,
+        fields: {
+          first: media,
+          second: media,
+          cover: field.media(),
+          related: field.list({ item: field.reference({ models: ["reviews"] }) }),
+          links: field.list({ item: field.url() }),
+        },
+      }),
+    ],
+  });
+  const model = configuration.runtime.content[0]!;
+  const dependencies = {
+    config: configuration.runtime,
+    content: { resolveLinkTargets: async () => ({}) },
+    media: {
+      loadMedia: async () => {
+        throw new Error("Unexpected loadMedia");
+      },
+      loadMediaMany: async (ids: readonly string[]) =>
+        ids.map((id) => mediaRecord({ id: mediaId(id) })),
+    },
+  };
+  const fields = {
+    first: Array.from({ length: 100 }, () => "image"),
+    second: Array.from({ length: 100 }, () => "image"),
+    related: Array.from({ length: 100 }, () => "review"),
+    links: Array.from({ length: 100 }, () => "entry:page"),
+  };
+  const input = { title: "Reviews", fields, blocks: [] };
+  const normalized = await validateDraft(dependencies, input, model, "draft");
+  expect(normalized.mediaReferences).toHaveLength(200);
+  expect(normalized.internalLinks).toHaveLength(100);
+  await expect(
+    validateDraft(
+      dependencies,
+      { ...input, fields: { ...fields, cover: "image" } },
+      model,
+      "draft",
+    ),
+  ).rejects.toThrow(/more than 200 media references/);
 });
 
 test("invalid block data fails with the draft-save issue path", () => {

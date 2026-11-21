@@ -80,9 +80,13 @@ global may declare `seoDefaults` ([ADR 0011](../adr/0011-seo-system-group.md),
 
 The field DSL supports text, textarea, rich text, number, boolean, date,
 datetime, select, URL and media, plus the composites group and list
-([field-descriptors]). Reference fields are not part of the product; the
-field-definition union and validation visitor are exhaustive, so such a variant
-can be added without changing existing encodings ([content-validation]).
+([field-descriptors]). The pre-1.0 scope also includes an entry-reference
+scalar under [ADR 0034](../adr/0034-acyclic-entry-reference-fields.md).
+Its value is the stable ID of a page or collection entry from an allowed
+model, including a collection without a route. The existing list descriptor
+expresses an ordered selection. This applies to model fields, globals and
+block data wherever a scalar is permitted. The field-definition union and
+validation visitor are exhaustive ([content-validation]).
 
 `@lacecms/content` owns the frozen `fieldTypeCapabilities` declaration and
 `FIELD_FILTER_OPERATIONS` ([field-descriptors]). Configuration, contracts,
@@ -102,8 +106,7 @@ Ordinary URL fields in model and global fields and block data, at any depth,
 accept a canonical `entry:<URI-component-encoded-id>` destination besides
 manual URLs ([internal-url-links], [guide](../internal-url-links.md)).
 
-- No reference-field kind is introduced. Block settings keep their
-  select/boolean/number/text allowlist and never hold references. Rich text,
+- Block settings keep their select/boolean/number/text allowlist. Rich text,
   provider-restricted URLs and SEO canonical URLs keep their own grammar;
   manual URLs are never converted or repaired.
 - Snapshots record indexed reference locations, and one graph revision is
@@ -307,7 +310,7 @@ with the configured structure and classifies every difference
 | validated | tighten a constraint, optional to required | apply only if every stored value satisfies it |
 | destructive | remove or rename a field, disallow a block type, disable SEO | apply only when no snapshot holds the data, or with an explicit hint |
 | migration | change an allowed block's definition | apply when no snapshot holds the block type; otherwise needs a block version increase and migrations |
-| breaking | change a field type, path or route (also adding or removing one) | refuse (path or route: while published; route removal also while snapshots hold slugs or incoming links) |
+| breaking | change a field type, path or route (also adding or removing one) | refuse (path or route: while published; route removal also while snapshots hold slugs or incoming URL links) |
 
 A required field added without a default is accepted: published snapshots stay
 valid as published, and each entry's next publication enforces it.

@@ -128,6 +128,7 @@ function fieldMarkup(key: string, field: ScaffoldField): string {
     case "group":
     case "list":
     case "number":
+    case "reference":
     case "select":
     case "text":
     case "textarea":

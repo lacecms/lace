@@ -207,6 +207,35 @@ The [verification record](../openspec/changes/archive/2026-11-21-enable-opt-in-d
 covers the shipped entry points, including hosted activation, a successful
 saved-draft build through GitHub Actions and withdrawal on `test-homepage`.
 
+## Pre-1.0 priority REL1 — Entry reference fields
+
+Selected on 2026-11-21 after protected single-entry preview. Status:
+**in progress** in [`add-entry-reference-fields`](../openspec/changes/add-entry-reference-fields/proposal.md).
+The owner selected one change with six ordered implementation sessions. They
+share the same field identity, publication guarantees and checker on Node and
+Cloudflare. Each session has its own verification checkpoint. The complete
+feature is ready to ship once the editor, import and generated-site scenarios
+exercise those same guarantees.
+
+| Session | Verification checkpoint |
+| --- | --- |
+| REL1A | Declare the scalar and its model allowlist, compose it with existing lists and verify configuration and schema evolution rules. |
+| REL1B | Migrate the direct usage index and verify atomic draft and published cycle checks on SQLite and D1, including concurrent writes and staged reversal. |
+| REL1C | Enforce lifecycle guards and expose permission-checked target search, direct impact and reviewed deletion through the admin API. |
+| REL1D | Resolve ID selections from the complete published export and the frozen preview context, including route-less records and targets on later export pages. |
+| REL1E | Exercise field selection, ordering, exact-field navigation, deleted selections and actionable publication-order errors in the editor. |
+| REL1F | Verify import and retry ordering, public documentation, generated-site journeys, upgrade/rollback and final cross-runtime checks. |
+
+REL1A implementation and verification are recorded in the
+[change checkpoint](../openspec/changes/add-entry-reference-fields/verification.md#rel1a--field-descriptors-and-configuration).
+
+[ADR 0034](adr/0034-acyclic-entry-reference-fields.md) records the scope and
+rationale. Direct published references block withdrawal and deletion.
+Draft-only uses allow deletion after a warning and acknowledgment. Editors
+can prepare both halves of a reversed reference in drafts before publishing
+them in dependency order. A page preview reads the published version of each
+selected target. Rich-text navigation stays in the [backlog](../backlog.md).
+
 ## 5. Owner decisions (2026-11-14)
 
 1. The refactoring roadmap is archived; its unfinished sessions and the open

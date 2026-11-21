@@ -72,6 +72,8 @@ export type {
   DatetimeFieldDefinition,
   UrlFieldDefinition,
   MediaFieldDefinition,
+  ReferenceFieldDefinition,
+  ReferenceFieldOptions,
   SelectFieldDefinition,
   FormLayout,
   FieldVisibilityRule,
@@ -128,11 +130,13 @@ export type {
   FieldInternalLinkReference,
   InternalLinkReference,
   PublicInternalLinkReference,
-} from "./references/internal-links.js";
+  SnapshotEntryReference,
+} from "./references/entry-references.js";
 export {
   collectFieldInternalLinks,
   collectSnapshotInternalLinks,
-} from "./references/internal-links.js";
+  collectSnapshotEntryReferences,
+} from "./references/entry-references.js";
 
 // blocks
 export type {
