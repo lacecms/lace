@@ -1,4 +1,4 @@
-# Lace
+# <img src="./logo-icon.png" width="48" height="48" alt="" /> Lace
 
 **A lightweight, self-hosted headless CMS for Astro websites.**
 
