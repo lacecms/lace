@@ -28,15 +28,17 @@ function trackGuards(connection: Database.Database) {
 
 function observedConnection(
   connection: Database.Database,
-  { beforePrepare, afterWrite }: Pick<ContractRepositoryOptions, "beforePrepare" | "afterWrite">,
+  { beforePrepare, afterRead, afterWrite }: Partial<ContractRepositoryOptions>,
 ) {
   const statements: string[] = [];
+  let maxParameters = 0;
   return {
     reads: {
       reset: () => {
         statements.length = 0;
+        maxParameters = 0;
       },
-      snapshot: () => ({ statements: statements.length, sql: [...statements] }),
+      snapshot: () => ({ statements: statements.length, sql: [...statements], maxParameters }),
     },
     connection: new Proxy(connection, {
       get(target, property) {
@@ -60,7 +62,13 @@ function observedConnection(
                 if (key === "all" || key === "get")
                   return (...args: unknown[]) => {
                     statements.push(sql);
-                    return value[key](...args);
+                    maxParameters = Math.max(maxParameters, args.length);
+                    const result: unknown = value[key](...args);
+                    afterRead?.(
+                      key === "all" ? (result as unknown[]) : [result],
+                      target.inTransaction,
+                    );
+                    return result;
                   };
                 const member: unknown = Reflect.get(value, key);
                 return typeof member === "function" ? member.bind(value) : member;
@@ -77,6 +85,7 @@ function observedConnection(
 const runtimes: Record<string, RepositoryContractRuntime> = {
   "file-backed SQLite": {
     listQueryLimits: NODE_LIST_QUERY_LIMITS,
+    publicReadOverlap: "wal",
     recordEvidence: (value) => console.log("Collection query SQLite file", JSON.stringify(value)),
     async open(options) {
       const directory = await mkdtemp(join(tmpdir(), "lace-contract-"));
@@ -98,7 +107,14 @@ const runtimes: Record<string, RepositoryContractRuntime> = {
       return {
         reads: observed.reads,
         reopen: (overrides = {}) =>
-          new NodeContentRepository(connect(), options.resolveModel, { ...options, ...overrides }),
+          new NodeContentRepository(
+            observedConnection(connect(), overrides).connection,
+            options.resolveModel,
+            {
+              ...options,
+              ...overrides,
+            },
+          ),
         repository: new NodeContentRepository(observed.connection, options.resolveModel, options),
         sql: contractSql(connection),
       };

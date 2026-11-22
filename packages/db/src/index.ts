@@ -1,7 +1,7 @@
 // Directory dependencies: shared ← schema, security, links; links ← content, sync;
 // write-plan ← links, content, media, builds, publication, outbox, sync; content ← sync;
 // content ← media ← delivery ← builds; builds, content, links ← publication;
-// shared ← outbox; builds, links ← reads; content, links, media, reads, shared, write-plan ← preview.
+// shared ← outbox; builds, delivery, links ← reads; content, links, media, reads, shared, write-plan ← preview.
 // builds, content, links, media, outbox, publication, reads, shared, sync,
 // preview, write-plan ← node-repository.
 export * from "./security/oauth.js";

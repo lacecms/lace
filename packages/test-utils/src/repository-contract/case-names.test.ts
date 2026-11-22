@@ -174,5 +174,11 @@ test("preserves every repository contract case in order", () => {
     "preview capture stops within the D1 query budget when the site exceeds three pages",
     "preview refuses oversized globals before loading their stored content",
     "preview capture replaces an old publication path only inside the frozen input",
+    "a public path read stays complete across republication",
+    "public payload size is independent of the draft",
+    "a routed public list keeps its membership, payload and cursor coherent",
+    "a route-less public list keeps its membership, payload and cursor coherent",
+    "a public global read stays complete across republication",
+    "maximum public list pages keep fixed statement and binding counts",
   ]);
 });

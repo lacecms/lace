@@ -26,11 +26,13 @@ export const PUBLIC_INTERNAL_LINKS_JSON_SQL = `(select coalesce(json_group_array
   from (select source_key,area,field_path,target_entry_id from content_entry_link_references
     where snapshot_id=s.id and purpose='url' and delivered=1 order by source_key,area,field_path))`;
 
-export const PUBLIC_ROUTE_SQL = `select e.id, e.model_key, e.draft_snapshot_id, e.published_snapshot_id,
-        r.path, s.created_at as published_created_at, ${PUBLIC_INTERNAL_LINKS_JSON_SQL} as internal_links_json
-   from published_routes r
+export const PUBLIC_ROUTE_FROM_SQL = `from published_routes r
    join content_entries e on e.id = r.entry_id and e.published_snapshot_id = r.snapshot_id
    join content_snapshots s on s.id = r.snapshot_id`;
+
+export const PUBLIC_ROUTE_SQL = `select e.id, e.model_key, e.draft_snapshot_id, e.published_snapshot_id,
+        r.path, s.created_at as published_created_at, ${PUBLIC_INTERNAL_LINKS_JSON_SQL} as internal_links_json
+   ${PUBLIC_ROUTE_FROM_SQL}`;
 
 /**
  * Whether published collection entry `e` has no published route: the stored
@@ -47,23 +49,30 @@ const PUBLIC_GLOBAL_MODEL_KINDS_SQL = modelKindsMatchingDelivery(
   ({ publicFamily }) => publicFamily === "globals",
 );
 
-/** Published entries of route-less collections; reads no route. */
-export function publicRecordSql(kinds: string): string {
-  return `select e.id, e.model_key, e.draft_snapshot_id, e.published_snapshot_id,
-        s.created_at as published_created_at, ${PUBLIC_INTERNAL_LINKS_JSON_SQL} as internal_links_json
-   from content_models m
+function publicRecordFromSql(kinds: string): string {
+  return `from content_models m
    cross join content_entries e on e.model_key = m.key
    join content_snapshots s on s.id = e.published_snapshot_id
   where m.kind in ${kinds} and ${ROUTE_LESS_PUBLISHED_SQL}`;
 }
+export const PUBLIC_RECORD_FROM_SQL = publicRecordFromSql(PUBLIC_RECORD_MODEL_KINDS_SQL);
+
+/** Published entries of route-less collections; reads no route. */
+export function publicRecordSql(kinds: string): string {
+  return `select e.id, e.model_key, e.draft_snapshot_id, e.published_snapshot_id,
+        s.created_at as published_created_at, ${PUBLIC_INTERNAL_LINKS_JSON_SQL} as internal_links_json
+   ${publicRecordFromSql(kinds)}`;
+}
 export const PUBLIC_RECORD_SQL = publicRecordSql(PUBLIC_RECORD_MODEL_KINDS_SQL);
+
+export const PUBLIC_GLOBAL_FROM_SQL = `from content_entries e
+   join content_models m on m.key = e.model_key and m.kind in ${PUBLIC_GLOBAL_MODEL_KINDS_SQL}
+   join content_snapshots s on s.id = e.published_snapshot_id`;
 
 /** Published route-less globals; never joins `published_routes`. */
 export const PUBLIC_GLOBAL_SQL = `select e.id, e.model_key, e.draft_snapshot_id, e.published_snapshot_id,
         s.created_at as published_created_at, ${PUBLIC_INTERNAL_LINKS_JSON_SQL} as internal_links_json
-   from content_entries e
-   join content_models m on m.key = e.model_key and m.kind in ${PUBLIC_GLOBAL_MODEL_KINDS_SQL}
-   join content_snapshots s on s.id = e.published_snapshot_id`;
+   ${PUBLIC_GLOBAL_FROM_SQL}`;
 
 /**
  * Excludes a reference `r` held by a hidden block, which is never delivered;
@@ -83,10 +92,15 @@ export const PUBLIC_MEDIA_SQL = `select ${MEDIA_COLUMNS_SQL}
 
 /** Active media delivered by the given published snapshots, one row per pair. */
 export function publicSnapshotMediaSql(count: number): string {
+  return publicSnapshotMediaBySelectionSql(Array.from({ length: count }, () => "?").join(", "));
+}
+
+/** Accepts a trusted published snapshot selector or positional placeholders. */
+export function publicSnapshotMediaBySelectionSql(snapshotIds: string): string {
   return `select distinct r.snapshot_id as public_snapshot_id, ${MEDIA_COLUMNS_SQL}
    from content_media_references r
    join media m on m.id = r.media_id
-  where r.snapshot_id in (${Array.from({ length: count }, () => "?").join(", ")})
+  where r.snapshot_id in (${snapshotIds})
     and m.status = 'active' and ${DELIVERED_REFERENCE_SQL}
   order by r.snapshot_id asc, m.id asc`;
 }

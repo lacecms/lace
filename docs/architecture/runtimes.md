@@ -204,6 +204,14 @@ independent of page size; anchors are never resolved by per-entry reads or
 full JSON loads, and query counts distinguish first pages from anchored
 continuations.
 
+Ordinary public reads prepare a bounded candidate query and three payload
+queries before opening a read transaction on Node SQLite or submitting one
+atomic D1 batch. The extra list candidate supplies the continuation decision.
+Only the returned published snapshots contribute fields, local link manifests,
+visible blocks or active media. The boundary covers one response. Build export
+applies its published-version check across its two read groups and across
+continuations.
+
 Collection summaries, media catalog reads, snapshot hydration and publication
 role reads resolve attribution with indexed access to the security-owned
 projection. Explicit editor descriptions use the same profile under the
@@ -263,6 +271,7 @@ results.
 | Entry plan admission | predicate and diagnostics inside the write transaction | first guarded write and diagnostics inside one atomic batch | typed outcomes; replay → stale revision → link targets → route conflict; contract cases for concurrent saves and stale publication |
 | Publication result | materialized from the state read inside the transaction | pre-batch prediction, stored in the same batch as the idempotency record | returned entry, its replay and the unpublication result equal a later `load` |
 | `mutation_guards` | in-transaction dirty token for shared sync link statements | batch-unique guard tokens, removed inside the batch | no persistent plan token |
+| Ordinary public content | one deferred read transaction | one atomic `batch()` | shared contract covers complete responses across republish and published-only payloads |
 | Build export page | both read groups in one read transaction | two `batch()` calls with a version re-read | contract build-export cases; Node one extra in-transaction version read |
 | Collection `list` and configuration-sync scans | numbered parameters, `NODE_LIST_QUERY_LIMITS` | positional parameters, `CLOUDFLARE_LIST_QUERY_LIMITS` | collection-query contract cases (§12 limits differ by design) |
 | Final configuration-sync apply | revalidates the report and reads recursive rewrite inputs inside the immediate write transaction | reads before one batch that guards every mutation on the stored summary and link predicates | shared plan preserves operation order, baselines, rewrites, stale and link errors, and commit-time build version |

@@ -71,18 +71,17 @@ import {
   storedSnapshots,
 } from "../content/snapshots.js";
 import type { SnapshotRow, StoredSnapshot } from "../content/snapshots.js";
-import {
-  PUBLIC_GLOBAL_SQL,
-  PUBLIC_MEDIA_SQL,
-  PUBLIC_RECORD_SQL,
-  PUBLIC_ROUTE_SQL,
-  publicContentEntry,
-  publicGlobalContent,
-  publicRecordContent,
-  publicSnapshotMedia,
-  publicSnapshotMediaSql,
-} from "../delivery/public.js";
+import { PUBLIC_MEDIA_SQL, publicGlobalContent, publicRecordContent } from "../delivery/public.js";
 import type { PublicGlobalRow, PublicRow } from "../delivery/public.js";
+import { assemblePublicPage, routedPublicContent } from "../delivery/public-page.js";
+import type { PublicProjector } from "../delivery/public-page.js";
+import {
+  publicGlobalSelection,
+  publicListSelection,
+  publicPathSelection,
+  publicReadStatements,
+} from "../delivery/public-selection.js";
+import type { PublicSelection } from "../delivery/public-selection.js";
 import { SqlContentLinkReader } from "../links/reader.js";
 import type { LinkReadSql } from "../links/reader.js";
 import {
@@ -98,7 +97,6 @@ import { mediaListFilters, mediaTagCatalogQuery } from "../media/tags.js";
 import { MEDIA_USAGE_SQL, mediaUsageEntries } from "../media/usage.js";
 import type { MediaUsageRow } from "../media/usage.js";
 import {
-  decodeCursor,
   encodeCursor,
   encodeSortCursor,
   operationalCursor,
@@ -121,9 +119,9 @@ export interface ContentReadSql extends LinkReadSql {
   /** Largest identifier group bound into one `in (...)` list. */
   readonly bindChunk: number;
   /**
-   * Runs `first`, then the statements `next` derives from its rows, as one
-   * consistent read: one SQLite read transaction on Node, two atomic batches
-   * on D1. An error thrown by `next` ends the read before the second group.
+   * Runs the first group and any follow-up statements derived from its rows.
+   * Node uses one read transaction. D1 uses one atomic batch per nonempty
+   * group, so callers that need a second group must check the version.
    */
   readGroups(
     first: readonly SqlReadStatement[],
@@ -191,56 +189,13 @@ export class SqlContentReader implements ContentLinkReadPort, ContentReferenceRe
   }
 
   public async listPublic(input: ListPublicContentInput): Promise<CursorPage<PublicContentEntry>> {
-    const limit = assertPageSize(input.limit);
-    const cursorKind = `public:${input.modelKey}`;
-    const after = input.after === undefined ? undefined : decodeCursor(input.after, cursorKind);
-    const rows = await this.sql.all<PublicRow>(
-      `${PUBLIC_ROUTE_SQL}
-        where e.model_key = ?
-          ${after === undefined ? "" : "and (s.created_at < ? or (s.created_at = ? and e.id < ?))"}
-        order by s.created_at desc, e.id desc limit ?`,
-      ...(after === undefined
-        ? [input.modelKey, limit + 1]
-        : [input.modelKey, after.timestamp, after.timestamp, after.id, limit + 1]),
-    );
-    const pageRows = rows.slice(0, limit);
-    const entries = await this.hydrate(pageRows);
-    const media = await this.publicMedia(pageRows);
-    const items = pageRows.map((row) => publicContentEntry(row, entries, media));
-    const last = pageRows.at(-1);
-    return Object.freeze({
-      items: Object.freeze(items),
-      ...(rows.length > limit && last !== undefined
-        ? { nextCursor: encodeCursor(cursorKind, last.published_created_at, last.id) }
-        : {}),
-    });
+    return this.readPublic(publicListSelection(input, "public"), routedPublicContent);
   }
 
   public async listPublicRecords(
     input: ListPublicContentInput,
   ): Promise<CursorPage<PublicRecordContent>> {
-    const limit = assertPageSize(input.limit);
-    const cursorKind = `public-records:${input.modelKey}`;
-    const after = input.after === undefined ? undefined : decodeCursor(input.after, cursorKind);
-    const rows = await this.sql.all<PublicGlobalRow>(
-      `${PUBLIC_RECORD_SQL} and e.model_key = ?
-          ${after === undefined ? "" : "and (s.created_at < ? or (s.created_at = ? and e.id < ?))"}
-        order by s.created_at desc, e.id desc limit ?`,
-      ...(after === undefined
-        ? [input.modelKey, limit + 1]
-        : [input.modelKey, after.timestamp, after.timestamp, after.id, limit + 1]),
-    );
-    const pageRows = rows.slice(0, limit);
-    const entries = await this.hydrate(pageRows);
-    const media = await this.publicMedia(pageRows);
-    const items = pageRows.map((row) => publicRecordContent(row, entries, media));
-    const last = pageRows.at(-1);
-    return Object.freeze({
-      items: Object.freeze(items),
-      ...(rows.length > limit && last !== undefined
-        ? { nextCursor: encodeCursor(cursorKind, last.published_created_at, last.id) }
-        : {}),
-    });
+    return this.readPublic(publicListSelection(input, "public-records"), publicRecordContent);
   }
 
   public async publishedContentVersion(): Promise<number> {
@@ -251,24 +206,13 @@ export class SqlContentReader implements ContentLinkReadPort, ContentReferenceRe
   }
 
   public async loadPublic(path: string): Promise<PublicContentEntry | null> {
-    const row = await this.first<PublicRow>(`${PUBLIC_ROUTE_SQL} where r.path = ? limit 1`, path);
-    if (row === undefined) return null;
-    const entries = await this.hydrate([row]);
-    return entries.has(row.id)
-      ? publicContentEntry(row, entries, await this.publicMedia([row]))
-      : null;
+    const page = await this.readPublic(publicPathSelection(path), routedPublicContent);
+    return page.items[0] ?? null;
   }
 
   public async loadPublicGlobal(modelKey: ContentModelKey): Promise<PublicGlobalContent | null> {
-    const row = await this.first<PublicGlobalRow>(
-      `${PUBLIC_GLOBAL_SQL} where e.model_key = ? limit 1`,
-      modelKey,
-    );
-    if (row === undefined) return null;
-    const entries = await this.hydrate([row]);
-    return entries.has(row.id)
-      ? publicGlobalContent(row, entries, await this.publicMedia([row]))
-      : null;
+    const page = await this.readPublic(publicGlobalSelection(modelKey), publicGlobalContent);
+    return page.items[0] ?? null;
   }
 
   public async loadPublicMedia(id: string): Promise<MediaMetadata | null> {
@@ -515,22 +459,12 @@ export class SqlContentReader implements ContentLinkReadPort, ContentReferenceRe
     return (await this.sql.all<Row>(sql, ...params))[0];
   }
 
-  private async publicMedia(
-    rows: readonly EntryRow[],
-  ): Promise<Map<string, readonly MediaMetadata[]>> {
-    const ids = rows.flatMap((row) =>
-      row.published_snapshot_id === null ? [] : [row.published_snapshot_id],
-    );
-    const mediaRows: Record<string, unknown>[] = [];
-    for (const group of chunks(ids, this.sql.bindChunk)) {
-      mediaRows.push(
-        ...(await this.sql.all<Record<string, unknown>>(
-          publicSnapshotMediaSql(group.length),
-          ...group,
-        )),
-      );
-    }
-    return publicSnapshotMedia(mediaRows);
+  private async readPublic<T>(
+    selection: PublicSelection,
+    project: PublicProjector<T>,
+  ): Promise<CursorPage<T>> {
+    const [rows] = await this.sql.readGroups(publicReadStatements(selection), () => []);
+    return assemblePublicPage(selection, rows, this.resolveModel, project);
   }
 
   private async hydrate(rows: readonly EntryRow[]): Promise<Map<string, ContentEntry>> {

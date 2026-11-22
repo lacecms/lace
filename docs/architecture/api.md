@@ -53,6 +53,13 @@ the configured route. Shared export queries use descriptor eligibility and
 the route of the published snapshot to assign entries to export sections.
 [Content-model kinds](content-configuration.md#content-model-kinds)
 
+Each page, global, collection item, by-path lookup and collection or records
+list response comes from one committed database state. A republish at the same
+address can return the complete earlier or later publication. The selected
+items, visible blocks, local link manifests, media and continuation cursor all
+come from that state. Each list page request sees its own committed state.
+The build export pins its sequence to a published-state version.
+
 - `blocks` hold visible blocks only and never carry `hidden`. Media referenced
   only by hidden blocks are absent from `media` dictionaries and not served by
   the public media route, yet keep their reference rows and stay protected by

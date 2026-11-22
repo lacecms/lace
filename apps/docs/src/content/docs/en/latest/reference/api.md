@@ -52,6 +52,15 @@ Failures use one JSON envelope: `error.code`, `error.message` and, for some code
 | GET    | `/api/v1/public/content/by-path`               | Read the published page or collection entry at `?path=`.                                        | None        |
 | GET    | `/api/v1/public/media/{mediaId}`               | Stream media that a current publication uses, with a strong `ETag` and `If-None-Match` support. | None        |
 
+Each page, global, collection item, by-path lookup and list response reflects
+one committed publication state. A concurrent republish at the same address
+can return the complete earlier or later content with its matching media.
+A request made after a move or withdrawal returns `404` at the old address
+while it remains absent. For collections and records, the items, order, media and
+`nextCursor` agree within each response. Following `nextCursor` with
+`after` reads the next page from the state available to that request.
+Build export cursors pin a published-state version.
+
 ## Setup, invitation and password reset endpoints
 
 | Method | Path                             | Purpose                                                                                          | Credential       |

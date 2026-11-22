@@ -14,7 +14,7 @@ export function bind(
 
 /**
  * D1 read capability for the shared reader. Each read group is one atomic
- * `batch()`, so a two-group read uses exactly two batches.
+ * `batch()`. Ordinary public reads need one group, exports use two.
  */
 export function d1ContentReadSql(database: D1Database): ContentReadSql {
   const prepared = (statement: SqlReadStatement): D1PreparedStatement =>
@@ -27,7 +27,11 @@ export function d1ContentReadSql(database: D1Database): ContentReadSql {
       (await bind(database.prepare(sql), params).all<Row>()).results,
     readGroups: async (first, next) => {
       const firstRows = rows(await database.batch(first.map(prepared)));
-      return [firstRows, rows(await database.batch(next(firstRows).map(prepared)))] as const;
+      const second = next(firstRows);
+      return [
+        firstRows,
+        second.length === 0 ? [] : rows(await database.batch(second.map(prepared))),
+      ] as const;
     },
   };
 }

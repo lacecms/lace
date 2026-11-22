@@ -78,6 +78,9 @@ export interface ContractSql {
 export interface ContractRepositoryOptions {
   readonly beforeMutation?: (checkpoint: string) => void;
   readonly beforePrepare?: (sql: string) => void;
+  readonly afterRead?: (rows: readonly unknown[], inTransaction?: boolean) => void;
+  readonly beforeReadBatch?: () => Promise<void>;
+  readonly afterReadBatch?: () => Promise<void>;
   readonly afterWrite?: () => void;
   readonly nextId?: () => string;
   readonly resolveModel: (key: string) => ContentModelRoute | undefined;
@@ -86,7 +89,13 @@ export interface ContractRepositoryOptions {
 export interface RepositoryContractHarness {
   readonly reads: {
     reset(): void;
-    snapshot(): { statements: number; rowsRead?: number; sql: readonly string[] };
+    snapshot(): {
+      statements: number;
+      rowsRead?: number;
+      batches?: number;
+      maxParameters: number;
+      sql: readonly string[];
+    };
   };
   readonly repository: ContractRepository;
   /** Constructs an independent repository over the same database. */
@@ -97,6 +106,7 @@ export interface RepositoryContractHarness {
 /** Opens a freshly migrated database for each call. */
 export interface RepositoryContractRuntime {
   readonly listQueryLimits: ListQueryLimits;
+  readonly publicReadOverlap?: "wal" | "batch";
   recordEvidence?(value: unknown): void;
   open(options: ContractRepositoryOptions): Promise<RepositoryContractHarness>;
 }

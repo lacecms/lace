@@ -38,6 +38,8 @@ import { cases as previewExecution } from "./preview/execution.js";
 import { cases as previewInvalidation } from "./preview/invalidation.js";
 import { cases as previewMaintenance } from "./preview/maintenance.js";
 import { cases as previewBudgets } from "./preview/budgets.js";
+import { cases as publishedReads } from "./delivery/published-reads.js";
+import { cases as publishedBudget } from "./delivery/published-budget.js";
 import type { RepositoryContractCase } from "./shared.js";
 
 export const contentRepositoryContractCases: readonly RepositoryContractCase[] = Object.freeze([
@@ -81,4 +83,6 @@ export const contentRepositoryContractCases: readonly RepositoryContractCase[] =
   ...previewInvalidation,
   ...previewMaintenance,
   ...previewBudgets,
+  ...publishedReads,
+  ...publishedBudget,
 ]);

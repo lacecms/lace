@@ -14,6 +14,7 @@ afterEach(async () => {
 
 const runtime: RepositoryContractRuntime = {
   listQueryLimits: CLOUDFLARE_LIST_QUERY_LIMITS,
+  publicReadOverlap: "batch",
   recordEvidence: (value) => console.log("Collection query local D1", JSON.stringify(value)),
   async open(options) {
     const { database, dispose } = await openLocalD1();
@@ -26,12 +27,16 @@ const runtime: RepositoryContractRuntime = {
         await dispose();
       }
     });
-    const measured = countingD1(database);
+    const measured = countingD1(database, options.afterRead);
     const statements: string[] = [];
     const binding = {
       ...measured.binding,
       async batch(statements: Parameters<typeof measured.binding.batch>[0]) {
+        if (options.beforeReadBatch !== undefined) await options.beforeReadBatch();
         const results = await measured.binding.batch(statements);
+        if (options.afterRead !== undefined)
+          for (const { results: rows } of results) options.afterRead(rows);
+        if (options.afterReadBatch !== undefined) await options.afterReadBatch();
         if (options.afterWrite !== undefined && results.some(({ meta }) => meta.changes > 0)) {
           options.afterWrite();
         }
@@ -49,10 +54,14 @@ const runtime: RepositoryContractRuntime = {
           statements.length = 0;
           measured.stats.queries = 0;
           measured.stats.rowsRead = 0;
+          measured.stats.batches = 0;
+          measured.stats.maxParameters = 0;
         },
         snapshot: () => ({
           statements: measured.stats.queries,
           rowsRead: measured.stats.rowsRead,
+          batches: measured.stats.batches,
+          maxParameters: measured.stats.maxParameters,
           sql: [...statements],
         }),
       },

@@ -5,8 +5,8 @@ import type Database from "better-sqlite3";
 export const SQLITE_BIND_CHUNK = 200;
 
 /**
- * Node read capability for the shared reader. Both read groups run inside one
- * better-sqlite3 transaction, so they observe one WAL snapshot.
+ * Node read capability for the shared reader. The statements run inside one
+ * deferred better-sqlite3 read transaction, so they observe one WAL snapshot.
  */
 export function nodeContentReadSql(connection: Database.Database): ContentReadSql {
   const read = (statement: SqlReadStatement): readonly unknown[] =>
