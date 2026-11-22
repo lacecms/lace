@@ -115,6 +115,7 @@ Git history keeps the originals.
 | [0032-outbox-contract-boundary.md](adr/0032-outbox-contract-boundary.md) | authoritative | ADR 0032: Share durable outbox contracts through a dedicated subpath |
 | [0033-protected-static-draft-preview.md](adr/0033-protected-static-draft-preview.md) | authoritative | ADR 0033: Protected single-page draft preview |
 | [0034-acyclic-entry-reference-fields.md](adr/0034-acyclic-entry-reference-fields.md) | authoritative | ADR 0034: Acyclic entry reference fields |
+| [0035-stable-rc5-upgrade-origin.md](adr/0035-stable-rc5-upgrade-origin.md) | authoritative | ADR 0035: RC5 is the upgrade origin for Lace 1.0 |
 
 ## docs/archive/
 

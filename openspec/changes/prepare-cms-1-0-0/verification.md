@@ -70,3 +70,14 @@ detach request's transport and query parameters, let the deletion test's
 simulated server return its committed state, give the synthetic tampered
 inventory its prerequisite channel, and restrict root verification discovery
 to this checkout's tests. These changes concern the verification harness.
+
+The shared repository contract also contained a gallery-v4 refusal case. Its
+replacement uses a custom block with a missing forward step on both Node and
+D1. Historical changelog links resolve to their tagged compatibility guides.
+
+Read-only npm preflight found that some packages already carried an older
+prerelease on `latest`. The publication helper compares its numeric core with
+the stable target and still refuses to overwrite a newer release. The repository
+test exercises the observed `0.1.0-alpha.6` tag. The cross-runtime browser
+check now waits for the rendered screen and fonts before the accessibility
+audit, allowing background connections to remain open.

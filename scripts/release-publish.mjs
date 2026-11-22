@@ -113,14 +113,13 @@ export async function lookupPackage(item) {
 function checkStableTag(channel, item, remote) {
   const current = remote.tags.latest;
   if (channel !== "latest" || !current || current === item.version) return;
-  // A prerelease (or unrecognized value) under latest requires operator review.
+  // Some packages already have an older published prerelease on latest.
+  // Validate the spelling before comparing the numeric core to the stable target.
+  releaseChannel(current);
   const target = item.version.split(".");
-  const observed = current.split(".");
+  const observed = current.split("-", 1)[0].split(".");
   const differs = target.findIndex((part, index) => part !== observed[index]);
-  if (
-    releaseChannel(current) !== "latest" ||
-    (differs >= 0 && BigInt(observed[differs]) > BigInt(target[differs]))
-  )
+  if (differs >= 0 && BigInt(observed[differs]) > BigInt(target[differs]))
     throw new Error(`Conflicting latest dist-tag for ${item.name}: ${current}`);
 }
 

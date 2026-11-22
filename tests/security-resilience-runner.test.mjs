@@ -145,6 +145,8 @@ test("Vitest phases run package suites through their own configurations", () => 
       "exec",
       "vitest",
       "run",
+      "--dir",
+      "tests",
       "tests/durable-restart.test.mjs",
       "--exclude=.release-artifacts/**",
       "--exclude=.lace-acceptance/**",

@@ -92,7 +92,7 @@ built API and builder images. The prior storage image must be MinIO
 `RELEASE.2025-02-07T23-21-09Z` from commit
 `703f51164d3d0c44af41b0d86075a1f61e4779e7`. Use a known cached image or
 build the unchanged `deploy/minio.Dockerfile` from
-[the retained template fixture](../tests/fixtures/template-0.49.0/default.json)
+[the retained template fixture](../tests/fixtures/template-0.50.0/default.json)
 in a separate build directory.
 
 ```sh

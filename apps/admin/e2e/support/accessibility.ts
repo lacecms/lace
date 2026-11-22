@@ -7,8 +7,12 @@ const wcagTags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
 /** Audits the settled page against WCAG A/AA and fails with each rule and element. */
 export async function expectNoAccessibilityViolations(page: Page, screen: string) {
-  // Let lazy thumbnails, totals, and relative times settle before auditing.
-  await page.waitForLoadState("networkidle");
+  // Callers await the specific screen before auditing. Background polling and
+  // open connections are independent of the rendered accessibility tree.
+  await page.waitForLoadState("domcontentloaded");
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+  });
   // Colors measured mid-transition (for example a button fading back from its
   // disabled opacity) are not the settled state the audit is meant to check.
   // Infinite animations such as spinners are skipped because they never finish.

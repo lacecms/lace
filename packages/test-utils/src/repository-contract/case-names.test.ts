@@ -58,7 +58,7 @@ test("preserves every repository contract case in order", () => {
     "renames a model and one of its fields in one apply",
     "migrates stale blocks from version 1 to 3 in drafts and published snapshots",
     "refuses throwing, invalid and media-introducing migrations without writing",
-    "refuses stored built-in blocks below their version without writing",
+    "refuses a missing custom block migration without writing",
     "resumes block migration and nested backfills after an interrupted synchronization",
     "stops block migration as stale when a draft is saved after the scan",
     "migrates entries holding the maximum blocks and references within budgets",
