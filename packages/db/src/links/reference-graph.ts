@@ -1,9 +1,10 @@
-import type { SnapshotEntryReference } from "@lacecms/content";
+import { MAX_REFERENCE_CYCLE_IDS } from "@lacecms/content";
+import type { ReferenceCycleDetails, SnapshotEntryReference } from "@lacecms/content";
 import type { EntryUsage } from "./statements.js";
 import type { WritePlanSql } from "../write-plan/plan.js";
+import { publicationCycleSql } from "./publication-cycle.js";
 
 export const MAX_REFERENCE_GRAPH_IDS = 2_048;
-export const MAX_REFERENCE_CYCLE_IDS = 16;
 export type ReferencePhase = "draft" | "published";
 
 export interface ReferenceGraphReplacement {
@@ -16,16 +17,15 @@ export interface ReferenceGraphRow {
   readonly cycle: number;
   readonly witness_json: string | null;
   readonly first_target: string | null;
+  readonly publish_first_json?: string | null;
 }
 
 export type ReferenceGraphIssue =
   | { readonly kind: "limit"; readonly targetId: string }
-  | {
+  | ({
       readonly kind: "cycle";
       readonly targetId: string;
-      readonly witness: readonly string[];
-      readonly truncated: boolean;
-    };
+    } & ReferenceCycleDetails);
 
 /** Only the delivered typed occurrences contribute to published reachability. */
 export function typedReferences(
@@ -66,7 +66,7 @@ export function referenceGraphQuery(
         subject: "?",
         overlay: "select value ->> '$[0]', value -> '$[1]' from json_each(?)",
       },
-      witness,
+      witness && phase === "published" && replacements.length === 1 ? "publication" : witness,
     ),
   };
 }
@@ -88,7 +88,7 @@ export function graphTargets(
 export function referenceGraphProofSql(
   phase: ReferencePhase,
   inputs: { readonly subject: string; readonly overlay: string },
-  witness: boolean,
+  witness: boolean | "publication",
   scalar = false,
 ): string {
   const pointer = phase === "draft" ? "draft_snapshot_id" : "published_snapshot_id";
@@ -98,9 +98,10 @@ export function referenceGraphProofSql(
   const diagnostic = witness ? "(select value from witness)" : "null";
   const result = scalar
     ? `json_array(over_limit, cycle, ${target}, ${diagnostic})`
-    : `over_limit, cycle, ${target} as first_target, ${diagnostic} as witness_json`;
+    : `over_limit, cycle, ${target} as first_target, ${diagnostic} as witness_json
+      ${witness === "publication" ? ", (select value from publish_first) as publish_first_json" : ""}`;
   return `with recursive
-      subject(id) as (values (${inputs.subject})),
+      subject(id) as materialized (values (${inputs.subject})),
       overlay(id, targets) as materialized (
         ${inputs.overlay}
       ),
@@ -125,10 +126,11 @@ export function referenceGraphProofSql(
         where v.id<>(select id from subject)
         limit ${MAX_REFERENCE_GRAPH_IDS + 1}
       ),
-      result(over_limit, cycle) as (
+      result(over_limit, cycle) as materialized (
         select count(*)>${MAX_REFERENCE_GRAPH_IDS}, coalesce(max(id=(select id from subject)),0) from visited
       )
-      ${witness ? graphWitnessSql(edge) : ""}
+      ${witness ? graphArcsSql(edge) : ""}
+      ${witness === "publication" ? publicationCycleSql(MAX_REFERENCE_GRAPH_IDS + 1) : witness ? graphWitnessSql() : ""}
       select ${result} from result`;
 }
 
@@ -136,18 +138,24 @@ export function referenceGraphProofSql(
  * Build a bounded diagnostic from the same read. Only arcs between vertices
  * actually visited by the proof can contribute to a witness.
  */
-function graphWitnessSql(edge: string): string {
+function graphArcsSql(edge: string): string {
   return `, arcs(source, target) as materialized (
     select v.id, r.target_entry_id from visited v
     cross join content_entries e on e.id=v.id
     cross join content_entry_link_references r indexed by content_entry_link_references_outgoing_idx on ${edge}
-    where v.id<>(select id from subject) and not exists (select 1 from overlay o where o.id=v.id)
+    where v.id<>(select id from subject)
+      and not exists (select 1 from overlay o where o.id=v.id)
       and exists (select 1 from visited reached where reached.id=r.target_entry_id)
     union
     select v.id, j.value from visited v
     join overlay o on o.id=v.id cross join json_each(o.targets) j
-    where v.id<>(select id from subject) and exists (select 1 from visited reached where reached.id=j.value)
-  ), walk(step, node, seen) as (
+    where v.id<>(select id from subject)
+      and exists (select 1 from visited reached where reached.id=j.value)
+  )`;
+}
+
+function graphWitnessSql(): string {
+  return `, walk(step, node, seen) as (
     select 0, (select id from subject), json_array() from result where cycle=1
     union all
     select w.step+1, (
@@ -178,10 +186,16 @@ export function referenceGraphIssue(
     return row.over_limit ? { kind: "limit", targetId: row.first_target! } : undefined;
   const witness = JSON.parse(row.witness_json!) as string[];
   const truncated = witness.length > MAX_REFERENCE_CYCLE_IDS;
+  const [entryIdToPublish, title] = row.publish_first_json
+    ? (JSON.parse(row.publish_first_json) as [string, string])
+    : [];
   return {
     kind: "cycle",
     targetId: witness[1]!,
     witness: truncated ? [...witness.slice(0, MAX_REFERENCE_CYCLE_IDS - 1), entryId] : witness,
     truncated,
+    ...(entryIdToPublish === undefined
+      ? {}
+      : { publishFirst: { entryId: entryIdToPublish, title: title! } }),
   };
 }

@@ -4,6 +4,7 @@ import { jsonObjectSchema } from "../shared/json.js";
 import { identifierSchema, expectedRevisionSchema } from "../shared/primitives.js";
 import { contentBlockSchema } from "./blocks.js";
 import { seoInputSchema } from "./seo.js";
+import { referenceImpactAcknowledgmentSchema } from "./references.js";
 import { linkImpactAcknowledgmentSchema } from "./links.js";
 
 const editableDraftFields = {
@@ -26,6 +27,7 @@ export const publishContentEntryRequestSchema = v.strictObject({
 export const deleteContentEntryRequestSchema = v.strictObject({
   expectedRevision: v.optional(expectedRevisionSchema),
   linkImpact: v.optional(linkImpactAcknowledgmentSchema),
+  referenceImpact: v.optional(referenceImpactAcknowledgmentSchema),
 });
 export const unpublishContentEntryRequestSchema = v.strictObject({
   expectedPublishedSnapshotId: identifierSchema,

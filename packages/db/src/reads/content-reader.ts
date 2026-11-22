@@ -9,6 +9,9 @@ import type {
   ActorSummary,
   BuildContentExportPage,
   ContentLinkReadPort,
+  ContentReferenceReadPort,
+  ReferenceTargetQuery,
+  ReferenceImpactQuery,
   CursorPage,
   CursorPageInput,
   ExportBuildContentPageInput,
@@ -130,7 +133,7 @@ export interface ContentReadSql extends LinkReadSql {
  * Bounded content, media, delivery and build reads shared by the Node and D1
  * repositories; adapters supply only their native execution capability.
  */
-export class SqlContentReader implements ContentLinkReadPort {
+export class SqlContentReader implements ContentLinkReadPort, ContentReferenceReadPort {
   private readonly links: SqlContentLinkReader;
 
   public constructor(
@@ -140,6 +143,15 @@ export class SqlContentReader implements ContentLinkReadPort {
     this.links = new SqlContentLinkReader(sql);
   }
 
+  public readReferenceImpact(query: ReferenceImpactQuery & { readonly actorId: string }) {
+    return this.links.readReferenceImpact(query);
+  }
+  public resolveReferenceTargets(ids: readonly string[]) {
+    return this.links.resolveReferenceTargets(ids);
+  }
+  public listReferenceTargets(query: ReferenceTargetQuery) {
+    return this.links.listReferenceTargets(query);
+  }
   public resolveLinkTargets(ids: readonly string[]) {
     return this.links.resolveLinkTargets(ids);
   }

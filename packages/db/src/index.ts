@@ -100,6 +100,7 @@ export * from "./publication/idempotency.js";
 export * from "./publication/write-plan.js";
 export * from "./publication/removal-write-plan.js";
 export * from "./links/reader.js";
+export { LINK_IMPACT_EVIDENCE_SQL, type ImpactEvidenceRow } from "./links/impact-evidence.js";
 export * from "./reads/content-reader.js";
 
 export * from "./shared/limits.js";

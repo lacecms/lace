@@ -12,7 +12,8 @@ narrow, and use cases depend only on the capabilities they call.
 | --- | --- |
 | `infrastructure` | `ObjectStorage` (put, get as `AsyncIterable<Uint8Array>`, delete, read URL), `Cache`, `Clock`, `IdGenerator`, `OperationalLogger` |
 | `content` | `ContentEntryReadPort`, `ContentEntryCommandPort`, `PublicContentReadPort` (public reads and paged build export) |
-| `links` | `ContentLinkReadPort` (link targets, usage and impact) |
+| `links` | `ContentLinkReadPort` (URL link targets, usage and impact) |
+| `references` | `ContentReferenceReadPort` (route-independent target discovery and direct impact) |
 | `media` | `MediaReadPort`, `MediaListPort`, `MediaCatalogPort`, `MediaCommandPort`, `MediaDeletionDispatchPort`, `ImageInspector` |
 | `builds` | `SiteBuildTrigger`, `SiteBuildCommandPort`, `SiteBuildReadPort`, `SiteBuildDispatchPort`, `ProviderDeploymentReader` |
 | `outbox` | `DispatcherLeasePort` (claim, complete, retry leased events) |

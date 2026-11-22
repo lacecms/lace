@@ -32,6 +32,7 @@ import type {
 } from "../ports/content.js";
 import type { ContentMediaReadPort } from "../ports/media.js";
 import type { OpaqueCursor } from "../shared/brands.js";
+import type { ReferenceImpactAcknowledgment } from "../ports/references.js";
 import type { ContentLinkReadPort, LinkImpactAcknowledgment } from "../ports/links.js";
 
 export interface ContentUseCaseDependencies {
@@ -158,6 +159,7 @@ export interface DetachMediaFromDraftUseCaseInput {
 }
 
 export interface DeleteContentEntryUseCaseInput {
+  readonly referenceImpact?: ReferenceImpactAcknowledgment;
   readonly linkImpact?: LinkImpactAcknowledgment;
   readonly actor: Actor;
   readonly entryId: ContentEntryId;

@@ -12,6 +12,10 @@ export {
 } from "./adapters/fakes.js";
 export { admin, delegatedActor, editor, testActor, viewer } from "./fixtures/actors.js";
 export { allowAllRateLimiter, fakePort, silentLogger } from "./fixtures/ports.js";
+export {
+  assertReferenceLifecycleRest,
+  referenceLifecycleConfig,
+} from "./delivery/reference-lifecycle.js";
 export { readAllBuildContentPages, readCompleteBuildExport } from "./delivery/build-export.js";
 export type {
   BuildExportHttpResponse,

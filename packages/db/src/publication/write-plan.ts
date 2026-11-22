@@ -331,6 +331,7 @@ export function publicationGuardResult(
     case "route":
       throw new DomainError("CONTENT_ROUTE_CONFLICT", "The public path belongs to another entry.");
     case "reference-config":
+    case "reference-conflict":
     case "reference-issues":
       return rejectReferenceWrite(miss);
   }

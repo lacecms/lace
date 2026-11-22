@@ -261,6 +261,60 @@ test("complete Worker reference invocations stay inside the D1 statement and bin
       .first(),
   ).toEqual({ revision: 1 });
 
+  // Reverse the last edge of the published chain in drafts, then try publishing the new edge first.
+  await invoke(
+    "deep-stage-correction",
+    `/api/v1/admin/entries/${deep(2048)}/draft`,
+    "PUT",
+    {
+      title: "Earlier dependency",
+      slug: deep(2048),
+      expectedRevision: 1,
+      blocks: [],
+      fields: {},
+    },
+    200,
+  );
+  const formerTail = `/api/v1/admin/entries/${deep(2049)}`;
+  await invoke(
+    "deep-stage-reversal",
+    `${formerTail}/draft`,
+    "PUT",
+    {
+      ...selection(deep(2)),
+      slug: deep(2049),
+      expectedRevision: 1,
+    },
+    200,
+  );
+  const longCycle = await invoke(
+    "deep-published-cycle",
+    `${formerTail}/publish`,
+    "POST",
+    { expectedRevision: 2 },
+    422,
+  );
+  expect(longCycle).toMatchObject({
+    error: {
+      details: {
+        issues: [
+          {
+            code: "reference_cycle",
+            details: {
+              witness: [
+                deep(2049),
+                ...Array.from({ length: 14 }, (_, index) => deep(index + 2)),
+                deep(2049),
+              ],
+              truncated: true,
+              publishFirst: { entryId: deep(2048), title: "Earlier dependency" },
+            },
+          },
+        ],
+      },
+    },
+  });
+
   const plans = new Set<string>();
   for (const [sql, params] of samples) {
     const explained = await db

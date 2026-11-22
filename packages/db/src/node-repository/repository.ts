@@ -14,6 +14,9 @@ import type {
   CompleteDispatcherLeaseInput,
   ContentCommandResult,
   ContentLinkReadPort,
+  ContentReferenceReadPort,
+  ReferenceTargetQuery,
+  ReferenceImpactQuery,
   ContentEntryCommandPort,
   ContentEntryListPage,
   ContentEntryReadPort,
@@ -92,6 +95,7 @@ import { NodeSiteBuilds } from "./site-builds.js";
 export class NodeContentRepository
   implements
     ContentLinkReadPort,
+    ContentReferenceReadPort,
     ContentEntryCommandPort,
     ContentEntryReadPort,
     ConfigurationSyncApplyPort,
@@ -137,6 +141,15 @@ export class NodeContentRepository
     this.siteBuilds = new NodeSiteBuilds(...parts);
   }
 
+  public readReferenceImpact(query: ReferenceImpactQuery & { readonly actorId: string }) {
+    return this.reader.readReferenceImpact(query);
+  }
+  public resolveReferenceTargets(ids: readonly string[]) {
+    return this.reader.resolveReferenceTargets(ids);
+  }
+  public listReferenceTargets(query: ReferenceTargetQuery) {
+    return this.reader.listReferenceTargets(query);
+  }
   public resolveLinkTargets(ids: readonly string[]) {
     return this.reader.resolveLinkTargets(ids);
   }

@@ -1,4 +1,5 @@
-import { LINK_IMPACT_EVIDENCE_SQL, linkRemovalCondition } from "../links/reader.js";
+import { linkRemovalCondition } from "../links/reader.js";
+import { LINK_IMPACT_EVIDENCE_SQL, type ImpactEvidenceRow } from "../links/impact-evidence.js";
 import { SqlContentReader } from "../reads/content-reader.js";
 import {
   replaceInternalLinkStatements,
@@ -91,9 +92,7 @@ export abstract class NodeRepositoryBase {
   ): void {
     const row = this.connection
       .prepare(LINK_IMPACT_EVIDENCE_SQL)
-      .get(targetId, targetId, action, targetId) as
-      | import("../links/reader.js").ImpactEvidenceRow
-      | undefined;
+      .get(targetId, targetId, action, targetId) as ImpactEvidenceRow | undefined;
     linkRemovalCondition(row, targetId, action, actorId, acknowledgment);
   }
 

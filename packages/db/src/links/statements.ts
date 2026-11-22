@@ -118,7 +118,7 @@ function replaceFrom(
 }
 
 export const LINK_TARGETS_SQL = `select requested.value as requested_id, e.id, e.model_key, m.kind,
-  d.title, p.path from json_each(?) requested
+  d.title, p.path, e.published_snapshot_id from json_each(?) requested
   left join content_entries e on e.id = requested.value
   left join content_models m on m.key=e.model_key
   left join content_snapshots d on d.id=e.draft_snapshot_id

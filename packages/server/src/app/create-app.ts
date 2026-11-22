@@ -1,6 +1,7 @@
 import { AuthenticationRequiredError } from "@lacecms/contracts";
 import { registerDocsRoutes, registerOpenApiRoute } from "../routes/docs.js";
 import { createPublicRoutes } from "../routes/public.js";
+import { createReferenceRoutes } from "../routes/references.js";
 import { createContentRoutes } from "../routes/content.js";
 import { createMediaRoutes } from "../routes/media.js";
 import { registerProtocolRoutes } from "../routes/protocol.js";
@@ -23,7 +24,7 @@ import {
 } from "../shared/protocol.js";
 import { AuthorizationError, errorResponse, noStore, notFound } from "../shared/http.js";
 import { isBearerManagementRequest, isReservedImportPath } from "../security/import-routes.js";
-import { mcpToolScope, RateLimitExceededError } from "@lacecms/application";
+import { canContentOperation, mcpToolScope, RateLimitExceededError } from "@lacecms/application";
 import type { ImportTokenMetadata } from "@lacecms/application";
 import { classifyError, transportError } from "@lacecms/contracts";
 import { bodyLimit } from "hono/body-limit";
@@ -73,9 +74,15 @@ export function createLaceApp(input: LaceAppInput) {
         context.req.path === API_V1 + previewRoutes.admin.authorize.path)
     )
       return errorResponse(classifyError(error), privatePreviewHeaders());
-    return isProtocolErrorPath(context.req.path)
-      ? protocolErrorResponse("server_error", 503, noStore)
-      : errorResponse(classifyError(error));
+    if (isProtocolErrorPath(context.req.path))
+      return protocolErrorResponse("server_error", 503, noStore);
+    const currentActor = context.get("lace.actor");
+    return errorResponse(
+      classifyError(error, {
+        includeReferenceDetails:
+          currentActor !== undefined && canContentOperation(currentActor, "load"),
+      }),
+    );
   });
 
   app.use(async (context, next) => {
@@ -240,6 +247,7 @@ export function createLaceApp(input: LaceAppInput) {
     .route("/", createAdminPreviewRoutes(routeContext, frameOrigin))
     .route("/", createMediaRoutes(routeContext))
     .route("/", createContentRoutes(routeContext))
+    .route("/", createReferenceRoutes(routeContext))
     .route("/", createPublicRoutes(routeContext));
   registerOpenApiRoute(v1, app, routeContext);
   const appWithV1 = app.route(API_V1, v1);

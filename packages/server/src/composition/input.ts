@@ -3,6 +3,7 @@ import type {
   ApiTokenUseCases,
   ContentUseCases,
   ContentLinkUseCases,
+  ContentReferenceUseCases,
   OAuthConnectionUseCases,
   ImportTokenMetadata,
   RateLimitDecision,
@@ -136,6 +137,7 @@ export interface LaceAppInput {
   readonly config: ServerConfig;
   readonly content: ContentUseCases;
   readonly links: ContentLinkUseCases;
+  readonly references: ContentReferenceUseCases;
   readonly environment: ServerEnvironmentMetadata;
   readonly logger: ServerLogger;
   readonly maxBodyBytes: number;

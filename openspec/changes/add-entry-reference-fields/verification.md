@@ -129,3 +129,54 @@ budget case to capture its statement counts and query plans as JSON.
 - `pnpm typecheck`, `pnpm lint`, `pnpm format:check` and
   `pnpm exec openspec validate add-entry-reference-fields --type change --strict`
   passed.
+
+## REL1C — Removal, direct impact and admin API
+
+- The shared repository contracts ran on file-backed and in-memory SQLite
+  and local D1. They checked literal prefix search, bounded batch resolution,
+  route-less publication status and separation from URL targets.
+- Impact grouped the review's own Author field by snapshot for Page → Review
+  → Anna. A 56-group fixture crossed source pages, continued 25 locations
+  from a single draft, distinguished hidden published usages and invalidated
+  both cursor modes after a graph change.
+- A delivered typed usage blocked unpublication and deletion until the
+  referring source was republished. A draft-only delete required current
+  acknowledgment. Mixed URL and typed usages required both receipts. Stale
+  and cross-actor receipts failed without changing publication, outbox or
+  graph state. Confirmed deletion preserved the referring draft and revision.
+- Two independent repository commands tested both commit orders of source
+  publication and reviewed target deletion. The shared HTTP scenario also
+  raced publication against withdrawal on Node and Worker. In each case only
+  one mutation committed and the losing attempt left its prior state intact.
+- The shared REST scenario exercised browser permissions, automation
+  credential refusal, route-less catalog and resolve responses, both impact
+  modes, stale preconditions, malformed delete bodies and idempotent
+  publication and withdrawal. OpenAPI and the Hono RPC type checks cover the
+  added contracts. The cycle response reports the candidate field and the
+  saved draft that removes a specific edge from the witness.
+
+### Local Worker invocation counts
+
+Counts include session authentication, response reads and deferred dispatch
+for single requests. The long-cycle case checked 2,048 reachable IDs. Its
+16-ID witness indicated an omitted segment and named the corrective source
+near the end of that segment.
+
+| Invocation | Statements | Largest batch | Most binds |
+| --- | ---: | ---: | ---: |
+| Search reference targets | 3 | 0 | 11 |
+| Resolve selected IDs | 3 | 0 | 1 |
+| Read reference impact, including a location continuation | 6 | 0 | 8 |
+| Delete with reference review | 22 | 14 | 14 |
+| Withdraw, including idempotent replay | 29 | 18 | 12 |
+| Publish, including conflicts and replay | 37 | 25 | 20 |
+| Reject a publication closing the long cycle | 33 | 24 | 19 |
+
+### Checks
+
+- The Node repository and REST run passed 324 tests. The focused local D1
+  repository, graph and Worker runs passed 22 tests.
+- Application, contracts, DB, server, MCP and shared fixture suites passed
+  857 tests. The affected packaged export suites and Hono RPC type check passed.
+- `pnpm typecheck`, `pnpm lint`, `pnpm format:check` and strict OpenSpec
+  validation passed.

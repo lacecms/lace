@@ -12,6 +12,7 @@ import {
 import {
   ContentUseCases,
   ContentLinkUseCases,
+  ContentReferenceUseCases,
   contentModelRoute,
   applyPreparedConfigurationSynchronization,
   prepareConfigurationSynchronization,
@@ -136,6 +137,7 @@ export async function startCollectionQueryBackend(kind) {
     config,
     content,
     links: new ContentLinkUseCases(repository),
+    references: new ContentReferenceUseCases(repository),
     publicContent: repository,
     actors: {
       resolve: async (request) => {

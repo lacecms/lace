@@ -5,6 +5,7 @@ import {
   RateLimitExceededError,
   CollectionQueryValidationError,
   BuildExportVersionChangedError,
+  ReferenceGraphChangedError,
 } from "@lacecms/domain";
 import type {
   AccountErrorCode,
@@ -87,6 +88,20 @@ const errorMappings = {
     status: 409,
     message: "Link impact changed. Refresh and review it again.",
   },
+  CONTENT_REFERENCES_IN_USE: {
+    status: 409,
+    message:
+      "Published references use this entry. Remove or replace them and republish the sources.",
+  },
+  CONTENT_REFERENCE_REVIEW_REQUIRED: {
+    status: 409,
+    message:
+      "Saved drafts reference this entry. Review and acknowledge the draft usages before deletion.",
+  },
+  CONTENT_REFERENCE_IMPACT_CHANGED: {
+    status: 409,
+    message: "Reference impact changed. Refresh and review it again.",
+  },
   CONTENT_MODEL_CARDINALITY_CONFLICT: {
     status: 409,
     message: "The content model cannot accept another entry.",
@@ -105,7 +120,14 @@ const errorMappings = {
   },
   MEDIA_IN_USE: { status: 409, message: "The media is still used by content." },
   MEDIA_UPDATE_CONFLICT: { status: 409, message: "The media was modified by another request." },
-  CONFLICT: { status: 409, message: "The request conflicts with the current state." },
+  CONFLICT: {
+    status: 409,
+    message: "The request conflicts with the current state.",
+    expose: (error) =>
+      error instanceof ReferenceGraphChangedError
+        ? { message: "The reference graph changed. Reload and retry." }
+        : {},
+  },
   INVALID_CREDENTIALS: { status: 400, message: "The current password is incorrect." },
   INVITATION_INVALID: { status: 410, message: "The invitation is invalid or has expired." },
   NOT_FOUND: { status: 404, message: "The requested resource was not found." },
@@ -176,10 +198,13 @@ export function transportError<Code extends TransportErrorCode>(
 }
 
 /** Converts portable failures to documented safe transport responses. */
-export function classifyError(error: unknown): ClassifiedError {
+export function classifyError(
+  error: unknown,
+  options: { readonly includeReferenceDetails?: boolean } = {},
+): ClassifiedError {
   if (error instanceof ContractValidationError) return validationError(error.issues);
   if (error instanceof ContentValidationError)
-    return validationError(toContentValidationIssues(error));
+    return validationError(toContentValidationIssues(error, options.includeReferenceDetails));
   if (error instanceof CollectionQueryValidationError)
     return validationError([
       { code: "invalid_value", message: "The submitted value is invalid.", path: error.pointer },

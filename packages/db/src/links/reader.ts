@@ -6,11 +6,21 @@ import {
 import {
   assertLinkImpactAcknowledgment,
   assertLinkPageLimit,
+  encodeReferenceImpactReceipt,
+  referenceImpactChanged,
   encodeLinkImpactReceipt,
   opaqueCursor,
 } from "@lacecms/application";
 import type {
   ContentLinkReadPort,
+  ContentReferenceReadPort,
+  ReferenceTarget,
+  ReferenceTargetStatus,
+  ReferenceTargetQuery,
+  ReferenceTargetPage,
+  ReferenceImpactQuery,
+  ReferenceImpactPage,
+  LinkImpactPagination,
   LinkTargetStatus,
   LinkTargetQuery,
   LinkTargetPage,
@@ -23,6 +33,13 @@ import type {
 } from "@lacecms/application";
 import { DomainError } from "@lacecms/domain";
 import { encodeBase64Url, decodeBase64Url } from "../shared/base64.js";
+import {
+  impactSourceCondition,
+  incomingUsageSql,
+  LINK_IMPACT_EVIDENCE_SQL,
+  REFERENCE_IMPACT_EVIDENCE_SQL,
+} from "./impact-evidence.js";
+import type { ImpactEvidenceRow, ImpactPurpose } from "./impact-evidence.js";
 import { LINK_TARGETS_SQL } from "./statements.js";
 
 export interface LinkReadSql {
@@ -36,6 +53,7 @@ interface TargetRow {
   readonly title: string | null;
   readonly path: string | null;
   readonly snapshot_id?: string;
+  readonly published_snapshot_id: string | null;
 }
 function invalid(): never {
   throw new DomainError("CONTENT_INVALID_STATE", "Invalid link query or cursor.");
@@ -59,6 +77,20 @@ function target(row: TargetRow): LinkTargetStatus {
   return row.path === null
     ? { ...value, state: "unpublished" }
     : { ...value, state: "published", path: row.path };
+}
+function referenceTarget(row: TargetRow): ReferenceTargetStatus {
+  if (row.id === null) return { id: row.requested_id, state: "missing" };
+  if (row.kind === "global") return { id: row.id, state: "ineligible" };
+  if ((row.kind !== "page" && row.kind !== "collection") || row.title === null) return invalid();
+  const item = {
+    id: row.id,
+    modelKey: row.model_key!,
+    modelKind: row.kind,
+    title: row.title,
+  } as const;
+  return row.published_snapshot_id === null
+    ? { ...item, state: "unpublished" }
+    : { ...item, state: "published", ...(row.path === null ? {} : { path: row.path }) };
 }
 interface Cursor {
   readonly version: 1;
@@ -106,22 +138,6 @@ function parseCursor(
     return invalid();
   }
 }
-const EXTERNAL = `not (e.id = ? and (? = 'delete' or e.published_snapshot_id = s.id))`;
-export const LINK_IMPACT_EVIDENCE_SQL = `select g.revision as graph_revision, d.revision as draft_revision,
-  t.published_snapshot_id, t.id,
-  exists(select 1 from content_entry_link_references r
-    join content_snapshots s on s.id=r.snapshot_id
-    join content_entries e on e.id=s.entry_id and e.published_snapshot_id=s.id
-    where r.target_entry_id=? and r.purpose='url' and r.delivered=1 and ${EXTERNAL}) as has_published_usages
-  from content_link_state g left join content_entries t on t.id=?
-  left join content_snapshots d on d.id=t.draft_snapshot_id where g.singleton_key=1`;
-export interface ImpactEvidenceRow {
-  readonly graph_revision: number;
-  readonly draft_revision: number | null;
-  readonly published_snapshot_id: string | null;
-  readonly id: string | null;
-  readonly has_published_usages: number;
-}
 interface LocationRow {
   readonly location_id: string;
   readonly source_key: string;
@@ -153,22 +169,49 @@ interface SourceRow {
 }
 
 /** Shared bounded queries; adapters supply only their native execution capability. */
-export class SqlContentLinkReader implements ContentLinkReadPort {
+export class SqlContentLinkReader implements ContentLinkReadPort, ContentReferenceReadPort {
   public constructor(private readonly db: LinkReadSql) {}
   public async resolveLinkTargets(
     ids: readonly string[],
   ): Promise<Readonly<Record<string, LinkTargetStatus>>> {
+    const rows = await this.resolveTargets(ids);
+    return Object.fromEntries(rows.map((row) => [row.requested_id, target(row)]));
+  }
+
+  public async resolveReferenceTargets(
+    ids: readonly string[],
+  ): Promise<Readonly<Record<string, ReferenceTargetStatus>>> {
+    const rows = await this.resolveTargets(ids);
+    return Object.fromEntries(rows.map((row) => [row.requested_id, referenceTarget(row)]));
+  }
+
+  private async resolveTargets(ids: readonly string[]): Promise<readonly TargetRow[]> {
     if (
       ids.length > MAX_LINK_RESOLVE_IDS ||
       new Set(ids).size !== ids.length ||
       !ids.every(isInternalLinkTargetId)
     )
       invalid();
-    if (ids.length === 0) return {};
-    const rows = await this.db.all<TargetRow>(LINK_TARGETS_SQL, JSON.stringify(ids));
-    return Object.fromEntries(rows.map((row) => [row.requested_id, target(row)]));
+    if (ids.length === 0) return [];
+    return this.db.all<TargetRow>(LINK_TARGETS_SQL, JSON.stringify(ids));
   }
   public async listLinkTargets(input: LinkTargetQuery): Promise<LinkTargetPage> {
+    const { rows, ...page } = await this.listTargets(input, "url");
+    return {
+      ...page,
+      items: rows.map(
+        (row) => target(row) as Extract<LinkTargetStatus, { readonly title: string }>,
+      ),
+    };
+  }
+
+  public async listReferenceTargets(input: ReferenceTargetQuery): Promise<ReferenceTargetPage> {
+    if (!isInternalLinkTargetId(input.modelKey)) invalid();
+    const { rows, ...page } = await this.listTargets(input, "reference");
+    return { ...page, items: rows.map((row) => referenceTarget(row) as ReferenceTarget) };
+  }
+
+  private async listTargets(input: LinkTargetQuery, purpose: "url" | "reference") {
     assertLinkPageLimit(input.limit);
     const search = input.search?.trim() ?? "";
     if (
@@ -178,6 +221,7 @@ export class SqlContentLinkReader implements ContentLinkReadPort {
       invalid();
     const excluded = [...(input.excludedModelKeys ?? [])];
     const scope = await sha256CanonicalJson([
+      ...(purpose === "reference" ? [purpose] : []),
       ...(excluded.length === 0 ? [] : [excluded]),
       input.modelKey ?? null,
       input.status ?? null,
@@ -189,7 +233,7 @@ export class SqlContentLinkReader implements ContentLinkReadPort {
       search.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_") + "%";
     const rows = await this.db.all<TargetRow>(
       `select e.id, e.model_key, m.kind, s.title,
-      s.id as snapshot_id, p.path from content_snapshots s indexed by content_snapshots_title_prefix_idx
+      s.id as snapshot_id, p.path, e.published_snapshot_id from content_snapshots s indexed by content_snapshots_title_prefix_idx
       join content_entries e on e.id=s.entry_id and e.draft_snapshot_id=s.id join content_models m on m.key=e.model_key
       left join published_routes p on p.entry_id=e.id and p.snapshot_id=e.published_snapshot_id
       where s.title like ? escape '\\' and m.kind in ('page','collection')
@@ -212,9 +256,7 @@ export class SqlContentLinkReader implements ContentLinkReadPort {
     const page = rows.slice(0, input.limit);
     const last = page.at(-1);
     return {
-      items: page.map(
-        (row) => target(row) as Extract<LinkTargetStatus, { readonly title: string }>,
-      ),
+      rows: page,
       ...(rows.length <= input.limit || last === undefined
         ? {}
         : {
@@ -231,6 +273,48 @@ export class SqlContentLinkReader implements ContentLinkReadPort {
   public async readLinkImpact(
     input: LinkImpactQuery & { readonly actorId: string },
   ): Promise<LinkImpactPage> {
+    const { page, evidence, observed } = await this.readImpact(input, "url");
+    return {
+      ...page,
+      hasPublishedUsages: observed.has_published_usages === 1,
+      receipt: encodeLinkImpactReceipt(evidence),
+    };
+  }
+
+  public async readReferenceImpact(
+    input: ReferenceImpactQuery & { readonly actorId: string },
+  ): Promise<ReferenceImpactPage> {
+    const { page, evidence, observed } = await this.readImpact(input, "reference");
+    const hasDraftUsages = observed.has_draft_usages === 1;
+    const hasPublishedBlockers = observed.has_published_usages === 1;
+    return {
+      ...page,
+      hasDraftUsages,
+      hasPublishedBlockers,
+      ...(input.action === "delete" && hasDraftUsages && !hasPublishedBlockers
+        ? { receipt: encodeReferenceImpactReceipt(evidence) }
+        : {}),
+    };
+  }
+
+  private async readImpact(
+    input: LinkImpactQuery & { readonly actorId: string },
+    purpose: ImpactPurpose,
+  ) {
+    const changed =
+      purpose === "url"
+        ? drift
+        : () => {
+            throw referenceImpactChanged();
+          };
+    const sourceCondition = impactSourceCondition(purpose);
+    const externalParams = purpose === "url" ? [input.targetId, input.action] : [input.targetId];
+    const scopeParts = [
+      ...(purpose === "reference" ? [purpose] : []),
+      input.targetId,
+      input.action,
+      input.actorId,
+    ];
     assertLinkPageLimit(input.limit);
     if (!isInternalLinkTargetId(input.targetId) || !["delete", "unpublish"].includes(input.action))
       invalid();
@@ -248,22 +332,23 @@ export class SqlContentLinkReader implements ContentLinkReadPort {
     )
       invalid();
     const scope = await sha256CanonicalJson([
-      input.targetId,
-      input.action,
-      input.actorId,
+      ...scopeParts,
       mode === "locations" ? (input.sourceEntryId ?? null) : null,
       mode === "locations" ? (input.snapshotId ?? null) : null,
     ]);
     const after = parseCursor(mode === "sources" ? input.after : input.locationsAfter, mode, scope);
     const [observed] = await this.db.all<ImpactEvidenceRow>(
-      LINK_IMPACT_EVIDENCE_SQL,
+      purpose === "url" ? LINK_IMPACT_EVIDENCE_SQL : REFERENCE_IMPACT_EVIDENCE_SQL,
       input.targetId,
-      input.targetId,
-      input.action,
+      ...externalParams,
+      ...(purpose === "reference" ? [input.targetId, ...externalParams] : []),
       input.targetId,
     );
-    if (!observed || !observed.id || observed.draft_revision === null) invalid();
-    if (after !== undefined && after.graph !== observed.graph_revision) drift();
+    if (!observed?.id || observed.draft_revision === null) {
+      if (purpose === "reference" && after !== undefined) changed();
+      invalid();
+    }
+    if (after !== undefined && after.graph !== observed.graph_revision) changed();
     const evidence: LinkImpactEvidence = {
       version: 1,
       targetId: input.targetId,
@@ -273,11 +358,7 @@ export class SqlContentLinkReader implements ContentLinkReadPort {
       publishedSnapshotId: observed.published_snapshot_id,
       graphRevision: observed.graph_revision,
     };
-    const common = {
-      hasPublishedUsages: observed.has_published_usages === 1,
-      receipt: encodeLinkImpactReceipt(evidence),
-    };
-    let result: LinkImpactPage;
+    let result: LinkImpactPagination;
     if (mode === "locations") {
       const anchor =
         after === undefined
@@ -285,7 +366,7 @@ export class SqlContentLinkReader implements ContentLinkReadPort {
           : (
               await this.db.all<LocationRow>(
                 `select ${LOCATION_COLUMNS} from content_entry_link_references r
-         where r.target_entry_id=? and r.purpose='url' and r.snapshot_id=? and r.rowid=cast(? as integer)`,
+         where r.target_entry_id=? and r.purpose='${purpose}' and r.snapshot_id=? and r.rowid=cast(? as integer)`,
                 input.targetId,
                 input.snapshotId,
                 after.last[0],
@@ -295,18 +376,17 @@ export class SqlContentLinkReader implements ContentLinkReadPort {
         after !== undefined &&
         (anchor === undefined || (await locationKey(anchor)) !== after.last[1])
       )
-        drift();
+        changed();
       const rows = await this.db.all<LocationRow>(
         `select ${LOCATION_COLUMNS} from content_entry_link_references r
         join content_snapshots s on s.id=r.snapshot_id join content_entries e on e.id=s.entry_id
-        where r.target_entry_id=? and r.purpose='url' and s.id=? and e.id=? and (e.draft_snapshot_id=s.id or e.published_snapshot_id=s.id)
-        and ${EXTERNAL} and (r.source_key,r.area,r.field_path) > (?,?,?)
+        where r.target_entry_id=? and r.purpose='${purpose}' and s.id=? and e.id=? and (e.draft_snapshot_id=s.id or e.published_snapshot_id=s.id)
+        and ${sourceCondition} and (r.source_key,r.area,r.field_path) > (?,?,?)
         order by ${LOCATION_ORDER} limit ?`,
         input.targetId,
         input.snapshotId,
         input.sourceEntryId,
-        input.targetId,
-        input.action,
+        ...externalParams,
         anchor?.source_key ?? "",
         anchor?.area ?? "",
         anchor?.field_path ?? "",
@@ -315,7 +395,6 @@ export class SqlContentLinkReader implements ContentLinkReadPort {
       const page = rows.slice(0, input.limit);
       const last = page.at(-1);
       result = {
-        ...common,
         mode: "locations",
         sourceEntryId: input.sourceEntryId!,
         snapshotId: input.snapshotId!,
@@ -338,19 +417,18 @@ export class SqlContentLinkReader implements ContentLinkReadPort {
         case when e.published_snapshot_id=s.id then 'published' else 'draft' end as phase,
         (select json_group_array(json_object('location_id',loc.location_id,'source_key',loc.source_key,'area',loc.area,'field_path',loc.field_path,'delivered',loc.delivered))
           from (select ${LOCATION_COLUMNS} from content_entry_link_references r
-            where r.target_entry_id=? and r.purpose='url' and r.snapshot_id=s.id order by ${LOCATION_ORDER} limit 11) loc) as locations_json
+            where r.target_entry_id=? and r.purpose='${purpose}' and r.snapshot_id=s.id order by ${LOCATION_ORDER} limit 11) loc) as locations_json
         from (select distinct r.snapshot_id from content_entry_link_references r
           join content_snapshots s on s.id=r.snapshot_id join content_entries e on e.id=s.entry_id
-          where r.target_entry_id=? and r.purpose='url' and r.snapshot_id > ?
-            and (e.draft_snapshot_id=s.id or e.published_snapshot_id=s.id) and ${EXTERNAL}
+          where r.target_entry_id=? and r.purpose='${purpose}' and r.snapshot_id > ?
+            and (e.draft_snapshot_id=s.id or e.published_snapshot_id=s.id) and ${sourceCondition}
           order by r.snapshot_id limit ?) candidates
         join content_snapshots s on s.id=candidates.snapshot_id join content_entries e on e.id=s.entry_id
         order by s.id`,
         input.targetId,
         input.targetId,
         after?.last[0] ?? "",
-        input.targetId,
-        input.action,
+        ...externalParams,
         input.limit + 1,
       );
       const page = rows.slice(0, input.limit);
@@ -372,9 +450,7 @@ export class SqlContentLinkReader implements ContentLinkReadPort {
                     version: 1,
                     kind: "locations",
                     scope: await sha256CanonicalJson([
-                      input.targetId,
-                      input.action,
-                      input.actorId,
+                      ...scopeParts,
                       row.entry_id,
                       row.snapshot_id,
                     ]),
@@ -386,7 +462,6 @@ export class SqlContentLinkReader implements ContentLinkReadPort {
         }),
       );
       result = {
-        ...common,
         mode: "sources",
         sources,
         ...(rows.length <= input.limit
@@ -403,10 +478,17 @@ export class SqlContentLinkReader implements ContentLinkReadPort {
       };
     }
     const [current] = await this.db.all<{ revision: number }>(
-      "select revision from content_link_state where singleton_key=1",
+      purpose === "url"
+        ? "select revision from content_link_state where singleton_key=1"
+        : `select g.revision from content_link_state g
+          join content_entries e on e.id=? join content_snapshots d on d.id=e.draft_snapshot_id
+          where g.singleton_key=1 and d.revision=? and e.published_snapshot_id is ?`,
+      ...(purpose === "url"
+        ? []
+        : [input.targetId, evidence.draftRevision, evidence.publishedSnapshotId]),
     );
-    if (current?.revision !== observed.graph_revision) drift();
-    return result;
+    if (current?.revision !== observed.graph_revision) changed();
+    return { page: result, evidence, observed };
   }
 }
 
@@ -442,9 +524,7 @@ export function linkRemovalCondition(
       ],
     };
   return {
-    sql: `not exists(select 1 from content_entry_link_references r
-      join content_snapshots s on s.id=r.snapshot_id join content_entries e on e.id=s.entry_id and e.published_snapshot_id=s.id
-      where r.target_entry_id=? and r.purpose='url' and r.delivered=1 and ${EXTERNAL})`,
+    sql: `not exists(${incomingUsageSql("url", "published")})`,
     params: [targetId, targetId, action],
   };
 }

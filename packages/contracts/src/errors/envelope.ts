@@ -5,6 +5,7 @@ import { jsonObjectSchema } from "../shared/json.js";
 import {
   contractValidationIssueSchema,
   ContractValidationError,
+  referenceCycleDetailsSchema,
 } from "../shared/validation-error.js";
 import type { ContractValidationIssue } from "../shared/validation-error.js";
 
@@ -19,6 +20,9 @@ export const errorCodeSchema = v.picklist([
   "CONTENT_INVALID_STATE",
   "CONTENT_LINKS_IN_USE",
   "CONTENT_LINK_IMPACT_CHANGED",
+  "CONTENT_REFERENCE_IMPACT_CHANGED",
+  "CONTENT_REFERENCES_IN_USE",
+  "CONTENT_REFERENCE_REVIEW_REQUIRED",
   "CONTENT_MODEL_CARDINALITY_CONFLICT",
   "CONTENT_NOT_PUBLISHED",
   "CONTENT_PAGE_SINGLETON",
@@ -74,14 +78,24 @@ export function toContractValidationIssues(
     path: contractIssuePointer(issue.path),
   }));
 }
+export const validationErrorDetailsSchema = v.strictObject({
+  issues: v.array(contractValidationIssueSchema),
+});
+
 export function toContentValidationIssues(
   error: ContentValidationError,
+  includeReferenceDetails = false,
 ): ContractValidationIssue[] {
-  return error.issues.map((issue) => ({
-    code: issue.code,
-    message: issue.message,
-    path: contractIssuePointer(issue.path),
-  }));
+  return error.issues.map((issue) => {
+    const base = {
+      code: issue.code,
+      message: issue.message,
+      path: contractIssuePointer(issue.path),
+    };
+    if (!includeReferenceDetails || issue.code !== "reference_cycle") return base;
+    const details = v.safeParse(referenceCycleDetailsSchema, issue.details);
+    return details.success ? { ...base, code: "reference_cycle", details: details.output } : base;
+  });
 }
 
 export interface ClassifiedError {

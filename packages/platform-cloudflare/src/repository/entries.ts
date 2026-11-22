@@ -149,17 +149,7 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
       failure("D1 content write failed.");
     }
     if (result.kind === "rejected") {
-      const replay = removalGuardResult(
-        result.reason,
-        {
-          entryId: input.entryId,
-          action: "unpublish",
-          actorId: input.unpublishedBy.id,
-          acknowledgment: input.linkImpact,
-          expectedPublished: input.expectedPublishedSnapshotId,
-        },
-        input.idempotency,
-      );
+      const replay = removalGuardResult(result.reason, "unpublish", input.idempotency);
       return { entry: replay, outcome: "replayed", status: "unpublished" };
     }
     if (result.committedOutboxWork) this.options.onOutboxWork?.();
@@ -219,15 +209,7 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
       if (error instanceof LaceError) throw error;
       failure("D1 content write failed.");
     }
-    if (result.kind === "rejected")
-      removalGuardResult(result.reason, {
-        entryId: input.entryId,
-        action: "delete",
-        actorId: input.deletedBy.id,
-        acknowledgment: input.linkImpact,
-        expectedPublished: input.expectedPublishedSnapshotId ?? null,
-        expectedRevision: input.expectedRevision,
-      });
+    if (result.kind === "rejected") removalGuardResult(result.reason, "delete");
     if (result.kind === "committed" && result.committedOutboxWork) this.options.onOutboxWork?.();
     return { status: "deleted" };
   }

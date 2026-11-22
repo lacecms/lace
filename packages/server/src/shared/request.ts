@@ -38,11 +38,11 @@ export function cursorPageInput(query: {
 }
 
 export async function optionalJsonBody(request: Request): Promise<unknown> {
-  if (request.headers.get("content-length") === "0") return {};
+  const body = await request.text();
+  if (body.length === 0) return {};
   try {
-    return await request.json();
+    return JSON.parse(body);
   } catch {
-    if (request.headers.get("content-length") === null) return {};
     invalid("The request body must contain valid JSON.");
   }
 }

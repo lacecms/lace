@@ -18,6 +18,9 @@ export const contentOperationPermissions = Object.freeze({
   delete: "content:write",
   resolveLinkTargets: "content:read",
   listLinkTargets: "content:read",
+  listReferenceTargets: "content:read",
+  resolveReferenceTargets: "content:read",
+  readReferenceImpact: "content:read",
   readLinkImpact: "content:read",
 } satisfies Record<string, Permission>);
 export type ContentOperation = keyof typeof contentOperationPermissions;

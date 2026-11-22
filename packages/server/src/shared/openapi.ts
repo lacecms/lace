@@ -57,6 +57,10 @@ export function validationFailure(): { readonly 422: EnvelopeResponse } {
   };
 }
 
+export function conflictFailure(description: string): { readonly 409: EnvelopeResponse } {
+  return { 409: envelopeResponse(description) };
+}
+
 /** A missing or rejected credential. */
 export function authenticationFailure(): { readonly 401: EnvelopeResponse } {
   return { 401: envelopeResponse("Authentication required (AUTHENTICATION_REQUIRED)") };

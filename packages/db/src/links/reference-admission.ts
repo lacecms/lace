@@ -1,7 +1,7 @@
 import { internalLinkIssuePath } from "@lacecms/application";
 import { ContentValidationError } from "@lacecms/content";
 import type { ContentValidationIssue, SnapshotEntryReference } from "@lacecms/content";
-import { DomainError } from "@lacecms/domain";
+import { DomainError, ReferenceGraphChangedError } from "@lacecms/domain";
 import type { WritePlan, WritePlanSql } from "../write-plan/plan.js";
 import { referenceGraphIssue, referenceGraphQuery, typedReferences } from "./reference-graph.js";
 import type { ReferenceGraphRow, ReferencePhase } from "./reference-graph.js";
@@ -21,7 +21,7 @@ export interface ReferenceAdmission {
 
 export type ReferenceMiss =
   | { readonly kind: "reference-issues"; readonly issues: readonly ContentValidationIssue[] }
-  | { readonly kind: "reference-config" };
+  | { readonly kind: "reference-config" | "reference-conflict" };
 
 const targetMessages = {
   reference_target_missing: "must select an existing entry.",
@@ -138,18 +138,24 @@ export function guardEntryReferences<Miss>(
           code: graphIssue.kind === "cycle" ? "reference_cycle" : "reference_graph_limit",
           message:
             graphIssue.kind === "cycle"
-              ? "would create a cycle between entries."
+              ? "would create a cycle between entries. Review this selection."
               : "reaches too many dependencies. Reduce the number of reachable entries and retry.",
           path: internalLinkIssuePath(occurrence, candidate.blockKeys),
           ...(graphIssue.kind === "cycle"
             ? {
-                details: { witness: graphIssue.witness, truncated: graphIssue.truncated },
+                details: {
+                  witness: graphIssue.witness,
+                  truncated: graphIssue.truncated,
+                  ...(graphIssue.publishFirst === undefined
+                    ? {}
+                    : { publishFirst: graphIssue.publishFirst }),
+                },
               }
             : {}),
         };
         return { kind: "reference-issues", issues: [issue] };
       }
-      return { kind: "reference-config" };
+      return { kind: "reference-conflict" };
     },
   };
 }
@@ -157,6 +163,7 @@ export function guardEntryReferences<Miss>(
 /** Preserve portable write failures through adapter error handling. */
 export function rejectReferenceWrite(miss: ReferenceMiss): never {
   if (miss.kind === "reference-issues") throw new ContentValidationError(miss.issues);
+  if (miss.kind === "reference-conflict") throw new ReferenceGraphChangedError();
   throw new DomainError(
     "CONTENT_REVISION_CONFLICT",
     "The content model changed. Reload and retry.",

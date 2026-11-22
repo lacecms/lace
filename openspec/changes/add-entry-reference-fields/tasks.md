@@ -19,10 +19,10 @@ session builds on the preceding ones. The feature ships after REL1F.
 
 ## 3. REL1C — Removal, direct impact and admin API
 
-- [ ] 3.1 Add the authenticated paginated reference-target catalog and batch resolver. Test literal title prefixes, continuations, selected model filtering, draft-only targets and published route-less records, missing IDs, invalid input and read-only permissions on both adapters.
-- [ ] 3.2 Add direct impact reads with bounded source/location pages, phase, visibility, stable source identities and pointers. Verify Page → Review → Anna lists only the review for Anna, plus tests for hidden uses, a changing graph, high fan-in and many locations in one source.
-- [ ] 3.3 Guard delete/unpublish in the same transaction as target preconditions and outbox effects. Verify an absolute delivered blocker, release after source republication, draft-only acknowledged deletion, hidden-only cases, mixed URL/typed usages, stale/cross-actor receipts and unchanged permissions/singleton rules.
-- [ ] 3.4 Expose path-addressed target/cycle failures, a verified publish-first hint and separate hard-block/review errors through the shared contracts and OpenAPI. Exercise positive, denied, stale and idempotent requests on Node and Worker, including source publish racing target removal. Record REST and runtime parity for REL1C.
+- [x] 3.1 Add the authenticated paginated reference-target catalog and batch resolver. Test literal title prefixes, continuations, selected model filtering, draft-only targets and published route-less records, missing IDs, invalid input and read-only permissions on both adapters.
+- [x] 3.2 Add direct impact reads with bounded source/location pages, phase, visibility, stable source identities and pointers. Verify Page → Review → Anna lists only the review for Anna, plus tests for hidden uses, a changing graph, high fan-in and many locations in one source.
+- [x] 3.3 Guard delete/unpublish in the same transaction as target preconditions and outbox effects. Verify an absolute delivered blocker, release after source republication, draft-only acknowledged deletion, hidden-only cases, mixed URL/typed usages, stale/cross-actor receipts and unchanged permissions/singleton rules.
+- [x] 3.4 Expose path-addressed target/cycle failures, a verified publish-first hint and separate hard-block/review errors through the shared contracts and OpenAPI. Exercise positive, denied, stale and idempotent requests on Node and Worker, including source publish racing target removal. Record REST and runtime parity for REL1C.
 
 ## 4. REL1D — Published SDK, Astro and saved-draft preview
 

@@ -19,6 +19,9 @@ import type {
   ConfigurationSyncStateReadPort,
   ContentCommandResult,
   ContentLinkReadPort,
+  ContentReferenceReadPort,
+  ReferenceTargetQuery,
+  ReferenceImpactQuery,
   ContentEntryCommandPort,
   ContentEntryListPage,
   ContentEntryReadPort,
@@ -102,6 +105,7 @@ export type { D1RepositoryOptions } from "./base.js";
 export class D1ContentRepository
   implements
     ContentLinkReadPort,
+    ContentReferenceReadPort,
     ContentEntryCommandPort,
     ContentEntryReadPort,
     ConfigurationSyncApplyPort,
@@ -151,6 +155,15 @@ export class D1ContentRepository
 
   // ---------------------------------------------------------------- reads
 
+  public readReferenceImpact(query: ReferenceImpactQuery & { readonly actorId: string }) {
+    return this.reader.readReferenceImpact(query);
+  }
+  public resolveReferenceTargets(ids: readonly string[]) {
+    return this.reader.resolveReferenceTargets(ids);
+  }
+  public listReferenceTargets(query: ReferenceTargetQuery) {
+    return this.reader.listReferenceTargets(query);
+  }
   public resolveLinkTargets(ids: readonly string[]) {
     return this.reader.resolveLinkTargets(ids);
   }

@@ -1,4 +1,10 @@
-import { ContentUseCases, contentModelRoute } from "@lacecms/application";
+import {
+  ContentLinkUseCases,
+  ContentReferenceUseCases,
+  ContentUseCases,
+  contentModelRoute,
+  opaqueCursor,
+} from "@lacecms/application";
 import { defineCollection, defineConfig } from "@lacecms/config";
 import { defineBlock, field } from "@lacecms/content";
 import type { JsonObject } from "@lacecms/content";
@@ -113,7 +119,11 @@ contract(
         {
           code: "reference_cycle",
           path: ["fields", "related", 0],
-          details: { witness: [b0.id, a0.id, b0.id] },
+          details: {
+            witness: [b0.id, a0.id, b0.id],
+            truncated: false,
+            publishFirst: { entryId: a0.id, title: "first" },
+          },
         },
       ],
     });
@@ -204,11 +214,11 @@ contract(
 );
 
 /** Let both callers prepare their commands, then exercise a chosen commit order. */
-async function interleave<Command, Result>(
-  first: (dispatch: (input: Command) => Promise<Result>) => Promise<unknown>,
-  second: (dispatch: (input: Command) => Promise<Result>) => Promise<unknown>,
-  commitFirst: (input: Command) => Promise<Result>,
-  commitSecond: (input: Command) => Promise<Result>,
+async function interleave<FirstCommand, FirstResult, SecondCommand, SecondResult>(
+  first: (dispatch: (input: FirstCommand) => Promise<FirstResult>) => Promise<unknown>,
+  second: (dispatch: (input: SecondCommand) => Promise<SecondResult>) => Promise<unknown>,
+  commitFirst: (input: FirstCommand) => Promise<FirstResult>,
+  commitSecond: (input: SecondCommand) => Promise<SecondResult>,
 ): Promise<PromiseSettledResult<unknown>[]> {
   const ready = Promise.withResolvers<void>();
   const committed = Promise.withResolvers<void>();
@@ -356,5 +366,419 @@ contract(
     await expect(publish(saved, undefined, "rollback-reference")).resolves.toMatchObject({
       publication: "published",
     });
+  },
+);
+
+contract(
+  "searches and resolves typed reference targets across publication states",
+  async (runtime, expect) => {
+    const { create, publish, repository, service, sql } = await setup(runtime);
+    await seedModels(sql, "settings");
+    const makeReview = (title: string) =>
+      service.create({ actor: editor, modelKey: "testimonials", title, fields: {}, blocks: [] });
+    const first = await makeReview("Wild% First");
+    const second = await makeReview("wild% Second");
+    const wildcard = await makeReview("Wild_ Third");
+    const post = await create("post");
+    await publish(first);
+    await publish(post);
+    await sql.run(
+      "insert into content_entries (id,model_key,created_by,created_at,updated_at) values ('settings','settings','admin',1,1)",
+    );
+
+    const queries = new ContentReferenceUseCases(repository);
+    const viewer = { ...editor, role: "viewer" } as const;
+    const query = { modelKey: "testimonials", search: "  WILD%  ", limit: 1 };
+    const page = await queries.list(viewer, query);
+    expect(page.items).toEqual([
+      {
+        id: first.id,
+        title: "Wild% First",
+        modelKey: "testimonials",
+        modelKind: "collection",
+        state: "published",
+      },
+    ]);
+    const next = { ...query, after: page.nextCursor! };
+    expect((await queries.list(viewer, next)).items).toMatchObject([
+      { id: second.id, state: "unpublished" },
+    ]);
+    await expect(queries.list(viewer, { ...next, modelKey: "posts" })).rejects.toMatchObject({
+      code: "CONTENT_INVALID_STATE",
+    });
+    await expect(queries.list(viewer, { ...next, search: "Wild_" })).rejects.toMatchObject({
+      code: "CONTENT_INVALID_STATE",
+    });
+    await expect(
+      queries.list(viewer, { ...query, after: opaqueCursor("bad") }),
+    ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+    expect((await queries.list(viewer, { ...query, search: "Wild_" })).items).toMatchObject([
+      { id: wildcard.id },
+    ]);
+    expect((await queries.list(viewer, { modelKey: "settings", limit: 20 })).items).toEqual([]);
+    expect(
+      await queries.resolve(viewer, [first.id, second.id, post.id, "missing", "settings"]),
+    ).toMatchObject({
+      [first.id]: { state: "published" },
+      [second.id]: { state: "unpublished" },
+      [post.id]: { state: "published", path: "/blog/post" },
+      missing: { id: "missing", state: "missing" },
+      settings: { id: "settings", state: "ineligible" },
+    });
+    const urlQueries = new ContentLinkUseCases(repository, ["testimonials"]);
+    expect((await urlQueries.list(viewer, { modelKey: "testimonials", limit: 20 })).items).toEqual(
+      [],
+    );
+    const maxIds = Array.from({ length: 200 }, (_, index) => `missing-${index}`);
+    expect(Object.keys(await queries.resolve(viewer, maxIds))).toHaveLength(200);
+    expect(() => queries.resolve(viewer, [...maxIds, "extra"])).toThrow();
+    expect(() => queries.resolve(viewer, [first.id, first.id])).toThrow();
+  },
+);
+
+contract(
+  "pages direct typed impact by source and location without traversing ancestors",
+  async (runtime, expect) => {
+    const { create, save, publish, repository, block } = await setup(runtime);
+    const anna = await create("anna");
+    await publish(anna);
+    const review = await create("review", { other: anna.id });
+    const publishedReview = await publish(review);
+    const page = await create("page", { other: review.id });
+    await publish(page);
+    const query = { action: "delete", targetId: anna.id, actorId: admin.id, limit: 50 } as const;
+    const direct = await repository.readReferenceImpact(query);
+    expect(direct).toMatchObject({ hasPublishedBlockers: true, hasDraftUsages: true });
+    expect(direct).not.toHaveProperty("receipt");
+    if (direct.mode !== "sources") throw new Error("Expected source page");
+    expect(direct.sources).toHaveLength(2);
+    expect(direct.sources.every((source) => source.entryId === review.id)).toBe(true);
+    expect(direct.sources.find((source) => source.phase === "published")).toMatchObject({
+      title: "review",
+      modelKey: "posts",
+      snapshotId: publishedReview.entry.published!.id,
+      locations: [{ sourceKey: "$fields", area: "fields", pointer: "/other", delivered: true }],
+    });
+
+    const hidden = await create("hidden", {}, [
+      {
+        type: block.type,
+        key: blockKey("hidden-card"),
+        schemaVersion: 1,
+        position: 1000,
+        hidden: true,
+        settings: {},
+        data: { values: [{ entry: anna.id }] },
+      },
+    ]);
+    const hiddenPublished = await publish(hidden);
+    await save(hidden, {}, []);
+    await create("url-only", { url: `entry:${anna.id}` });
+    const many = await create("many-locations", {
+      related: Array.from({ length: 25 }, () => anna.id),
+    });
+    for (let i = 0; i < 52; i++) await create(`additional-${i}`, { other: anna.id });
+
+    const first = await repository.readReferenceImpact(query);
+    if (first.mode !== "sources") throw new Error("Expected source page");
+    expect(first.sources).toHaveLength(50);
+    expect(first).toMatchObject({ hasPublishedBlockers: true, hasDraftUsages: true });
+    const rest = await repository.readReferenceImpact({ ...query, after: first.nextCursor! });
+    if (rest.mode !== "sources") throw new Error("Expected source page");
+    const sources = [...first.sources, ...rest.sources];
+    expect(sources).toHaveLength(56);
+    expect(new Set(sources.map((source) => source.snapshotId)).size).toBe(sources.length);
+    expect(sources.find((source) => source.entryId === hidden.id)).toMatchObject({
+      phase: "published",
+      snapshotId: hiddenPublished.entry.published!.id,
+      locations: [
+        {
+          sourceKey: "hidden-card",
+          area: "data",
+          pointer: "/values/0/entry",
+          delivered: false,
+        },
+      ],
+    });
+    const group = sources.find((source) => source.entryId === many.id)!;
+    expect(group.locations).toHaveLength(10);
+    const locations = {
+      ...query,
+      sourceEntryId: many.id,
+      snapshotId: group.snapshotId,
+      limit: 7,
+      locationsAfter: group.nextLocationsCursor!,
+    };
+    const pointers = group.locations.map((item) => item.pointer);
+    let locationPage = await repository.readReferenceImpact(locations);
+    while (locationPage.mode === "locations") {
+      pointers.push(...locationPage.locations.map((item) => item.pointer));
+      if (!locationPage.nextCursor) break;
+      locationPage = await repository.readReferenceImpact({
+        ...locations,
+        locationsAfter: locationPage.nextCursor,
+      });
+    }
+    expect(new Set(pointers)).toEqual(
+      new Set(Array.from({ length: 25 }, (_, i) => `/related/${i}`)),
+    );
+    await expect(
+      repository.readReferenceImpact({ ...locations, action: "unpublish" }),
+    ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+    await expect(
+      repository.readReferenceImpact({ ...locations, snapshotId: review.draft.id }),
+    ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+    await save(many, { related: [anna.id] });
+    await expect(repository.readReferenceImpact(locations)).rejects.toMatchObject({
+      code: "CONTENT_REFERENCE_IMPACT_CHANGED",
+    });
+    await expect(
+      repository.readReferenceImpact({ ...query, after: first.nextCursor! }),
+    ).rejects.toMatchObject({ code: "CONTENT_REFERENCE_IMPACT_CHANGED" });
+
+    const reviewWithoutAnna = await save(review, {});
+    expect(await repository.readReferenceImpact(query)).toMatchObject({
+      hasPublishedBlockers: true,
+    });
+    await publish(reviewWithoutAnna);
+    expect(await repository.readReferenceImpact(query)).toMatchObject({
+      hasPublishedBlockers: false,
+      hasDraftUsages: true,
+      receipt: expect.any(String),
+    });
+  },
+);
+
+contract(
+  "blocks delivered reference removal and enforces independent draft reviews atomically",
+  async (runtime, expect) => {
+    const { create, save, publish, service, repository, sql, block } = await setup(runtime);
+    const target = await create("target");
+    let targetPublication = (await publish(target)).entry.published!.id;
+    const source = await create("referring", { other: target.id });
+    const deletion = { actor: admin, entryId: target.id, expectedRevision: target.draft.revision };
+    const unpublish = (key?: string) =>
+      service.unpublish({
+        actor: admin,
+        entryId: target.id,
+        expectedPublishedSnapshotId: targetPublication,
+        ...(key === undefined ? {} : { idempotencyKey: key }),
+      });
+    const impact = { action: "delete", actorId: admin.id, targetId: target.id, limit: 20 } as const;
+    const versions = async () => ({
+      state: await sql.all("select version from published_state"),
+      graph: await sql.all("select revision from content_link_state"),
+      work: await sql.all("select id, payload_json from outbox_events order by id"),
+    });
+    const initial = await versions();
+    await expect(service.delete(deletion)).rejects.toMatchObject({
+      code: "CONTENT_REFERENCE_REVIEW_REQUIRED",
+    });
+    expect(await versions()).toEqual(initial);
+    expect(await unpublish("withdraw")).toMatchObject({ unpublication: "unpublished" });
+    const withdrawn = await versions();
+    expect(await unpublish("withdraw")).toMatchObject({ unpublication: "replayed" });
+    expect(await versions()).toEqual(withdrawn);
+    expect((await repository.load({ entryId: source.id }))!.draft.fields).toEqual({
+      other: target.id,
+    });
+    targetPublication = (await publish(target)).entry.published!.id;
+    const before = await repository.readReferenceImpact(impact);
+    const acknowledgment = { receipt: before.receipt!, acknowledgeDraftReferences: true } as const;
+
+    await publish(source);
+    const current = await versions();
+    await expect(
+      service.delete({ ...deletion, referenceImpact: acknowledgment }),
+    ).rejects.toMatchObject({ code: "CONTENT_REFERENCES_IN_USE" });
+    await expect(unpublish()).rejects.toMatchObject({ code: "CONTENT_REFERENCES_IN_USE" });
+    await expect(service.delete({ ...deletion, actor: editor })).rejects.toMatchObject({
+      code: "AUTHORIZATION_DENIED",
+    });
+    expect(await versions()).toEqual(current);
+    const removed = await save(source, {});
+    await expect(unpublish()).rejects.toMatchObject({ code: "CONTENT_REFERENCES_IN_USE" });
+    await publish(removed);
+
+    const hiddenSource = await create("hidden", {}, [
+      {
+        type: block.type,
+        key: blockKey("card"),
+        schemaVersion: 1,
+        position: 1000,
+        hidden: true,
+        settings: {},
+        data: { values: [{ entry: target.id }] },
+      },
+    ]);
+    await publish(hiddenSource);
+    await save(hiddenSource, {}, []);
+    const informational = await repository.readReferenceImpact(impact);
+    expect(informational).toMatchObject({ hasPublishedBlockers: false, hasDraftUsages: false });
+    expect(informational).not.toHaveProperty("receipt");
+
+    const typed = await create("draft-only", { other: target.id });
+    const url = await create("url", { url: `entry:${target.id}` });
+    await publish(url);
+    const urlImpact = await repository.readLinkImpact(impact);
+    const linkImpact = { receipt: urlImpact.receipt, acknowledgePublishedLinks: true } as const;
+    const reviewed = await repository.readReferenceImpact(impact);
+    const referenceImpact = {
+      receipt: reviewed.receipt!,
+      acknowledgeDraftReferences: true,
+    } as const;
+    const both = { ...deletion, linkImpact, referenceImpact };
+    const mixed = await versions();
+    await expect(service.delete({ ...deletion, linkImpact })).rejects.toMatchObject({
+      code: "CONTENT_REFERENCE_REVIEW_REQUIRED",
+    });
+    await expect(service.delete({ ...deletion, referenceImpact })).rejects.toMatchObject({
+      code: "CONTENT_LINKS_IN_USE",
+    });
+    await expect(
+      service.delete({ ...both, referenceImpact: acknowledgment }),
+    ).rejects.toMatchObject({ code: "CONTENT_REFERENCE_IMPACT_CHANGED" });
+    await expect(
+      service.delete({
+        ...both,
+        referenceImpact: { ...referenceImpact, receipt: linkImpact.receipt },
+      }),
+    ).rejects.toMatchObject({ code: "CONTENT_REFERENCE_IMPACT_CHANGED" });
+    const otherAdmin = { ...admin, id: editor.id };
+    await expect(service.delete({ ...both, actor: otherAdmin })).rejects.toMatchObject({
+      code: "CONTENT_REFERENCE_IMPACT_CHANGED",
+    });
+    await expect(service.delete({ ...both, expectedRevision: 99 })).rejects.toMatchObject({
+      code: "CONTENT_REVISION_CONFLICT",
+    });
+    expect(await versions()).toEqual(mixed);
+
+    const revised = await save(target, {});
+    const revisedDeletion = { ...both, expectedRevision: revised.draft.revision };
+    await expect(service.delete(revisedDeletion)).rejects.toMatchObject({
+      code: "CONTENT_REFERENCE_IMPACT_CHANGED",
+    });
+    const latestReference = await repository.readReferenceImpact(impact);
+    const latestLink = await repository.readLinkImpact(impact);
+    await service.delete({
+      ...revisedDeletion,
+      linkImpact: { ...linkImpact, receipt: latestLink.receipt },
+      referenceImpact: { ...referenceImpact, receipt: latestReference.receipt! },
+    });
+    expect(await repository.load({ entryId: target.id })).toBeNull();
+    expect((await repository.load({ entryId: typed.id }))!.draft).toMatchObject({
+      fields: { other: target.id },
+      revision: typed.draft.revision,
+    });
+    expect((await repository.load({ entryId: url.id }))!.published?.fields).toEqual({
+      url: `entry:${target.id}`,
+    });
+    expect(
+      (await repository.load({ entryId: hiddenSource.id }))!.published?.blocks[0]!.data,
+    ).toEqual({
+      values: [{ entry: target.id }],
+    });
+    await expect(publish(typed)).rejects.toMatchObject({
+      issues: [{ code: "reference_target_missing", path: ["fields", "other"] }],
+    });
+    await save(typed, {});
+  },
+);
+
+contract(
+  "finds the publish-first source beyond the bounded cycle witness",
+  async (runtime, expect) => {
+    const { create, save, publish } = await setup(runtime);
+    const target = await create("target");
+    await publish(target);
+    const sources = [];
+    let downstream = target.id;
+    for (let i = 0; i < 19; i++) {
+      const source = await create(`chain-${i}`, { related: [downstream] });
+      await publish(source);
+      sources.unshift(source);
+      downstream = source.id;
+    }
+    const correction = await save(sources.at(-1)!, {});
+    await save(sources[0]!, { other: sources[1]!.id }); // Same edge at a different location.
+    const reversed = await save(target, { related: [downstream] });
+    await expect(publish(reversed)).rejects.toMatchObject({
+      issues: [
+        {
+          code: "reference_cycle",
+          path: ["fields", "related", 0],
+          details: {
+            witness: [target.id, ...sources.slice(0, 14).map((source) => source.id), target.id],
+            truncated: true,
+            publishFirst: { entryId: correction.id, title: "chain-0" },
+          },
+        },
+      ],
+    });
+    await publish(correction);
+    await publish(reversed);
+  },
+);
+
+contract(
+  "allows only one of a source publication and reviewed target deletion",
+  async (runtime, expect) => {
+    for (const removeFirst of [false, true]) {
+      const { create, publish, reopen, repository, use, sql } = await setup(runtime);
+      const target = await create("target");
+      const source = await create("source", { other: target.id });
+      await publish(target);
+      const before = await repository.publishedContentVersion();
+      const read = await repository.readReferenceImpact({
+        action: "delete",
+        targetId: target.id,
+        actorId: admin.id,
+        limit: 20,
+      });
+      const publisher = reopen();
+      const remover = reopen();
+      const publishSource = (dispatch: ContractRepository["publish"]) =>
+        publish(
+          source,
+          use(
+            Object.assign(Object.create(publisher) as ContractRepository, {
+              publish: dispatch,
+            }),
+          ),
+          "publish-in-race",
+        );
+      const deleteTarget = (dispatch: ContractRepository["delete"]) =>
+        use(
+          Object.assign(Object.create(remover) as ContractRepository, { delete: dispatch }),
+        ).delete({
+          actor: admin,
+          entryId: target.id,
+          expectedRevision: target.draft.revision,
+          referenceImpact: { receipt: read.receipt!, acknowledgeDraftReferences: true },
+        });
+      const publishCommand = publisher.publish.bind(publisher);
+      const deleteCommand = remover.delete.bind(remover);
+      const outcomes = removeFirst
+        ? await interleave(deleteTarget, publishSource, deleteCommand, publishCommand)
+        : await interleave(publishSource, deleteTarget, publishCommand, deleteCommand);
+      expect(outcomes).toMatchObject([
+        { status: "fulfilled" },
+        {
+          status: "rejected",
+          reason: removeFirst
+            ? { code: "VALIDATION_FAILED", issues: [{ code: "reference_target_missing" }] }
+            : { code: "CONTENT_REFERENCES_IN_USE" },
+        },
+      ]);
+      expect(await repository.publishedContentVersion()).toBe(before + 1);
+      const savedSource = await repository.load({ entryId: source.id });
+      const savedTarget = await repository.load({ entryId: target.id });
+      expect(savedSource?.draft.fields).toEqual({ other: target.id });
+      expect(savedTarget === null).toBe(removeFirst);
+      expect(savedSource?.published === undefined).toBe(removeFirst);
+      expect(await sql.get("select count(*) as count from idempotency_records")).toEqual({
+        count: removeFirst ? 0 : 1,
+      });
+    }
   },
 );

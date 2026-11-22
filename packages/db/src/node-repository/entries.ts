@@ -150,17 +150,7 @@ export class NodeEntryCommands extends NodeRepositoryBase implements ContentEntr
       failure("SQLite content write failed.");
     }
     if (result.kind === "rejected") {
-      const replay = removalGuardResult(
-        result.reason,
-        {
-          entryId: input.entryId,
-          action: "unpublish",
-          actorId: input.unpublishedBy.id,
-          acknowledgment: input.linkImpact,
-          expectedPublished: input.expectedPublishedSnapshotId,
-        },
-        input.idempotency,
-      );
+      const replay = removalGuardResult(result.reason, "unpublish", input.idempotency);
       return { entry: replay, outcome: "replayed", status: "unpublished" };
     }
     if (entry === null) failure("Unpublished content entry could not be reloaded.");
@@ -223,15 +213,7 @@ export class NodeEntryCommands extends NodeRepositoryBase implements ContentEntr
       if (error instanceof LaceError) throw error;
       failure("SQLite content write failed.");
     }
-    if (result.kind === "rejected")
-      removalGuardResult(result.reason, {
-        entryId: input.entryId,
-        action: "delete",
-        actorId: input.deletedBy.id,
-        acknowledgment: input.linkImpact,
-        expectedPublished: input.expectedPublishedSnapshotId ?? null,
-        expectedRevision: input.expectedRevision,
-      });
+    if (result.kind === "rejected") removalGuardResult(result.reason, "delete");
     return { status: "deleted" };
   }
 }

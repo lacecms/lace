@@ -5,6 +5,7 @@ import {
   fieldVisibilitySchema,
   contentMetadataOpenApi,
   errorEnvelopeSchema,
+  validationErrorDetailsSchema,
 } from "@lacecms/contracts";
 import { Scalar } from "@scalar/hono-api-reference";
 import { toJsonSchema } from "@valibot/to-json-schema";
@@ -47,6 +48,20 @@ const { $schema: _dialect, ...errorEnvelopeComponent } = toJsonSchema(errorEnvel
   errorMode: "ignore",
 });
 
+const { $schema: _detailDialect, ...validationDetails } = toJsonSchema(
+  validationErrorDetailsSchema,
+  { errorMode: "ignore" },
+);
+
+// OpenAPI 3.1 accepts JSON Schema conditionals, which the route generator's
+// SchemaObject type omits. Keep validation evidence on the shared envelope.
+const validationDetailsCondition = {
+  type: "object",
+  if: { properties: { error: { properties: { code: { const: "VALIDATION_FAILED" } } } } },
+  // oxlint-disable-next-line unicorn/no-thenable -- JSON Schema conditional keyword.
+  then: { properties: { error: { properties: { details: validationDetails } } } },
+} as const;
+
 export function registerOpenApiRoute(v1: Hono, app: Hono, routeContext: RouteContext): void {
   const { capabilities } = routeContext;
   const route = v1Routes.documentation.openApi;
@@ -67,7 +82,10 @@ export function registerOpenApiRoute(v1: Hono, app: Hono, routeContext: RouteCon
           components: {
             schemas: {
               ...contentMetadataOpenApi,
-              ErrorEnvelope: errorEnvelopeComponent,
+              ErrorEnvelope: {
+                ...errorEnvelopeComponent,
+                allOf: [validationDetailsCondition],
+              },
             } as NonNullable<
               NonNullable<GenerateSpecOptions["documentation"]["components"]>["schemas"]
             >,

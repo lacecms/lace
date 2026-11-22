@@ -151,6 +151,13 @@ description.
   configuration or content-hash input. Invalid input fails before SQL with
   value-free `422` issues and is never truncated. Public, export and SDK
   ordering are unaffected.
+- Entry reference discovery and direct impact require a browser session with
+  `content:read`. Discovery uses the current published snapshot to identify
+  published targets, including route-less records. Impact pages identify the
+  source snapshot and field or block pointer. Delivered published uses block
+  deletion and unpublication. Draft-only deletion review and existing URL
+  review use separate receipts. Content validation may include a bounded cycle
+  witness and a verified source to publish first for an authorized reader.
 - Media tags are read with `content:read` and changed with `media:write`; tag
   filters and the tag catalog are bounded reads
   ([media-use-cases](../../openspec/specs/media-use-cases/spec.md), "Media

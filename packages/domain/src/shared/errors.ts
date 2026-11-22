@@ -6,9 +6,13 @@ export type InternalDomainErrorCode = "CONFIGURATION_SYNC_STALE";
 export type DomainErrorCode =
   | "AUTHORIZATION_DENIED"
   | "BUILD_EXPORT_VERSION_CHANGED"
+  | "CONFLICT"
   | "CONTENT_INVALID_STATE"
   | "CONTENT_LINKS_IN_USE"
   | "CONTENT_LINK_IMPACT_CHANGED"
+  | "CONTENT_REFERENCE_IMPACT_CHANGED"
+  | "CONTENT_REFERENCES_IN_USE"
+  | "CONTENT_REFERENCE_REVIEW_REQUIRED"
   | "CONTENT_MODEL_CARDINALITY_CONFLICT"
   | "CONTENT_NOT_PUBLISHED"
   | "CONTENT_PAGE_SINGLETON"
@@ -25,5 +29,13 @@ export class DomainError extends LaceError<DomainErrorCode> {
   public constructor(code: DomainErrorCode, message: string) {
     super(code, message);
     this.name = "DomainError";
+  }
+}
+
+/** The candidate needs fresh graph evidence before a write can be admitted. */
+export class ReferenceGraphChangedError extends DomainError {
+  public constructor() {
+    super("CONFLICT", "The reference graph changed. Reload and retry.");
+    this.name = "ReferenceGraphChangedError";
   }
 }

@@ -29,6 +29,7 @@ import type {
 import { CONTENT_ENTRY_SYSTEM_SORTS } from "@lacecms/content";
 import type { CursorPage } from "../shared/pagination.js";
 import type { ActorSummary } from "../shared/actors.js";
+import type { ReferenceImpactAcknowledgment } from "./references.js";
 import type { LinkImpactAcknowledgment } from "./links.js";
 
 export type CollectionQueryFieldType = ListQueryableFieldType;
@@ -215,6 +216,7 @@ export interface PublicationIdempotency {
 }
 
 export interface DeleteContentEntryInput {
+  readonly referenceImpact?: ReferenceImpactAcknowledgment;
   readonly events: readonly OutboxEventRequest[];
   readonly linkImpact?: LinkImpactAcknowledgment;
   readonly deletedAt: UnixMilliseconds;

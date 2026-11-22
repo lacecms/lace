@@ -35,8 +35,16 @@ export function fail(path: string, message: string): never {
 /** A stable path segment for validation errors. */
 export type ValidationPathSegment = number | string;
 
+export const MAX_REFERENCE_CYCLE_IDS = 16;
+export interface ReferenceCycleDetails {
+  readonly witness: readonly string[];
+  readonly truncated: boolean;
+  readonly publishFirst?: { readonly entryId: string; readonly title: string };
+}
+
 /** A portable validation error that callers can associate with form values. */
 export interface ContentValidationIssue {
+  readonly details?: ReferenceCycleDetails;
   readonly code: string;
   readonly message: string;
   readonly path: readonly ValidationPathSegment[];

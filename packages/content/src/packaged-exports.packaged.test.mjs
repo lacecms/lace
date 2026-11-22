@@ -38,6 +38,7 @@ test("packaged entry point keeps its public exports", async () => {
     "MAX_MEDIA_USAGE_ENTRIES",
     "MAX_MODEL_ICON_LENGTH",
     "MAX_PAGE_SIZE",
+    "MAX_REFERENCE_CYCLE_IDS",
     "MAX_SLUG_LENGTH",
     "MAX_SNAPSHOT_LIST_ITEMS",
     "MAX_TITLE_LENGTH",

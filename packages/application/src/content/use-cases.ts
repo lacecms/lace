@@ -569,6 +569,7 @@ export class ContentUseCases {
             ],
       deletedAt,
       ...(input.linkImpact === undefined ? {} : { linkImpact: input.linkImpact }),
+      ...(input.referenceImpact === undefined ? {} : { referenceImpact: input.referenceImpact }),
       deletedBy: auditActor(input.actor),
       entryId: entry.id,
       ...(entry.published === undefined ? {} : { expectedPublishedSnapshotId: entry.published.id }),

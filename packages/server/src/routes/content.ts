@@ -12,6 +12,7 @@ import {
 import { contentModel } from "../shared/content-config.js";
 import {
   authenticationFailure,
+  conflictFailure,
   authorizationFailure,
   describePolicy,
   validate,
@@ -64,6 +65,9 @@ const draftIfMatch = {
   required: false,
   schema: draftTagSchema,
 } as const;
+
+const referenceAdmission =
+  "Reference failures identify the field or block using a JSON Pointer. Target issues use reference_target_missing, reference_target_model or reference_target_unpublished. A reference_cycle witness lists up to 16 entry IDs for callers with content:read. truncated indicates an omitted segment. publishFirst identifies a saved draft whose publication would remove an edge on the reported cycle. Further corrections may be required. reference_graph_limit means the proof would exceed 2048 reachable IDs. Reduce dependencies and retry.";
 
 export function createContentRoutes(routeContext: RouteContext) {
   const { actor } = routeContext.actors;
@@ -160,6 +164,7 @@ export function createContentRoutes(routeContext: RouteContext) {
       routes.createEntry.method,
       routes.createEntry.path,
       describePolicy(routes.createEntry, {
+        description: referenceAdmission,
         requestBody: {
           content: { "application/json": { schema: resolver(createContentEntryRequestSchema) } },
         },
@@ -171,6 +176,9 @@ export function createContentRoutes(routeContext: RouteContext) {
           ...authenticationFailure(),
           ...authorizationFailure(),
           ...validationFailure(),
+          ...conflictFailure(
+            "The reference graph or entry changed. For CONFLICT, reload and retry.",
+          ),
         },
         summary: "Create content entry",
         tags: ["admin"],
@@ -334,6 +342,7 @@ export function createContentRoutes(routeContext: RouteContext) {
       routes.saveDraft.method,
       routes.saveDraft.path,
       describePolicy(routes.saveDraft, {
+        description: referenceAdmission,
         parameters: [draftIfMatch],
         requestBody: {
           content: { "application/json": { schema: resolver(saveDraftRequestSchema) } },
@@ -346,6 +355,9 @@ export function createContentRoutes(routeContext: RouteContext) {
           ...authenticationFailure(),
           ...authorizationFailure(),
           ...validationFailure(),
+          ...conflictFailure(
+            "The reference graph or entry changed. For CONFLICT, reload and retry.",
+          ),
         },
         summary: "Save complete draft",
         tags: ["admin"],
@@ -372,6 +384,7 @@ export function createContentRoutes(routeContext: RouteContext) {
       routes.publishEntry.method,
       routes.publishEntry.path,
       describePolicy(routes.publishEntry, {
+        description: referenceAdmission,
         parameters: [draftIfMatch],
         requestBody: {
           content: { "application/json": { schema: resolver(publishContentEntryRequestSchema) } },
@@ -384,6 +397,9 @@ export function createContentRoutes(routeContext: RouteContext) {
           ...authenticationFailure(),
           ...authorizationFailure(),
           ...validationFailure(),
+          ...conflictFailure(
+            "The reference graph or entry changed. For CONFLICT, reload and retry.",
+          ),
         },
         summary: "Publish content entry",
         tags: ["admin"],
@@ -416,7 +432,7 @@ export function createContentRoutes(routeContext: RouteContext) {
       routes.unpublishEntry.path,
       describePolicy(routes.unpublishEntry, {
         description:
-          "Removes the entry's publication and public route, keeps the draft, and queues a site build. Requires content:publish.",
+          "Requires content:publish and the expected published snapshot. Keeps the draft and queues a site build after removing the publication. An idempotency key can replay a committed request. Delivered typed uses block unpublication. Review published URL uses with linkImpact.",
         requestBody: {
           content: { "application/json": { schema: resolver(unpublishContentEntryRequestSchema) } },
         },
@@ -430,6 +446,9 @@ export function createContentRoutes(routeContext: RouteContext) {
           ...authenticationFailure(),
           ...authorizationFailure(),
           ...validationFailure(),
+          ...conflictFailure(
+            "CONTENT_REFERENCES_IN_USE requires removing the delivered use and republishing its source. For CONTENT_LINKS_IN_USE or CONTENT_LINK_IMPACT_CHANGED, review the current URL usages and supply linkImpact. Publication preconditions can also conflict.",
+          ),
         },
         summary: "Unpublish content entry",
         tags: ["admin"],
@@ -465,8 +484,7 @@ export function createContentRoutes(routeContext: RouteContext) {
       routes.revertDraft.path,
       describePolicy(routes.revertDraft, {
         parameters: [draftIfMatch],
-        description:
-          "Replaces the draft with the current publication. Requires content:write and the expected draft revision.",
+        description: `Replaces the draft with the current publication. Requires content:write and the expected draft revision. ${referenceAdmission}`,
         requestBody: {
           content: { "application/json": { schema: resolver(revertContentEntryRequestSchema) } },
         },
@@ -478,6 +496,9 @@ export function createContentRoutes(routeContext: RouteContext) {
           ...authenticationFailure(),
           ...authorizationFailure(),
           ...validationFailure(),
+          ...conflictFailure(
+            "The reference graph or entry changed. For CONFLICT, reload and retry.",
+          ),
         },
         summary: "Revert draft to published",
         tags: ["admin"],
@@ -502,8 +523,7 @@ export function createContentRoutes(routeContext: RouteContext) {
       routes.duplicateEntry.path,
       describePolicy(routes.duplicateEntry, {
         parameters: [draftIfMatch],
-        description:
-          "Creates an unpublished copy of a collection entry's draft with a cleared slug. Requires content:write.",
+        description: `Creates an unpublished copy of a collection entry's draft with a cleared slug. Requires content:write. ${referenceAdmission}`,
         requestBody: {
           content: { "application/json": { schema: resolver(duplicateContentEntryRequestSchema) } },
         },
@@ -515,6 +535,9 @@ export function createContentRoutes(routeContext: RouteContext) {
           ...authenticationFailure(),
           ...authorizationFailure(),
           ...validationFailure(),
+          ...conflictFailure(
+            "The reference graph or entry changed. For CONFLICT, reload and retry.",
+          ),
         },
         summary: "Duplicate content entry",
         tags: ["admin"],
@@ -543,7 +566,7 @@ export function createContentRoutes(routeContext: RouteContext) {
         summary: "Delete content entry",
         tags: ["admin"],
         description:
-          "Requires content:write and the expected draft revision through If-Match or the body. Optional linkImpact acknowledges the current published incoming links. Refresh impact after CONTENT_LINK_IMPACT_CHANGED.",
+          "Requires content:write and the expected draft revision through If-Match or the body. Deletion of a published entry also requires content:publish. A draft-only reference review uses referenceImpact. Published URL uses require a separate linkImpact acknowledgment. Both objects can be supplied together.",
         requestBody: {
           required: false,
           content: { "application/json": { schema: resolver(deleteContentEntryRequestSchema) } },
@@ -553,6 +576,9 @@ export function createContentRoutes(routeContext: RouteContext) {
           ...authenticationFailure(),
           ...authorizationFailure(),
           ...validationFailure(),
+          ...conflictFailure(
+            "CONTENT_REFERENCES_IN_USE requires removing the delivered use and republishing its source. For CONTENT_REFERENCE_REVIEW_REQUIRED or CONTENT_REFERENCE_IMPACT_CHANGED, review the current draft usages and supply referenceImpact. For CONTENT_LINKS_IN_USE or CONTENT_LINK_IMPACT_CHANGED, review URL usages and supply linkImpact. Target preconditions can also conflict.",
+          ),
         },
       }),
       validate("param", entryIdParams),
@@ -566,6 +592,7 @@ export function createContentRoutes(routeContext: RouteContext) {
           entryId: entryId(context.req.valid("param").entryId),
           expectedRevision: revision(body, context.req.raw),
           ...(body.linkImpact === undefined ? {} : { linkImpact: body.linkImpact }),
+          ...(body.referenceImpact === undefined ? {} : { referenceImpact: body.referenceImpact }),
         });
         return bodyResponse(null, 204);
       },

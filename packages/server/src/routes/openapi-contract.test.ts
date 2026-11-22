@@ -22,6 +22,9 @@ interface Operation {
       readonly headers?: Record<string, { schema?: unknown }>;
     }
   >;
+  readonly requestBody?: {
+    readonly content?: Record<string, { schema?: unknown }>;
+  };
   readonly security?: readonly Record<string, readonly string[]>[];
   readonly summary?: string;
   readonly tags?: readonly string[];
@@ -254,4 +257,71 @@ test("credentials are declared once and applied per boundary", async () => {
     { importToken: [] },
   ]);
   expect(JSON.stringify(doc)).not.toContain('"Validation Error"');
+});
+
+test("reference management documents browser sessions, bounds and distinct lifecycle conflicts", async () => {
+  const { doc } = await generated();
+  const admin = "/api/v1/admin";
+  const picker = operationOf(doc, "GET", `${admin}/reference-targets`)!;
+  const resolve = operationOf(doc, "POST", `${admin}/reference-targets/resolve`)!;
+  const entry = `${admin}/entries/:entryId`;
+  const impact = operationOf(doc, "GET", `${entry}/reference-impact`)!;
+  for (const operation of [picker, resolve, impact]) {
+    expect(operation.security).toEqual([{ session: [] }]);
+    expect(operation.responses?.["200"]).toBeDefined();
+  }
+  expect(picker.parameters?.find(({ name }) => name === "modelKey")).toMatchObject({
+    required: true,
+  });
+  expect(impact.responses?.["409"]?.description).toContain("CONTENT_REFERENCE_IMPACT_CHANGED");
+  expect(resolve.requestBody?.content?.["application/json"]?.schema).toMatchObject({
+    type: "object",
+    additionalProperties: false,
+    properties: { ids: { maxItems: 200 } },
+  });
+  const deletion = operationOf(doc, "DELETE", entry)!;
+  const withdrawal = operationOf(doc, "POST", `${entry}/unpublish`)!;
+  expect(deletion.responses?.["409"]?.description).toContain("CONTENT_REFERENCE_REVIEW_REQUIRED");
+  expect(withdrawal.responses?.["409"]?.description).toContain("CONTENT_REFERENCES_IN_USE");
+  expect(deletion.requestBody?.content?.["application/json"]?.schema).toHaveProperty(
+    "properties.referenceImpact.properties.acknowledgeDraftReferences.const",
+    true,
+  );
+  expect(withdrawal.requestBody?.content?.["application/json"]?.schema).not.toHaveProperty(
+    "properties.referenceImpact",
+  );
+
+  const envelope = doc.components.schemas?.ErrorEnvelope;
+  expect(envelope).toHaveProperty(
+    "allOf.0.if.properties.error.properties.code.const",
+    "VALIDATION_FAILED",
+  );
+  expect(envelope).toHaveProperty(
+    "allOf.0.then.properties.error.properties.details",
+    expect.objectContaining({
+      additionalProperties: false,
+      properties: {
+        issues: {
+          type: "array",
+          items: {
+            anyOf: expect.arrayContaining([
+              expect.objectContaining({
+                additionalProperties: false,
+                properties: expect.objectContaining({
+                  code: { const: "reference_cycle" },
+                  details: expect.objectContaining({
+                    additionalProperties: false,
+                    properties: expect.objectContaining({
+                      witness: expect.objectContaining({ maxItems: 16 }),
+                      publishFirst: expect.objectContaining({ additionalProperties: false }),
+                    }),
+                  }),
+                }),
+              }),
+            ]),
+          },
+        },
+      },
+    }),
+  );
 });
