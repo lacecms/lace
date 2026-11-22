@@ -14,15 +14,29 @@ export const contentEntryLinkReferences = sqliteTable(
     fieldPath: text("field_path").notNull(),
     targetEntryId: text("target_entry_id").notNull(),
     delivered: integer("delivered", { mode: "boolean" }).notNull(),
+    purpose: text("purpose", { enum: ["url", "reference"] })
+      .notNull()
+      .default("url"),
   },
   (table) => [
     primaryKey({ columns: [table.snapshotId, table.sourceKey, table.area, table.fieldPath] }),
     index("content_entry_link_references_target_idx").on(
       table.targetEntryId,
+      table.purpose,
       table.snapshotId,
       table.sourceKey,
       table.area,
       table.fieldPath,
+    ),
+    index("content_entry_link_references_outgoing_idx").on(
+      table.snapshotId,
+      table.purpose,
+      table.delivered,
+      table.targetEntryId,
+    ),
+    check(
+      "content_entry_link_references_purpose_check",
+      sql`${table.purpose} in ('url', 'reference')`,
     ),
     check("content_entry_link_references_area_check", sql`${table.area} in ('fields', 'data')`),
     check("content_entry_link_references_delivery_check", sql`${table.delivered} in (0, 1)`),

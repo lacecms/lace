@@ -44,6 +44,7 @@ function classifyMatchedModel(
   current: NormalizedContentModel,
   stored: StoredContentModelState,
   context: PlanningContext,
+  renamedModels: ReadonlyMap<string, string>,
 ): ConfigurationSyncOperation | undefined {
   const { diagnostics } = context;
   const model = copyModel(current);
@@ -88,6 +89,7 @@ function classifyMatchedModel(
       ...(current.removedFields === undefined ? {} : { removedFields: current.removedFields }),
       ...(current.renamedFields === undefined ? {} : { renamedFields: current.renamedFields }),
       ...(current.kind !== "global" && current.removedSeo === true ? { removedSeo: true } : {}),
+      renamedModels,
     };
     const issues = validateStructureHints(stored.structure!, hints);
     for (const issue of issues) {
@@ -208,6 +210,21 @@ function planWithContext(
     storedByKey.set(stored.key, stored);
   }
 
+  const renamedModels = new Map<string, string>();
+  for (const current of currentModels) {
+    const former = current.renamedFrom;
+    if (
+      former !== undefined &&
+      !currentKeys.has(former) &&
+      !storedByKey.has(current.key) &&
+      !duplicateStoredKeys.has(former) &&
+      !duplicateCurrentKeys.has(current.key) &&
+      storedByKey.get(former)?.kind === current.kind
+    ) {
+      renamedModels.set(former, current.key);
+    }
+  }
+
   const consumedStoredKeys = new Set<string>();
   for (const current of currentModels) {
     if (duplicateCurrentKeys.has(current.key)) continue;
@@ -215,7 +232,7 @@ function planWithContext(
     const stored = storedByKey.get(model.key);
     if (stored !== undefined && !duplicateStoredKeys.has(model.key)) {
       consumedStoredKeys.add(stored.key);
-      const operation = classifyMatchedModel(current, stored, context);
+      const operation = classifyMatchedModel(current, stored, context, renamedModels);
       if (operation !== undefined) operations.push(operation);
       continue;
     }
@@ -262,7 +279,7 @@ function planWithContext(
       operations.push(incompatible(model, former));
       continue;
     }
-    const transition = classifyMatchedModel(current, former, context);
+    const transition = classifyMatchedModel(current, former, context, renamedModels);
     if (transition?.action === "incompatible-change") {
       operations.push(transition);
       continue;

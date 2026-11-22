@@ -4,6 +4,7 @@ import {
   AccountUseCases,
   ContentUseCases,
   ContentLinkUseCases,
+  ContentReferenceUseCases,
   MediaUseCases,
   opaqueTokenSecret,
   unconfiguredEmailSender,
@@ -190,6 +191,7 @@ export async function fixture({
     config,
     content,
     links: new ContentLinkUseCases(linkReads ?? store),
+    references: new ContentReferenceUseCases(store),
     ...(buildSite === undefined ? {} : { buildSite }),
     ...(builds === undefined ? {} : { builds }),
     ...(securityPort === undefined

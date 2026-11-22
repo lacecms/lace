@@ -65,6 +65,24 @@ void listed;
 void page;
 void collection;
 
+const referenceFields = { author: field.reference({ models: ["authors"] }) };
+defineCollection({
+  key: "reference-metadata",
+  version: 1,
+  route: "/references/:slug",
+  fields: referenceFields,
+  listOptions: {
+    // @ts-expect-error Reference fields cannot be searched.
+    searchableFields: ["author"],
+    // @ts-expect-error Reference fields cannot be sorted.
+    sortableFields: ["author"],
+    // @ts-expect-error Reference fields cannot be filtered.
+    filterableFields: ["author"],
+  },
+  // @ts-expect-error Reference fields cannot supply SEO text.
+  seo: { title: "author" },
+});
+
 const compositePage = definePage({
   key: "composite",
   path: "/composite",

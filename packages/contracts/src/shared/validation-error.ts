@@ -1,12 +1,39 @@
-import { LaceError } from "@lacecms/content";
+import {
+  isInternalLinkTargetId,
+  LaceError,
+  MAX_REFERENCE_CYCLE_IDS,
+  MAX_TITLE_LENGTH,
+} from "@lacecms/content";
 import * as v from "valibot";
 import { identifierSchema, jsonPointerSchema } from "./primitives.js";
 
-export const contractValidationIssueSchema = v.strictObject({
-  code: identifierSchema,
-  message: v.string(),
-  path: jsonPointerSchema,
+const referenceEntryIdSchema = v.pipe(
+  identifierSchema,
+  v.check((value: string) => isInternalLinkTargetId(value)),
+);
+export const referenceCycleDetailsSchema = v.strictObject({
+  witness: v.pipe(
+    v.array(referenceEntryIdSchema),
+    v.minLength(2),
+    v.maxLength(MAX_REFERENCE_CYCLE_IDS),
+  ),
+  truncated: v.boolean(),
+  publishFirst: v.exactOptional(
+    v.strictObject({
+      entryId: referenceEntryIdSchema,
+      title: v.pipe(v.string(), v.minLength(1), v.maxLength(MAX_TITLE_LENGTH)),
+    }),
+  ),
 });
+const issueEntries = { message: v.string(), path: jsonPointerSchema };
+export const contractValidationIssueSchema = v.union([
+  v.strictObject({
+    ...issueEntries,
+    code: v.literal("reference_cycle"),
+    details: referenceCycleDetailsSchema,
+  }),
+  v.strictObject({ ...issueEntries, code: identifierSchema }),
+]);
 export type ContractValidationIssue = v.InferOutput<typeof contractValidationIssueSchema>;
 
 /**

@@ -1,0 +1,35 @@
+---
+import { readFile } from "node:fs/promises";
+import LaceBlocks from "@lacecms/astro/LaceBlocks.astro";
+import { createAstroPreviewSiteLoader } from "@lacecms/astro/preview";
+import { defineBlockMap } from "@lacecms/render";
+import { selection } from "../blocks/definition";
+import SelectionBlock from "../blocks/SelectionBlock.astro";
+
+let requests = 0;
+const getSite = createAstroPreviewSiteLoader({
+  env: {
+    LACE_API_BASE_URL: "https://cms.test",
+    LACE_BUILD_TOKEN: "fixture",
+  },
+  optimizeImages: false,
+  fetch: async () => {
+    if (++requests > 1 || process.env.LACE_PREVIEW_INPUT_FILE)
+      throw new Error("Unexpected export request");
+    const exported = JSON.parse(await readFile("published.json", "utf8"));
+    return Response.json(exported, { headers: { etag: '"' + exported.version + '"' } });
+  },
+});
+const site = await getSite();
+const entry = site.byPath("/");
+if (!entry) throw new Error("Expected a home page");
+const blocks = defineBlockMap({ selection: { definition: selection, component: SelectionBlock } });
+---
+
+<html lang="en">
+  <head><meta charset="utf-8" /><title>{entry.title}</title></head>
+  <body>
+    <h1>{entry.title}</h1>
+    <LaceBlocks blocks={blocks} entry={entry} mediaUrl={site.mediaUrl} />
+  </body>
+</html>

@@ -82,22 +82,57 @@ Every account endpoint acts on the signed-in user and needs a session of any rol
 
 ### Session, models and entries
 
-| Method | Path                                          | Purpose                                                                                                              | Credential                                                          |
-| ------ | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| GET    | `/api/v1/admin/session`                       | Read the signed-in user, role and permissions.                                                                       | Session                                                             |
-| GET    | `/api/v1/admin/content-models`                | List models with fields, blocks, `listOptions` and `listQueryLimits`.                                                | `content:read`, or import token                                     |
-| GET    | `/api/v1/admin/models/{modelKey}/entries`     | List draft entries of a model with search, sort and filters ([grammar below](#configured-admin-collection-queries)). | `content:read`, or import token                                     |
-| POST   | `/api/v1/admin/models/{modelKey}/entries`     | Create an entry from a complete draft.                                                                               | `content:write`, or import token                                    |
-| GET    | `/api/v1/admin/entries/{entryId}`             | Read an entry with its published snapshot and draft revision, also returned in `ETag`.                               | `content:read`, or import token                                     |
-| PUT    | `/api/v1/admin/entries/{entryId}/draft`       | Replace the complete draft at the expected revision.                                                                 | `content:write`, or import token                                    |
-| POST   | `/api/v1/admin/entries/{entryId}/publish`     | Publish the saved draft; accepts an `Idempotency-Key` header.                                                        | `content:publish`, or import token issued with publishing           |
-| POST   | `/api/v1/admin/entries/{entryId}/unpublish`   | Withdraw the published snapshot; accepts an `Idempotency-Key` header.                                                | `content:publish`                                                   |
-| POST   | `/api/v1/admin/entries/{entryId}/revert`      | Replace the draft with the published version.                                                                        | `content:write`                                                     |
-| POST   | `/api/v1/admin/entries/{entryId}/duplicate`   | Copy a collection entry into a new unpublished entry.                                                                | `content:write`                                                     |
-| DELETE | `/api/v1/admin/entries/{entryId}`             | Delete a collection entry at the expected revision.                                                                  | `content:write`; also `content:publish` when the entry is published |
-| GET    | `/api/v1/admin/entries/{entryId}/link-impact` | List published links to the entry before delete or unpublish.                                                        | `content:read`                                                      |
-| GET    | `/api/v1/admin/link-targets`                  | Search pages and collection entries that a URL field can link to.                                                    | `content:read`                                                      |
-| POST   | `/api/v1/admin/link-targets/resolve`          | Resolve up to 200 distinct destination IDs.                                                                          | `content:read`                                                      |
+| Method | Path                                               | Purpose                                                                                                              | Credential                                                          |
+| ------ | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| GET    | `/api/v1/admin/session`                            | Read the signed-in user, role and permissions.                                                                       | Session                                                             |
+| GET    | `/api/v1/admin/content-models`                     | List models with fields, blocks, `listOptions` and `listQueryLimits`.                                                | `content:read`, or import token                                     |
+| GET    | `/api/v1/admin/models/{modelKey}/entries`          | List draft entries of a model with search, sort and filters ([grammar below](#configured-admin-collection-queries)). | `content:read`, or import token                                     |
+| POST   | `/api/v1/admin/models/{modelKey}/entries`          | Create an entry from a complete draft.                                                                               | `content:write`, or import token                                    |
+| GET    | `/api/v1/admin/entries/{entryId}`                  | Read an entry with its published snapshot and draft revision, also returned in `ETag`.                               | `content:read`, or import token                                     |
+| PUT    | `/api/v1/admin/entries/{entryId}/draft`            | Replace the complete draft at the expected revision.                                                                 | `content:write`, or import token                                    |
+| POST   | `/api/v1/admin/entries/{entryId}/publish`          | Publish the saved draft; accepts an `Idempotency-Key` header.                                                        | `content:publish`, or import token issued with publishing           |
+| POST   | `/api/v1/admin/entries/{entryId}/unpublish`        | Withdraw the published snapshot; accepts an `Idempotency-Key` header.                                                | `content:publish`                                                   |
+| POST   | `/api/v1/admin/entries/{entryId}/revert`           | Replace the draft with the published version.                                                                        | `content:write`                                                     |
+| POST   | `/api/v1/admin/entries/{entryId}/duplicate`        | Copy a collection entry into a new unpublished entry.                                                                | `content:write`                                                     |
+| DELETE | `/api/v1/admin/entries/{entryId}`                  | Delete a collection entry at the expected revision.                                                                  | `content:write`; also `content:publish` when the entry is published |
+| GET    | `/api/v1/admin/entries/{entryId}/link-impact`      | List published links to the entry before delete or unpublish.                                                        | `content:read`                                                      |
+| GET    | `/api/v1/admin/link-targets`                       | Search pages and collection entries that a URL field can link to.                                                    | `content:read`                                                      |
+| POST   | `/api/v1/admin/link-targets/resolve`               | Resolve up to 200 distinct destination IDs.                                                                          | `content:read`                                                      |
+| GET    | `/api/v1/admin/reference-targets`                  | Find eligible page and collection entries, including route-less records.                                             | Browser session with `content:read`                                 |
+| POST   | `/api/v1/admin/reference-targets/resolve`          | Resolve the publication status of up to 200 distinct selected IDs.                                                   | Browser session with `content:read`                                 |
+| GET    | `/api/v1/admin/entries/{entryId}/reference-impact` | Find direct sources and exact reference locations before delete or unpublish.                                        | Browser session with `content:read`                                 |
+
+### Typed entry references
+
+`reference-targets` requires `modelKey` and accepts a literal title prefix
+in `search` (up to 100 characters), `limit` (1–50, default 20) and an
+`after` cursor. The batch resolver accepts `{ "ids": [...] }` and returns
+statuses keyed by ID. A published route-less target has state `published`
+with no `path`. Other states include `unpublished`, `missing` and
+`ineligible`.
+
+Request `reference-impact?action=delete` or `action=unpublish` to page
+direct source snapshots. Supply both `sourceEntryId` and `snapshotId` to page
+that source's locations. Locations carry the source key, area, JSON Pointer
+and delivery status. The same read permission applies to both pages.
+
+A delivered published reference returns `409 CONTENT_REFERENCES_IN_USE`
+on delete and unpublish. To release it, publish the corrected source first.
+For a delete with only draft uses, repeat with
+`referenceImpact: { receipt, acknowledgeDraftReferences: true }` in the JSON
+body using the current impact receipt. A missing confirmation returns
+`CONTENT_REFERENCE_REVIEW_REQUIRED`; an obsolete receipt returns
+`CONTENT_REFERENCE_IMPACT_CHANGED`. URL impact uses the independent
+`linkImpact: { receipt, acknowledgePublishedLinks: true }`. Both may be
+required on the same deletion.
+
+Draft writes, publication and preview can return path-addressed
+`reference_target_missing`, `reference_target_model`,
+`reference_target_unpublished`, `reference_cycle` or `reference_graph_limit`
+issues under `422 VALIDATION_FAILED`. Cycle details include a witness up to
+16 IDs, `truncated` and, when verified, `publishFirst` with an entry ID and
+title. The proof can examine up to 2,048 reachable entry IDs per changed
+source and phase. If that limit is reached, reduce dependencies and retry.
 
 ### Protected draft preview
 

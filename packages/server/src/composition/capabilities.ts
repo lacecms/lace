@@ -173,6 +173,7 @@ export function createCapabilities(input: LaceAppInput) {
     deferTask,
     environment: input.environment,
     links: input.links,
+    references: input.references,
     installedAccounts,
     mcp: input.mcp,
     mcpEnabled: input.mcpEnabled ?? false,

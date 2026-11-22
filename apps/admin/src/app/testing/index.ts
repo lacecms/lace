@@ -186,6 +186,15 @@ export function stubClient(overrides: Partial<AdminClient> = {}): AdminClient {
     createImportToken: async () => ({}) as never,
     revokeImportToken: async () => ({}) as never,
     listLinkTargets: async () => ({ items: [] }),
+    listReferenceTargets: async () => ({ items: [] }),
+    resolveReferenceTargets: async (ids) =>
+      Object.fromEntries(ids.map((id) => [id, { id, state: "missing" as const }])),
+    referenceImpact: async () => ({
+      mode: "sources",
+      sources: [],
+      hasPublishedBlockers: false,
+      hasDraftUsages: false,
+    }),
     resolveLinkTargets: async (ids) =>
       Object.fromEntries(ids.map((id) => [id, { id, state: "missing" as const }])),
     linkImpact: async () => ({

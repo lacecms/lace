@@ -21,6 +21,7 @@ const app = createLaceApp({
   config,
   content: {},
   links: {},
+  references: {},
   environment: { engineVersion: "0.0.0", openApiTitle: "Lace API" },
   logger: { log: () => {} },
   maxBodyBytes: 1_048_576,

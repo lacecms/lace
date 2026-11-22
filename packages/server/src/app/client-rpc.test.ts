@@ -5,6 +5,9 @@ import type {
   ErrorEnvelope,
   ManagedUserListDto,
   OAuthConnectionListDto,
+  ReferenceImpactPageDto,
+  ReferenceTargetPageDto,
+  ReferenceTargetStatusesDto,
   SiteBuildListDto,
 } from "@lacecms/contracts";
 import type { saveDraftRequestSchema } from "@lacecms/contracts";
@@ -69,4 +72,16 @@ test("the mounted client keeps empty and binary replies separate from JSON", () 
   expectTypeOf<Awaited<ReturnType<Media>>["status"]>().toEqualTypeOf<200 | 304 | 404 | 422>();
   expectTypeOf<InferResponseType<Media, 200>>().toEqualTypeOf<ReadableStream<Uint8Array>>();
   expectTypeOf<InferResponseType<Media, 304>>().toEqualTypeOf<null>();
+});
+
+test("reference management infers separate picker, resolver and impact contracts", () => {
+  type Catalog = (typeof v1.admin)["reference-targets"];
+  type Targets = Catalog["$get"];
+  type Resolve = Catalog["resolve"]["$post"];
+  type Impact = (typeof v1.admin.entries)[":entryId"]["reference-impact"]["$get"];
+  expectTypeOf<InferRequestType<Targets>["query"]["modelKey"]>().toEqualTypeOf<string | string[]>();
+  expectTypeOf<InferRequestType<Resolve>["json"]>().toEqualTypeOf<{ ids: string[] }>();
+  expectTypeOf<InferResponseType<Targets, 200>>().toEqualTypeOf<ReferenceTargetPageDto>();
+  expectTypeOf<InferResponseType<Resolve, 200>>().toEqualTypeOf<ReferenceTargetStatusesDto>();
+  expectTypeOf<InferResponseType<Impact, 200>>().toEqualTypeOf<ReferenceImpactPageDto>();
 });

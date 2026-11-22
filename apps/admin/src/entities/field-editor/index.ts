@@ -12,6 +12,8 @@ export {
   type ItemPreview,
   type MediaListPickerProps,
 } from "./FieldRenderer/index.js";
+export type { ReferenceListPickerProps } from "./field-types.js";
+export { useRevealedFieldPath } from "./EditorContext/index.js";
 export { FieldLayout, layoutHasProblems } from "./FieldLayout/index.js";
 export { builtInRenderers } from "./FieldControls/index.js";
 

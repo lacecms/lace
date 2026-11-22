@@ -111,3 +111,87 @@ test("cancelling sends no request, clears the typed title, and returns focus to 
   await user.click(opener);
   expect(screen.getByRole("textbox", { name: "Type “First” to confirm" })).toHaveValue("");
 });
+
+test("separately reviews link and draft reference receipts and refreshes a new hard blocker", async () => {
+  const user = userEvent.setup();
+  let published = false;
+  const deleteEntry = vi.fn(async () => {
+    published = true;
+    throw new AdminClientError({
+      code: "CONTENT_REFERENCES_IN_USE",
+      message: "A source has published this reference.",
+      status: 409,
+    });
+  });
+  const source = {
+    entryId: "source",
+    modelKey: "posts",
+    title: "Source",
+    snapshotId: "source-draft",
+    phase: "draft" as const,
+    locations: [
+      { sourceKey: "$fields", area: "fields" as const, pointer: "/value", delivered: true },
+    ],
+    nextLocationsCursor: "more-locations",
+  };
+  renderInRouter(<Harness />, {
+    client: stubClient({
+      deleteEntry,
+      linkImpact: async () => ({
+        mode: "sources",
+        hasPublishedUsages: true,
+        receipt: "url-receipt",
+        sources: [],
+      }),
+      referenceImpact: async (_id, query) => {
+        const summary = {
+          hasDraftUsages: true,
+          hasPublishedBlockers: published,
+          ...(published ? {} : { receipt: "reference-receipt" }),
+        };
+        if (query.locationsAfter)
+          return {
+            ...summary,
+            mode: "locations",
+            sourceEntryId: "source",
+            snapshotId: source.snapshotId,
+            locations: [{ ...source.locations[0]!, pointer: "/another" }],
+          };
+        return {
+          ...summary,
+          mode: "sources",
+          sources: published
+            ? [{ ...source, phase: "published", snapshotId: "new-publication" }]
+            : query.after
+              ? [{ ...source, title: "Second source", snapshotId: "second-draft" }]
+              : [source],
+          ...(!published && !query.after ? { nextCursor: "more-sources" } : {}),
+        };
+      },
+    }),
+  });
+  await user.click(await screen.findByRole("button", { name: "Open delete" }));
+  const dialog = within(screen.getByRole("dialog", { name: "Delete entry?" }));
+  const confirm = dialog.getByRole("button", { name: "Delete entry" });
+  await user.click(await dialog.findByRole("checkbox", { name: /published links/ }));
+  expect(confirm).toBeDisabled();
+  await user.click(await dialog.findByRole("button", { name: "More locations in Source" }));
+  expect(await dialog.findByRole("link", { name: "Field /another" })).toBeVisible();
+  await user.click(dialog.getByRole("button", { name: "More referring entries" }));
+  expect(await dialog.findByText("Second source")).toBeVisible();
+  await user.click(dialog.getByRole("checkbox", { name: /drafts will keep missing selections/ }));
+  expect(confirm).toBeEnabled();
+  await user.click(confirm);
+  expect(deleteEntry).toHaveBeenCalledExactlyOnceWith(
+    "entry-1",
+    4,
+    { receipt: "url-receipt", acknowledgePublishedLinks: true },
+    { receipt: "reference-receipt", acknowledgeDraftReferences: true },
+  );
+  await dialog.findByText(/Published references block removal/);
+  expect(dialog.getByRole("link", { name: "Field /value" })).toBeVisible();
+  expect(confirm).toBeDisabled();
+  expect(
+    dialog.queryByRole("checkbox", { name: /drafts will keep missing selections/ }),
+  ).toBeNull();
+});

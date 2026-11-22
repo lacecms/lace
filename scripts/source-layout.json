@@ -55,7 +55,7 @@
     "write-plan": [],
     "schema": ["shared"],
     "security": ["shared"],
-    "links": ["shared"],
+    "links": ["shared", "write-plan"],
     "publication": ["builds", "content", "links", "shared", "write-plan"],
     "sync": ["content", "links", "shared", "write-plan"],
     "content": ["links", "shared", "write-plan"],
@@ -77,7 +77,7 @@
       "write-plan",
       "preview"
     ],
-    "preview": ["content", "media", "reads", "shared", "write-plan"]
+    "preview": ["content", "links", "media", "reads", "shared", "write-plan"]
   },
   "packages/server": {
     "routing": [],

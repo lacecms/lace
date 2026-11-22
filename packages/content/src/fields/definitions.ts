@@ -45,6 +45,11 @@ export type BooleanFieldOptions = CommonFieldOptions<boolean>;
 /** Options supported by date, datetime, URL, and media fields. */
 export type StringValueFieldOptions = CommonFieldOptions<string>;
 
+/** An entry ID selected from one of these models. */
+export interface ReferenceFieldOptions extends CommonFieldOptions<string> {
+  readonly models: readonly string[];
+}
+
 /** Options supported by a safe Tiptap rich-text field. */
 export interface RichTextFieldOptions extends PlaceholderFieldOptions<SafeRichTextDocument> {}
 
@@ -145,6 +150,13 @@ export type UrlFieldDefinition<Options extends UrlFieldOptions = UrlFieldOptions
 export type MediaFieldDefinition<
   Options extends StringValueFieldOptions = StringValueFieldOptions,
 > = CommonDefinition<"media", Options>;
+
+/** A stable entry ID constrained to a set of model keys. */
+export type ReferenceFieldDefinition<
+  Options extends ReferenceFieldOptions = ReferenceFieldOptions,
+> = CommonDefinition<"reference", Options> & {
+  readonly models: readonly Options["models"][number][];
+};
 
 /** A select-field descriptor. */
 export type SelectFieldDefinition<
@@ -273,6 +285,7 @@ export type FieldDefinition =
   | DatetimeFieldDefinition
   | MediaFieldDefinition
   | NumberFieldDefinition
+  | ReferenceFieldDefinition
   | RichTextFieldDefinition
   | SelectFieldDefinition
   | TextareaFieldDefinition
@@ -347,6 +360,8 @@ export function visitFieldDefinition<Result>(
       return visitor.media(definition);
     case "number":
       return visitor.number(definition);
+    case "reference":
+      return visitor.reference(definition);
     case "richText":
       return visitor.richText(definition);
     case "select":

@@ -24,9 +24,24 @@ async function items(row: ContentEntrySummaryDto, canPublish: boolean) {
 }
 
 test.each([
-  ["a draft row without publish permission", entry, false, ["Open", "Duplicate", "Delete"]],
-  ["a published row without publish permission", publishedRow, false, ["Open", "Duplicate"]],
-  ["a published row with publish permission", publishedRow, true, ["Open", "Duplicate", "Delete"]],
+  [
+    "a draft row without publish permission",
+    entry,
+    false,
+    ["Open", "Where used", "Duplicate", "Delete"],
+  ],
+  [
+    "a published row without publish permission",
+    publishedRow,
+    false,
+    ["Open", "Where used", "Duplicate"],
+  ],
+  [
+    "a published row with publish permission",
+    publishedRow,
+    true,
+    ["Open", "Where used", "Duplicate", "Delete"],
+  ],
 ] as const)("%s", async (_name, row, canPublish, expected) => {
   expect(await items(row, canPublish)).toEqual(expected);
 });

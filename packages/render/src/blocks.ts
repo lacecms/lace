@@ -14,6 +14,7 @@ import type {
   BlockDataValues,
   BlockDefinition,
   BlockSettingsValues,
+  JsonObject,
   ModelFieldDefinitions,
 } from "@lacecms/content";
 import { LaceRenderError } from "./errors.js";
@@ -50,6 +51,19 @@ export interface RenderableMedia {
   readonly width: number | null;
 }
 
+/** Published content available to a block through an authored entry ID. */
+export interface RenderableReference {
+  readonly fields: JsonObject;
+  readonly id: string;
+  readonly modelKey: string;
+  readonly path?: string;
+  readonly publishedAt?: string | undefined;
+  readonly title: string;
+  media(mediaId: string): RenderableMedia | undefined;
+}
+
+export type ReferenceResolver = (id: string) => RenderableReference | undefined;
+
 /** The structural entry shape whose blocks the render core prepares. */
 export interface RenderableEntry {
   readonly link?: LinkResolver;
@@ -58,6 +72,7 @@ export interface RenderableEntry {
   /** Resolves the entry's media; the published-site entries provide it. */
   readonly media?: (mediaId: string) => RenderableMedia | undefined;
   readonly modelKey: string;
+  readonly reference?: ReferenceResolver;
 }
 
 /** What a block component needs to render one image without layout shift. */
@@ -124,6 +139,7 @@ export interface BlockProps<Definition extends AnyBlockDefinition = BlockDefinit
   readonly image: ImageDescriber;
   readonly link: LinkResolver;
   readonly mediaUrl: MediaUrlBuilder;
+  readonly reference: ReferenceResolver;
   /** The block's settings with every declared default applied. */
   readonly settings: BlockSettingsOf<Definition>;
 }
@@ -149,6 +165,7 @@ export interface PreparedBlock<Component = unknown> {
 }
 
 const visibilityDeclarations = new WeakMap<object, boolean>();
+const absentReference: ReferenceResolver = () => undefined;
 
 /** Whether a block's data declares conditional-field rules anywhere; memoized per definition. */
 function declaresVisibility(definition: AnyBlockDefinition): boolean {
@@ -345,6 +362,7 @@ export function prepareBlocks<Component>(
   entry: RenderableEntry,
   mediaUrl: MediaUrlBuilder,
 ): readonly PreparedBlock<Component>[] {
+  const reference = entry.reference ?? absentReference;
   return Object.freeze(
     entry.blocks
       .filter((block) => block.hidden !== true)
@@ -361,7 +379,16 @@ export function prepareBlocks<Component>(
         const link = createLinkResolver(entry.link, context);
         return Object.freeze({
           component,
-          props: Object.freeze({ ...envelope, block, context, data, image, link, mediaUrl }),
+          props: Object.freeze({
+            ...envelope,
+            block,
+            context,
+            data,
+            image,
+            link,
+            mediaUrl,
+            reference,
+          }),
         });
       }),
   );

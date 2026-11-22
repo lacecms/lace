@@ -61,6 +61,24 @@ Rollback means restoring the backed-up packages, images, configuration, source, 
 
 Custom code that reads the REST build export directly must follow its pagination and accept build-export format 2; sites using the SDK need the matching SDK version.
 
+### Adopt entry reference fields
+
+Apply the forward database migrations before starting the matching runtime.
+Migration `0006_entry_reference_purpose.sql` preserves existing URL links.
+An existing site can upgrade with its current models. To adopt references,
+deploy matching engine, admin, CLI, SDK, render and Astro packages and any
+site-owned block updates together. Advance the affected model or block
+versions, then check and apply configuration sync. Verify a published target
+resolves in a site build and, where enabled, in a protected preview.
+
+For rollback, stop the writers and restore the pre-upgrade SQLite backup
+or D1 export with its corresponding configuration, package lockfiles,
+API and builder artifacts, Worker or Compose deployment, and site source.
+Restore the matching media backup if media changed. An older writer cannot
+maintain typed references on the upgraded database. Check the restored
+installation with its matching artifacts in isolation before reopening it
+to writes and rebuilding the public site.
+
 ## Rotate credentials
 
 - **Build token:** create a replacement in Settings, update the server-side site or builder settings, verify a fresh build, then revoke the old token. After a compromise, revoke immediately and accept temporary build downtime.

@@ -249,7 +249,9 @@ export function createMcpContentHandler(input: {
                   };
                 } catch (error) {
                   outcome = "error";
-                  const result = classifyError(error).body;
+                  const result = classifyError(error, {
+                    includeReferenceDetails: canContentOperation(actor, "load"),
+                  }).body;
                   return {
                     isError: true,
                     content: [{ type: "text" as const, text: JSON.stringify(result) }],

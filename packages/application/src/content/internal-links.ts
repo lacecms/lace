@@ -57,22 +57,25 @@ export class ContentLinkUseCases {
   }
   public impact(actor: Actor, query: LinkImpactQuery): Promise<LinkImpactPage> {
     authorizeContentOperation(actor, "readLinkImpact");
-    assertLinkPageLimit(query.limit);
-    const locations =
-      query.sourceEntryId !== undefined ||
-      query.snapshotId !== undefined ||
-      query.locationsAfter !== undefined;
-    if (
-      !isInternalLinkTargetId(query.targetId) ||
-      (query.action !== "delete" && query.action !== "unpublish") ||
-      (locations &&
-        (query.after !== undefined ||
-          !isInternalLinkTargetId(query.sourceEntryId) ||
-          !isInternalLinkTargetId(query.snapshotId)))
-    )
-      throw new DomainError("CONTENT_INVALID_STATE", "Invalid link impact query.");
+    assertLinkImpactQuery(query);
     return this.links.readLinkImpact({ ...query, actorId: actor.id });
   }
+}
+export function assertLinkImpactQuery(query: LinkImpactQuery): void {
+  assertLinkPageLimit(query.limit);
+  const locations =
+    query.sourceEntryId !== undefined ||
+    query.snapshotId !== undefined ||
+    query.locationsAfter !== undefined;
+  if (
+    !isInternalLinkTargetId(query.targetId) ||
+    (query.action !== "delete" && query.action !== "unpublish") ||
+    (locations &&
+      (query.after !== undefined ||
+        !isInternalLinkTargetId(query.sourceEntryId) ||
+        !isInternalLinkTargetId(query.snapshotId)))
+  )
+    throw new DomainError("CONTENT_INVALID_STATE", "Invalid link impact query.");
 }
 export function assertLinkPageLimit(limit: number): void {
   if (!Number.isInteger(limit) || limit < 1 || limit > 50)
@@ -145,8 +148,8 @@ function normalizeEvidence(value: LinkImpactEvidence): LinkImpactEvidence {
     graphRevision: value.graphRevision,
   };
 }
-export function encodeLinkImpactReceipt(evidence: LinkImpactEvidence): string {
-  const binary = encodeURIComponent(JSON.stringify(normalizeEvidence(evidence))).replace(
+function encodeImpact(value: object): string {
+  const binary = encodeURIComponent(JSON.stringify(value)).replace(
     /%([0-9A-F]{2})/gu,
     (_, byte: string) => String.fromCharCode(parseInt(byte, 16)),
   );
@@ -154,19 +157,53 @@ export function encodeLinkImpactReceipt(evidence: LinkImpactEvidence): string {
   if (receipt.length > 4096) throw impactChanged();
   return receipt;
 }
+
+function decodeImpact(receipt: string): unknown {
+  if (typeof receipt !== "string" || receipt.length > 4096 || !/^[A-Za-z0-9_-]+$/u.test(receipt))
+    throw impactChanged();
+  const binary = atob(receipt.replaceAll("-", "+").replaceAll("_", "/"));
+  const json = decodeURIComponent(
+    Array.from(binary, (char) => `%${char.charCodeAt(0).toString(16).padStart(2, "0")}`).join(""),
+  );
+  return JSON.parse(json);
+}
+
+export function encodeLinkImpactReceipt(evidence: LinkImpactEvidence): string {
+  return encodeImpact(normalizeEvidence(evidence));
+}
+
 export function decodeLinkImpactReceipt(receipt: string): LinkImpactEvidence {
   try {
-    if (typeof receipt !== "string" || receipt.length > 4096 || !/^[A-Za-z0-9_-]+$/u.test(receipt))
-      throw impactChanged();
-    const binary = atob(receipt.replaceAll("-", "+").replaceAll("_", "/"));
-    const json = decodeURIComponent(
-      Array.from(binary, (char) => `%${char.charCodeAt(0).toString(16).padStart(2, "0")}`).join(""),
-    );
-    const evidence = normalizeEvidence(JSON.parse(json) as LinkImpactEvidence);
+    const evidence = normalizeEvidence(decodeImpact(receipt) as LinkImpactEvidence);
     if (encodeLinkImpactReceipt(evidence) !== receipt) throw impactChanged();
     return evidence;
   } catch {
     throw impactChanged();
+  }
+}
+
+export function referenceImpactChanged(): DomainError {
+  return new DomainError(
+    "CONTENT_REFERENCE_IMPACT_CHANGED",
+    "Reference impact changed. Refresh and review it again.",
+  );
+}
+
+export function encodeReferenceImpactReceipt(evidence: LinkImpactEvidence): string {
+  if (evidence.action !== "delete") throw referenceImpactChanged();
+  return encodeImpact({ purpose: "reference-review", ...normalizeEvidence(evidence) });
+}
+
+export function decodeReferenceImpactReceipt(receipt: string): LinkImpactEvidence {
+  try {
+    const { purpose, ...evidence } = decodeImpact(receipt) as LinkImpactEvidence & {
+      purpose: string;
+    };
+    if (purpose !== "reference-review" || encodeReferenceImpactReceipt(evidence) !== receipt)
+      throw referenceImpactChanged();
+    return evidence;
+  } catch {
+    throw referenceImpactChanged();
   }
 }
 

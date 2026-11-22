@@ -5,7 +5,7 @@ import type { BlockDefinition } from "../blocks/types.js";
 import { describe, expect, it } from "vitest";
 import { ContentValidationError } from "../shared/errors.js";
 import { canonicalizeJson } from "../entries/canonical-json.js";
-import { collectSnapshotInternalLinks } from "../references/internal-links.js";
+import { collectSnapshotInternalLinks } from "../references/entry-references.js";
 import {
   declaresFieldVisibility,
   publishedFieldValues,

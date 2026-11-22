@@ -74,6 +74,31 @@ test("composite metadata and content round-trip with nested issue pointers", () 
   });
 });
 
+test("reference metadata survives JSON round trips and rejects forged declarations", () => {
+  const author = field.reference({ models: ["reviews", "authors"], defaultValue: "A/b" });
+  const block = toBlockMetadata(
+    defineBlock({
+      type: "quotes",
+      version: 1,
+      fields: { quotes: field.list({ item: field.group({ fields: { author } }) }) },
+      defaultValue: { quotes: [{ author: "A/b" }] },
+    }),
+  );
+  expect(v.parse(blockMetadataSchema, JSON.parse(JSON.stringify(block)))).toEqual(block);
+  for (const invalid of [
+    { models: [] },
+    { models: ["authors", "authors"] },
+    { models: ["authors", "bad key"] },
+    { models: ["reviews", "authors"] },
+    { defaultValue: { id: "A/b" } },
+    { defaultValue: "" },
+    { placeholder: "Author" },
+    { multiple: true },
+  ]) {
+    expect(v.safeParse(fieldMetadataSchema, { ...author, ...invalid }).success).toBe(false);
+  }
+});
+
 test("cyclic and accessor-backed forged metadata are refused without evaluation", () => {
   const cyclic: { type: string; required: boolean; fields: Record<string, unknown> } = {
     type: "group",

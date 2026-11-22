@@ -258,11 +258,11 @@ contract(
       json,
     );
     await sql.run(
-      "insert into content_entry_link_references select value||'-published','$fields','fields','/url','target',1 from json_each(?)",
+      "insert into content_entry_link_references (snapshot_id,source_key,area,field_path,target_entry_id,delivered) select value||'-published','$fields','fields','/url','target',1 from json_each(?)",
       json,
     );
     await sql.run(
-      "insert into content_entry_link_references select 'source-0000-published','block','data','/links/'||value||'/url','target',case when value=5 then 0 else 1 end from json_each(?)",
+      "insert into content_entry_link_references (snapshot_id,source_key,area,field_path,target_entry_id,delivered) select 'source-0000-published','block','data','/links/'||value||'/url','target',case when value=5 then 0 else 1 end from json_each(?)",
       JSON.stringify(Array.from({ length: 199 }, (_, i) => i)),
     );
     await sql.run("update content_snapshots set title='Wild%card' where id='source-0000-draft'");

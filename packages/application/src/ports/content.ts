@@ -19,6 +19,7 @@ import type {
   JsonObject,
   ListQueryLimits,
   ListQueryableFieldType,
+  SnapshotEntryReference,
 } from "@lacecms/content";
 import type {
   OpaqueCursor,
@@ -28,6 +29,7 @@ import type {
 import { CONTENT_ENTRY_SYSTEM_SORTS } from "@lacecms/content";
 import type { CursorPage } from "../shared/pagination.js";
 import type { ActorSummary } from "../shared/actors.js";
+import type { ReferenceImpactAcknowledgment } from "./references.js";
 import type { LinkImpactAcknowledgment } from "./links.js";
 
 export type CollectionQueryFieldType = ListQueryableFieldType;
@@ -160,6 +162,7 @@ export interface ContentEntryReadPort {
 
 export interface CreateContentEntryInput {
   readonly internalLinks?: readonly InternalLinkReference[];
+  readonly entryReferences?: EntryReferenceCandidate;
   /** Commits the new entry only while the duplicated source draft is still at this revision. */
   readonly duplicateOf?: DuplicateSourceGuard;
   readonly entry: ContentEntry;
@@ -174,11 +177,13 @@ export interface DuplicateSourceGuard {
 
 export interface SaveCompleteDraftInput {
   readonly internalLinks?: readonly InternalLinkReference[];
+  readonly entryReferences?: EntryReferenceCandidate;
   readonly entryId: ContentEntryId;
   readonly mutation: CompleteDraftMutation;
 }
 
 export interface PublishContentEntryCommand {
+  readonly entryReferences?: EntryReferenceCandidate;
   readonly events: readonly OutboxEventRequest[];
   readonly entryId: ContentEntryId;
   readonly expectedRevision: number;
@@ -211,6 +216,7 @@ export interface PublicationIdempotency {
 }
 
 export interface DeleteContentEntryInput {
+  readonly referenceImpact?: ReferenceImpactAcknowledgment;
   readonly events: readonly OutboxEventRequest[];
   readonly linkImpact?: LinkImpactAcknowledgment;
   readonly deletedAt: UnixMilliseconds;
@@ -231,11 +237,19 @@ export interface UnpublishContentEntryCommand {
 }
 
 export interface RevertContentDraftCommand {
+  readonly entryReferences?: EntryReferenceCandidate;
   readonly entryId: ContentEntryId;
   readonly expectedPublishedSnapshotId: ContentSnapshotId;
   readonly expectedRevision: number;
   readonly revertedAt: UnixMilliseconds;
   readonly revertedBy: Actor;
+}
+
+/** Typed occurrences derived from one active model's descriptors. */
+export interface EntryReferenceCandidate {
+  readonly structureHash: string;
+  readonly modelKey: ContentModelKey;
+  readonly references: readonly Extract<SnapshotEntryReference, { purpose: "reference" }>[];
 }
 
 export type ContentCommandStatus = "created" | "deleted" | "published" | "reverted" | "saved";

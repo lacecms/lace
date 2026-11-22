@@ -6,7 +6,11 @@ import { normalizeDraftCandidate } from "./draft-normalization.js";
 import type { NormalizedDraft } from "./draft-normalization.js";
 import { internalLinkIssuePath } from "./internal-links.js";
 import { markRouteLessTargets, routeLessModelKeys } from "./route-less-links.js";
-import { collectMedia, internalLinks as collectInternalLinks } from "./publication-projection.js";
+import {
+  collectMedia,
+  snapshotEntryReferences,
+  snapshotUrlLinks,
+} from "./publication-projection.js";
 
 export async function validateDraft(
   dependencies: Pick<ContentUseCaseDependencies, "config" | "media"> & {
@@ -53,12 +57,13 @@ export async function validateDraft(
       throw new DomainError("CONTENT_INVALID_STATE", `Media ${id} is unavailable.`);
   }
   // Links inside hidden targets are not delivered, so publication never checks them.
-  const internalLinks = collectInternalLinks(
+  const entryReferences = snapshotEntryReferences(
     dependencies,
     model,
     normalized.fields,
     normalized.blocks,
   );
+  const internalLinks = snapshotUrlLinks(entryReferences);
   if (internalLinks.length > 0) {
     if (dependencies.content.resolveLinkTargets === undefined)
       throw new DomainError("CONTENT_INVALID_STATE", "Internal link validation is unavailable.");
@@ -94,5 +99,10 @@ export async function validateDraft(
     });
     if (issues.length > 0) throw new ContentValidationError(issues);
   }
-  return { ...normalized, mediaReferences: Object.freeze(mediaReferences), internalLinks };
+  return {
+    ...normalized,
+    mediaReferences: Object.freeze(mediaReferences),
+    internalLinks,
+    entryReferences,
+  };
 }

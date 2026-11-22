@@ -13,6 +13,10 @@ import {
   linkTargetStatusesSchema,
   linkImpactPageSchema,
   type LinkImpactAcknowledgmentDto,
+  referenceTargetPageSchema,
+  referenceTargetStatusesSchema,
+  referenceImpactPageSchema,
+  type ReferenceImpactAcknowledgmentDto,
 } from "@lacecms/contracts";
 import { request, postJson, parse, type Fetcher } from "../admin-transport.js";
 import type { AdminClient, EntryListQuery } from "../admin-client-types.js";
@@ -76,15 +80,64 @@ export function contentClient(fetcher: Fetcher) {
         ),
       );
     },
+    listReferenceTargets: async (
+      query: Parameters<AdminClient["listReferenceTargets"]>[0],
+      signal?: AbortSignal,
+    ) => {
+      const search = new URLSearchParams(
+        Object.entries(query)
+          .filter(([, value]) => value !== undefined)
+          .map(([key, value]) => [key, String(value)]),
+      );
+      return parse(
+        referenceTargetPageSchema,
+        await request(
+          fetcher,
+          `/api/v1/admin/reference-targets?${search}`,
+          signal ? { signal } : {},
+        ),
+      );
+    },
+    resolveReferenceTargets: async (ids: readonly string[], signal?: AbortSignal) =>
+      parse(
+        referenceTargetStatusesSchema,
+        await request(fetcher, "/api/v1/admin/reference-targets/resolve", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ids }),
+          ...(signal === undefined ? {} : { signal }),
+        }),
+      ),
+    referenceImpact: async (
+      entryId: string,
+      query: Parameters<AdminClient["referenceImpact"]>[1],
+      signal?: AbortSignal,
+    ) => {
+      const search = new URLSearchParams(
+        Object.entries(query)
+          .filter(([, value]) => value !== undefined)
+          .map(([key, value]) => [key, String(value)]),
+      );
+      return parse(
+        referenceImpactPageSchema,
+        await request(
+          fetcher,
+          `/api/v1/admin/entries/${encodeURIComponent(entryId)}/reference-impact?${search}`,
+          signal ? { signal } : {},
+        ),
+      );
+    },
     deleteEntry: async (
       entryId: string,
       expectedRevision: number,
       linkImpact?: LinkImpactAcknowledgmentDto,
+      referenceImpact?: ReferenceImpactAcknowledgmentDto,
     ) => {
       await request(fetcher, `/api/v1/admin/entries/${encodeURIComponent(entryId)}`, {
         body: JSON.stringify({
           expectedRevision,
           ...(linkImpact === undefined ? {} : { linkImpact }),
+          ...(referenceImpact === undefined ? {} : { referenceImpact }),
         }),
         headers: { "content-type": "application/json" },
         method: "DELETE",

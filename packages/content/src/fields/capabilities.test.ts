@@ -29,6 +29,7 @@ test("field capabilities match every accepted specification row", () => {
     ["select", true, "string", "select", false, false, true, true, "string"],
     ["url", true, "string", "text", false, false, true, true, "string"],
     ["media", false, null, null, false, false, false, false, "string"],
+    ["reference", false, null, null, false, false, false, false, "string"],
     ["group", false, null, null, false, false, false, false, "object"],
     ["list", false, null, null, false, false, false, false, "array"],
   ]);

@@ -80,6 +80,13 @@ async function mockApi(page: Page) {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     const method = request.method();
+    if (path.endsWith("/reference-impact"))
+      return json(route, {
+        mode: "sources",
+        sources: [],
+        hasPublishedBlockers: false,
+        hasDraftUsages: false,
+      });
     if (path.endsWith("/link-impact"))
       return json(route, {
         mode: "sources",

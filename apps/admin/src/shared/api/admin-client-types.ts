@@ -53,9 +53,22 @@ import {
   type LinkTargetStatusesDto,
   type LinkImpactPageDto,
   type LinkImpactAcknowledgmentDto,
+  type ReferenceTargetPageDto,
+  type ReferenceTargetStatusesDto,
+  type ReferenceImpactPageDto,
+  type ReferenceImpactAcknowledgmentDto,
 } from "@lacecms/contracts";
 import { type MediaUploadOptions } from "./admin-transport.js";
 import type { ListQueryLimits } from "@lacecms/contracts";
+
+interface ImpactQuery {
+  readonly action: "delete" | "unpublish";
+  readonly after?: string;
+  readonly sourceEntryId?: string;
+  readonly snapshotId?: string;
+  readonly locationsAfter?: string;
+  readonly limit?: number;
+}
 
 export interface AdminClient {
   loadSetupState(): Promise<SetupStateDto>;
@@ -131,6 +144,7 @@ export interface AdminClient {
     entryId: string,
     expectedRevision: number,
     linkImpact?: LinkImpactAcknowledgmentDto,
+    referenceImpact?: ReferenceImpactAcknowledgmentDto,
   ): Promise<void>;
   listLinkTargets(
     query: {
@@ -142,18 +156,20 @@ export interface AdminClient {
     signal?: AbortSignal,
   ): Promise<LinkTargetPageDto>;
   resolveLinkTargets(ids: readonly string[], signal?: AbortSignal): Promise<LinkTargetStatusesDto>;
-  linkImpact(
-    entryId: string,
-    query: {
-      readonly action: "delete" | "unpublish";
-      readonly after?: string;
-      readonly sourceEntryId?: string;
-      readonly snapshotId?: string;
-      readonly locationsAfter?: string;
-      readonly limit?: number;
-    },
+  linkImpact(entryId: string, query: ImpactQuery, signal?: AbortSignal): Promise<LinkImpactPageDto>;
+  listReferenceTargets(
+    query: { modelKey: string; search?: string; after?: string; limit?: number },
     signal?: AbortSignal,
-  ): Promise<LinkImpactPageDto>;
+  ): Promise<ReferenceTargetPageDto>;
+  resolveReferenceTargets(
+    ids: readonly string[],
+    signal?: AbortSignal,
+  ): Promise<ReferenceTargetStatusesDto>;
+  referenceImpact(
+    entryId: string,
+    query: ImpactQuery,
+    signal?: AbortSignal,
+  ): Promise<ReferenceImpactPageDto>;
   loadPreviewConfig(): Promise<PreviewReadinessDto>;
   loadPreviewStatus(entryId: string, signal?: AbortSignal): Promise<PreviewStatusDto>;
   createPreview(

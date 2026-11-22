@@ -215,6 +215,7 @@ test("prepareBlocks returns components and props in block order", () => {
   expect(prepared.map((item) => item.component)).toEqual(["Hero", "Quote", "Cta"]);
   expect(required(prepared[1]).props).toEqual({
     link: expect.any(Function),
+    reference: expect.any(Function),
     block: blocks[1],
     context: { blockKey: "b", entryId: "entry-1", modelKey: "home" },
     data: { quote: "Middle" },
@@ -222,6 +223,7 @@ test("prepareBlocks returns components and props in block order", () => {
     mediaUrl,
     settings: {},
   });
+  expect(required(prepared[1]).props.reference("missing")).toBeUndefined();
   expect(Object.isFrozen(prepared)).toBe(true);
 });
 

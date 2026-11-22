@@ -1,6 +1,10 @@
 import { chunks } from "../shared/values.js";
 import { syncInternalLinkStatements } from "../links/statements.js";
-import type { ConfigurationSyncSnapshotMigration } from "@lacecms/application";
+import type {
+  ApplyConfigurationSyncBlockMigrationsInput,
+  ConfigurationSyncSnapshotMigration,
+} from "@lacecms/application";
+import { syncReferenceGuards } from "./reference-checks.js";
 import type { ConfigurationSyncWriteStatement } from "./writes.js";
 
 /** Guard condition and ordered writes of one migrated snapshot. */
@@ -30,6 +34,10 @@ export function configurationSyncMigrationStatements(
   migratedAt: number,
   maxParameters: number,
   linkDirtyToken?: string,
+  referenceContext?: Pick<
+    ApplyConfigurationSyncBlockMigrationsInput,
+    "modelKey" | "expectedStructureHash" | "referenceRenames"
+  >,
 ): ConfigurationSyncMigrationStatements {
   const current =
     migration.state === "draft" ? "e.draft_snapshot_id = s.id" : "e.published_snapshot_id = s.id";
@@ -64,6 +72,19 @@ export function configurationSyncMigrationStatements(
   for (const valid of links?.valid ?? []) {
     guardSql += ` and (${valid.sql})`;
     guardParams.push(...valid.params);
+  }
+  if (migration.referenceCheck !== undefined) {
+    for (const checked of syncReferenceGuards({
+      checks: [migration.referenceCheck],
+      renames: referenceContext?.referenceRenames ?? [],
+    })) {
+      guardSql += ` and (${checked.sql})`;
+      guardParams.push(...(checked.params as (string | number)[]));
+    }
+    if (referenceContext?.expectedStructureHash !== undefined) {
+      guardSql += " and exists(select 1 from content_models where key=? and structure_hash=?)";
+      guardParams.push(referenceContext.modelKey, referenceContext.expectedStructureHash);
+    }
   }
   guardSql += ")";
 

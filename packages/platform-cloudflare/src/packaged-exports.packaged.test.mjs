@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 
-test("packaged entry point keeps its public exports", async () => {
+// The cold import loads the full Worker dependency graph on shared CI runners.
+test("packaged entry point keeps its public exports", { timeout: 15_000 }, async () => {
   expect(Object.keys(await import("../dist/index.js")).sort()).toEqual([
     "CloudflareEnvironmentError",
     "CloudflareKvCache",

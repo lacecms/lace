@@ -151,7 +151,8 @@ Resolved defaults: pnpm workspaces with Turborepo ([ADR 0028](../adr/0028-spec-d
 for the Node adapter; Tailwind CSS over Lace design tokens with
 shadcn/ui-generated, Lace-owned admin components on Radix UI primitives
 ([ADR 0005](../adr/0005-admin-owned-component-source.md)); a small built-in
-block set and no reference fields; a no-op cache by default, with optional KV
+block set and code-defined entry references selected for 1.0
+([ADR 0034](../adr/0034-acyclic-entry-reference-fields.md)); a no-op cache by default, with optional KV
 only after the uncached path is correct; a first-party fixed-command VPS
 builder rather than an arbitrary command or external CI dependency
 ([ADR 0004](../adr/0004-fixed-command-vps-builder.md)); npm scope `@lacecms/*`,

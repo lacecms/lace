@@ -37,7 +37,7 @@ export const SYNC_SNAPSHOTS_SQL = `select ${SNAPSHOT_INTERNAL_LINKS_JSON_SQL} as
         (select count(*) from content_entry_link_references lr
            join content_snapshots ls on ls.id = lr.snapshot_id
            join content_entries le on le.id = ls.entry_id
-          where lr.target_entry_id = s.entry_id
+          where lr.target_entry_id = s.entry_id and lr.purpose='url'
             and lr.snapshot_id in (le.draft_snapshot_id, le.published_snapshot_id)) as incoming_links,
         (select coalesce(json_group_array(json_object('sourceKey',r.source_key,'fieldPath',r.field_path,'mediaId',r.media_id)), '[]') from content_media_references r where r.snapshot_id=s.id) as references_json,
         case when e.published_snapshot_id = s.id then 'published' else 'draft' end as state
@@ -79,7 +79,7 @@ export function syncSnapshotPage(
         : {
             internalLinks: JSON.parse(
               row.internal_links_json,
-            ) as readonly import("@lacecms/content").InternalLinkReference[],
+            ) as readonly import("@lacecms/application").ConfigurationSyncEntryUsage[],
           }),
       entryId: row.entry_id,
       fields: parseObject(row.fields_json, "Snapshot fields"),

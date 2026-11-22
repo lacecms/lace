@@ -10,6 +10,7 @@ const codes: Readonly<Record<string, string>> = {
   BlockConfigurationError: "BLOCK_CONFIGURATION_INVALID",
   BlockMigrationError: "missing_step",
   ConfigurationError: "CONFIGURATION_INVALID",
+  ReferenceGraphChangedError: "CONFLICT",
   BuildExportVersionChangedError: "BUILD_EXPORT_VERSION_CHANGED",
   BuildExportCursorError: "CONTENT_INVALID_STATE",
   BlockOrderError: "CONTENT_INVALID_STATE",

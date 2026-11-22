@@ -323,6 +323,72 @@ test("duplicate source IDs and inconsistent manifest locations fail before expos
   }
 });
 
+test("ordered references resolve from the complete export and stay bound to their version", async () => {
+  const reviews = ["review-c", "review-a", "review-c"];
+  const source = exportEntry({ id: "service", path: "/service", fields: { reviews } });
+  const { path: _path, ...author } = exportEntry({ id: "author", modelKey: "authors", path: "/" });
+  const review = (id: string) => ({
+    ...author,
+    id,
+    modelKey: "reviews",
+    fields: { author: author.id, copy: { quote: id } },
+  });
+  const { title: _title, ...global } = { ...author, id: "global", modelKey: "settings" };
+  const pages = (version: number, title: string) => [
+    exportResponse({ ...linkedExport([source], [global], version), nextCursor: "records" }),
+    exportResponse({
+      entries: [],
+      records: [{ ...author, title }, review("review-a")],
+      formatVersion: 2,
+      media: {},
+      nextCursor: "later",
+      version,
+    }),
+    exportResponse({
+      entries: [],
+      records: [review("review-c")],
+      formatVersion: 2,
+      media: {},
+      version,
+    }),
+  ];
+  const transport = scriptedFetch([
+    ...pages(1, "Original"),
+    notModified('"1"'),
+    ...pages(2, "New"),
+  ]);
+  const load = createPublishedSiteLoader({ environment, fetch: transport.fetch, revalidate: true });
+  const site = await load();
+  const service = required(site.byPath("/service"));
+  expect(service.fields.reviews).toEqual(reviews);
+  const selected = reviews.map(service.reference);
+  expect(selected.map((record) => record?.id)).toEqual(reviews);
+  expect(selected[0]).toBe(selected[2]);
+  expect(selected[1]).toBe(site.records("reviews").find((record) => record.id === "review-a"));
+  expect(selected[1]).not.toHaveProperty("path");
+  expect(Object.isFrozen(selected[1]?.fields.copy)).toBe(true);
+  expect(selected[1]?.fields.author).toBe("author");
+  expect(site.reference("service")).toBe(service);
+  expect(site.reference("global")).toBeUndefined();
+  expect(site.reference("missing")).toBeUndefined();
+  expect(await load()).toBe(site);
+  expect((await load()).reference("author")?.title).toBe("New");
+  expect(site.reference("author")?.title).toBe("Original");
+  expect(transport.requests).toHaveLength(7);
+  expect(transport.requests[3]?.headers.get("if-none-match")).toBe('"1"');
+});
+
+test("an ID shared across the routed and records phases invalidates the export", async () => {
+  const entry = exportEntry({ id: "duplicate", path: "/entry" });
+  const { path: _path, ...record } = { ...entry, modelKey: "reviews" };
+  const transport = scriptedFetch([
+    exportResponse({ ...linkedExport([entry]), nextCursor: "records" }),
+    exportResponse({ entries: [], records: [record], formatVersion: 2, media: {}, version: 1 }),
+  ]);
+  const load = createPublishedSiteLoader({ environment, fetch: transport.fetch });
+  await expect(load()).rejects.toMatchObject({ code: "invalid_export" });
+});
+
 test("unavailable diagnostics are bounded, deterministic, private and reported once per assembled view", async () => {
   const entries = Array.from({ length: 150 }, (_, i) =>
     linkedEntry(`source-${String(i).padStart(3, "0")}`, "missing"),

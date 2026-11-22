@@ -11,7 +11,12 @@ export {
   MAX_MODEL_ICON_LENGTH,
   MODEL_ICON_NAMES,
 } from "./shared/model-icons.js";
-export type { ValidationPathSegment, ContentValidationIssue } from "./shared/errors.js";
+export { MAX_REFERENCE_CYCLE_IDS } from "./shared/errors.js";
+export type {
+  ValidationPathSegment,
+  ContentValidationIssue,
+  ReferenceCycleDetails,
+} from "./shared/errors.js";
 export { FieldConfigurationError, ContentValidationError } from "./shared/errors.js";
 export type { JsonPrimitive, JsonValue, JsonObject } from "./shared/json.js";
 export { isPortableJsonValue } from "./shared/json.js";
@@ -72,6 +77,8 @@ export type {
   DatetimeFieldDefinition,
   UrlFieldDefinition,
   MediaFieldDefinition,
+  ReferenceFieldDefinition,
+  ReferenceFieldOptions,
   SelectFieldDefinition,
   FormLayout,
   FieldVisibilityRule,
@@ -128,11 +135,14 @@ export type {
   FieldInternalLinkReference,
   InternalLinkReference,
   PublicInternalLinkReference,
-} from "./references/internal-links.js";
+  SnapshotEntryReference,
+} from "./references/entry-references.js";
 export {
+  collectFieldEntryReferences,
   collectFieldInternalLinks,
   collectSnapshotInternalLinks,
-} from "./references/internal-links.js";
+  collectSnapshotEntryReferences,
+} from "./references/entry-references.js";
 
 // blocks
 export type {

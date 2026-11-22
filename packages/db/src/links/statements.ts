@@ -1,4 +1,4 @@
-import type { InternalLinkReference, JsonValue } from "@lacecms/content";
+import type { InternalLinkReference, JsonValue, SnapshotEntryReference } from "@lacecms/content";
 import {
   ContentValidationError,
   canonicalJsonByteLength,
@@ -12,7 +12,10 @@ export interface LinkSqlStatement {
   readonly sql: string;
   readonly params: readonly (string | number)[];
 }
-const COLUMNS = "source_key, area, field_path, target_entry_id, delivered";
+export type EntryUsage = InternalLinkReference & {
+  readonly purpose?: SnapshotEntryReference["purpose"];
+};
+const COLUMNS = "source_key, area, field_path, target_entry_id, delivered, purpose";
 export const COPY_INTERNAL_LINKS_SQL = `insert into content_entry_link_references (snapshot_id, ${COLUMNS})
   select ?, ${COLUMNS} from content_entry_link_references where snapshot_id = ?`;
 export const BUMP_INTERNAL_LINK_GRAPH_SQL = `update content_link_state set revision = revision + 1
@@ -20,7 +23,7 @@ export const BUMP_INTERNAL_LINK_GRAPH_SQL = `update content_link_state set revis
     where snapshot_id in (select value from json_each(?)))`;
 
 /** Bound rowsets are shared by both adapters, including their validation limits. */
-export function internalLinkRowsJson(references: readonly InternalLinkReference[]): string {
+export function internalLinkRowsJson(references: readonly EntryUsage[]): string {
   if (references.length > MAX_INTERNAL_LINK_REFERENCES)
     throw new DomainError("CONTENT_INVALID_STATE", "Too many internal links.");
   const locations = new Set<string>();
@@ -32,6 +35,9 @@ export function internalLinkRowsJson(references: readonly InternalLinkReference[
         !reference.pointer.startsWith("/") ||
         !["fields", "data"].includes(reference.area) ||
         typeof reference.delivered !== "boolean" ||
+        (reference.purpose !== undefined &&
+          reference.purpose !== "url" &&
+          reference.purpose !== "reference") ||
         (reference.area === "fields"
           ? reference.sourceKey !== "$fields"
           : !reference.sourceKey || reference.sourceKey.startsWith("$")) ||
@@ -45,6 +51,7 @@ export function internalLinkRowsJson(references: readonly InternalLinkReference[
         reference.pointer,
         reference.targetId,
         reference.delivered ? 1 : 0,
+        reference.purpose ?? "url",
       ];
     }),
   );
@@ -52,15 +59,16 @@ export function internalLinkRowsJson(references: readonly InternalLinkReference[
 /** Reads one bound `internalLinkRowsJson` rowset as link-reference columns. */
 export const INTERNAL_LINK_ROWS_SQL = `select json_extract(value, '$[0]') as source_key,
   json_extract(value, '$[1]') as area, json_extract(value, '$[2]') as field_path,
-  json_extract(value, '$[3]') as target_entry_id, json_extract(value, '$[4]') as delivered from json_each(?)`;
+  json_extract(value, '$[3]') as target_entry_id, json_extract(value, '$[4]') as delivered,
+  json_extract(value, '$[5]') as purpose from json_each(?)`;
 const INCOMING = INTERNAL_LINK_ROWS_SQL;
 const MATCH = `i.source_key=r.source_key and i.area=r.area and i.field_path=r.field_path
-  and i.target_entry_id=r.target_entry_id and i.delivered=r.delivered`;
+  and i.target_entry_id=r.target_entry_id and i.delivered=r.delivered and i.purpose=r.purpose`;
 
 /** Three set operations; unchanged tuples and graph revision receive zero row writes. */
 export function replaceInternalLinkStatements(
   snapshotId: string,
-  references: readonly InternalLinkReference[],
+  references: readonly EntryUsage[],
   guard = "1",
 ): readonly LinkSqlStatement[] {
   return replaceFrom(snapshotId, INCOMING, [internalLinkRowsJson(references)], guard);
@@ -102,7 +110,7 @@ function replaceFrom(
     },
     {
       sql: `with incoming as (${incoming}) insert into content_entry_link_references (snapshot_id, ${COLUMNS})
-        select ?, i.source_key, i.area, i.field_path, i.target_entry_id, i.delivered from incoming i
+        select ?, i.source_key, i.area, i.field_path, i.target_entry_id, i.delivered, i.purpose from incoming i
         where not exists (select 1 from content_entry_link_references r where r.snapshot_id = ? and ${MATCH}) and (${guard})`,
       params: [...params, snapshotId, snapshotId],
     },
@@ -110,7 +118,7 @@ function replaceFrom(
 }
 
 export const LINK_TARGETS_SQL = `select requested.value as requested_id, e.id, e.model_key, m.kind,
-  d.title, p.path from json_each(?) requested
+  d.title, p.path, e.published_snapshot_id from json_each(?) requested
   left join content_entries e on e.id = requested.value
   left join content_models m on m.key=e.model_key
   left join content_snapshots d on d.id=e.draft_snapshot_id
@@ -122,7 +130,7 @@ export const INVALID_PUBLISHED_LINK_TARGETS_SQL = `select r.source_key, r.area, 
   from content_entry_link_references r
   left join content_entries target on target.id=r.target_entry_id
   left join published_routes route on route.entry_id=target.id and route.snapshot_id=target.published_snapshot_id
-  where r.snapshot_id=? and r.delivered=1 and not (r.target_entry_id=? and ? is not null) and route.path is null`;
+  where r.snapshot_id=? and r.purpose='url' and r.delivered=1 and not (r.target_entry_id=? and ? is not null) and route.path is null`;
 
 export interface InvalidPublishedLinkTargetRow {
   readonly source_key: string;
@@ -149,9 +157,10 @@ export function assertPublishedInternalLinkTargets(
 }
 
 /** Shared read projection at schema synchronization boundaries. */
-export const SNAPSHOT_INTERNAL_LINKS_JSON_SQL = `(select coalesce(json_group_array(json_object(
+export const SNAPSHOT_INTERNAL_LINKS_JSON_SQL = `(select coalesce(json_group_array(json_patch(json_object(
   'sourceKey',lr.source_key,'area',lr.area,'pointer',lr.field_path,'targetId',lr.target_entry_id,
-  'delivered',json(case when lr.delivered=1 then 'true' else 'false' end))), '[]')
+  'delivered',json(case when lr.delivered=1 then 'true' else 'false' end)),
+  case when lr.purpose='reference' then '{"purpose":"reference"}' else '{}' end)), '[]')
   from content_entry_link_references lr where lr.snapshot_id=s.id)`;
 
 /** Set-based projection replacement shared by schema rewrites and resumable units. */
@@ -159,6 +168,9 @@ export function syncInternalLinkStatements(
   rows: readonly import("@lacecms/application").ConfigurationSyncLinkRewrite[],
   dirtyToken: string,
 ): { readonly valid: readonly LinkSqlStatement[]; readonly writes: readonly LinkSqlStatement[] } {
+  rows = rows
+    .filter((row) => !row.checkOnly)
+    .map(({ snapshotId, references }) => ({ snapshotId, references }));
   const valid: LinkSqlStatement[] = [];
   const writes: LinkSqlStatement[] = [];
   const ids = new Set<string>();
@@ -189,7 +201,8 @@ export function syncInternalLinkStatements(
     const incoming = `select p.value ->> 'snapshotId' as snapshot_id,
       r.value ->> 'sourceKey' as source_key,r.value ->> 'area' as area,
       r.value ->> 'pointer' as field_path,r.value ->> 'targetId' as target_entry_id,
-      r.value ->> 'delivered' as delivered from json_each(?) p,json_each(p.value -> 'references') r`;
+      r.value ->> 'delivered' as delivered, coalesce(r.value ->> 'purpose','url') as purpose
+      from json_each(?) p,json_each(p.value -> 'references') r`;
     const same = `i.snapshot_id=r.snapshot_id and ${MATCH}`;
     const added = `select 1 from incoming i where not exists(select 1 from content_entry_link_references r where ${same})`;
     const removed = `select 1 from content_entry_link_references r
@@ -202,7 +215,7 @@ export function syncInternalLinkStatements(
       left join content_entries target on target.id=i.target_entry_id
       left join content_models m on m.key=target.model_key
       left join published_routes route on route.entry_id=target.id and route.snapshot_id=target.published_snapshot_id
-      where (m.kind='global' or (e.id is not null and i.delivered=1 and route.path is null))
+      where i.purpose='url' and (m.kind='global' or (e.id is not null and i.delivered=1 and route.path is null))
       and not exists(select 1 from content_entry_link_references r where ${same}))`,
     });
     writes.push(
@@ -221,8 +234,8 @@ export function syncInternalLinkStatements(
       {
         params: [json],
         sql: `with incoming as (${incoming}) insert into content_entry_link_references
-        (snapshot_id,source_key,area,field_path,target_entry_id,delivered)
-        select i.snapshot_id,i.source_key,i.area,i.field_path,i.target_entry_id,i.delivered from incoming i
+        (snapshot_id,source_key,area,field_path,target_entry_id,delivered,purpose)
+        select i.snapshot_id,i.source_key,i.area,i.field_path,i.target_entry_id,i.delivered,i.purpose from incoming i
         where not exists(select 1 from content_entry_link_references r where ${same})`,
       },
     );

@@ -12,6 +12,7 @@ const modelFields = {
   related: { type: "url" },
   body: { type: "richText" },
   links: { type: "list", item: { type: "url" } },
+  reviews: { type: "list", item: { type: "reference", models: ["reviews"] } },
   cards: {
     type: "list",
     item: { type: "group", fields: { image: { type: "media" }, href: { type: "url" } } },
@@ -22,9 +23,10 @@ const blockFields = (type: string) =>
 const keys = {
   media: new Set(["hero"]),
   entries: new Map([
-    ["about", "page"],
-    ["contact", "collection"],
-    ["settings", "global"],
+    ["about", { key: "pages", kind: "page" }],
+    ["contact", { key: "contacts", kind: "collection" }],
+    ["settings", { key: "settings", kind: "global" }],
+    ["review", { key: "reviews", kind: "collection", routeLess: true }],
   ]),
 };
 
@@ -82,7 +84,7 @@ describe("package references", () => {
     ]);
   });
 
-  test("hidden blocks and SEO are not delivered links", () => {
+  test("marker validation includes references in hidden blocks", () => {
     const issues: import("./import-format.js").ImportIssue[] = [];
     const references = collectReferences(
       entry({
@@ -96,7 +98,7 @@ describe("package references", () => {
       issues,
     );
     expect(issues).toEqual([]);
-    expect(references.map((reference) => reference.delivered)).toEqual([true, false]);
+    expect(references.map((reference) => reference.key)).toEqual(["contact", "about"]);
   });
 
   test("rewrites to IDs and link tokens, passes literals, strips properties and list elements", () => {
@@ -133,5 +135,29 @@ describe("package references", () => {
   test("placeholders are valid identifiers and canonical link tokens", () => {
     expect(placeholderResolver("media", "hero")).toBe("import-media-hero");
     expect(placeholderResolver("entry", "a.b")).toBe("entry:import-entry-a.b");
+  });
+
+  test("typed markers accept route-less targets and preserve ordered raw IDs", () => {
+    const source = entry({
+      fields: {
+        reviews: [{ $entry: "review" }, "entry:literal", { $entry: "review" }, { $entry: "about" }],
+        related: { $entry: "review" },
+      },
+    });
+    const issues: import("./import-format.js").ImportIssue[] = [];
+    const references = collectReferences(source, 0, modelFields, blockFields, keys, issues);
+    expect(references.map(({ kind, key }) => [kind, key])).toEqual([
+      ["reference", "review"],
+      ["reference", "review"],
+    ]);
+    expect(issues.map(({ pointer }) => pointer)).toEqual([
+      "/entries/0/fields/reviews/3",
+      "/entries/0/fields/related",
+    ]);
+    expect(
+      rewriteReferences(source, modelFields, blockFields, (kind, key) =>
+        kind === "reference" && key === "review" ? "abc/1" : STRIP,
+      ).fields,
+    ).toEqual({ reviews: ["abc/1", "entry:literal", "abc/1"] });
   });
 });

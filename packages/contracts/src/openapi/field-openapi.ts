@@ -3,6 +3,7 @@ import {
   FIELD_KEY_SOURCE,
   fieldTypeCapabilities,
   fieldTypesWith,
+  MODEL_KEY_PATTERN,
   VIDEO_EMBED_PROVIDERS,
 } from "@lacecms/content";
 import type { FieldType } from "@lacecms/content";
@@ -24,6 +25,21 @@ const extras: Partial<Record<FieldType, Record<string, unknown>>> = {
     maxLength: { type: "integer", minimum: 0 },
   },
   number: { min: { type: "number" }, max: { type: "number" } },
+  reference: {
+    models: {
+      type: "array",
+      minItems: 1,
+      uniqueItems: true,
+      items: { type: "string", pattern: MODEL_KEY_PATTERN.source },
+    },
+    defaultValue: {
+      type: "string",
+      minLength: 1,
+      maxLength: 255,
+      description:
+        "Opaque, case-sensitive entry ID. Shared runtime validation limits IDs to 255 UTF-16 code units and rejects control characters and invalid encoding.",
+    },
+  },
   select: {
     options: { type: "array", minItems: 1, uniqueItems: true, items: { type: "string" } },
     presentation: ref("SelectPresentation"),
@@ -40,7 +56,12 @@ const extras: Partial<Record<FieldType, Record<string, unknown>>> = {
 const scalar = (type: FieldType) => ({
   type: "object",
   additionalProperties: false,
-  required: ["type", "required", ...(type === "select" ? ["options"] : [])],
+  required: [
+    "type",
+    "required",
+    ...(type === "select" ? ["options"] : []),
+    ...(type === "reference" ? ["models"] : []),
+  ],
   properties: {
     ...common,
     type: { const: type },

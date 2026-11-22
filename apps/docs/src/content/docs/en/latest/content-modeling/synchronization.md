@@ -2,7 +2,7 @@
 title: Synchronize configuration
 description: Review and apply changes to lace.config.ts against stored content, including renames, removals and block migrations.
 kind: guide
-verifiedAgainst: 0.1.0-rc2
+verifiedAgainst: 0.1.0-rc6
 ---
 
 Editing `lace.config.ts` does not change stored models on startup.
@@ -137,6 +137,31 @@ run synchronization **immediately** in every environment, then delete the hint
 (no version increase needed). An applied hint is inert. Run synchronization
 right after deploying: an editor whose draft was opened before synchronization
 could otherwise save an empty renamed field over the moved value.
+
+## Migrate a text author
+
+For an existing `posts.author: field.text()`, add an optional
+`authorEntry: field.reference({ models: ["authors"] })` and keep the text
+field. Define the `authors` collection, increase the posts model version,
+review `content sync --check` and apply the change.
+
+Create and publish the author records. Map each existing author string to
+the correct record explicitly, resolving ambiguous names in the source data.
+In Admin, save the chosen record on each post. A converter can also use
+`lace import` with a package `$entry` key or an existing raw author ID.
+Review the saved posts, publish them, and check the site before removing
+the old field.
+
+When every post has been migrated, advance the posts version again,
+remove the old definition and set `removedFields: ["author"]` for that
+sync. Review the removal and apply it. The populated text field's original
+key cannot change to a reference in place.
+
+When changing existing references, expanding the model allowlist is
+compatible. Narrowing it requires every saved selection to resolve to a
+remaining model. Review the check report for ineligible or missing targets.
+If a block migration would temporarily create a cycle, split it into sync
+stages that remove the old edges before introducing their reverses.
 
 ## Migrate block data
 

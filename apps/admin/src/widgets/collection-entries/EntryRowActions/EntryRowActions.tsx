@@ -1,8 +1,8 @@
 import type { ContentEntrySummaryDto } from "@lacecms/contracts";
 import { Link } from "@tanstack/react-router";
-import { CopyIcon, MoreHorizontalIcon, PencilIcon, Trash2Icon } from "lucide-react";
+import { CopyIcon, MoreHorizontalIcon, NetworkIcon, PencilIcon, Trash2Icon } from "lucide-react";
 import { useRef, useState } from "react";
-import { entryActions } from "../../../entities/content/index.js";
+import { entryActions, WhereUsedDialog } from "../../../entities/content/index.js";
 import { DeleteEntryDialog } from "../../../features/delete-entry/index.js";
 import { useDuplicateEntry } from "../../../features/duplicate-entry/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
@@ -31,8 +31,8 @@ export function EntryRowActions({
   readonly onDeleted?: () => void;
 }) {
   const trigger = useRef<HTMLButtonElement>(null);
-  const deleteSelected = useRef(false);
-  const [deleting, setDeleting] = useState(false);
+  const selected = useRef<"delete" | "where-used" | undefined>(undefined);
+  const [dialog, setDialog] = useState<"delete" | "where-used" | undefined>(undefined);
   const duplicate = useDuplicateEntry(modelKey);
   const published = entry.status !== "draft";
   const actions = entryActions({
@@ -61,10 +61,11 @@ export function EntryRowActions({
         <DropdownMenuContent
           align="end"
           onCloseAutoFocus={(event) => {
-            if (!deleteSelected.current) return;
-            deleteSelected.current = false;
+            const next = selected.current;
+            if (!next) return;
+            selected.current = undefined;
             event.preventDefault();
-            setDeleting(true);
+            setDialog(next);
           }}
         >
           <DropdownMenuItem asChild>
@@ -72,6 +73,14 @@ export function EntryRowActions({
               <PencilIcon aria-hidden />
               Open
             </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => {
+              selected.current = "where-used";
+            }}
+          >
+            <NetworkIcon aria-hidden />
+            Where used
           </DropdownMenuItem>
           {actions.duplicate ? (
             <DropdownMenuItem
@@ -88,7 +97,7 @@ export function EntryRowActions({
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onSelect={() => {
-                  deleteSelected.current = true;
+                  selected.current = "delete";
                 }}
                 variant="destructive"
               >
@@ -99,13 +108,20 @@ export function EntryRowActions({
           ) : undefined}
         </DropdownMenuContent>
       </DropdownMenu>
+      <WhereUsedDialog
+        entryId={entry.id}
+        onOpenChange={(open) => setDialog(open ? "where-used" : undefined)}
+        open={dialog === "where-used"}
+        returnFocus={trigger}
+        title={entry.title}
+      />
       {actions.delete ? (
         <DeleteEntryDialog
           entryId={entry.id}
           expectedRevision={entry.draftRevision}
           modelKey={modelKey}
-          onOpenChange={setDeleting}
-          open={deleting}
+          onOpenChange={(open) => setDialog(open ? "delete" : undefined)}
+          open={dialog === "delete"}
           published={published}
           returnFocus={trigger}
           title={entry.title}

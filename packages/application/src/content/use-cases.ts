@@ -54,7 +54,11 @@ import type {
 import type { PublicationIdempotencyKey } from "../shared/brands.js";
 import { siteBuildEvent } from "../ports/outbox.js";
 import { validateDraft } from "./draft-validation.js";
-import { publishedProjection } from "./publication-projection.js";
+import {
+  entryReferenceCandidate,
+  publishedProjection,
+  snapshotEntryReferences,
+} from "./publication-projection.js";
 
 import type {
   ContentUseCaseDependencies,
@@ -200,6 +204,7 @@ export class ContentUseCases {
       model,
       "draft",
     );
+    const references = entryReferenceCandidate(model, draft.entryReferences);
     const now = this.dependencies.clock.now();
     const id = contentEntryId(this.dependencies.idGenerator.next());
     const entry = createContentEntry({
@@ -219,6 +224,7 @@ export class ContentUseCases {
     return commandEntry(
       await this.dependencies.content.create({
         entry,
+        ...(references === undefined ? {} : { entryReferences: references }),
         mediaReferences: draft.mediaReferences,
         internalLinks: draft.internalLinks,
       }),
@@ -303,9 +309,11 @@ export class ContentUseCases {
       model,
       "draft",
     );
+    const references = entryReferenceCandidate(model, draft.entryReferences);
     return commandEntry(
       await this.dependencies.content.saveCompleteDraft({
         entryId: entry.id,
+        ...(references === undefined ? {} : { entryReferences: references }),
         internalLinks: draft.internalLinks,
         mutation: {
           ...draft,
@@ -322,22 +330,22 @@ export class ContentUseCases {
   ): Promise<PublishContentEntryUseCaseResult> {
     authorizeContentOperation(input.actor, "publish");
     const entry = await this.entry(input.entryId);
-    const draft = await validateDraft(
-      this.dependencies,
-      entry.draft,
-      this.model(entry.model.key),
-      "publish",
-      entry.id,
-    );
+    const model = this.model(entry.model.key);
+    const draft = await validateDraft(this.dependencies, entry.draft, model, "publish", entry.id);
     contentPublicPath(entry.model, draft.slug);
-    const projection = publishedProjection(
-      this.dependencies,
-      this.visibilityOwners,
-      this.model(entry.model.key),
-      draft,
+    const projected = publishedProjection(this.dependencies, this.visibilityOwners, model, draft);
+    const { entryReferences, ...projection } = projected ?? draft;
+    const references = entryReferenceCandidate(
+      model,
+      entryReferences,
+      draft.entryReferences.some((row) => row.purpose === "reference"),
     );
     // A projection belongs to one draft revision; never attach it to another.
-    if (projection !== undefined && entry.draft.revision !== input.expectedRevision)
+    if (
+      projected !== undefined &&
+      entry.draft.revision !== input.expectedRevision &&
+      input.idempotencyKey === undefined
+    )
       throw new DomainError(
         "CONTENT_REVISION_CONFLICT",
         "The draft revision no longer matches the expected revision.",
@@ -355,7 +363,8 @@ export class ContentUseCases {
       ],
       entryId: entry.id,
       expectedRevision: input.expectedRevision,
-      ...(projection === undefined ? {} : { projection }),
+      ...(references === undefined ? {} : { entryReferences: references }),
+      ...(projected === undefined ? {} : { projection }),
       ...(input.idempotencyKey === undefined
         ? {}
         : { idempotency: await this.idempotency(input, draft) }),
@@ -429,9 +438,15 @@ export class ContentUseCases {
     authorizeContentOperation(input.actor, "revertDraft");
     const entry = await this.entry(input.entryId);
     const published = requirePublishedSnapshot(entry);
+    const model = this.model(entry.model.key);
+    const references = entryReferenceCandidate(
+      model,
+      snapshotEntryReferences(this.dependencies, model, published.fields, published.blocks),
+    );
     return commandEntry(
       await this.dependencies.content.revertDraft({
         entryId: entry.id,
+        ...(references === undefined ? {} : { entryReferences: references }),
         expectedPublishedSnapshotId: published.id,
         expectedRevision: input.expectedRevision,
         revertedAt: this.dependencies.clock.now(),
@@ -465,6 +480,7 @@ export class ContentUseCases {
       model,
       "draft",
     );
+    const references = entryReferenceCandidate(model, draft.entryReferences);
     const now = this.dependencies.clock.now();
     const id = contentEntryId(this.dependencies.idGenerator.next());
     const entry = createContentEntry({
@@ -485,6 +501,7 @@ export class ContentUseCases {
       await this.dependencies.content.create({
         duplicateOf: { entryId: source.id, expectedRevision: source.draft.revision },
         entry,
+        ...(references === undefined ? {} : { entryReferences: references }),
         mediaReferences: draft.mediaReferences,
         internalLinks: draft.internalLinks,
       }),
@@ -552,6 +569,7 @@ export class ContentUseCases {
             ],
       deletedAt,
       ...(input.linkImpact === undefined ? {} : { linkImpact: input.linkImpact }),
+      ...(input.referenceImpact === undefined ? {} : { referenceImpact: input.referenceImpact }),
       deletedBy: auditActor(input.actor),
       entryId: entry.id,
       ...(entry.published === undefined ? {} : { expectedPublishedSnapshotId: entry.published.id }),
@@ -569,7 +587,7 @@ export class ContentUseCases {
 
   private async idempotency(
     input: PublishContentEntryUseCaseInput,
-    draft: NormalizedDraft,
+    { entryReferences: _entryReferences, ...draft }: NormalizedDraft,
   ): Promise<{
     readonly actorId: Actor["id"];
     readonly fingerprint: ReturnType<typeof publicationRequestFingerprint>;

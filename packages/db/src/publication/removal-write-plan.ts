@@ -1,9 +1,15 @@
 import { invalidatePreviews } from "../write-plan/preview-invalidation.js";
-import { decodeLinkImpactReceipt } from "@lacecms/application";
+import {
+  decodeLinkImpactReceipt,
+  decodeReferenceImpactReceipt,
+  referenceImpactChanged,
+} from "@lacecms/application";
 import type {
   DeleteContentEntryInput,
   LinkImpactAcknowledgment,
   LinkImpactAction,
+  LinkImpactEvidence,
+  ReferenceImpactAcknowledgment,
   UnpublishContentEntryCommand,
 } from "@lacecms/application";
 import { DomainError } from "@lacecms/domain";
@@ -11,11 +17,16 @@ import type { ContentEntry } from "@lacecms/domain";
 import { publicStateIncrementStatement } from "../write-plan/build-enqueue.js";
 import { enqueueRequests } from "../write-plan/enqueue-events.js";
 import { unpublicationScope } from "../content/snapshots.js";
-import { LINK_IMPACT_EVIDENCE_SQL, linkRemovalCondition } from "../links/reader.js";
-import type { ImpactEvidenceRow } from "../links/reader.js";
+import { linkRemovalCondition } from "../links/reader.js";
+import {
+  incomingUsageSql,
+  LINK_IMPACT_EVIDENCE_SQL,
+  REFERENCE_IMPACT_EVIDENCE_SQL,
+} from "../links/impact-evidence.js";
+import type { ImpactEvidenceRow } from "../links/impact-evidence.js";
 import { BUMP_INTERNAL_LINK_GRAPH_SQL } from "../links/statements.js";
 import { PUBLICATION_IDEMPOTENCY_TTL_MS } from "../shared/limits.js";
-import type { WritePlan, WritePlanStatement } from "../write-plan/plan.js";
+import type { WritePlan, WritePlanSql, WritePlanStatement } from "../write-plan/plan.js";
 import {
   LIVE_IDEMPOTENCY_RECORD_SQL,
   NO_LIVE_IDEMPOTENCY_RECORD_SQL,
@@ -25,50 +36,110 @@ import {
 type RemovalMiss =
   | { readonly kind: "replay"; readonly requestHash: string; readonly responseJson: string }
   | { readonly kind: "missing" | "not_published" | "publication" | "revision" }
-  | { readonly kind: "impact"; readonly row: ImpactEvidenceRow | undefined };
+  | { readonly kind: "impact"; readonly error: DomainError };
 
 type RemovalInput = {
   readonly entryId: string;
   readonly action: LinkImpactAction;
   readonly actorId: string;
   readonly acknowledgment: LinkImpactAcknowledgment | undefined;
+  readonly referenceAcknowledgment?: ReferenceImpactAcknowledgment | undefined;
   readonly expectedPublished: string | null;
   readonly expectedRevision?: number;
 };
 
-function impactGuard(input: RemovalInput): { sql: string; params: readonly unknown[] } {
-  if (input.acknowledgment !== undefined) {
-    let evidence: ReturnType<typeof decodeLinkImpactReceipt>;
-    try {
-      evidence = decodeLinkImpactReceipt(input.acknowledgment.receipt);
-    } catch {
-      return { sql: "0", params: [] };
-    }
-    if (
-      input.acknowledgment.acknowledgePublishedLinks !== true ||
-      evidence.targetId !== input.entryId ||
-      evidence.action !== input.action ||
-      evidence.actorId !== input.actorId
-    )
-      return { sql: "0", params: [] };
-    return {
-      sql: `(select revision from content_link_state where singleton_key=1)=? and exists(select 1 from content_entries e join content_snapshots d on d.id=e.draft_snapshot_id where e.id=? and d.revision=? and e.published_snapshot_id is ?)`,
-      params: [
-        evidence.graphRevision,
-        input.entryId,
-        evidence.draftRevision,
-        evidence.publishedSnapshotId,
-      ],
-    };
-  }
+function matchesReceiptScope(evidence: LinkImpactEvidence, input: RemovalInput): boolean {
+  return (
+    evidence.targetId === input.entryId &&
+    evidence.action === input.action &&
+    evidence.actorId === input.actorId
+  );
+}
+
+function receiptGuard(evidence: LinkImpactEvidence): WritePlanSql {
   return {
-    sql: `not exists(select 1 from content_entry_link_references r join content_snapshots s on s.id=r.snapshot_id join content_entries e on e.id=s.entry_id and e.published_snapshot_id=s.id where r.target_entry_id=? and r.delivered=1 and not (e.id=? and (?='delete' or e.published_snapshot_id=s.id)))`,
-    params: [input.entryId, input.entryId, input.action],
+    sql: `(select revision from content_link_state where singleton_key=1)=?
+      and exists(select 1 from content_entries e join content_snapshots d on d.id=e.draft_snapshot_id
+        where e.id=? and d.revision=? and e.published_snapshot_id is ?)`,
+    params: [
+      evidence.graphRevision,
+      evidence.targetId,
+      evidence.draftRevision,
+      evidence.publishedSnapshotId,
+    ],
   };
 }
 
+function urlImpactGuard(input: RemovalInput): WritePlanSql {
+  if (input.acknowledgment === undefined)
+    return {
+      sql: `not exists(${incomingUsageSql("url", "published")})`,
+      params: [input.entryId, input.entryId, input.action],
+    };
+  try {
+    const evidence = decodeLinkImpactReceipt(input.acknowledgment.receipt);
+    if (
+      input.acknowledgment.acknowledgePublishedLinks === true &&
+      matchesReceiptScope(evidence, input)
+    )
+      return receiptGuard(evidence);
+  } catch {
+    // Diagnostics classify the invalid receipt if admission misses.
+  }
+  return { sql: "0", params: [] };
+}
+
+function referenceReviewGuard(input: RemovalInput): WritePlanSql {
+  if (input.action === "unpublish") return { sql: "1", params: [] };
+  if (input.referenceAcknowledgment === undefined)
+    return {
+      sql: `not exists(${incomingUsageSql("reference", "draft")})`,
+      params: [input.entryId, input.entryId],
+    };
+  try {
+    const evidence = decodeReferenceImpactReceipt(input.referenceAcknowledgment.receipt);
+    if (
+      input.referenceAcknowledgment.acknowledgeDraftReferences === true &&
+      matchesReceiptScope(evidence, input)
+    )
+      return receiptGuard(evidence);
+  } catch {
+    // Diagnostics classify the invalid receipt if admission misses.
+  }
+  return { sql: "0", params: [] };
+}
+
+function assertReferenceRemoval(row: ImpactEvidenceRow | undefined, input: RemovalInput): void {
+  if (row?.has_published_usages === 1)
+    throw new DomainError(
+      "CONTENT_REFERENCES_IN_USE",
+      "Published references use this entry. Remove or replace them and republish the sources.",
+    );
+  if (input.action === "unpublish") return;
+  const acknowledgment = input.referenceAcknowledgment;
+  if (acknowledgment === undefined) {
+    if (row?.has_draft_usages === 1)
+      throw new DomainError(
+        "CONTENT_REFERENCE_REVIEW_REQUIRED",
+        "Saved drafts reference this entry. Review and acknowledge the draft usages before deletion.",
+      );
+    return;
+  }
+  const evidence = decodeReferenceImpactReceipt(acknowledgment.receipt);
+  if (
+    acknowledgment.acknowledgeDraftReferences !== true ||
+    !matchesReceiptScope(evidence, input) ||
+    evidence.graphRevision !== row?.graph_revision ||
+    evidence.draftRevision !== row.draft_revision ||
+    evidence.publishedSnapshotId !== row.published_snapshot_id
+  )
+    throw referenceImpactChanged();
+}
+
 function guardParts(input: RemovalInput, replay?: { scope: string; key: string; now: number }) {
-  const impact = impactGuard(input);
+  const linkImpact = urlImpactGuard(input);
+  const referenceReview = referenceReviewGuard(input);
+  const blockers = incomingUsageSql("reference", "published");
   const publication = {
     sql: "exists(select 1 from content_entries e join content_snapshots d on d.id=e.draft_snapshot_id where e.id=? and e.published_snapshot_id is ?",
     params: [input.entryId, input.expectedPublished],
@@ -83,8 +154,17 @@ function guardParts(input: RemovalInput, replay?: { scope: string; key: string; 
       : { sql: NO_LIVE_IDEMPOTENCY_RECORD_SQL, params: [replay.scope, replay.key, replay.now] };
   return {
     admission: {
-      sql: `${publication.sql}${revision.sql} and (${impact.sql}) and (${noReplay.sql})`,
-      params: [...publication.params, ...revision.params, ...impact.params, ...noReplay.params],
+      sql: `${publication.sql}${revision.sql} and not exists(${blockers})
+        and (${referenceReview.sql}) and (${linkImpact.sql}) and (${noReplay.sql})`,
+      params: [
+        ...publication.params,
+        ...revision.params,
+        input.entryId,
+        input.entryId,
+        ...referenceReview.params,
+        ...linkImpact.params,
+        ...noReplay.params,
+      ],
     },
     diagnostics: {
       state: {
@@ -94,6 +174,10 @@ function guardParts(input: RemovalInput, replay?: { scope: string; key: string; 
       impact: {
         sql: LINK_IMPACT_EVIDENCE_SQL,
         params: [input.entryId, input.entryId, input.action, input.entryId],
+      },
+      references: {
+        sql: REFERENCE_IMPACT_EVIDENCE_SQL,
+        params: [input.entryId, input.entryId, input.entryId, input.entryId, input.entryId],
       },
       ...(replay === undefined
         ? {}
@@ -122,9 +206,11 @@ function guardParts(input: RemovalInput, replay?: { scope: string; key: string; 
       // Preserve removal evidence errors before the deletion revision conflict.
       const row = rows.impact?.[0] as ImpactEvidenceRow | undefined;
       try {
+        assertReferenceRemoval(rows.references?.[0] as ImpactEvidenceRow | undefined, input);
         linkRemovalCondition(row, input.entryId, input.action, input.actorId, input.acknowledgment);
-      } catch {
-        return { kind: "impact", row };
+      } catch (error) {
+        if (error instanceof DomainError) return { kind: "impact", error };
+        throw error;
       }
       return { kind: "revision" };
     },
@@ -230,6 +316,7 @@ export function deleteEntryWritePlan(
     action: "delete",
     actorId: input.deletedBy.id,
     acknowledgment: input.linkImpact,
+    referenceAcknowledgment: input.referenceImpact,
     expectedPublished,
     expectedRevision: input.expectedRevision,
   };
@@ -278,7 +365,7 @@ export function deleteEntryWritePlan(
 
 export function removalGuardResult(
   miss: RemovalMiss,
-  input: RemovalInput,
+  action: LinkImpactAction,
   idempotency?: { readonly fingerprint: string },
 ): ContentEntry | never {
   switch (miss.kind) {
@@ -296,19 +383,12 @@ export function removalGuardResult(
     case "publication":
       throw new DomainError(
         "CONTENT_REVISION_CONFLICT",
-        input.action === "delete"
+        action === "delete"
           ? "The publication state no longer matches the deletion guard."
           : "The published snapshot no longer matches the expected publication.",
       );
     case "impact":
-      linkRemovalCondition(
-        miss.row,
-        input.entryId,
-        input.action,
-        input.actorId,
-        input.acknowledgment,
-      );
-      throw new DomainError("CONTENT_INVALID_STATE", "Removal guard failed.");
+      throw miss.error;
     case "revision":
       throw new DomainError(
         "CONTENT_REVISION_CONFLICT",

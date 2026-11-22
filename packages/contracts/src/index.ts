@@ -59,6 +59,7 @@ export * from "./errors/classification.js";
 export * from "./openapi/json-schema.js";
 export { contentMetadataOpenApi } from "./openapi/field-openapi.js";
 export * from "./content/links.js";
+export * from "./content/references.js";
 export * from "./content/entries.js";
 export * from "./content/entry-requests.js";
 export * from "./content/mcp-arguments.js";

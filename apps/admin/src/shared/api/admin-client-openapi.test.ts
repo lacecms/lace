@@ -55,6 +55,10 @@ describe("admin client OpenAPI drift", () => {
     expect(names("linkImpact")).toEqual(
       new Set(["action", "after", "sourceEntryId", "snapshotId", "locationsAfter", "limit"]),
     );
+    expect(names("listReferenceTargets")).toEqual(
+      new Set(["modelKey", "search", "after", "limit"]),
+    );
+    expect(names("referenceImpact")).toEqual(names("linkImpact"));
     expect(operations).toContainEqual(
       expect.objectContaining({
         clientMethod: "uploadMedia",

@@ -91,15 +91,16 @@ export async function createWorkerFixture(
     ...extraEnv,
   };
   const runtime = worker.runtime(env);
+  const fixtureConfig = overrides.config ?? config;
   const prepared = await prepareConfigurationSynchronization({
-    models: config.runtime.content,
+    models: fixtureConfig.runtime.content,
     state: runtime.repository,
   });
   let value = 0;
   await applyPreparedConfigurationSynchronization({
     clock: { now: () => unixMilliseconds(100) },
     ids: { next: () => `sync-${++value}` },
-    models: config.runtime.content,
+    models: fixtureConfig.runtime.content,
     prepared,
     target: runtime.repository,
   });

@@ -22,7 +22,7 @@ import {
   MAX_BLOCK_CLASS_NAME_LENGTH,
 } from "../blocks/grammar.js";
 import { validateBlockSettings, validateBlockData } from "../blocks/definition.js";
-import { collectSnapshotInternalLinks } from "../references/internal-links.js";
+import { collectSnapshotEntryReferences } from "../references/entry-references.js";
 
 /** Maximum title length shared by draft, publish, REST, and admin validation. */
 export const MAX_TITLE_LENGTH = 200;
@@ -288,15 +288,20 @@ export function validateEntryAggregate(
       path: ["blocks", index, "data"],
     })),
   );
-  collectSnapshotInternalLinks(
+  collectSnapshotEntryReferences(
     model.fields,
     fields,
-    blocks.map((block) => ({
-      key: block.key,
-      fields: registry.get(block.type)!.fields,
-      data: block.data,
-      hidden: block.hidden,
-    })),
+    blocks.map((block) => {
+      const { fields, visibility } = registry.get(block.type)!;
+      return {
+        key: block.key,
+        fields,
+        data: block.data,
+        hidden: block.hidden,
+        ...(visibility === undefined ? {} : { visibility }),
+      };
+    }),
+    model.visibility,
   );
   return deepFreeze({
     blocks: deepFreeze(blocks),

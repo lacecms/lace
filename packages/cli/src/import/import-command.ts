@@ -92,6 +92,7 @@ interface PlanData {
   readonly media: readonly { key: string; action: string; sameAs?: string }[];
   readonly entries: readonly { key: string; model: string; action: string; publish: string }[];
   readonly publication: string;
+  readonly draftOrder: readonly string[];
   readonly publishOrder: readonly string[];
   readonly summary: Readonly<Record<string, number>>;
 }
@@ -114,6 +115,7 @@ export function planData(plan: ImportPlan): PlanData {
       publish: entry.publish,
     })),
     publication: plan.publication,
+    draftOrder: plan.draftOrder,
     publishOrder: plan.publishOrder,
     summary: {
       upload: count(plan.media, (item) => item.action === "upload"),
@@ -142,6 +144,7 @@ export function presentPlan(data: PlanData): string {
       `  ${entry.action.padEnd(10)} ${entry.key} (${entry.model})${entry.publish === "published" ? ", already published" : ""}`,
     );
   if (data.entries.length === 0) lines.push("  (none)");
+  if (data.draftOrder.length > 0) lines.push(`Draft order: ${data.draftOrder.join(", ")}.`);
   lines.push(
     data.publication === "skipped"
       ? "Publication: skipped (no --publish)."

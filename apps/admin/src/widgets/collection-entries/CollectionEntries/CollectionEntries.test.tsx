@@ -358,10 +358,15 @@ test("row menus offer only permitted actions", async () => {
     editor,
     client({ listEntries: async () => entryList([changedEntry, entry]), listModels }),
   );
-  expect(await openRowMenu(user, "Launch")).toEqual(["Open", "Duplicate"]);
+  expect(await openRowMenu(user, "Launch")).toEqual(["Open", "Where used", "Duplicate"]);
   await user.keyboard("{Escape}");
   await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
-  expect(await openRowMenu(user, "First post")).toEqual(["Open", "Duplicate", "Delete"]);
+  expect(await openRowMenu(user, "First post")).toEqual([
+    "Open",
+    "Where used",
+    "Duplicate",
+    "Delete",
+  ]);
 });
 
 test("an admin deletes a published row only after typing its title and cancel returns focus", async () => {
@@ -372,7 +377,7 @@ test("an admin deletes a published row only after typing its title and cancel re
     admin,
     client({ deleteEntry, listEntries: async () => entryList([changedEntry]), listModels }),
   );
-  expect(await openRowMenu(user, "Launch")).toEqual(["Open", "Duplicate", "Delete"]);
+  expect(await openRowMenu(user, "Launch")).toEqual(["Open", "Where used", "Duplicate", "Delete"]);
   await user.click(screen.getByRole("menuitem", { name: "Delete" }));
   let dialog = await screen.findByRole("dialog", { name: "Delete entry?" });
   expect(dialog).toHaveAccessibleDescription(/disappears from the site after the next build/u);

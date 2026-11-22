@@ -29,7 +29,7 @@ function database() {
       width integer, height integer, alt text, caption text, focal_x real, focal_y real, status text,
       created_by text, created_at integer, updated_at integer);
     create table content_media_references (snapshot_id text, source_key text, field_path text, media_id text);
-    create table content_entry_link_references (snapshot_id text, source_key text, area text, field_path text, target_entry_id text, delivered integer);
+    create table content_entry_link_references (snapshot_id text, source_key text, area text, field_path text, target_entry_id text, delivered integer, purpose text not null default 'url');
     insert into content_models values ('posts', 'collection'), ('cv', 'collection'),
       ('testimonials', 'collection'), ('settings', 'global');
     insert into content_entries values

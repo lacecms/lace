@@ -10,6 +10,7 @@ import { ConfigurationError } from "@lacecms/config";
 import {
   DomainError,
   BuildExportVersionChangedError,
+  ReferenceGraphChangedError,
   BuildExportCursorError,
   BlockOrderError,
   CollectionQueryValidationError,
@@ -222,6 +223,61 @@ export const errorMatrixCases: readonly ErrorMatrixCase[] = [
         error: {
           code: "MEDIA_UPDATE_CONFLICT",
           message: "The media was modified by another request.",
+        },
+      },
+      status: 409,
+    },
+  },
+  {
+    name: "ReferenceGraphChangedError",
+    errorClass: ReferenceGraphChangedError,
+    create: () => new ReferenceGraphChangedError(),
+    expected: {
+      body: {
+        error: { code: "CONFLICT", message: "The reference graph changed. Reload and retry." },
+      },
+      status: 409,
+    },
+  },
+  {
+    name: "DomainError:CONTENT_REFERENCES_IN_USE",
+    errorClass: DomainError,
+    create: () => new DomainError("CONTENT_REFERENCES_IN_USE", "private domain detail"),
+    expected: {
+      body: {
+        error: {
+          code: "CONTENT_REFERENCES_IN_USE",
+          message:
+            "Published references use this entry. Remove or replace them and republish the sources.",
+        },
+      },
+      status: 409,
+    },
+  },
+  {
+    name: "DomainError:CONTENT_REFERENCE_REVIEW_REQUIRED",
+    errorClass: DomainError,
+    create: () => new DomainError("CONTENT_REFERENCE_REVIEW_REQUIRED", "private domain detail"),
+    expected: {
+      body: {
+        error: {
+          code: "CONTENT_REFERENCE_REVIEW_REQUIRED",
+          message:
+            "Saved drafts reference this entry. Review and acknowledge the draft usages before deletion.",
+        },
+      },
+      status: 409,
+    },
+  },
+  {
+    name: "DomainError:CONTENT_REFERENCE_IMPACT_CHANGED",
+    errorClass: DomainError,
+    create: () => new DomainError("CONTENT_REFERENCE_IMPACT_CHANGED", "private domain detail"),
+    expected: {
+      body: {
+        error: {
+          code: "CONTENT_REFERENCE_IMPACT_CHANGED",
+          message: "Reference impact changed. Refresh and review it again.",
         },
       },
       status: 409,

@@ -8,6 +8,7 @@ import type {
   BooleanFieldOptions,
   StringValueFieldOptions,
   NumberFieldOptions,
+  ReferenceFieldOptions,
   RichTextFieldOptions,
   StringFieldOptions,
 } from "./definitions.js";
@@ -66,6 +67,8 @@ function normalizeDescriptor(
           return scalarField.media(options as StringValueFieldOptions);
         case "number":
           return scalarField.number(options as NumberFieldOptions);
+        case "reference":
+          return scalarField.reference(options as unknown as ReferenceFieldOptions);
         case "richText":
           return scalarField.richText(options as RichTextFieldOptions);
         case "select":

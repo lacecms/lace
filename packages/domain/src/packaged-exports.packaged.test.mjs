@@ -33,6 +33,7 @@ test("packaged entry point keeps its public exports", async () => {
     "PREVIEW_READY_MS",
     "PreviewContextLimitError",
     "RateLimitExceededError",
+    "ReferenceGraphChangedError",
     "StaleSynchronizationError",
     "actorId",
     "assertCollectionEntryOperation",

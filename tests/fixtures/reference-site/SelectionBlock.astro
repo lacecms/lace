@@ -1,0 +1,12 @@
+---
+import type { BlockProps } from "@lacecms/render";
+
+const { data, reference } = Astro.props as BlockProps<typeof import("./definition").selection>;
+const reviews = (data.reviews ?? []).map(reference);
+const author = data.author === undefined ? undefined : reference(data.author);
+const photo = author?.fields.photo;
+const image = typeof photo === "string" ? author?.media(photo) : undefined;
+---
+
+<ol>{reviews.map((review) => review && <li>{review.title}</li>)}</ol>
+{image && <img src={image.url} alt={image.alt ?? ""} />}

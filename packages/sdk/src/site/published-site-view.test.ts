@@ -423,6 +423,7 @@ test("the site view exposes published content only, ordered and immutable", asyn
   expect(home).toEqual({
     internalLinks: [],
     link: expect.any(Function),
+    reference: expect.any(Function),
     blocks: [block("first", 0), block("second", 1)],
     fields: { summary: "Welcome" },
     id: "home",

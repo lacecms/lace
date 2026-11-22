@@ -9,7 +9,11 @@ import type {
   UnixMilliseconds,
 } from "@lacecms/domain";
 import type { ContentBlock } from "@lacecms/domain";
-import type { JsonObject, PublicInternalLinkReference } from "@lacecms/content";
+import type {
+  JsonObject,
+  PublicInternalLinkReference,
+  SnapshotEntryReference,
+} from "@lacecms/content";
 import type {
   BuildContentExportPage,
   ExportBuildContentPageInput,
@@ -59,6 +63,11 @@ export interface AdmitPreview extends PreviewRequest, PreviewCaptureFence {
   readonly path: string;
   readonly draftSnapshotId: string;
   readonly projection: PublishedProjection;
+  readonly referenceCandidate?: {
+    readonly references: readonly SnapshotEntryReference[];
+    /** Saved block order, including hidden blocks, for editor issue paths. */
+    readonly blockKeys: readonly string[];
+  };
   readonly source: PreviewSource;
   readonly now: UnixMilliseconds;
 }

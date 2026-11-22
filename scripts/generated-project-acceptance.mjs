@@ -52,6 +52,7 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
 import { readCompleteBuildExport } from "../packages/test-utils/dist/index.js";
+import { buildReferenceSite, referenceSiteExport } from "../tests/fixtures/reference-site.mjs";
 import {
   assertSecretFree,
   assertImageFileList,
@@ -1441,6 +1442,15 @@ async function starterJourney(project) {
   if (optimized[0] !== repeated[0]) throw new Error("Image cache changed rendered output");
   await verifyImageDelivery(project, repeated[0]);
   await validateImportSample({ project, run, workspace });
+  const references = await buildReferenceSite(
+    referenceSiteExport(),
+    undefined,
+    join(project, "site/node_modules"),
+  );
+  if (!references.html.includes("<ol><li>Clara</li><li>Anna</li><li>Boris</li></ol>"))
+    throw new Error(
+      "starter-build: the packed site did not resolve the selected route-less records in order",
+    );
   console.info(
     "Packed starter installed, typechecked and built every built-in block, block anchors, site navigation and SEO output with and without published globals and a site URL, and validated the import sample",
   );

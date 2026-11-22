@@ -61,7 +61,9 @@ export interface LinkImpactQuery {
 export type LinkImpactPage = {
   readonly hasPublishedUsages: boolean;
   readonly receipt: string;
-} & (
+} & LinkImpactPagination;
+
+export type LinkImpactPagination =
   | {
       readonly mode: "sources";
       readonly sources: readonly LinkUsageSource[];
@@ -73,8 +75,7 @@ export type LinkImpactPage = {
       readonly snapshotId: string;
       readonly locations: readonly LinkUsageLocation[];
       readonly nextCursor?: OpaqueCursor;
-    }
-);
+    };
 
 /** A concurrency precondition. It confers no authority to read or mutate content. */
 export interface LinkImpactAcknowledgment {

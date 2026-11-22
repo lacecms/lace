@@ -3,13 +3,15 @@
 // the documented sample package.
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { openProductRuntime } from "./support/cross-runtime-fixture.mjs";
 import { readCompleteBuildExport } from "../packages/test-utils/dist/index.js";
+import { referenceConfig } from "./fixtures/reference-preview.mjs";
+import { buildReferenceSite } from "./fixtures/reference-site.mjs";
 
 const exec = promisify(execFile);
 const workspace = fileURLToPath(new URL("..", import.meta.url));
@@ -36,12 +38,12 @@ afterAll(async () => rm(project, { recursive: true, force: true }));
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
 /** Runs the built CLI with only PATH and the token in its environment. */
-async function lace(directory, origin, token, args) {
+async function lace(directory, origin, token, args, cwd = project) {
   const env = { PATH: process.env.PATH, ...(token ? { LACE_IMPORT_TOKEN: token } : {}) };
   const argv = [bin, "import", directory, ...(origin ? ["--url", origin] : []), ...args, "--json"];
   let outcome;
   try {
-    const { stdout, stderr } = await exec(process.execPath, argv, { cwd: project, env });
+    const { stdout, stderr } = await exec(process.execPath, argv, { cwd, env });
     outcome = { exitCode: 0, stdout, stderr };
   } catch (error) {
     if (typeof error.code !== "number") throw error;
@@ -333,3 +335,163 @@ test("lace import validates, publishes, reruns idempotently and protects edits o
   for (const kind of ["node", "worker"]) results[kind] = await runtimeJourney(kind);
   expect(results.worker).toEqual(results.node);
 }, 300_000);
+
+test.each(["node", "worker"])(
+  "the %s import delivers route-less cards and keeps URL lifecycle independent",
+  async (kind) => {
+    const root = await mkdtemp(join(project, "references-"));
+    const fixture = new URL("./fixtures/reference-preview.mjs", import.meta.url);
+    await writeFile(
+      join(root, "lace.config.ts"),
+      `import { referenceConfig } from ${JSON.stringify(fixture.href)};\nexport default await referenceConfig();\n`,
+    );
+    const review = (key, title) => ({ key, model: "testimonials", title, fields: {}, blocks: [] });
+    await writeFile(
+      join(root, "lace-import.json"),
+      JSON.stringify({
+        formatVersion: 1,
+        media: [],
+        entries: [
+          {
+            key: "home",
+            model: "home",
+            title: "Services",
+            fields: { relatedPage: { $entry: "news" } },
+            blocks: [
+              {
+                type: "selection",
+                data: { reviews: ["clara", "anna", "boris"].map(($entry) => ({ $entry })) },
+              },
+            ],
+          },
+          review("anna", "Anna"),
+          review("boris", "Boris"),
+          review("clara", "Clara"),
+          { key: "news", model: "notes", slug: "news", title: "News", fields: {}, blocks: [] },
+        ],
+      }),
+    );
+
+    const runtime = await openProductRuntime(kind, { config: await referenceConfig() });
+    try {
+      async function admin(path, options = {}, status = 200) {
+        const response = await runtime.call(`/api/v1/admin${path}`, {
+          cookie: runtime.cookies.admin,
+          ...options,
+        });
+        expect(response.status, `${kind} ${path}`).toBe(status);
+        return response.json();
+      }
+      const importer = await admin(
+        "/import-tokens",
+        {
+          method: "POST",
+          json: { name: "Reference import", expiresInDays: 1, allowPublish: true },
+        },
+        201,
+      );
+      const run = () => lace(root, runtime.origin, importer.token, ["--publish"], root);
+      const first = await run();
+      expect(first.exitCode, first.stdout).toBe(0);
+      expect(first.result.data.plan.publishOrder).toEqual([
+        "anna",
+        "boris",
+        "clara",
+        "news",
+        "home",
+      ]);
+      const { entries } = JSON.parse(await readFile(join(root, "lace-import.state.json"), "utf8"))
+        .targets[runtime.origin];
+
+      const { token } = await admin(
+        "/api-tokens",
+        { method: "POST", json: { name: "Cards export" } },
+        201,
+      );
+      const exported = async () =>
+        (await readCompleteBuildExport(fetch, runtime.origin, token, { limit: 1 })).export;
+      const initial = await exported();
+      const home = initial.entries.find(({ id }) => id === entries.home.id);
+      expect(home.internalLinks).toEqual([
+        {
+          area: "fields",
+          sourceKey: "$fields",
+          pointer: "/relatedPage",
+          targetId: entries.news.id,
+        },
+      ]);
+      expect(home.blocks[0].data.reviews).toEqual(
+        ["clara", "anna", "boris"].map((key) => entries[key].id),
+      );
+      expect(initial.records).toHaveLength(3);
+      expect(initial.records.every((record) => !Object.hasOwn(record, "path"))).toBe(true);
+      expect((await buildReferenceSite(initial)).html).toContain(
+        "<ol><li>Clara</li><li>Anna</li><li>Boris</li></ol>",
+      );
+      const rerun = await run();
+      expect(rerun.exitCode, rerun.stdout).toBe(0);
+      expect(rerun.result.data.result).toEqual({
+        uploaded: 0,
+        mediaUpdated: 0,
+        created: 0,
+        saved: 0,
+        published: 0,
+      });
+      expect(await exported()).toEqual(initial);
+
+      const targets = "/api/v1/admin/reference-targets?modelKey=testimonials&limit=1";
+      const readable = await runtime.call(targets, { cookie: runtime.cookies.viewer });
+      expect(readable.status).toBe(200);
+      const page = await readable.json();
+      expect(page.items[0]).toMatchObject({ state: "published", title: "Anna" });
+      expect(page.items[0]).not.toHaveProperty("path");
+      expect(typeof page.nextCursor).toBe("string");
+      expect(
+        (await runtime.call(targets, { headers: { authorization: `Bearer ${importer.token}` } }))
+          .status,
+      ).toBe(403);
+      const reviewPath = `/entries/${entries.anna.id}`;
+      const selected = await admin(reviewPath);
+      const unpublish = {
+        method: "POST",
+        json: { expectedPublishedSnapshotId: selected.published.id },
+      };
+      expect(
+        (
+          await runtime.call(`/api/v1/admin${reviewPath}/unpublish`, {
+            cookie: runtime.cookies.viewer,
+            ...unpublish,
+          })
+        ).status,
+      ).toBe(403);
+      expect((await admin(`${reviewPath}/unpublish`, unpublish, 409)).error.code).toBe(
+        "CONTENT_REFERENCES_IN_USE",
+      );
+
+      const newsPath = `/entries/${entries.news.id}`;
+      const news = await admin(newsPath);
+      const linkRemoval = {
+        method: "POST",
+        json: { expectedPublishedSnapshotId: news.published.id },
+      };
+      expect((await admin(`${newsPath}/unpublish`, linkRemoval, 409)).error.code).toBe(
+        "CONTENT_LINKS_IN_USE",
+      );
+      const links = await admin(`${newsPath}/link-impact?action=unpublish`);
+      await admin(`${newsPath}/unpublish`, {
+        method: "POST",
+        json: {
+          ...linkRemoval.json,
+          linkImpact: { receipt: links.receipt, acknowledgePublishedLinks: true },
+        },
+      });
+      const withdrawn = await exported();
+      expect(withdrawn.entries.map(({ path }) => path)).toEqual(["/"]);
+      expect(withdrawn.entries[0].internalLinks).toEqual(home.internalLinks);
+      expect(withdrawn.records).toEqual(initial.records);
+    } finally {
+      await runtime.close();
+    }
+  },
+  120_000,
+);

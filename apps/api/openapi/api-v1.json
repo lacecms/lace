@@ -195,6 +195,117 @@
       },
       "ErrorEnvelope": {
         "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "error": {
+                  "properties": {
+                    "code": {
+                      "const": "VALIDATION_FAILED"
+                    }
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "error": {
+                  "properties": {
+                    "details": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "issues": {
+                          "items": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "code": {
+                                    "const": "reference_cycle"
+                                  },
+                                  "details": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "publishFirst": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "entryId": {
+                                            "maxLength": 255,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "title": {
+                                            "maxLength": 200,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": ["entryId", "title"],
+                                        "type": "object"
+                                      },
+                                      "truncated": {
+                                        "type": "boolean"
+                                      },
+                                      "witness": {
+                                        "items": {
+                                          "maxLength": 255,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "maxItems": 16,
+                                        "minItems": 2,
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": ["witness", "truncated"],
+                                    "type": "object"
+                                  },
+                                  "message": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["message", "path", "code", "details"],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "code": {
+                                    "maxLength": 255,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "message": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["message", "path", "code"],
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": ["issues"],
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            },
+            "type": "object"
+          }
+        ],
         "properties": {
           "error": {
             "additionalProperties": false,
@@ -208,6 +319,9 @@
                   "CONTENT_INVALID_STATE",
                   "CONTENT_LINKS_IN_USE",
                   "CONTENT_LINK_IMPACT_CHANGED",
+                  "CONTENT_REFERENCE_IMPACT_CHANGED",
+                  "CONTENT_REFERENCES_IN_USE",
+                  "CONTENT_REFERENCE_REVIEW_REQUIRED",
                   "CONTENT_MODEL_CARDINALITY_CONFLICT",
                   "CONTENT_NOT_PUBLISHED",
                   "CONTENT_PAGE_SINGLETON",
@@ -536,6 +650,40 @@
               }
             },
             "required": ["type", "required"],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "defaultValue": {
+                "description": "Opaque, case-sensitive entry ID. Shared runtime validation limits IDs to 255 UTF-16 code units and rejects control characters and invalid encoding.",
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "models": {
+                "items": {
+                  "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "type": {
+                "const": "reference"
+              }
+            },
+            "required": ["type", "required", "models"],
             "type": "object"
           },
           {
@@ -943,6 +1091,40 @@
                   }
                 },
                 "required": ["type", "required"],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "defaultValue": {
+                    "description": "Opaque, case-sensitive entry ID. Shared runtime validation limits IDs to 255 UTF-16 code units and rejects control characters and invalid encoding.",
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "models": {
+                    "items": {
+                      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "required": {
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "const": "reference"
+                  }
+                },
+                "required": ["type", "required", "models"],
                 "type": "object"
               },
               {
@@ -2608,7 +2790,7 @@
     },
     "/api/v1/admin/entries/{entryId}": {
       "delete": {
-        "description": "Requires content:write and the expected draft revision through If-Match or the body. Optional linkImpact acknowledges the current published incoming links. Refresh impact after CONTENT_LINK_IMPACT_CHANGED.",
+        "description": "Requires content:write and the expected draft revision through If-Match or the body. Deletion of a published entry also requires content:publish. A draft-only reference review uses referenceImpact. Published URL uses require a separate linkImpact acknowledgment. Both objects can be supplied together.",
         "operationId": "deleteApiV1AdminEntriesByEntryId",
         "parameters": [
           {
@@ -2657,6 +2839,21 @@
                     },
                     "required": ["receipt", "acknowledgePublishedLinks"],
                     "type": "object"
+                  },
+                  "referenceImpact": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "acknowledgeDraftReferences": {
+                        "const": true
+                      },
+                      "receipt": {
+                        "maxLength": 4096,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": ["receipt", "acknowledgeDraftReferences"],
+                    "type": "object"
                   }
                 },
                 "required": [],
@@ -2689,6 +2886,16 @@
               }
             },
             "description": "Permission denied (AUTHORIZATION_DENIED)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "CONTENT_REFERENCES_IN_USE requires removing the delivered use and republishing its source. For CONTENT_REFERENCE_REVIEW_REQUIRED or CONTENT_REFERENCE_IMPACT_CHANGED, review the current draft usages and supply referenceImpact. For CONTENT_LINKS_IN_USE or CONTENT_LINK_IMPACT_CHANGED, review URL usages and supply linkImpact. Target preconditions can also conflict."
           },
           "422": {
             "content": {
@@ -3190,6 +3397,7 @@
     },
     "/api/v1/admin/entries/{entryId}/draft": {
       "put": {
+        "description": "Reference failures identify the field or block using a JSON Pointer. Target issues use reference_target_missing, reference_target_model or reference_target_unpublished. A reference_cycle witness lists up to 16 entry IDs for callers with content:read. truncated indicates an omitted segment. publishFirst identifies a saved draft whose publication would remove an edge on the reported cycle. Further corrections may be required. reference_graph_limit means the proof would exceed 2048 reachable IDs. Reduce dependencies and retry.",
         "operationId": "putApiV1AdminEntriesByEntryIdDraft",
         "parameters": [
           {
@@ -3777,6 +3985,16 @@
             },
             "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The reference graph or entry changed. For CONFLICT, reload and retry."
+          },
           "422": {
             "content": {
               "application/json": {
@@ -3802,7 +4020,7 @@
     },
     "/api/v1/admin/entries/{entryId}/duplicate": {
       "post": {
-        "description": "Creates an unpublished copy of a collection entry's draft with a cleared slug. Requires content:write.",
+        "description": "Creates an unpublished copy of a collection entry's draft with a cleared slug. Requires content:write. Reference failures identify the field or block using a JSON Pointer. Target issues use reference_target_missing, reference_target_model or reference_target_unpublished. A reference_cycle witness lists up to 16 entry IDs for callers with content:read. truncated indicates an omitted segment. publishFirst identifies a saved draft whose publication would remove an edge on the reported cycle. Further corrections may be required. reference_graph_limit means the proof would exceed 2048 reachable IDs. Reduce dependencies and retry.",
         "operationId": "postApiV1AdminEntriesByEntryIdDuplicate",
         "parameters": [
           {
@@ -4275,6 +4493,16 @@
               }
             },
             "description": "Permission denied (AUTHORIZATION_DENIED)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The reference graph or entry changed. For CONFLICT, reload and retry."
           },
           "422": {
             "content": {
@@ -4862,6 +5090,7 @@
     },
     "/api/v1/admin/entries/{entryId}/publish": {
       "post": {
+        "description": "Reference failures identify the field or block using a JSON Pointer. Target issues use reference_target_missing, reference_target_model or reference_target_unpublished. A reference_cycle witness lists up to 16 entry IDs for callers with content:read. truncated indicates an omitted segment. publishFirst identifies a saved draft whose publication would remove an edge on the reported cycle. Further corrections may be required. reference_graph_limit means the proof would exceed 2048 reachable IDs. Reduce dependencies and retry.",
         "operationId": "postApiV1AdminEntriesByEntryIdPublish",
         "parameters": [
           {
@@ -5375,6 +5604,16 @@
             },
             "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The reference graph or entry changed. For CONFLICT, reload and retry."
+          },
           "422": {
             "content": {
               "application/json": {
@@ -5398,9 +5637,313 @@
         "tags": ["admin"]
       }
     },
+    "/api/v1/admin/entries/{entryId}/reference-impact": {
+      "get": {
+        "description": "Requires a browser session with content:read. Returns whole-result blocking and draft usage flags. Source pages hold up to 50 groups with up to ten locations each. Continue one group by specifying sourceEntryId, snapshotId and locationsAfter instead of after. Deletion review receipts are scoped to the current actor, target and graph. Cursors and receipts are limited to 4096 characters.",
+        "operationId": "getApiV1AdminEntriesByEntryIdReferenceImpact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entryId",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "action",
+            "required": true,
+            "schema": {
+              "enum": ["delete", "unpublish"],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "schema": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": "20",
+              "pattern": "^(?:[1-9]|[1-4][0-9]|50)$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sourceEntryId",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "snapshotId",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "locationsAfter",
+            "schema": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "hasDraftUsages": {
+                          "type": "boolean"
+                        },
+                        "hasPublishedBlockers": {
+                          "type": "boolean"
+                        },
+                        "mode": {
+                          "const": "sources"
+                        },
+                        "nextCursor": {
+                          "maxLength": 4096,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "receipt": {
+                          "maxLength": 4096,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "sources": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "entryId": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "locations": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "area": {
+                                      "enum": ["fields", "data"],
+                                      "type": "string"
+                                    },
+                                    "delivered": {
+                                      "type": "boolean"
+                                    },
+                                    "pointer": {
+                                      "minLength": 1,
+                                      "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                                      "type": "string"
+                                    },
+                                    "sourceKey": {
+                                      "maxLength": 255,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["sourceKey", "area", "pointer", "delivered"],
+                                  "type": "object"
+                                },
+                                "maxItems": 10,
+                                "type": "array"
+                              },
+                              "modelKey": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "nextLocationsCursor": {
+                                "maxLength": 4096,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "phase": {
+                                "enum": ["draft", "published"],
+                                "type": "string"
+                              },
+                              "snapshotId": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "title": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "entryId",
+                              "snapshotId",
+                              "modelKey",
+                              "title",
+                              "phase",
+                              "locations"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 50,
+                          "type": "array"
+                        }
+                      },
+                      "required": ["hasPublishedBlockers", "hasDraftUsages", "mode", "sources"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "hasDraftUsages": {
+                          "type": "boolean"
+                        },
+                        "hasPublishedBlockers": {
+                          "type": "boolean"
+                        },
+                        "locations": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "area": {
+                                "enum": ["fields", "data"],
+                                "type": "string"
+                              },
+                              "delivered": {
+                                "type": "boolean"
+                              },
+                              "pointer": {
+                                "minLength": 1,
+                                "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                                "type": "string"
+                              },
+                              "sourceKey": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["sourceKey", "area", "pointer", "delivered"],
+                            "type": "object"
+                          },
+                          "maxItems": 50,
+                          "type": "array"
+                        },
+                        "mode": {
+                          "const": "locations"
+                        },
+                        "nextCursor": {
+                          "maxLength": 4096,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "receipt": {
+                          "maxLength": 4096,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "snapshotId": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "sourceEntryId": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "hasPublishedBlockers",
+                        "hasDraftUsages",
+                        "mode",
+                        "sourceEntryId",
+                        "snapshotId",
+                        "locations"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Bounded source or location page"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "CONTENT_REFERENCE_IMPACT_CHANGED. Restart the review."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The request did not satisfy the API contract (VALIDATION_FAILED)"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Review direct entry reference usages",
+        "tags": ["admin"]
+      }
+    },
     "/api/v1/admin/entries/{entryId}/revert": {
       "post": {
-        "description": "Replaces the draft with the current publication. Requires content:write and the expected draft revision.",
+        "description": "Replaces the draft with the current publication. Requires content:write and the expected draft revision. Reference failures identify the field or block using a JSON Pointer. Target issues use reference_target_missing, reference_target_model or reference_target_unpublished. A reference_cycle witness lists up to 16 entry IDs for callers with content:read. truncated indicates an omitted segment. publishFirst identifies a saved draft whose publication would remove an edge on the reported cycle. Further corrections may be required. reference_graph_limit means the proof would exceed 2048 reachable IDs. Reduce dependencies and retry.",
         "operationId": "postApiV1AdminEntriesByEntryIdRevert",
         "parameters": [
           {
@@ -5874,6 +6417,16 @@
             },
             "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The reference graph or entry changed. For CONFLICT, reload and retry."
+          },
           "422": {
             "content": {
               "application/json": {
@@ -5896,7 +6449,7 @@
     },
     "/api/v1/admin/entries/{entryId}/unpublish": {
       "post": {
-        "description": "Removes the entry's publication and public route, keeps the draft, and queues a site build. Requires content:publish.",
+        "description": "Requires content:publish and the expected published snapshot. Keeps the draft and queues a site build after removing the publication. An idempotency key can replay a committed request. Delivered typed uses block unpublication. Review published URL uses with linkImpact.",
         "operationId": "postApiV1AdminEntriesByEntryIdUnpublish",
         "parameters": [
           {
@@ -6414,6 +6967,16 @@
               }
             },
             "description": "Permission denied (AUTHORIZATION_DENIED)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "CONTENT_REFERENCES_IN_USE requires removing the delivered use and republishing its source. For CONTENT_LINKS_IN_USE or CONTENT_LINK_IMPACT_CHANGED, review the current URL usages and supply linkImpact. Publication preconditions can also conflict."
           },
           "422": {
             "content": {
@@ -9664,6 +10227,7 @@
         "tags": ["admin"]
       },
       "post": {
+        "description": "Reference failures identify the field or block using a JSON Pointer. Target issues use reference_target_missing, reference_target_model or reference_target_unpublished. A reference_cycle witness lists up to 16 entry IDs for callers with content:read. truncated indicates an omitted segment. publishFirst identifies a saved draft whose publication would remove an edge on the reported cycle. Further corrections may be required. reference_graph_limit means the proof would exceed 2048 reachable IDs. Reduce dependencies and retry.",
         "operationId": "postApiV1AdminModelsByModelKeyEntries",
         "parameters": [
           {
@@ -10236,6 +10800,16 @@
             },
             "description": "Permission denied (AUTHORIZATION_DENIED)"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The reference graph or entry changed. For CONFLICT, reload and retry."
+          },
           "422": {
             "content": {
               "application/json": {
@@ -10335,6 +10909,345 @@
           }
         ],
         "summary": "Read draft preview configuration readiness",
+        "tags": ["admin"]
+      }
+    },
+    "/api/v1/admin/reference-targets": {
+      "get": {
+        "description": "Requires a browser session with content:read. Select one page or collection model. Search uses a trimmed literal title prefix, compared ASCII case-insensitively. Reuse a cursor with the same model, search and limit. A published route-less entry has no path.",
+        "operationId": "getApiV1AdminReferenceTargets",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "modelKey",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "schema": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": "20",
+              "pattern": "^(?:[1-9]|[1-4][0-9]|50)$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "modelKey": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "modelKind": {
+                                "enum": ["page", "collection"],
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "state": {
+                                "const": "published"
+                              },
+                              "title": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["id", "modelKey", "modelKind", "title", "state"],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "modelKey": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "modelKind": {
+                                "enum": ["page", "collection"],
+                                "type": "string"
+                              },
+                              "state": {
+                                "const": "unpublished"
+                              },
+                              "title": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["id", "modelKey", "modelKind", "title", "state"],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "maxItems": 50,
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "maxLength": 4096,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["items"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Reference targets, up to 50 per page"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The request did not satisfy the API contract (VALIDATION_FAILED)"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Search entry reference targets",
+        "tags": ["admin"]
+      }
+    },
+    "/api/v1/admin/reference-targets/resolve": {
+      "post": {
+        "description": "Requires a browser session with content:read. Missing IDs have no title and globals are ineligible.",
+        "operationId": "postApiV1AdminReferenceTargetsResolve",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "ids": {
+                    "items": {
+                      "maxLength": 255,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "maxItems": 200,
+                    "type": "array"
+                  }
+                },
+                "required": ["ids"],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "modelKey": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "modelKind": {
+                                "enum": ["page", "collection"],
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "state": {
+                                "const": "published"
+                              },
+                              "title": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["id", "modelKey", "modelKind", "title", "state"],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "modelKey": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "modelKind": {
+                                "enum": ["page", "collection"],
+                                "type": "string"
+                              },
+                              "state": {
+                                "const": "unpublished"
+                              },
+                              "title": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": ["id", "modelKey", "modelKind", "title", "state"],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "maxLength": 255,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "state": {
+                            "enum": ["missing", "ineligible"],
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "state"],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "propertyNames": {
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Reference target statuses keyed by ID"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The request did not satisfy the API contract (VALIDATION_FAILED)"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Resolve up to 200 distinct reference target IDs",
         "tags": ["admin"]
       }
     },

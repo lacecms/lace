@@ -34,8 +34,14 @@ export interface PublishedMediaLookup {
   media(mediaId: string): PublishedMedia | undefined;
 }
 
+/** Looks up one selected entry in the current site view. */
+export interface PublishedReferenceLookup<Entry = SiteEntry> {
+  reference(id: string): Entry | PublishedRecord | undefined;
+}
+
 /** The published content of one entry; no draft or editorial data is exposed. */
-export interface SiteEntry extends PublishedMediaLookup, PublishedLinkLookup {
+export interface SiteEntry
+  extends PublishedMediaLookup, PublishedLinkLookup, PublishedReferenceLookup {
   readonly internalLinks: readonly Readonly<PublicEntryDto["internalLinks"][number]>[];
   readonly blocks: readonly PublishedBlock[];
   readonly fields: PublicEntryDto["fields"];
@@ -57,7 +63,8 @@ export interface PublishedEntry extends SiteEntry {
 }
 
 /** The published content of one route-less global; no path, slug, or title. */
-export interface PublishedGlobal extends PublishedMediaLookup, PublishedLinkLookup {
+export interface PublishedGlobal
+  extends PublishedMediaLookup, PublishedLinkLookup, PublishedReferenceLookup {
   readonly internalLinks: readonly Readonly<PublicEntryDto["internalLinks"][number]>[];
   readonly blocks: readonly PublishedBlock[];
   readonly fields: PublicEntryDto["fields"];
@@ -70,7 +77,8 @@ export interface PublishedGlobal extends PublishedMediaLookup, PublishedLinkLook
  * The published content of one entry of a route-less collection: listed by
  * model key, with a title but no path, slug or SEO group.
  */
-export interface PublishedRecord extends PublishedMediaLookup, PublishedLinkLookup {
+export interface PublishedRecord
+  extends PublishedMediaLookup, PublishedLinkLookup, PublishedReferenceLookup {
   readonly internalLinks: readonly Readonly<PublicEntryDto["internalLinks"][number]>[];
   readonly blocks: readonly PublishedBlock[];
   readonly fields: PublicEntryDto["fields"];
@@ -82,7 +90,7 @@ export interface PublishedRecord extends PublishedMediaLookup, PublishedLinkLook
 
 /** An immutable view of one published build export. */
 export interface SiteView<Entry extends SiteEntry = SiteEntry>
-  extends PublishedMediaLookup, PublishedLinkLookup {
+  extends PublishedMediaLookup, PublishedLinkLookup, PublishedReferenceLookup<Entry> {
   readonly linkDiagnostics: LinkDiagnostics;
   /** Every published entry of every model, sorted by path; no globals. */
   allEntries(): readonly Entry[];

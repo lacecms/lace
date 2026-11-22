@@ -200,6 +200,7 @@ export const fieldTypeSupport: Readonly<Record<FieldType, FieldTypeSupport>> = {
     summary: { priority: 2, text: summaryText },
   },
   media: { groupedControl: true, characterCount: false, problem: () => "Choose a media item." },
+  reference: { groupedControl: true, characterCount: false, problem: () => "Choose an entry." },
   group: {
     groupedControl: false,
     characterCount: false,

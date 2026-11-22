@@ -1,5 +1,5 @@
 import { CircleAlertIcon } from "lucide-react";
-import type { Ref } from "react";
+import type { ReactNode, Ref } from "react";
 import type { ProblemTarget, ValidationProblem } from "../../entities/content/index.js";
 import { cn, revealControl } from "../../shared/lib/index.js";
 
@@ -67,9 +67,11 @@ function ProblemItem({ problem }: { readonly problem: ValidationProblem }) {
 export function EntryValidationSummary({
   problems,
   ref,
+  children,
 }: {
   readonly problems: readonly ValidationProblem[];
   readonly ref?: Ref<HTMLElement>;
+  readonly children?: ReactNode;
 }) {
   const blocking = problems.filter((problem) => problem.blocking);
   const exempt = problems.filter((problem) => !problem.blocking);
@@ -133,6 +135,7 @@ export function EntryValidationSummary({
             </ul>
           </>
         )}
+        {children}
       </div>
     </section>
   );

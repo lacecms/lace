@@ -2,6 +2,7 @@ import {
   AccountUseCases,
   ApiTokenUseCases,
   ContentLinkUseCases,
+  ContentReferenceUseCases,
   routeLessModelKeys,
   ContentUseCases,
   MediaUseCases,
@@ -49,6 +50,7 @@ export type LaceRepository = ContentInput["content"] &
   MediaInput["publicMedia"] &
   BuildsInput["builds"] &
   ConstructorParameters<typeof ContentLinkUseCases>[0] &
+  ConstructorParameters<typeof ContentReferenceUseCases>[0] &
   PublicContentReadPort;
 
 /** Structured operational failures (`component` plus closed reasons); never request data. */
@@ -150,6 +152,7 @@ export function composeLaceServices(input: LaceServicesInput): LaceServices {
     storage: input.storage,
   });
   const links = new ContentLinkUseCases(repository, routeLessModelKeys(input.config.content));
+  const references = new ContentReferenceUseCases(repository);
   const builds = new SiteBuildUseCases({ builds: repository, clock });
   const publicBaseUrl = input.http.publicBaseUrl.href;
   const requests = input.limits.requests;
@@ -205,6 +208,7 @@ export function composeLaceServices(input: LaceServicesInput): LaceServices {
     environment: input.http.environment,
     importActors: input.auth.importActors,
     links,
+    references,
     logger: input.http.requestLogger ?? jsonRequestLogger,
     maxBodyBytes: input.http.maxBodyBytes,
     ...(mcp === undefined ? {} : { mcp }),

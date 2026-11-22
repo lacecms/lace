@@ -13,6 +13,7 @@ import type {
   ConfigurationSyncApplyPort,
   ConfigurationSyncStateReadPort,
   ContentLinkReadPort,
+  ContentReferenceReadPort,
   ContentEntryCommandPort,
   ContentEntryReadPort,
   DispatcherLeasePort,
@@ -46,6 +47,7 @@ import type { ExpectStatic } from "vitest";
 
 /** Every persistence port a SQL runtime adapter must implement identically. */
 export type ContractRepository = ContentLinkReadPort &
+  ContentReferenceReadPort &
   ConfigurationSyncApplyPort &
   ConfigurationSyncStateReadPort &
   ContentEntryCommandPort &

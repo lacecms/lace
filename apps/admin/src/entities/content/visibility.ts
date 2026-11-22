@@ -118,10 +118,12 @@ export function renderedFieldKeys(
   visibility: FieldVisibility | undefined,
   values: unknown,
   errors: unknown,
+  revealedKey?: string,
 ): ReadonlySet<string> | undefined {
   if (visibility === undefined || Object.keys(visibility).length === 0) return undefined;
   const shown = shownFieldKeys(fields, visibility, values);
   const entries = record(errors) ? errors : {};
+  if (revealedKey !== undefined && Object.hasOwn(fields, revealedKey)) shown.add(revealedKey);
   for (const key of Object.keys(fields)) if (hasMessage(entries[key])) shown.add(key);
   return shown;
 }
@@ -134,7 +136,7 @@ function valueLabel(controller: FieldDefinition | undefined, value: boolean | st
 }
 
 /**
- * The note on a hidden field shown only to fix a problem in its stored value,
+ * The note on a hidden field shown to inspect a reference or fix a problem,
  * naming the controller and the values under which the field applies; for
  * example "Applies when Kind is Video".
  */
@@ -142,6 +144,7 @@ export function hiddenFieldNote(
   fields: Fields,
   visibility: FieldVisibility | undefined,
   key: string,
+  revealedForReference = false,
 ): string | undefined {
   const rule = visibility?.[key];
   if (rule === undefined) return undefined;
@@ -149,8 +152,8 @@ export function hiddenFieldNote(
   const values = rule.values.map((value) => valueLabel(controller, value));
   const listed =
     values.length < 2 ? values.join("") : `${values.slice(0, -1).join(", ")} or ${values.at(-1)}`;
-  return `Shown to fix a problem in a stored value. Applies when ${fieldLabel(
-    rule.field,
-    controller?.label,
-  )} is ${listed}.`;
+  const reason = revealedForReference
+    ? "Shown for reference inspection."
+    : "Shown to fix a problem in a stored value.";
+  return `${reason} Applies when ${fieldLabel(rule.field, controller?.label)} is ${listed}.`;
 }

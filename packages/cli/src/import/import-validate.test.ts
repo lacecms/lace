@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, test } from "vitest";
 import { defineCollection, defineConfig } from "@lacecms/config";
 import { ImportError, type ImportPackage } from "./import-format.js";
-import { builtInBlocks, field } from "@lacecms/content";
+import { builtInBlocks, defineBlock, field } from "@lacecms/content";
 import {
   draftInput,
   loadImportConfiguration,
@@ -18,6 +18,7 @@ import {
   samplePackage,
   writePackage,
 } from "../test-support/import-fixtures.js";
+import { runImportCommand } from "./import-command.js";
 
 const { import: config } = await fixtureConfig();
 afterEach(removePackages);
@@ -139,6 +140,116 @@ describe("local package validation", () => {
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
+  });
+});
+
+describe("entry reference validation", () => {
+  const configSource = `import { defineCollection, defineConfig } from "@lacecms/config";
+import { defineBlock, field } from "@lacecms/content";
+const selection = field.reference({ models: ["reviews"] });
+export default await defineConfig({
+  blocks: [defineBlock({ type: "related", version: 1, fields: { groups: field.list({
+    item: field.group({ fields: { pick: selection } }),
+  }) } })],
+  content: [defineCollection({ key: "reviews", version: 1, blocks: ["related"],
+    fields: { pick: selection, show: field.boolean() },
+    visibility: { pick: { field: "show", values: [true] } },
+  })],
+});`;
+
+  test("validate-only reports every location in a hidden cycle with zero requests", async () => {
+    const directory = await mkdtemp(
+      join(fileURLToPath(new URL("../..", import.meta.url)), ".import-config-"),
+    );
+    try {
+      await writeFile(join(directory, "lace.config.ts"), configSource);
+      const item = (
+        key: string,
+        fields: Record<string, unknown>,
+        blocks: ImportPackage["entries"][number]["blocks"] = [],
+      ) => ({ key, model: "reviews", title: key, fields, blocks });
+      const root = await writePackage(
+        {
+          formatVersion: 1,
+          media: [],
+          entries: [
+            item("a", {}, [
+              { type: "related", hidden: true, data: { groups: [{ pick: { $entry: "b" } }] } },
+            ]),
+            item("b", { show: false, pick: { $entry: "c" } }),
+            item("c", { pick: { $entry: "a" } }),
+          ],
+        },
+        directory,
+      );
+      const outcome = await runImportCommand([root, "--validate-only"], {
+        cwd: directory,
+        env: {},
+        fetch: async () => {
+          throw new Error("Unexpected network request");
+        },
+      });
+      expect(outcome.code).toBe("IMPORT_INVALID");
+      expect(outcome.message).toContain('/entries/0/blocks/0/data/groups/0/pick: "a" selects "b"');
+      expect(outcome.message).toContain('/entries/1/fields/pick: "b" selects "c"');
+      expect(outcome.message).toContain('/entries/2/fields/pick: "c" selects "a"');
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("validates literal IDs and the shared 200-occurrence limit", async () => {
+    const defined = await defineConfig({
+      blocks: [
+        defineBlock({
+          type: "extra",
+          version: 1,
+          fields: { pick: field.reference({ models: ["reviews"] }) },
+        }),
+      ],
+      content: [
+        defineCollection({
+          key: "reviews",
+          version: 1,
+          route: "/reviews/:slug",
+          blocks: ["extra"],
+          fields: {
+            links: field.list({ item: field.url() }),
+            picks: field.list({ item: field.reference({ models: ["reviews"] }) }),
+          },
+        }),
+      ],
+    });
+    const config = {
+      blocks: defined.runtime.blocks,
+      models: new Map(defined.runtime.content.map((model) => [model.key, model])),
+    };
+    const pkg: ImportPackage = {
+      formatVersion: 1,
+      media: [],
+      entries: [
+        {
+          key: "first",
+          model: "reviews",
+          slug: "first",
+          title: "First",
+          fields: {
+            links: Array.from({ length: 100 }, () => "entry:a%2Fb"),
+            picks: Array.from({ length: 100 }, () => "a/b"),
+          },
+          blocks: [],
+        },
+      ],
+    };
+    await expect(
+      validatePackage(await writePackage(pkg), config, { publish: false }),
+    ).resolves.toBeDefined();
+    pkg.entries[0]!.blocks.push({ type: "extra", hidden: true, data: { pick: "a/b" } });
+    await expect(
+      validatePackage(await writePackage(pkg), config, { publish: false }),
+    ).rejects.toMatchObject({
+      issues: [{ pointer: "/entries/0/blocks/0/data/pick" }],
+    });
   });
 });
 

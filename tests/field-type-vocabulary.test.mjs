@@ -15,6 +15,15 @@ const kinds = new Set(
   ),
 );
 
+// These declarations describe import markers and stored link purposes.
+const otherVocabularies = new Map([
+  [
+    "packages/cli/src/import/import-references.ts",
+    'export type ReferenceKind = "media" | "entry" | "reference";',
+  ],
+  ["packages/db/src/schema/links.ts", 'text("purpose", { enum: ["url", "reference"] })'],
+]);
+
 function tokens(source) {
   const scanner = createScanner(true, undefined, source);
   const result = [];
@@ -38,6 +47,10 @@ function tokens(source) {
 }
 
 function violations(source, file) {
+  const otherVocabulary = otherVocabularies.get(file);
+  if (otherVocabulary !== undefined) {
+    source = source.replace(otherVocabulary, (text) => " ".repeat(text.length));
+  }
   const scanned = tokens(source);
   const found = [];
   const report = (start, values) => {
@@ -72,6 +85,13 @@ function violations(source, file) {
   }
   return found;
 }
+
+test("ignores known non-field declarations and still checks field kinds in those files", () => {
+  for (const [file, declaration] of otherVocabularies) {
+    const source = `${declaration}\nconst fieldKinds = ["url", "reference"];`;
+    expect(violations(source, file)).toEqual([`${file}:2`]);
+  }
+});
 
 function sourceFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {

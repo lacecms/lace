@@ -1,7 +1,7 @@
 // Directory dependencies: shared ← schema, security, links; links ← content, sync;
-// write-plan ← content, media, builds, publication, outbox, sync; content ← sync;
+// write-plan ← links, content, media, builds, publication, outbox, sync; content ← sync;
 // content ← media ← delivery ← builds; builds, content, links ← publication;
-// shared ← outbox; builds, links ← reads; content, media, reads, shared, write-plan ← preview.
+// shared ← outbox; builds, links ← reads; content, links, media, reads, shared, write-plan ← preview.
 // builds, content, links, media, outbox, publication, reads, shared, sync,
 // preview, write-plan ← node-repository.
 export * from "./security/oauth.js";
@@ -31,6 +31,7 @@ export * from "./sync/model-state.js";
 export * from "./sync/scan.js";
 export * from "./sync/writes.js";
 export * from "./sync/block-migration-scan.js";
+export { inspectSyncReferences } from "./sync/reference-checks.js";
 export * from "./sync/block-migration-writes.js";
 export * from "./sync/field-rewrite.js";
 export { configurationSyncRecursiveScans } from "./sync/recursive-scans.js";
@@ -85,14 +86,21 @@ export {
 export * from "./media/usage.js";
 export * from "./content/entries.js";
 export * from "./content/draft-write-plan.js";
+export * from "./content/revert-write-plan.js";
 export * from "./content/blocks.js";
 export * from "./content/snapshots.js";
 export * from "./links/statements.js";
+export { referenceGraphGuard } from "./links/reference-admission.js";
+export { referenceGraphIssue, referenceGraphQuery } from "./links/reference-graph.js";
+export type { ReferenceGraphRow, ReferencePhase } from "./links/reference-graph.js";
+export { referenceTargetsQuery } from "./links/reference-targets.js";
+export type { InvalidReferenceRow } from "./links/reference-targets.js";
 export * from "./publication/projection.js";
 export * from "./publication/idempotency.js";
 export * from "./publication/write-plan.js";
 export * from "./publication/removal-write-plan.js";
 export * from "./links/reader.js";
+export { LINK_IMPACT_EVIDENCE_SQL, type ImpactEvidenceRow } from "./links/impact-evidence.js";
 export * from "./reads/content-reader.js";
 
 export * from "./shared/limits.js";

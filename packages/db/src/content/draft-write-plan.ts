@@ -2,6 +2,9 @@ import type { CreateContentEntryInput, SaveCompleteDraftInput } from "@lacecms/a
 import { DomainError, isSingletonKind } from "@lacecms/domain";
 import type { DraftMediaReference } from "@lacecms/domain";
 import { replaceInternalLinkStatements } from "../links/statements.js";
+import type { EntryUsage } from "../links/statements.js";
+import { guardEntryReferences, rejectReferenceWrite } from "../links/reference-admission.js";
+import type { ReferenceMiss } from "../links/reference-admission.js";
 import { blockStatements, draftInserts, values } from "./draft-insert.js";
 import { seoJson } from "./snapshots.js";
 import type { WritePlan, WritePlanGuard, WritePlanStatement } from "../write-plan/plan.js";
@@ -48,7 +51,7 @@ function referenceStatements(
 
 function linkStatements(
   snapshotId: string,
-  links: NonNullable<CreateContentEntryInput["internalLinks"]>,
+  links: readonly EntryUsage[],
   guard: WritePlanGuard,
 ): WritePlanStatement[] {
   return replaceInternalLinkStatements(snapshotId, links, guard.sql).map((statement, index) => ({
@@ -59,7 +62,9 @@ function linkStatements(
 }
 
 /** Creation and duplication share admission and all draft projection writes. */
-export function createDraftWritePlan(input: CreateContentEntryInput): WritePlan<DraftGuardMiss> {
+export function createDraftWritePlan(
+  input: CreateContentEntryInput,
+): WritePlan<DraftGuardMiss | ReferenceMiss> {
   const { model, draft } = input.entry;
   const source = input.duplicateOf;
   const stateSql = `select exists(select 1 from content_models where key=?) as model_ok,
@@ -78,7 +83,9 @@ export function createDraftWritePlan(input: CreateContentEntryInput): WritePlan<
     source?.expectedRevision ?? null,
     mediaIds(input.mediaReferences),
   ];
-  return {
+  const candidate = input.entryReferences;
+  const links = [...(input.internalLinks ?? []), ...(candidate?.references ?? [])];
+  const plan: WritePlan<DraftGuardMiss> = {
     admission: {
       sql: `exists(select 1 from (${stateSql}) where model_ok and singleton_ok and source_ok and revision_ok and media_ok)`,
       params: stateParams,
@@ -99,18 +106,27 @@ export function createDraftWritePlan(input: CreateContentEntryInput): WritePlan<
         { ...inserts.snapshot, expectedChanges: 1 },
         ...inserts.blocks,
         ...referenceStatements(draft.id, draft.updatedAt, input.mediaReferences, g),
-        ...linkStatements(draft.id, input.internalLinks ?? [], g),
+        ...linkStatements(draft.id, links, g),
         { ...inserts.pointer, checkpoint: "draft.internal-links.complete", expectedChanges: 1 },
       ];
     },
   };
+  return candidate === undefined
+    ? plan
+    : guardEntryReferences(plan, {
+        entryId: input.entry.id,
+        phase: "draft",
+        references: candidate.references,
+        config: candidate,
+        blockKeys: draft.blocks.map((block) => block.key),
+      });
 }
 
 /** Complete replacement is guarded by draft identity, revision and all media. */
 export function saveDraftWritePlan(
   input: SaveCompleteDraftInput,
   draftId: string,
-): WritePlan<DraftGuardMiss> {
+): WritePlan<DraftGuardMiss | ReferenceMiss> {
   const m = input.mutation;
   const stateSql = `select exists(select 1 from content_entries where id=? and draft_snapshot_id is not null) as model_ok,
     exists(select 1 from content_entries e join content_snapshots s on s.id=e.draft_snapshot_id where e.id=? and s.id=? and s.revision=?) as revision_ok,
@@ -122,7 +138,9 @@ export function saveDraftWritePlan(
     m.expectedRevision,
     mediaIds(m.mediaReferences),
   ];
-  return {
+  const candidate = input.entryReferences;
+  const links = [...(input.internalLinks ?? []), ...(candidate?.references ?? [])];
+  const plan: WritePlan<DraftGuardMiss> = {
     admission: {
       sql: `exists(select 1 from (${stateSql}) where model_ok and revision_ok and media_ok)`,
       params: stateParams,
@@ -143,7 +161,7 @@ export function saveDraftWritePlan(
       },
       ...blockStatements(draftId, m.updatedAt, m.blocks, g),
       ...referenceStatements(draftId, m.updatedAt, m.mediaReferences, g),
-      ...linkStatements(draftId, input.internalLinks ?? [], g),
+      ...linkStatements(draftId, links, g),
       {
         checkpoint: "draft.internal-links.complete",
         sql: `update content_entries set updated_at=? where id=? and ${g.sql}`,
@@ -166,10 +184,21 @@ export function saveDraftWritePlan(
       },
     ],
   };
+  return candidate === undefined
+    ? plan
+    : guardEntryReferences(plan, {
+        entryId: input.entryId,
+        phase: "draft",
+        references: candidate.references,
+        config: candidate,
+        previousDraftId: draftId,
+        blockKeys: m.blocks.map((block) => block.key),
+      });
 }
 
 /** Maps typed admission evidence to the existing portable repository errors. */
-export function rejectDraftWrite(reason: DraftGuardMiss, modelKey: string): never {
+export function rejectDraftWrite(reason: DraftGuardMiss | ReferenceMiss, modelKey: string): never {
+  if (typeof reason !== "string") return rejectReferenceWrite(reason);
   switch (reason) {
     case "missing_model":
       throw new DomainError("CONTENT_INVALID_STATE", `Content model ${modelKey} does not exist.`);

@@ -14,6 +14,7 @@ import { ContentValidationError, invalid } from "../shared/errors.js";
 import type { JsonValue, JsonObject } from "../shared/json.js";
 import { isRecord } from "../shared/objects.js";
 import { effectiveVisibilityValues, isFieldVisible } from "./visibility.js";
+import { isInternalLinkTargetId } from "./internal-link-tokens.js";
 
 function isCalendarDate(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) {
@@ -50,6 +51,7 @@ function isFieldValue(definition: FieldDefinition, value: unknown): boolean {
       Number.isFinite(value) &&
       (fieldDefinition.min === undefined || value >= fieldDefinition.min) &&
       (fieldDefinition.max === undefined || value <= fieldDefinition.max),
+    reference: () => isInternalLinkTargetId(value),
     richText: () => isSafeRichTextDocument(value),
     select: (fieldDefinition) =>
       typeof value === "string" && fieldDefinition.options.includes(value),

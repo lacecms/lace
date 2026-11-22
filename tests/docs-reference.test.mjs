@@ -29,7 +29,7 @@ const configurationTypes = {
     "GlobalModelInput",
   ],
   "packages/content/src/blocks/types.ts": ["BlockDefinitionInput"],
-  "packages/content/src/fields/definitions.ts": ["CommonFieldOptions"],
+  "packages/content/src/fields/definitions.ts": ["CommonFieldOptions", "ReferenceFieldOptions"],
 };
 
 const escape = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -246,4 +246,16 @@ describe("reference extractors", () => {
 
 test("Reference pages name every shipped public interface item", async () => {
   expect(findMissing(referenceText(), await inventory())).toEqual([]);
+});
+
+test("the documented review block matches the definition and renderer built by acceptance", () => {
+  const guide = readFileSync(join(referenceDirectory, "../astro-integration/index.md"), "utf8");
+  const example = guide.split("## Render selected reviews\n")[1]?.split("\n## ")[0];
+  for (const [language, file] of [
+    ["ts", "definition.ts"],
+    ["astro", "SelectionBlock.astro"],
+  ]) {
+    const fixture = readFileSync(join(workspace, "tests/fixtures/reference-site", file), "utf8");
+    expect(example?.split(`\n\`\`\`${language}\n`)[1]?.split("\n```")[0]).toBe(fixture.trimEnd());
+  }
 });

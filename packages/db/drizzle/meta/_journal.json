@@ -43,6 +43,13 @@
       "when": 1794936220439,
       "tag": "0005_preview_capture_fence",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1795303322861,
+      "tag": "0006_entry_reference_purpose",
+      "breakpoints": true
     }
   ]
 }

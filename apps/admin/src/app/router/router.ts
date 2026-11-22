@@ -11,6 +11,7 @@ import {
   type SearchSchemaInput,
 } from "@tanstack/react-router";
 import { readSetupState } from "../../entities/setup/index.js";
+import { parseReferenceUseSearch } from "../../entities/content/index.js";
 import { SetupPage, SetupStateError } from "../../pages/setup/index.js";
 import { can, type AdminSessionSource } from "../../entities/session/index.js";
 import { AcceptInvitePage } from "../../pages/accept-invite/index.js";
@@ -189,6 +190,7 @@ const entryRoute = createRoute({
     stringify: (parameters) => ({ entryId: parameters.entryId, modelKey: parameters.modelKey }),
   },
   path: "/content/$modelKey/$entryId",
+  validateSearch: parseReferenceUseSearch,
 });
 const mediaRoute = createRoute({
   component: MediaPage,

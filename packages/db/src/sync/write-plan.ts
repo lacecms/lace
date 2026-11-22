@@ -21,6 +21,7 @@ import type {
   WritePlanSql,
   WritePlanStatement,
 } from "../write-plan/plan.js";
+import { syncReferenceGuards } from "./reference-checks.js";
 import { configurationSyncSnapshotRewriteStatements } from "./field-rewrite.js";
 import { STORED_MODEL_STATE_JSON_SQL } from "./model-state.js";
 import { configurationSyncModelStatements, storedModelKey } from "./model-writes.js";
@@ -49,11 +50,28 @@ export function configurationSyncWritePlan(
     report.requiresApply ? (input.linkRewrites ?? []) : [],
     linkDirtyToken,
   );
+  const referenceGuards = syncReferenceGuards({
+    checks: (input.linkRewrites ?? []).flatMap((row) =>
+      row.referenceCheck ? [row.referenceCheck] : [],
+    ),
+    renames: report.operations.flatMap((operation) =>
+      operation.action === "rename" ? [[operation.renamedFrom, operation.model.key] as const] : [],
+    ),
+  });
   const predicates = [
+    ...(input.expectedReferenceRevision === undefined
+      ? []
+      : [
+          {
+            sql: "(select revision from content_link_state where singleton_key=1)=?",
+            params: [input.expectedReferenceRevision],
+          },
+        ]),
     ...(storedStateJson === undefined
       ? []
       : [{ sql: `${STORED_MODEL_STATE_JSON_SQL} = ?`, params: [storedStateJson] }]),
     ...links.valid,
+    ...referenceGuards,
   ];
   return {
     admission: {

@@ -16,8 +16,11 @@ export const v1Routes = {
     createEntry: defineRoute("POST", "/admin/models/:modelKey/entries", "session-or-import", {
       mcpOperation: mcpContentOperations.create_entry,
     }),
+    referenceTargets: defineRoute("GET", "/admin/reference-targets", "session"),
+    resolveReferenceTargets: defineRoute("POST", "/admin/reference-targets/resolve", "session"),
     linkTargets: defineRoute("GET", "/admin/link-targets", "session"),
     resolveLinkTargets: defineRoute("POST", "/admin/link-targets/resolve", "session"),
+    referenceImpact: defineRoute("GET", "/admin/entries/:entryId/reference-impact", "session"),
     linkImpact: defineRoute("GET", "/admin/entries/:entryId/link-impact", "session"),
     getEntry: defineRoute("GET", "/admin/entries/:entryId", "session-or-import", {
       mcpOperation: mcpContentOperations.get_entry,

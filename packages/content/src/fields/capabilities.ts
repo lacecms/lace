@@ -9,6 +9,7 @@ export type FieldType =
   | "group"
   | "list"
   | "number"
+  | "reference"
   | "richText"
   | "select"
   | "text"
@@ -124,6 +125,14 @@ const declaredFieldTypeCapabilities = deepFreeze({
     valueKind: "string",
   },
   media: {
+    listQueryable: false,
+    searchable: false,
+    seoText: false,
+    itemLabel: false,
+    placeholder: false,
+    valueKind: "string",
+  },
+  reference: {
     listQueryable: false,
     searchable: false,
     seoText: false,

@@ -58,6 +58,7 @@ const exhaustiveVisitor: FieldDefinitionVisitor<string> = {
   datetime: () => "datetime",
   media: () => "media",
   number: () => "number",
+  reference: () => "reference",
   richText: () => "richText",
   select: () => "select",
   text: () => "text",

@@ -25,6 +25,8 @@ export {
 export * from "./ports/infrastructure.js";
 export * from "./ports/outbox.js";
 export * from "./ports/links.js";
+export * from "./ports/references.js";
+export * from "./content/reference-reads.js";
 export * from "./ports/content.js";
 export * from "./ports/media.js";
 export * from "./ports/builds.js";
@@ -36,9 +38,20 @@ export * from "./ports/preview-storage.js";
 // Content
 export * from "./content/authority.js";
 export * from "./content/collection-queries.js";
-export * from "./content/internal-links.js";
+export {
+  ContentLinkUseCases,
+  assertLinkImpactAcknowledgment,
+  assertLinkPageLimit,
+  decodeLinkImpactReceipt,
+  decodeReferenceImpactReceipt,
+  encodeLinkImpactReceipt,
+  encodeReferenceImpactReceipt,
+  internalLinkIssuePath,
+  referenceImpactChanged,
+} from "./content/internal-links.js";
 export { routeLessModelKeys } from "./content/route-less-links.js";
 export * from "./content/published-projection.js";
+export { snapshotEntryReferences } from "./content/publication-projection.js";
 export * from "./content/use-case-inputs.js";
 export {
   duplicateTitle,
@@ -87,7 +100,7 @@ export * from "./configuration/structure-diff.js";
 export * from "./configuration/structure-hints.js";
 export * from "./configuration/evidence.js";
 export * from "./configuration/migration.js";
-export * from "./configuration/links.js";
+export { configurationSyncLinkRewrites } from "./configuration/links.js";
 export { contentSyncActor } from "./configuration/model-state.js";
 export * from "./configuration/plan.js";
 export * from "./configuration/report.js";

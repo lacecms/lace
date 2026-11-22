@@ -73,6 +73,12 @@ export {
   isLinkImpactChanged,
 } from "./LinkImpactReview/index.js";
 export {
+  ReferenceImpactReview,
+  useReferenceImpactReview,
+  isReferenceImpactChanged,
+} from "./ReferenceImpactReview/index.js";
+export { WhereUsedButton, WhereUsedDialog } from "./WhereUsedDialog/index.js";
+export {
   collectionFilterProblem,
   defaultCollectionSort,
   fieldFilterOperations,
@@ -98,3 +104,10 @@ export {
 
 export { fieldEditorServices } from "./field-editor-services.js";
 export { LINK_URL_MESSAGE } from "./editor-form.js";
+
+export {
+  parseReferenceUseSearch,
+  verifyReferenceUse,
+  type ReferenceUse,
+  type VerifiedReferenceUse,
+} from "./reference-use.js";
