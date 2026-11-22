@@ -9,7 +9,8 @@ import {
   unixMilliseconds,
 } from "@lacecms/domain";
 import type { Actor, MediaId, MediaMetadata } from "@lacecms/domain";
-import { DEFAULT_MEDIA_SORT, MEDIA_SORTS } from "../ports/media.js";
+import { DEFAULT_MEDIA_SORT, MEDIA_SORTS, MediaCreateError } from "../ports/media.js";
+import type { OperationalError } from "../ports/infrastructure.js";
 import { siteBuildEvent } from "../ports/outbox.js";
 import type {
   ListMediaTagsInput,
@@ -43,6 +44,7 @@ import {
 import { sha256Bytes } from "../shared/sha256.js";
 import { normalizeMediaMetadataPatch, sameFocalPoint, validatedTags } from "./metadata.js";
 import { toMediaView, validateDimensions } from "./projection.js";
+import { resolveMediaUploadFailure } from "./create-recovery.js";
 
 /** Portable orchestration for media policy and metadata lifecycle commands. */
 export class MediaUseCases {
@@ -68,7 +70,7 @@ export class MediaUseCases {
       stored.contentType !== mimeType ||
       stored.size !== bytes.byteLength
     ) {
-      await this.cleanupAfterMetadataFailure(storageKey, false);
+      await this.cleanupUploadObject(storageKey);
       failure("Object storage returned unexpected media metadata.");
     }
     const now = this.dependencies.clock.now();
@@ -87,8 +89,23 @@ export class MediaUseCases {
         width: dimensions.width,
       });
     } catch (error) {
-      await this.cleanupAfterMetadataFailure(storageKey, true);
-      throw error;
+      const creationError = error instanceof MediaCreateError ? error : undefined;
+      const resolution = await resolveMediaUploadFailure(
+        this.dependencies.media,
+        id,
+        storageKey,
+        creationError?.outcome ?? "unknown",
+      );
+      if (resolution === "cleanup") {
+        await this.recordOperationalError({ code: "MEDIA_METADATA_CREATE_FAILED", storageKey });
+        await this.cleanupUploadObject(storageKey);
+      } else if (resolution === "unresolved") {
+        await this.recordOperationalError({
+          code: "MEDIA_METADATA_CREATE_OUTCOME_UNRESOLVED",
+          storageKey,
+        });
+      }
+      throw creationError === undefined ? error : creationError.operationError;
     }
     // Metadata is committed: a reload failure must not trigger object cleanup.
     return this.catalogView(id, "Created media could not be reloaded.");
@@ -349,16 +366,7 @@ export class MediaUseCases {
     return toMediaView(detached(item));
   }
 
-  private async cleanupAfterMetadataFailure(
-    storageKey: string,
-    metadataFailure: boolean,
-  ): Promise<void> {
-    if (metadataFailure) {
-      await this.recordOperationalError({
-        code: "MEDIA_METADATA_CREATE_FAILED",
-        storageKey,
-      });
-    }
+  private async cleanupUploadObject(storageKey: string): Promise<void> {
     try {
       await this.dependencies.storage.delete(storageKey);
     } catch {
@@ -369,10 +377,7 @@ export class MediaUseCases {
     }
   }
 
-  private async recordOperationalError(input: {
-    readonly code: "MEDIA_METADATA_CREATE_FAILED" | "MEDIA_OBJECT_CLEANUP_FAILED";
-    readonly storageKey: string;
-  }): Promise<void> {
+  private async recordOperationalError(input: OperationalError): Promise<void> {
     try {
       await this.dependencies.logger.error(input);
     } catch {

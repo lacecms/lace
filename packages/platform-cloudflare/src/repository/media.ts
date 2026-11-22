@@ -1,3 +1,4 @@
+import { MediaCreateError } from "@lacecms/application";
 import type {
   CreateMediaMetadataInput,
   MarkMediaForDeletionInput,
@@ -15,12 +16,17 @@ import {
   failMediaDeletionWritePlan,
   failure,
   sqliteWriteError,
+  sqliteWriteFailure,
 } from "@lacecms/db";
 import type { MediaDeletionMiss, WritePlan } from "@lacecms/db";
 import { DomainError } from "@lacecms/domain";
 import type { MediaMetadata } from "@lacecms/domain";
 import { D1RepositoryBase } from "./base.js";
 import { executeWritePlan, executeWritePlanGroup } from "./write-plan.js";
+
+// D1 rolls back a batch on a statement failure. Transport failures carry no such evidence.
+const d1ConstraintFailure =
+  /^D1_ERROR: [\s\S]*: SQLITE_CONSTRAINT(?:_[A-Z_]+| \(extended: SQLITE_CONSTRAINT_[A-Z_]+\))?$/u;
 
 /** Media metadata writes and the deletion workflow. */
 export class D1MediaCommands
@@ -36,11 +42,20 @@ export class D1MediaCommands
         this.options.beforeMutation,
       );
     } catch (error) {
-      sqliteWriteError(error, false, "D1");
+      const rollback = error instanceof Error && d1ConstraintFailure.test(error.message);
+      throw new MediaCreateError(
+        rollback ? "rolled-back" : "unknown",
+        error,
+        sqliteWriteFailure(error, false, "D1"),
+      );
     }
-    const media = await this.loadMedia(input.id);
-    if (media === null) failure("Created media could not be reloaded.");
-    return media;
+    try {
+      const media = await this.loadMedia(input.id);
+      if (media === null) failure("Created media could not be reloaded.");
+      return media;
+    } catch (error) {
+      throw new MediaCreateError("committed", error);
+    }
   }
 
   public async updateMediaMetadata(

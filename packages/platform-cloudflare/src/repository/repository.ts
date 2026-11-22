@@ -48,6 +48,8 @@ import type {
   MediaDeletionDispatchPort,
   MediaListPort,
   MediaReadPort,
+  MediaUploadOwnership,
+  MediaUploadOwnershipPort,
   OperationsMaintenancePort,
   MediaUsageEntry,
   PublicContentEntry,
@@ -78,6 +80,7 @@ import type {
   ContentEntry,
   ContentModelKey,
   DraftSnapshot,
+  MediaId,
   MediaMetadata,
   PublishedSnapshot,
   SiteBuildId,
@@ -116,6 +119,7 @@ export class D1ContentRepository
     MediaDeletionDispatchPort,
     MediaListPort,
     MediaReadPort,
+    MediaUploadOwnershipPort,
     OperationsMaintenancePort,
     PublicContentReadPort,
     SiteBuildCommandPort,
@@ -260,6 +264,11 @@ export class D1ContentRepository
 
   public async loadMedia(id: string): Promise<MediaMetadata | null> {
     return this.reader.loadMedia(id);
+  }
+
+  public checkMediaUploadOwnership(id: MediaId, storageKey: string): Promise<MediaUploadOwnership> {
+    // Reads through the D1 binding (without a Session) go to the primary.
+    return this.reader.checkMediaUploadOwnership(id, storageKey);
   }
 
   public async loadDeletingMedia(id: string): Promise<MediaMetadata | null> {

@@ -1,3 +1,4 @@
+import { MediaCreateError } from "@lacecms/application";
 import type {
   CreateMediaMetadataInput,
   MarkMediaForDeletionInput,
@@ -20,6 +21,8 @@ import { DomainError } from "@lacecms/domain";
 import type { MediaMetadata } from "@lacecms/domain";
 import { NodeRepositoryBase } from "./base.js";
 import { executeWritePlan, executeWritePlanGroup } from "./write-plan.js";
+import Database from "better-sqlite3";
+import { sqliteWriteFailure } from "../shared/write-errors.js";
 
 /** Media metadata writes and the deletion workflow. */
 export class NodeMediaCommands
@@ -30,11 +33,19 @@ export class NodeMediaCommands
     try {
       executeWritePlan(this.connection, createMediaWritePlan(input), this.options.beforeMutation);
     } catch (error) {
-      this.throwWriteError(error, false);
+      const settled = !this.connection.inTransaction;
+      const constraint =
+        error instanceof Database.SqliteError && error.code.startsWith("SQLITE_CONSTRAINT");
+      const outcome = settled ? (constraint ? "rolled-back" : "unknown-settled") : "unknown";
+      throw new MediaCreateError(outcome, error, sqliteWriteFailure(error, false, "SQLite"));
     }
-    const media = await this.loadMedia(input.id);
-    if (media === null) failure("Created media could not be reloaded.");
-    return media;
+    try {
+      const media = await this.loadMedia(input.id);
+      if (media === null) failure("Created media could not be reloaded.");
+      return media;
+    } catch (error) {
+      throw new MediaCreateError("committed", error);
+    }
   }
 
   public async updateMediaMetadata(

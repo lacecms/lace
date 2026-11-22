@@ -15,6 +15,7 @@ import type {
   MediaListPort,
   MediaMimeType,
   MediaReadPort,
+  MediaUploadOwnershipPort,
   MediaUsageEntry,
   ObjectStorage,
 } from "../ports/media.js";
@@ -136,7 +137,11 @@ export interface MediaUseCaseDependencies {
   readonly idGenerator: IdGenerator;
   readonly imageInspector: ImageInspector;
   readonly logger: OperationalLogger;
-  readonly media: MediaReadPort & MediaListPort & MediaCatalogPort & MediaCommandPort;
+  readonly media: MediaReadPort &
+    MediaListPort &
+    MediaCatalogPort &
+    MediaCommandPort &
+    MediaUploadOwnershipPort;
   readonly publicMedia?: Pick<PublicContentReadPort, "loadPublicMedia">;
   readonly storage: ObjectStorage;
 }

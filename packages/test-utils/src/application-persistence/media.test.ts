@@ -20,6 +20,7 @@ import {
   MAX_IMAGE_DIMENSION,
   MAX_IMAGE_PIXELS,
   MAX_MEDIA_BYTES,
+  MediaCreateError,
   MediaUseCases,
   sanitizeMediaFilename,
 } from "@lacecms/application";
@@ -112,8 +113,9 @@ test("orchestrates verified media creation and keeps storage keys private", asyn
 
 test("cleans up a stored object and logs only its opaque key when metadata creation fails", async () => {
   const { store } = repositorySqlite();
+  const original = new Error("database unavailable");
   store.createMedia = async () => {
-    throw new Error("database unavailable");
+    throw new MediaCreateError("rolled-back", original);
   };
   const storage = new InMemoryObjectStorage();
   const logs: { code: string; storageKey: string }[] = [];
@@ -136,7 +138,7 @@ test("cleans up a stored object and logs only its opaque key when metadata creat
 
   await expect(
     media.create({ actor: editor, body: binaryStream(png), filename: "secret.png" }),
-  ).rejects.toThrow("database unavailable");
+  ).rejects.toBe(original);
   expect(await storage.get("media/media-1")).toBeNull();
   expect(logs).toEqual([{ code: "MEDIA_METADATA_CREATE_FAILED", storageKey: "media/media-1" }]);
 });
@@ -280,8 +282,9 @@ test("rejects truncated and polyglot image containers before object storage", as
 
 test("records cleanup failure without leaking a metadata-write error", async () => {
   const { store } = repositorySqlite();
+  const original = new Error("untrusted database detail");
   store.createMedia = async () => {
-    throw new Error("untrusted database detail");
+    throw new MediaCreateError("rolled-back", original);
   };
   const logs: { code: string; storageKey: string }[] = [];
   const media = new MediaUseCases({
@@ -295,6 +298,7 @@ test("records cleanup failure without leaking a metadata-write error", async () 
     logger: {
       error: (event) => {
         logs.push(event);
+        throw new Error("logger unavailable");
       },
     },
     media: store,
@@ -316,7 +320,7 @@ test("records cleanup failure without leaking a metadata-write error", async () 
 
   await expect(
     media.create({ actor: editor, body: binaryStream(png), filename: "private.png" }),
-  ).rejects.toThrow("untrusted database detail");
+  ).rejects.toBe(original);
   expect(logs).toEqual([
     { code: "MEDIA_METADATA_CREATE_FAILED", storageKey: "media/media-1" },
     { code: "MEDIA_OBJECT_CLEANUP_FAILED", storageKey: "media/media-1" },

@@ -13,7 +13,12 @@ import {
 } from "../shared.js";
 import { seedPublishedLifecycle } from "../entries/fixtures.js";
 
-import { metadataUpdate, mediaMetadataState, pendingBuilds } from "../media/fixtures.js";
+import {
+  metadataUpdate,
+  mediaMetadataState,
+  pendingBuilds,
+  rejectMediaTagInsert,
+} from "./fixtures.js";
 
 export const cases: RepositoryContractCase[] = [];
 const contract = registerContract(cases);
@@ -172,10 +177,12 @@ contract("creates media, hash and up to twenty tags atomically", async (runtime,
     sha256: "a".repeat(64),
     tags: Array.from({ length: 20 }, (_, index) => `tag-${index}`),
   };
-  await sql.run(
-    "create trigger reject_tag before insert on media_tags begin select raise(abort, 'injected tag failure'); end",
-  );
-  await expect(repository.createMedia(input)).rejects.toThrow();
+  await sql.run(rejectMediaTagInsert);
+  await expect(repository.createMedia(input)).rejects.toMatchObject({
+    outcome: "rolled-back",
+    cause: expect.any(Error),
+    operationError: { code: "CONTENT_INVALID_STATE" },
+  });
   expect(await sql.get("select id from media where id = ?", input.id)).toBeUndefined();
   expect(await sql.all("select * from media_tags where media_id = ?", input.id)).toEqual([]);
   await sql.run("drop trigger reject_tag");

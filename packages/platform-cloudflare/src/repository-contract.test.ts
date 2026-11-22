@@ -30,7 +30,15 @@ const runtime: RepositoryContractRuntime = {
     const statements: string[] = [];
     const binding = {
       ...measured.binding,
+      async batch(statements: Parameters<typeof measured.binding.batch>[0]) {
+        const results = await measured.binding.batch(statements);
+        if (options.afterWrite !== undefined && results.some(({ meta }) => meta.changes > 0)) {
+          options.afterWrite();
+        }
+        return results;
+      },
       prepare: (sql: string) => {
+        options.beforePrepare?.(sql);
         statements.push(sql);
         return measured.binding.prepare(sql);
       },

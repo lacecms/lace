@@ -19,6 +19,7 @@ import { cases as entryReferences } from "./links/entry-references.js";
 import { cases as run16 } from "./links/removal.js";
 import { cases as run17 } from "./delivery/queries.js";
 import { cases as run18 } from "./media/tags.js";
+import { cases as mediaUploads } from "./media/uploads.js";
 import { cases as run19 } from "./media/import-lookups.js";
 import { cases as mediaCatalog } from "./media/catalog.js";
 import { cases as globalsSeo } from "./entries/globals-seo.js";
@@ -63,6 +64,7 @@ export const contentRepositoryContractCases: readonly RepositoryContractCase[] =
   ...run16,
   ...run17,
   ...run18,
+  ...mediaUploads,
   ...run19,
   ...conditional,
   ...resultParity,

@@ -48,6 +48,8 @@ import type {
   MediaDeletionDispatchPort,
   MediaListPort,
   MediaReadPort,
+  MediaUploadOwnership,
+  MediaUploadOwnershipPort,
   OperationsMaintenancePort,
   MediaUsageEntry,
   PublishContentEntryCommand,
@@ -79,6 +81,7 @@ import type {
   ContentEntry,
   ContentModelKey,
   DraftSnapshot,
+  MediaId,
   MediaMetadata,
   PublishedSnapshot,
 } from "@lacecms/domain";
@@ -106,6 +109,7 @@ export class NodeContentRepository
     MediaDeletionDispatchPort,
     MediaListPort,
     MediaReadPort,
+    MediaUploadOwnershipPort,
     OperationsMaintenancePort,
     PublicContentReadPort,
     SiteBuildCommandPort,
@@ -348,6 +352,10 @@ export class NodeContentRepository
 
   public async loadMedia(id: string): Promise<MediaMetadata | null> {
     return this.reader.loadMedia(id);
+  }
+
+  public checkMediaUploadOwnership(id: MediaId, storageKey: string): Promise<MediaUploadOwnership> {
+    return this.reader.checkMediaUploadOwnership(id, storageKey);
   }
 
   public async listMedia(input: ListMediaInput): Promise<CursorPage<MediaCatalogItem>> {

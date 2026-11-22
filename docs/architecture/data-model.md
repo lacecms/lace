@@ -181,6 +181,14 @@ Shared `db` write plans define media creation, edits, deletion requests and
 lease-guarded deletion outcomes for both runtimes. Metadata, hashes and tags
 commit together; object upload and idempotent deletion remain external effects.
 
+Upload writes the object first. Cleanup after a metadata failure requires a
+settled write that did not commit and an authoritative check that the object key
+has no owner. A response can fail while reading an already committed item. In
+that case the active row, tags, hash and exact object bytes remain available.
+An unresolved write leaves the object in place because a matching row may
+already exist or the write may still commit. Diagnostics identify the unresolved
+outcome using the opaque key. [Media creation contract](../../openspec/specs/media-use-cases/spec.md#requirement-object-and-metadata-creation-preserve-a-recoverable-boundary)
+
 The projection is the only source of media usage: an entry uses an item when
 its current draft or current published snapshot references it in an entry
 field, a block field or its SEO image. Only current snapshots keep references,

@@ -15,7 +15,10 @@ export interface OperationalLogger {
 }
 
 export interface OperationalError {
-  readonly code: "MEDIA_METADATA_CREATE_FAILED" | "MEDIA_OBJECT_CLEANUP_FAILED";
+  readonly code:
+    | "MEDIA_METADATA_CREATE_FAILED"
+    | "MEDIA_METADATA_CREATE_OUTCOME_UNRESOLVED"
+    | "MEDIA_OBJECT_CLEANUP_FAILED";
   readonly storageKey: string;
 }
 

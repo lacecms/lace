@@ -45,6 +45,7 @@ test("packaged entry point keeps its public exports", async () => {
     "MEDIA_DELETE_REQUESTED",
     "MEDIA_SORTS",
     "MIN_IMPORT_TOKEN_LIFETIME_DAYS",
+    "MediaCreateError",
     "MediaDeletionDispatcher",
     "MediaUseCases",
     "NODE_LIST_QUERY_LIMITS",

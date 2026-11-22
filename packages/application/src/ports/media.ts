@@ -221,12 +221,35 @@ export interface UpdateMediaMetadataResult {
   readonly targetVersion?: number;
 }
 
+/** An unknown write may still be in flight unless the adapter confirms it has finished. */
+export type MediaCreateOutcome = "committed" | "rolled-back" | "unknown" | "unknown-settled";
+
+/** Carries commit evidence and keeps the repository's normal error translation. */
+export class MediaCreateError extends Error {
+  public constructor(
+    public readonly outcome: MediaCreateOutcome,
+    cause: unknown,
+    public readonly operationError: unknown = cause,
+  ) {
+    super("Media metadata creation failed.", { cause });
+    this.name = "MediaCreateError";
+  }
+}
+
 /** Mutation remains separate from metadata reads and binary object storage. */
 export interface MediaCommandPort {
+  /** Rejects with MediaCreateError when the adapter has evidence about the write outcome. */
   createMedia(input: CreateMediaMetadataInput): Promise<MediaMetadata>;
   markForDeletion(input: MarkMediaForDeletionInput): Promise<MarkMediaForDeletionResult>;
   retryDeletion(input: MarkMediaForDeletionInput): Promise<MarkMediaForDeletionResult>;
   updateMediaMetadata(input: UpdateMediaMetadataInput): Promise<UpdateMediaMetadataResult>;
+}
+
+export type MediaUploadOwnership = "matching" | "conflicting" | "absent";
+
+export interface MediaUploadOwnershipPort {
+  /** Uses the writer database to check both unique identities across all lifecycle statuses. */
+  checkMediaUploadOwnership(id: MediaId, storageKey: string): Promise<MediaUploadOwnership>;
 }
 
 /** Private worker-only boundary: transport never receives the storage key. */

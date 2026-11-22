@@ -24,6 +24,7 @@ import type {
   LoadMediaUsageInput,
   MediaCatalogItem,
   MediaTagCount,
+  MediaUploadOwnership,
   MediaUsageEntry,
   PublicContentEntry,
   PublicGlobalContent,
@@ -36,6 +37,7 @@ import type {
   ContentEntry,
   ContentModelKey,
   DraftSnapshot,
+  MediaId,
   MediaMetadata,
   PublishedSnapshot,
   SiteBuildId,
@@ -287,6 +289,21 @@ export class SqlContentReader implements ContentLinkReadPort, ContentReferenceRe
   public async loadMedia(id: string): Promise<MediaMetadata | null> {
     const row = await this.first<Record<string, unknown>>(MEDIA_BY_ID_SQL, id);
     return row === undefined ? null : mediaMetadata(row);
+  }
+
+  public async checkMediaUploadOwnership(
+    id: MediaId,
+    storageKey: string,
+  ): Promise<MediaUploadOwnership> {
+    const rows = await this.sql.all<{ id: string; storage_key: string }>(
+      "select id, storage_key from media where id = ? or storage_key = ? limit 2",
+      id,
+      storageKey,
+    );
+    const [row] = rows;
+    if (row === undefined) return "absent";
+    if (rows.length === 1 && row.id === id && row.storage_key === storageKey) return "matching";
+    return "conflicting";
   }
 
   public async loadDeletingMedia(id: string): Promise<MediaMetadata | null> {

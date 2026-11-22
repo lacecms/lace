@@ -21,6 +21,7 @@ import type {
   MediaCommandPort,
   MediaDeletionDispatchPort,
   MediaListPort,
+  MediaUploadOwnershipPort,
   ContentMediaReadPort,
   OperationsMaintenancePort,
   PublicContentReadPort,
@@ -57,6 +58,7 @@ export type ContractRepository = ContentLinkReadPort &
   MediaCommandPort &
   MediaDeletionDispatchPort &
   MediaListPort &
+  MediaUploadOwnershipPort &
   ContentMediaReadPort &
   OperationsMaintenancePort &
   PublicContentReadPort &
@@ -75,6 +77,8 @@ export interface ContractSql {
 
 export interface ContractRepositoryOptions {
   readonly beforeMutation?: (checkpoint: string) => void;
+  readonly beforePrepare?: (sql: string) => void;
+  readonly afterWrite?: () => void;
   readonly nextId?: () => string;
   readonly resolveModel: (key: string) => ContentModelRoute | undefined;
 }
