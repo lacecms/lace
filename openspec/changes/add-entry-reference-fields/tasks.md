@@ -26,10 +26,10 @@ session builds on the preceding ones. The feature ships after REL1F.
 
 ## 4. REL1D — Published SDK, Astro and saved-draft preview
 
-- [ ] 4.1 Index eligible targets after complete format-2 export traversal in the shared site view and implement `site.reference(id)`. Verify cross-page resolution, immutable records without paths, duplicate-ID contract failures, ordered/repeated IDs, unknown IDs, cache/304 reuse and no per-target request.
-- [ ] 4.2 Carry the lookup through render-core and Astro to site-owned blocks. Build a route and block showing three selected testimonials in authored order, and verify an existing minimal render caller and site without reference fields still work.
-- [ ] 4.3 Apply publication-grade reference checks at preview admission with frozen public-version/capture-epoch guards. Verify a selected draft-only testimonial or wrong-order cycle fails before replacement or dispatch, a hidden selection succeeds, and publishing the missing testimonial enables preview of the same saved page.
-- [ ] 4.4 Exercise the Node and Cloudflare preview inputs against the same site components. Assert that the author's draft photo never enters the article preview, a later author publication updates the next public build, the ready preview keeps its capture, and ordinary public reads remain published-only. Record REL1D evidence.
+- [x] 4.1 Index eligible targets after complete format-2 export traversal in the shared site view and implement `site.reference(id)`. Verify cross-page resolution, immutable records without paths, duplicate-ID contract failures, ordered/repeated IDs, unknown IDs, cache/304 reuse and no per-target request.
+- [x] 4.2 Carry the lookup through render-core and Astro to site-owned blocks. Build a route and block showing three selected testimonials in authored order, and verify an existing minimal render caller and site without reference fields still work.
+- [x] 4.3 Apply publication-grade reference checks at preview admission with frozen public-version/capture-epoch guards. Verify a selected draft-only testimonial or wrong-order cycle fails before replacement or dispatch, a hidden selection succeeds, and publishing the missing testimonial enables preview of the same saved page.
+- [x] 4.4 Exercise the Node and Cloudflare preview inputs against the same site components. Assert that the author's draft photo never enters the article preview, a later author publication updates the next public build, the ready preview keeps its capture, and ordinary public reads remain published-only. Record REL1D evidence.
 
 ## 5. REL1E — Editor and repair workflows
 

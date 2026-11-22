@@ -77,7 +77,7 @@
       "write-plan",
       "preview"
     ],
-    "preview": ["content", "media", "reads", "shared", "write-plan"]
+    "preview": ["content", "links", "media", "reads", "shared", "write-plan"]
   },
   "packages/server": {
     "routing": [],

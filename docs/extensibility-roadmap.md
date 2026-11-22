@@ -226,10 +226,11 @@ exercise those same guarantees.
 | REL1E | Exercise field selection, ordering, exact-field navigation, deleted selections and actionable publication-order errors in the editor. |
 | REL1F | Verify import and retry ordering, public documentation, generated-site journeys, upgrade/rollback and final cross-runtime checks. |
 
-REL1A through REL1C are implemented. The change records verification for
+REL1A through REL1D are implemented. The change records verification for
 [field descriptors and configuration](../openspec/changes/add-entry-reference-fields/verification.md#rel1a--field-descriptors-and-configuration),
 [persistence and acyclic writes](../openspec/changes/add-entry-reference-fields/verification.md#rel1b--persistence-and-acyclic-writes),
-and [removal, direct impact and admin API](../openspec/changes/add-entry-reference-fields/verification.md#rel1c--removal-direct-impact-and-admin-api).
+[removal, direct impact and admin API](../openspec/changes/add-entry-reference-fields/verification.md#rel1c--removal-direct-impact-and-admin-api),
+and [published SDK, Astro and saved-draft preview](../openspec/changes/add-entry-reference-fields/verification.md#rel1d--published-sdk-astro-and-saved-draft-preview).
 
 [ADR 0034](adr/0034-acyclic-entry-reference-fields.md) records the scope and
 rationale. Direct published references block withdrawal and deletion.

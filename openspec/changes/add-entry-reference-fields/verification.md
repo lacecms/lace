@@ -180,3 +180,44 @@ near the end of that segment.
   857 tests. The affected packaged export suites and Hono RPC type check passed.
 - `pnpm typecheck`, `pnpm lint`, `pnpm format:check` and strict OpenSpec
   validation passed.
+
+## REL1D — Published SDK, Astro and saved-draft preview
+
+Verified locally on 2026-11-22.
+
+- The SDK resolved `[C, A, C]` across format-2 pages, preserving authored IDs,
+  repeated object identity and deep immutability. Route-less records had no
+  path. Unknown and global IDs returned `undefined`. A duplicate ID across
+  routed entries and records rejected the export. HTTP 304 reused the same
+  view, while a later version resolved the new author with no per-target I/O.
+- The compiled Astro adapter built a static route with a site-owned block
+  showing three testimonials in authored order. The same fixture also built
+  with content without reference fields. The minimal render-core caller
+  returned `undefined` for a lookup without a site view.
+- The Node and local D1 admin preview endpoints rejected a delivered selection
+  of an unpublished testimonial at `/blocks/1/data/reviews/0`. The ready
+  generation survived and the dispatch count stayed unchanged. A hidden block
+  and a conditional field could select an unpublished record and were
+  excluded from capture. Publishing the selected testimonial made the same
+  saved revision eligible. The staged reversal reported a cycle at
+  `/fields/peer` and named the entry to publish first. Both capture fences
+  rejected an interleaved change before sealing.
+- Node/SQLite and local Worker/D1 supplied their runner inputs to the same
+  Astro route and block. The preview rendered the saved article with the
+  author's captured published GIF. Its manifest included that original and
+  the scoped runner denied the draft original. Before author publication,
+  the ordinary public REST reads and the static build used the old photo.
+  Publishing only the author advanced the export version and the next build
+  rendered the new photo. The ready generation still returned the original
+  HTML. The Worker used local R2 and the Node test used in-memory object
+  storage. The two dispatch providers were test doubles.
+
+### Checks
+
+- SDK, render-core and Astro passed 117, 106 and 87 tests respectively.
+- The focused server suite passed 16 tests. The preview repository contracts
+  passed 30 tests on SQLite and 15 on D1.
+- All five packaged Astro, Node and Cloudflare reference tests passed.
+- `pnpm typecheck`, `pnpm lint`, `pnpm format:check` and
+  `pnpm exec openspec validate add-entry-reference-fields --type change --strict`
+  passed.

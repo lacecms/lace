@@ -73,6 +73,7 @@ import {
 } from "./rows.js";
 import type { PreviewExecutionRow, PreviewGenerationRow } from "./rows.js";
 import { SqlPreviewAccess } from "./access.js";
+import { rejectReferenceWrite } from "../links/reference-admission.js";
 
 export type ExecutePreviewPlan = <Miss>(
   plan: WritePlan<Miss>,
@@ -123,7 +124,11 @@ export class SqlPreviewRepository
     const plan = previewAdmissionPlan(input);
     if (plan === null) return { kind: "rejected", reason: "PREVIEW_RESOURCE_LIMIT" };
     const result = await this.execute(plan, input.now);
-    if (result.kind === "rejected") return result.reason;
+    if (result.kind === "rejected") {
+      const rejection = result.reason;
+      if (rejection.kind === "rejected" || rejection.kind === "replayed") return rejection;
+      rejectReferenceWrite(rejection);
+    }
     const row = result.slots[PREVIEW_ADMITTED_ROW]?.[0] as PreviewGenerationRow;
     return { kind: "admitted", generation: generation(row) };
   }

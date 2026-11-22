@@ -98,6 +98,9 @@ export class PreviewAdmissionService {
     const path = contentPublicPath(contentModelRoute(model), draft.slug)!;
     const publication =
       publishedProjection(this.dependencies, this.visibilityOwners, model, draft) ?? draft;
+    const references = publication.entryReferences.filter(
+      (reference) => reference.purpose === "reference" && reference.delivered,
+    );
     const visible = new Set(
       draft.blocks.filter((block) => !block.hidden).map((block) => block.key),
     );
@@ -125,6 +128,9 @@ export class PreviewAdmissionService {
         path,
         source: selected,
         now: clock.now(),
+        ...(references.length > 0 && {
+          referenceCandidate: { references, blockKeys: draft.blocks.map((block) => block.key) },
+        }),
         projection: {
           fields: publication.fields,
           blocks: publication.blocks.filter((block) => visible.has(block.key)),

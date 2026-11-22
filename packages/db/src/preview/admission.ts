@@ -3,6 +3,8 @@ import type { AdmitPreview, PreviewAdmission } from "@lacecms/application";
 import { PREVIEW_MAX_MODELS, PREVIEW_OVERALL_MS } from "@lacecms/domain";
 import { SQL_MAX_DRAFT_BLOCKS, SQL_MAX_DRAFT_MEDIA_REFERENCES } from "../shared/limits.js";
 import type { WritePlan, WritePlanStatement } from "../write-plan/plan.js";
+import { guardEntryReferences } from "../links/reference-admission.js";
+import type { ReferenceMiss } from "../links/reference-admission.js";
 import {
   fenceParams,
   GENERATION_COLUMNS,
@@ -18,7 +20,9 @@ const MAX_PROJECTION_BYTES = 1024 * 1024;
 const reject = (reason: Extract<PreviewAdmission, { kind: "rejected" }>["reason"]) =>
   ({ kind: "rejected", reason }) as const;
 
-export function previewAdmissionPlan(input: AdmitPreview): WritePlan<Rejection> | null {
+export function previewAdmissionPlan(
+  input: AdmitPreview,
+): WritePlan<Rejection | ReferenceMiss> | null {
   const {
     id,
     actorId,
@@ -77,7 +81,7 @@ export function previewAdmissionPlan(input: AdmitPreview): WritePlan<Rejection> 
     },
   } as const;
   const constraints = Object.values(checks);
-  return {
+  const plan: WritePlan<Rejection> = {
     admission: {
       sql: `not exists (${existing.sql}) and ${constraints.map(({ sql }) => `(${sql})`).join(" and ")}`,
       params: [...existing.params, ...constraints.flatMap(({ params }) => [...params])],
@@ -169,4 +173,12 @@ export function previewAdmissionPlan(input: AdmitPreview): WritePlan<Rejection> 
       },
     ],
   };
+  // The publication proof and the preview fence must hold in the same guarded write.
+  return input.referenceCandidate === undefined
+    ? plan
+    : guardEntryReferences(plan, {
+        entryId,
+        phase: "published",
+        ...input.referenceCandidate,
+      });
 }

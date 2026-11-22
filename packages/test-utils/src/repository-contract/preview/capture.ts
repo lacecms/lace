@@ -221,7 +221,7 @@ for (const change of ["public version", "preview epoch"] as const) {
   contract(
     `preview capture fails without recapture when the ${change} changes between pages`,
     async (runtime, expect) => {
-      const { repository, sql, target, other, reads } = await openPreview(runtime);
+      const { repository, sql, target, reads } = await openPreview(runtime);
       await seedMedia(sql, "image");
       const first = entry("first", "posts", {
         slug: "aaa",
@@ -230,11 +230,29 @@ for (const change of ["public version", "preview epoch"] as const) {
       });
       await repository.create({ entry: first, mediaReferences: [] });
       await repository.publish(publish(first.id, 1, 10, "first-published"));
-      await repository.publish(publish(other.id, 1, 11));
+      const author = entry("author", "testimonials", { updatedAt: 1 });
+      await repository.create({ entry: author, mediaReferences: [] });
+      await repository.publish(publish(author.id, 1, 12, "author-published"));
       const before = await repository.preview.previewCaptureFence();
-      const receipt = await repository.preview.admitPreview(
-        await previewInput(repository, target, "race"),
-      );
+      const input = await previewInput(repository, target, "race");
+      const receipt = await repository.preview.admitPreview({
+        ...input,
+        projection: { ...input.projection, fields: { author: author.id } },
+        referenceCandidate: {
+          blockKeys: [],
+          references: [
+            {
+              purpose: "reference",
+              sourceKey: "$fields",
+              area: "fields",
+              pointer: "/author",
+              targetId: author.id,
+              delivered: true,
+              models: ["testimonials"],
+            },
+          ],
+        },
+      });
       if (receipt.kind !== "admitted") throw new Error("Expected an admitted preview.");
       const memory = memoryInput();
       let readsOfPages = 0;
@@ -249,7 +267,8 @@ for (const change of ["public version", "preview epoch"] as const) {
               const attempt = ++readsOfPages;
               const page = await repository.preview.previewContextPage({ ...input, limit: 1 });
               if (attempt === 1) {
-                if (change === "public version") await repository.publish(publish(other.id, 1, 20));
+                if (change === "public version")
+                  await repository.publish(publish(author.id, 1, 20, "author-updated"));
                 else
                   await repository.applyConfigurationSyncBlockMigrations({
                     migratedAt: unixMilliseconds(20),

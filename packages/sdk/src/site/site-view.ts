@@ -9,6 +9,7 @@ import type {
   PublishedMedia,
   PublishedMediaLookup,
   PublishedRecord,
+  PublishedReferenceLookup,
   SiteEntry,
   SiteView,
 } from "./types.js";
@@ -17,7 +18,8 @@ type EntryData = Omit<PublicEntryDto, "publishedAt"> & { readonly publishedAt?: 
 type ViewEntry<Entry extends EntryData> = Readonly<Omit<Entry, "blocks">> &
   Pick<SiteEntry, "blocks"> &
   PublishedMediaLookup &
-  PublishedLinkLookup;
+  PublishedLinkLookup &
+  PublishedReferenceLookup;
 
 interface SiteViewOptions<Entry extends EntryData> {
   readonly exported: Pick<BuildExportDto, "globals" | "records" | "seo" | "version"> & {
@@ -36,7 +38,7 @@ function compareCodeUnits(left: string, right: string): number {
   return left > right ? 1 : 0;
 }
 
-/** Assemble detached content into shared route, link, SEO and media lookups. */
+/** Assemble detached content into shared route, reference, link, SEO and media lookups. */
 export function assembleSiteView<Entry extends EntryData>({
   exported,
   indexing,
@@ -68,6 +70,9 @@ export function assembleSiteView<Entry extends EntryData>({
     media: (mediaId: string) => resolved.get(mediaId),
   });
   const byPath = new Map<string, ViewEntry<Entry>>();
+  // publishedLinks has already checked identity uniqueness across all export phases.
+  const byId = new Map<string, ViewEntry<Entry> | PublishedRecord>();
+  const reference = (id: string) => byId.get(id);
   const byModel = new Map<string, ViewEntry<Entry>[]>();
   const bySlug = new Map<string, Map<string, ViewEntry<Entry>>>();
   for (const entry of exported.entries) {
@@ -82,6 +87,7 @@ export function assembleSiteView<Entry extends EntryData>({
       image: lookup.image,
       media: lookup.media,
       link: links.link,
+      reference,
     });
     const samePath = byPath.get(path);
     if (samePath !== undefined)
@@ -89,6 +95,7 @@ export function assembleSiteView<Entry extends EntryData>({
         `The build export contains entries ${samePath.id} and ${entry.id} at the same path ${path}.`,
       );
     byPath.set(path, published);
+    byId.set(entry.id, published);
     const modelEntries = byModel.get(published.modelKey) ?? [];
     modelEntries.push(published);
     byModel.set(published.modelKey, modelEntries);
@@ -122,40 +129,38 @@ export function assembleSiteView<Entry extends EntryData>({
         image: lookup.image,
         media: lookup.media,
         link: links.link,
+        reference,
         modelKey: global.modelKey,
         publishedAt: global.publishedAt,
       }),
     );
   }
   const recordsByModel = new Map<string, PublishedRecord[]>();
-  const recordIds = new Set<string>();
   for (const record of exported.records) {
     if (byModel.has(record.modelKey) || globals.has(record.modelKey))
       failure(
         `The build export contains records of ${record.modelKey}, which also has entries or a global.`,
       );
-    if (recordIds.has(record.id))
-      failure(`The build export contains record ${record.id} more than once.`);
-    recordIds.add(record.id);
     const modelRecords = recordsByModel.get(record.modelKey) ?? [];
-    modelRecords.push(
-      Object.freeze({
-        internalLinks: record.internalLinks,
-        blocks: Object.freeze(
-          [...record.blocks]
-            .sort((left, right) => left.position - right.position)
-            .map((block) => Object.freeze(block)),
-        ),
-        fields: record.fields,
-        id: record.id,
-        image: lookup.image,
-        media: lookup.media,
-        link: links.link,
-        modelKey: record.modelKey,
-        publishedAt: record.publishedAt,
-        title: record.title,
-      }),
-    );
+    const published = Object.freeze({
+      internalLinks: record.internalLinks,
+      blocks: Object.freeze(
+        [...record.blocks]
+          .sort((left, right) => left.position - right.position)
+          .map((block) => Object.freeze(block)),
+      ),
+      fields: record.fields,
+      id: record.id,
+      image: lookup.image,
+      media: lookup.media,
+      link: links.link,
+      reference,
+      modelKey: record.modelKey,
+      publishedAt: record.publishedAt,
+      title: record.title,
+    });
+    byId.set(record.id, published);
+    modelRecords.push(published);
     recordsByModel.set(record.modelKey, modelRecords);
   }
   const recordListings = new Map<string, readonly PublishedRecord[]>();
@@ -214,6 +219,7 @@ export function assembleSiteView<Entry extends EntryData>({
     media: lookup.media,
     mediaUrl: (mediaId: string) => resolved.get(mediaId)?.url ?? missingMediaUrl(mediaId),
     records: (modelKey: string) => recordListings.get(modelKey) ?? noRecords,
+    reference,
     seo: (entry: SiteEntry) =>
       resolveSeo({
         ...(defaults === undefined ? {} : { defaults }),
