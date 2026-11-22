@@ -5,7 +5,7 @@ ENV npm_config_manage_package_manager_versions=false
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends build-essential python3 \
     && rm -rf /var/lib/apt/lists/* \
-    && npm install --global pnpm@12.3.4
+    && npm install --global pnpm@12.21.0
 WORKDIR /opt/lace/workspace
 COPY . .
 RUN pnpm install --frozen-lockfile \

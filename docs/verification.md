@@ -7,7 +7,7 @@ See the [internal index](README.md) for document status and the
 
 ## Commands
 
-Use the pinned verification toolchain, Node 24.12.0 and pnpm 12.3.4, with dependencies installed using
+Use the pinned verification toolchain, Node 24.12.0 and pnpm 12.21.0, with dependencies installed using
 `pnpm install --frozen-lockfile`. Run commands from the engine checkout.
 The [script catalog](../DEVELOPMENT.md#script-catalog) lists all root commands.
 Verification runners build their required packages. Docker/Compose, a local

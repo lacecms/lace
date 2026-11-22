@@ -132,12 +132,12 @@ versions and dependency locks are separate from the minimums:
 | Tested Node | `24.12.0` | CI workflows and the recorded baseline |
 | Image Node | `24.22.3` | Local development and API/builder image stages; image smoke verification is separate |
 | Preparation Node | major `24` or later | `release:prepare` gate (`scripts/release.mjs`); eligible, not tested |
-| Tested pnpm | `12.3.4` | CI and the recorded baseline |
-| Root package-manager metadata | `pnpm@12.3.4` | Required by Turborepo and selected by Corepack; Corepack selects this version; set `npm_config_manage_package_manager_versions=false` when using a different installed pnpm |
+| Tested pnpm | `12.3.4` | Last verified release baseline |
+| Root package-manager metadata | `pnpm@12.21.0` | Required by Turborepo and selected by Corepack; Corepack selects this version; set `npm_config_manage_package_manager_versions=false` when using a different installed pnpm |
 | Generated project package manager | `engines.pnpm` `>=12` only | No `packageManager` or `devEngines.packageManager`: Corepack bundled with Node 24.12.0 rejects a range there, so the generated project uses whichever eligible pnpm is installed or activated; release validation rejects a range in either field |
 | Preparation pnpm | `12` or later | Release preparation gate; eligible versions require a frozen install |
-| Image pnpm | `12.3.4` for RC5 | API build and builder image use the exact workspace pin |
-| Acceptance pnpm | `12.3.4` for RC5 | The harness selects the workspace pin for installs and commands in disposable consumers |
+| Image pnpm | `12.21.0` for the current candidate | API build and builder image use the exact workspace pin |
+| Acceptance pnpm | `12.21.0` for the current candidate | The harness selects the workspace pin for installs and commands in disposable consumers |
 | Dependencies | exact versions | `pnpm-lock.yaml` and the workspace catalog |
 
 Dependency engine audit (2026-10-06, resolved lockfile metadata): Astro 7.3.1

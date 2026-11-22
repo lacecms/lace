@@ -22,7 +22,7 @@ The owner confirmed the npm organization `lacecms` and GitHub organization `lace
 | Generator | `create-lace@0.1.0-rc6` | Executable, declarations, templates, ownership inventory, MIT license |
 | Runtime graph | `@lacecms/*@0.1.0-rc6` | Compiled ESM/declarations and complete registry dependency metadata; `platform-cloudflare` also ships the packaged admin |
 | API/admin | `ghcr.io/lacecms/api:0.1.0-rc6` | Compiled API/admin, dispatcher, explicit migrations, bucket initializer and native runtime |
-| Builder | `ghcr.io/lacecms/builder:0.1.0-rc6` | Fixed-command service, non-root work/output mounts and Node 24.22.3 with pnpm 12.3.4 |
+| Builder | `ghcr.io/lacecms/builder:0.1.0-rc6` | Fixed-command service, non-root work/output mounts and Node 24.22.3 with pnpm 12.21.0 |
 
 Recheck npm and GHCR publishing rights with authenticated accounts before live
 publication. Local artifact preparation does not need publishing credentials.
@@ -38,7 +38,7 @@ Both runtime images support `linux/amd64` and `linux/arm64` only when both platf
 
 ## Prerequisites
 
-- Node 24 or later and pnpm 12 or later for preparation. `release:prepare` checks both versions before creating the output directory. Consumer packages declare Node `>=24.12.0` and generated projects pnpm `>=12`. Use the workspace-pinned pnpm `12.3.4` to reproduce release evidence. CI uses Node `24.12.0`, and Docker builds use Node `24.22.3` and the same pnpm pin as CI.
+- Node 24 or later and pnpm 12 or later for preparation. `release:prepare` checks both versions before creating the output directory. Consumer packages declare Node `>=24.12.0` and generated projects pnpm `>=12`. Use the workspace-pinned pnpm `12.21.0` to reproduce release evidence. CI uses Node `24.12.0`, and Docker builds use Node `24.22.3` and the same pnpm pin as CI.
 - Git, tar, Docker with buildx and the ability to run both Linux platforms (native or emulated), plus enough disk for build layers and four saved images.
 - Public registry access for dependency tarballs, pnpm's supply-chain metadata checks and image base and toolchain downloads. Preparation and acceptance can start with an empty pnpm metadata cache. Local builds use public dependencies and base images.
 - A clean reviewed source commit for release-eligible preparation. Registry credentials and local runtime data must remain outside tracked release inputs and build contexts.

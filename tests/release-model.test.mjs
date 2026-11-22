@@ -159,7 +159,8 @@ test.each([
 
 test.each([
   ["apps/api/Dockerfile", /pnpm@\S+(?=\n)/u, "pnpm@12"],
-  ["apps/builder/Dockerfile", /pnpm@\S+(?= \\\n)/u, "pnpm@12.21.0"],
+  ["apps/builder/Dockerfile", /pnpm@\S+(?=\n)/u, "pnpm@12"],
+  ["apps/builder/Dockerfile", /pnpm@\S+(?= \\\n)/u, "pnpm@12.3.4"],
 ])("rejects pnpm version drift in %s", async (file, pin, replacement) => {
   const model = await coherentModel();
   model.dockerfiles[file] = model.dockerfiles[file].replace(pin, replacement);

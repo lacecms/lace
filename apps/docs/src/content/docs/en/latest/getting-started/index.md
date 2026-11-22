@@ -9,7 +9,7 @@ Lace manages one website per installation. Developers define models and renderin
 
 ## Before you start
 
-- Node **>=24.12.0**, pnpm **>=12** and Docker Compose. The tested versions are Node **24.12.0** and pnpm **12.3.4**; a newer major satisfies the minimum but is not tested.
+- Node **>=24.12.0**, pnpm **>=12** and Docker Compose. The release compatibility record lists [tested versions](https://github.com/lacecms/lace/blob/main/docs/compatibility.md#minimum-requirements-and-tested-versions).
 - Lace packages, the `create-lace` generator and the API/builder images from one release. This documentation targets **0.1.0-rc6**; rc2 is the oldest supported release. Check that the release is available in [GitHub Releases](https://github.com/lacecms/lace/releases): the latest documentation follows the main branch and can describe a release before it is published. Do not substitute an older prerelease.
 - An empty target directory. Only files such as `.git`, `README.md` and `LICENSE` may already exist; the generator does not install into a populated project.
 

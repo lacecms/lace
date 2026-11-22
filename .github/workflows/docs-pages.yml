@@ -48,7 +48,7 @@ jobs:
         if: steps.decision.outputs.publish == 'true'
         run: |
           corepack enable
-          corepack prepare pnpm@12.3.4 --activate
+          corepack prepare pnpm@12.21.0 --activate
       - name: Install frozen workspace dependencies
         if: steps.decision.outputs.publish == 'true'
         run: pnpm install --frozen-lockfile
