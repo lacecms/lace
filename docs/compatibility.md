@@ -132,13 +132,15 @@ versions and dependency locks are separate from the minimums:
 | Tested Node | `24.12.0` | CI workflows and the recorded baseline |
 | Image Node | `24.22.3` | Local development and API/builder image stages; image smoke verification is separate |
 | Preparation Node | major `24` or later | `release:prepare` gate (`scripts/release.mjs`); eligible, not tested |
-| Tested pnpm | `12.3.4` | Last verified release baseline |
+| Tested pnpm | `12.21.0` | Verified on 2026-11-22 for the RC6 artifact set |
 | Root package-manager metadata | `pnpm@12.21.0` | Required by Turborepo and selected by Corepack; Corepack selects this version; set `npm_config_manage_package_manager_versions=false` when using a different installed pnpm |
 | Generated project package manager | `engines.pnpm` `>=12` only | No `packageManager` or `devEngines.packageManager`: Corepack bundled with Node 24.12.0 rejects a range there, so the generated project uses whichever eligible pnpm is installed or activated; release validation rejects a range in either field |
 | Preparation pnpm | `12` or later | Release preparation gate; eligible versions require a frozen install |
 | Image pnpm | `12.21.0` for the current candidate | API build and builder image use the exact workspace pin |
 | Acceptance pnpm | `12.21.0` for the current candidate | The harness selects the workspace pin for installs and commands in disposable consumers |
 | Dependencies | exact versions | `pnpm-lock.yaml` and the workspace catalog |
+
+On 2026-11-22, Node `24.12.0` and pnpm `12.21.0` passed a clean frozen install and native SQLite query on macOS arm64. The packed starter and local Worker passed. Both API and builder images passed smoke checks on `linux/amd64` and `linux/arm64` with Node `24.22.3`. Full exact-artifact acceptance passed on `linux/arm64` for revision `0f8f8be0`. The saved inventory and acceptance receipt are in `.release-artifacts/ex7a-0f8f8be0/`. See the [EX7A verification record](../openspec/changes/ex07a-upgrade-pnpm-toolchain/verification.md) for the hashes and dependency review.
 
 Dependency engine audit (2026-10-06, resolved lockfile metadata): Astro 7.3.1
 `>=22.12.0`, better-sqlite3 13.0.3 `>=22`, Wrangler 4.129.0 and Miniflare

@@ -95,7 +95,7 @@ from committed outbox work, and `401 AUTHENTICATION_REQUIRED`.
 | EX4 | Route policies and security use cases | L | EX4A → EX4B → EX4C → EX4D | done |
 | EX5 | Model kind descriptor | S | EX5A | done |
 | EX6 | Trusted client identity and production Compose ingress | M | EX6A and EX6B independent | done |
-| EX7 | pnpm 12.21.0 toolchain | S | EX7A | planned |
+| EX7 | pnpm 12.21.0 toolchain | S | EX7A | done |
 
 **Deployment maintenance outside EX1–EX7:** the owner selected
 [`adopt-silo-object-storage`](../openspec/changes/archive/2026-11-17-adopt-silo-object-storage/)
@@ -497,6 +497,7 @@ recorded event.
 
 | Date | Session | Change | Status |
 | --- | --- | --- | --- |
+| 2026-11-22 | EX7A | [pnpm release toolchain](../openspec/changes/ex07a-upgrade-pnpm-toolchain/verification.md) | done. Verified the frozen install, native SQLite, packed starter and local Worker with pnpm 12.21.0. Both Linux platforms passed API and builder smoke checks. Full acceptance on linux/arm64 matched the 16 tarballs and host images from revision `0f8f8be0`. |
 | 2026-11-22 | EX5A | [Model kind descriptors](../openspec/changes/archive/2026-11-22-ex05a-model-kind-descriptors/) | done. Synchronized both specs after verification on both Node SQLite modes and local D1. The [comparison inventory and verification](#ex5a-model-kind-comparisons) record the results. |
 | 2026-11-16 | EX4D | [HTTP consistency](../openspec/changes/archive/2026-11-16-ex04d-http-consistency/) | done. Verified entry tags and protected cursor pages through Node/SQLite and Worker/local D1, 105-build traversal on both SQLite modes and local D1, and continuation recovery and refresh in Admin. OpenAPI, docs, typecheck, lint, format and strict OpenSpec validation passed. |
 | 2026-11-16 | EX4C | [Typed handlers](../openspec/changes/archive/2026-11-16-ex04c-typed-handlers/) | done. Production route `as never` casts fell from 24 after EX4B to zero, and the shared hook cast was removed. Hono client types passed against source and emitted declarations. The server suite, shared Node/SQLite and Worker/local D1 HTTP tests, and OpenAPI comparison passed. |

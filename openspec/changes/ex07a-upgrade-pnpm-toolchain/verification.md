@@ -21,3 +21,7 @@ The packed local Worker also passed offline and ready doctor checks, D1 migratio
 ## Release preparation
 
 The first preparation caught an omitted generator template during archive inspection. pnpm 12.21.0 packs `templates/.gitignore` when it appears explicitly in the package file allowlist. A focused pack of create-lace with that entry produced a byte-identical copy of the template.
+
+From clean revision `0f8f8be087c65f58b7f2adc7976af49c9e3a5e40`, release preparation produced all 16 tarballs and both API/builder images for linux/amd64 and linux/arm64. All four image smoke checks passed. Both builder IDs reported pnpm 12.21.0 with networking disabled. Independent saved-artifact verification passed. The inventory is `.release-artifacts/ex7a-0f8f8be0/inventory.json` (SHA-256 `4ee0c77c371acf540b10d7b30618e085bfa31b6ee1cb025d6ab14cc7057745f8`), source fingerprint `c77de229352c28117f509d90a92e20d0503257f334c1111fd3b5d937be9adb4d`.
+
+On 2026-11-22 the full `acceptance:release` run passed on linux/arm64 and recorded 23 journeys. The saved `.release-artifacts/ex7a-0f8f8be0/acceptance.json` has SHA-256 `3fb87d89ca448802aa109e505968502c1c91a7890dea51f484697dbf6caa0c01`. Independent receipt validation matched the inventory digest, source revision and fingerprint, all 16 package records and both arm64 image identities. The compatibility record now lists pnpm 12.21.0 as tested.
