@@ -1,3 +1,4 @@
+import { resolveModelKind } from "@lacecms/content";
 import {
   canonicalCollectionFilters,
   collectionCapabilityIdentity,
@@ -105,6 +106,7 @@ export function CollectionEntries({
   const session = useSession();
   const heading = useRef<HTMLHeadingElement>(null);
   const modelKey = model.key;
+  const routed = resolveModelKind(model).routing === "slug";
   const title = model.label ?? model.key;
   const queryKey = adminQueryKeys.entryList(modelKey, {
     ...request,
@@ -167,16 +169,12 @@ export function CollectionEntries({
           <h1 className="outline-none" id="model-title" ref={heading} tabIndex={-1}>
             {title}
           </h1>
-          {model.route === undefined ? undefined : (
+          {!routed ? undefined : (
             <p className="m-0 font-mono text-xs text-muted-foreground">{model.route}</p>
           )}
         </div>
         {canManage && !empty ? (
-          <CreateEntryDialog
-            collectionLabel={title}
-            modelKey={modelKey}
-            routed={model.route !== undefined}
-          />
+          <CreateEntryDialog collectionLabel={title} modelKey={modelKey} routed={routed} />
         ) : undefined}
       </div>
       <div
@@ -338,11 +336,7 @@ export function CollectionEntries({
         <EmptyState
           action={
             canManage ? (
-              <CreateEntryDialog
-                collectionLabel={title}
-                modelKey={modelKey}
-                routed={model.route !== undefined}
-              />
+              <CreateEntryDialog collectionLabel={title} modelKey={modelKey} routed={routed} />
             ) : undefined
           }
           description={
@@ -377,7 +371,7 @@ export function CollectionEntries({
             onDeleted={focusHeading}
             onSortChange={(sort) => change({ sort })}
             onFilterField={openFilters}
-            routed={model.route !== undefined}
+            routed={routed}
             sort={sort}
           />
           {entries.isFetchNextPageError && expired ? (

@@ -1,3 +1,4 @@
+import { modelKindsMatchingDelivery } from "../shared/model-kind-sql.js";
 import { failure } from "../shared/failures.js";
 import type {
   PublicContentEntry,
@@ -39,19 +40,29 @@ export const PUBLIC_ROUTE_SQL = `select e.id, e.model_key, e.draft_snapshot_id, 
 export const ROUTE_LESS_PUBLISHED_SQL = `not exists (select 1 from published_routes rr
                   where rr.entry_id = e.id and rr.snapshot_id = e.published_snapshot_id)`;
 
+const PUBLIC_RECORD_MODEL_KINDS_SQL = modelKindsMatchingDelivery(
+  ({ publicFamily }) => publicFamily === "records",
+);
+const PUBLIC_GLOBAL_MODEL_KINDS_SQL = modelKindsMatchingDelivery(
+  ({ publicFamily }) => publicFamily === "globals",
+);
+
 /** Published entries of route-less collections; reads no route. */
-export const PUBLIC_RECORD_SQL = `select e.id, e.model_key, e.draft_snapshot_id, e.published_snapshot_id,
+export function publicRecordSql(kinds: string): string {
+  return `select e.id, e.model_key, e.draft_snapshot_id, e.published_snapshot_id,
         s.created_at as published_created_at, ${PUBLIC_INTERNAL_LINKS_JSON_SQL} as internal_links_json
    from content_models m
    cross join content_entries e on e.model_key = m.key
    join content_snapshots s on s.id = e.published_snapshot_id
-  where m.kind = 'collection' and ${ROUTE_LESS_PUBLISHED_SQL}`;
+  where m.kind in ${kinds} and ${ROUTE_LESS_PUBLISHED_SQL}`;
+}
+export const PUBLIC_RECORD_SQL = publicRecordSql(PUBLIC_RECORD_MODEL_KINDS_SQL);
 
 /** Published route-less globals; never joins `published_routes`. */
 export const PUBLIC_GLOBAL_SQL = `select e.id, e.model_key, e.draft_snapshot_id, e.published_snapshot_id,
         s.created_at as published_created_at, ${PUBLIC_INTERNAL_LINKS_JSON_SQL} as internal_links_json
    from content_entries e
-   join content_models m on m.key = e.model_key and m.kind = 'global'
+   join content_models m on m.key = e.model_key and m.kind in ${PUBLIC_GLOBAL_MODEL_KINDS_SQL}
    join content_snapshots s on s.id = e.published_snapshot_id`;
 
 /**

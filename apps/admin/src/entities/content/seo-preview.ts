@@ -1,6 +1,7 @@
 import { formatSeoTitle, seoText } from "@lacecms/contracts";
 import type { ContentModelDto } from "@lacecms/contracts";
 import { fieldLabel, siteUrlFor } from "./draft.js";
+import { modelPublicPath } from "./model-kind.js";
 import type { DraftEditorValues } from "./editor-form.js";
 
 /** Site SEO default values read from the published defaults global. */
@@ -27,16 +28,6 @@ export interface SeoInheritance {
   readonly imageInheritance: string;
   readonly preview: SeoPreview;
   readonly titlePlaceholder: string;
-}
-
-function editorPath(
-  model: ContentModelDto,
-  values: { readonly slug: string | undefined },
-): string | undefined {
-  if (model.kind === "page") return model.path;
-  const slug = values.slug?.trim() ?? "";
-  if (model.kind !== "collection" || model.route === undefined || slug === "") return undefined;
-  return model.route.replace(":slug", slug);
 }
 
 /**
@@ -84,7 +75,7 @@ export function seoInheritance({
         ? "No image is shared"
         : "Uses the site image";
 
-  const path = editorPath(model, values);
+  const path = modelPublicPath(model, values.slug?.trim() || undefined);
   const pageUrl =
     siteUrl === undefined || path === undefined ? undefined : siteUrlFor(siteUrl, path);
   const canonical = stored?.canonical.trim() ?? "";

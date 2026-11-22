@@ -1,3 +1,4 @@
+import { resolveModelKind } from "@lacecms/content";
 import { useEffect, useLayoutEffect, useRef, useState, type BaseSyntheticEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { AdminContentEntryDto } from "@lacecms/contracts";
@@ -70,17 +71,19 @@ export function useEntryMutations({
       readonly submitted: DraftEditorValues;
       readonly expectedRevision: number;
     }) => {
-      const values = withoutClearedValues(submitted, modelRef.current);
+      const model = modelRef.current;
+      const values = withoutClearedValues(submitted, model);
       return client.saveDraft(entryId, {
         blocks: orderedDraftBlocks(values.blocks),
         expectedRevision,
         fields: values.fields,
         // Models without SEO accept no group, so only SEO-enabled entries send one.
-        ...(modelRef.current?.seo === undefined || values.seo === undefined
+        ...(model?.seo === undefined || values.seo === undefined
           ? {}
           : { seo: seoInput(values.seo) }),
         // An empty slug input means the draft has no slug.
-        ...(modelRef.current?.kind === "collection" &&
+        ...(model !== undefined &&
+        resolveModelKind(model).routing === "slug" &&
         values.slug !== undefined &&
         values.slug !== ""
           ? { slug: values.slug }

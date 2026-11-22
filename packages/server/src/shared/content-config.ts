@@ -1,3 +1,4 @@
+import { resolveModelKind } from "@lacecms/application";
 import { toModelSeoDto, toSeoDefaultsDto } from "@lacecms/contracts";
 import type { ExportSeoDto, toContentModelDto } from "@lacecms/contracts";
 
@@ -51,42 +52,31 @@ export function contentModel(config: ServerConfig, key: string): ServerContentMo
   return config.content.find((model) => model.key === key);
 }
 
-export function pageModel(
+type ModelInFamily = {
+  pages: Extract<ServerContentModel, { readonly kind: "page" }>;
+  collections: Extract<ServerContentModel, { readonly kind: "collection" }> & {
+    readonly route: string;
+  };
+  records: Extract<ServerContentModel, { readonly kind: "collection" }>;
+  globals: Extract<ServerContentModel, { readonly kind: "global" }>;
+};
+
+/** A model is public through the endpoint family selected by its configured route. */
+export function publicModel<Family extends ReturnType<typeof resolveModelKind>["publicFamily"]>(
   config: ServerConfig,
   key: string,
-): Extract<ServerContentModel, { readonly kind: "page" }> | undefined {
+  family: Family,
+): ModelInFamily[Family] | undefined {
   const model = contentModel(config, key);
-  return model?.kind === "page" ? model : undefined;
+  if (matchesPublicFamily(model, family)) return model;
+  return undefined;
 }
 
-export function globalModel(
-  config: ServerConfig,
-  key: string,
-): Extract<ServerContentModel, { readonly kind: "global" }> | undefined {
-  const model = contentModel(config, key);
-  return model?.kind === "global" ? model : undefined;
-}
-
-type ServerCollectionModel = Extract<ServerContentModel, { readonly kind: "collection" }>;
-
-/** A collection that declares a route; route-less collections answer as unknown. */
-export function collectionModel(
-  config: ServerConfig,
-  key: string,
-): (ServerCollectionModel & { readonly route: string }) | undefined {
-  const model = contentModel(config, key);
-  return model?.kind === "collection" && model.route !== undefined
-    ? { ...model, route: model.route }
-    : undefined;
-}
-
-/** A collection without a route, whose published entries are public records. */
-export function routeLessCollectionModel(
-  config: ServerConfig,
-  key: string,
-): ServerCollectionModel | undefined {
-  const model = contentModel(config, key);
-  return model?.kind === "collection" && model.route === undefined ? model : undefined;
+function matchesPublicFamily<Family extends keyof ModelInFamily>(
+  model: ServerContentModel | undefined,
+  family: Family,
+): model is ModelInFamily[Family] {
+  return model !== undefined && resolveModelKind(model).publicFamily === family;
 }
 
 /** The export's SEO section: fallback fields of SEO-enabled models and the defaults global. */

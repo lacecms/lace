@@ -27,7 +27,7 @@ function Harness({
       <UnpublishEntryDialog
         entryId="entry-1"
         expectedPublishedSnapshotId="published-1"
-        kind={kind}
+        model={{ kind, route: kind === "collection" && !routeLess ? "/posts/:slug" : undefined }}
         onOpenChange={setOpen}
         onReload={onReload}
         onUnpublished={onUnpublished}
@@ -36,7 +36,6 @@ function Harness({
           kind === "global" || routeLess ? undefined : kind === "page" ? "/about" : "/posts/first"
         }
         returnFocus={trigger}
-        routeLess={routeLess}
       />
     </>
   );

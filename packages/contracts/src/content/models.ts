@@ -1,11 +1,14 @@
 import {
   canonicalizeJson,
+  CONTENT_MODEL_KINDS,
   fieldTypeCapabilities,
   isModelIconEmoji,
   isModelIconIdentifier,
   MAX_MODEL_ICON_LENGTH,
   normalizeFieldVisibility,
   normalizeFormLayout,
+  modelKindDescriptor,
+  resolveModelKind,
 } from "@lacecms/content";
 import type {
   BlockMetadata,
@@ -34,7 +37,7 @@ function hasValidListFields<
 >(value: Value): boolean {
   if (value.listFields === undefined) return true;
   return (
-    value.kind === "collection" &&
+    modelKindDescriptor(value.kind).admin.navigation === "list" &&
     value.listFields.length > 0 &&
     new Set(value.listFields).size === value.listFields.length &&
     value.listFields.every(
@@ -53,7 +56,10 @@ function hasGlobalRouting<
     readonly route?: string | undefined;
   },
 >(value: Value): boolean {
-  return value.kind !== "global" || (value.path === undefined && value.route === undefined);
+  return (
+    modelKindDescriptor(value.kind).delivery.routing !== "none" ||
+    (value.path === undefined && value.route === undefined)
+  );
 }
 
 function hasMatchingBlockDefinitions<
@@ -146,7 +152,7 @@ export const contentModelSchema = v.pipe(
       ),
     ),
     key: identifierSchema,
-    kind: v.picklist(["collection", "global", "page"]),
+    kind: v.picklist(CONTENT_MODEL_KINDS.toSorted()),
     label: v.optional(v.string()),
     listFields: v.optional(v.array(identifierSchema)),
     listOptions: v.optional(collectionListOptionsSchema),
@@ -171,7 +177,7 @@ export const contentModelSchema = v.pipe(
   v.check(
     (model) =>
       model.listOptions === undefined ||
-      (model.kind === "collection" &&
+      (modelKindDescriptor(model.kind).admin.navigation === "list" &&
         Object.entries(model.listOptions).every(
           ([operation, keys]) =>
             keys === undefined ||
@@ -189,14 +195,15 @@ export const contentModelSchema = v.pipe(
   v.check(hasGlobalRouting, "A global model carries no path or route."),
   v.check(
     (model) =>
-      model.kind !== "collection" ||
-      model.route !== undefined ||
+      resolveModelKind(model).publicFamily !== "records" ||
       (model.path === undefined && model.seo === undefined),
     "A route-less collection carries no path or seo.",
   ),
   v.check(
     (model) =>
-      model.kind === "global" ? model.seo === undefined : model.seoDefaults === undefined,
+      resolveModelKind(model).publicFamily === "globals"
+        ? model.seo === undefined
+        : model.seoDefaults === undefined,
     "Only pages and collections carry seo, and only a global carries seoDefaults.",
   ),
 );

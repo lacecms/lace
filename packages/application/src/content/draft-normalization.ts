@@ -5,15 +5,11 @@ import type { InternalLinkReference, JsonObject, SnapshotEntryReference } from "
 import {
   assertOrderedBlockPositions,
   blockKey,
-  contentModelKey,
   normalizeEntrySeo,
+  modelKindDescriptor,
+  resolveModelKind,
 } from "@lacecms/domain";
-import type {
-  ContentBlock,
-  ContentModelRoute,
-  DraftMediaReference,
-  EntrySeo,
-} from "@lacecms/domain";
+import type { ContentBlock, DraftMediaReference, EntrySeo } from "@lacecms/domain";
 
 import type { CompleteDraftInput } from "./use-case-inputs.js";
 const DUPLICATE_TITLE_SUFFIX = " (copy)";
@@ -42,33 +38,18 @@ export interface NormalizedDraft extends Omit<CompleteDraftInput, "seo"> {
 
 /** Whether a configured model enables the per-entry SEO group. */
 export function seoEnabled(model: NormalizedContentModel): boolean {
-  return model.kind !== "global" && model.seo !== undefined;
+  return resolveModelKind(model).routing !== "none" && "seo" in model && model.seo !== undefined;
 }
 
 export function detached<Value>(value: Value): Value {
   return JSON.parse(JSON.stringify(value)) as Value;
 }
 
-/** Maps a configured model to the route identity stored with its entries. */
-export function contentModelRoute(model: NormalizedContentModel): ContentModelRoute {
-  const key = contentModelKey(model.key);
-  switch (model.kind) {
-    case "page":
-      return { key, kind: "page", path: model.path };
-    case "collection":
-      return model.route === undefined
-        ? { key, kind: "collection" }
-        : { key, kind: "collection", route: model.route };
-    case "global":
-      return { key, kind: "global" };
-    default:
-      return model satisfies never;
-  }
-}
-
 /** A global's title is system-owned: always its model label, or its key. */
 export function systemTitle(model: NormalizedContentModel, title: string): string {
-  return model.kind === "global" ? (model.label ?? model.key) : title;
+  return modelKindDescriptor(model.kind).admin.title === "system"
+    ? (model.label ?? model.key)
+    : title;
 }
 
 /** Input of {@link normalizeDraftCandidate}. */
@@ -117,9 +98,7 @@ export function normalizeDraftCandidate(
       ...(draft.slug === undefined ? {} : { slug: draft.slug }),
       title: systemTitle(model, draft.title),
     },
-    model.kind === "collection" && model.route === undefined
-      ? { ...model, routeLess: true }
-      : model,
+    resolveModelKind(model).publicFamily === "records" ? { ...model, routeLess: true } : model,
     registry,
     mode,
   );

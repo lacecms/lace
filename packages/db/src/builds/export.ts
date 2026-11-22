@@ -1,3 +1,4 @@
+import { modelKindsMatchingDelivery } from "../shared/model-kind-sql.js";
 import { opaqueCursor } from "@lacecms/application";
 import { SQL_CURSOR_VERSION } from "../shared/limits.js";
 import { encodeBase64Url } from "../shared/base64.js";
@@ -23,10 +24,18 @@ import {
   publicContentEntry,
   publicGlobalContent,
   publicRecordContent,
-  PUBLIC_RECORD_SQL,
+  publicRecordSql,
   ROUTE_LESS_PUBLISHED_SQL,
 } from "../delivery/public.js";
 import type { PublicRow, PublicGlobalRow } from "../delivery/public.js";
+
+const EXPORT_RECORD_MODEL_KINDS_SQL = modelKindsMatchingDelivery(
+  ({ exportSection }) => exportSection === "records",
+);
+const EXPORT_GLOBAL_MODEL_KINDS_SQL = modelKindsMatchingDelivery(
+  ({ exportSection }) => exportSection === "globals",
+);
+const EXPORT_RECORD_SQL = publicRecordSql(EXPORT_RECORD_MODEL_KINDS_SQL);
 
 /**
  * Stored JSON bytes of published snapshot `s`: fields, SEO, and the data and
@@ -52,7 +61,7 @@ export const BUILD_EXPORT_FIRST_PAGE_VERSION_SQL = `select ${EXPORT_VERSION_SQL}
                 from content_models cm
                 cross join content_entries e on e.model_key = cm.key
                 join content_snapshots s on s.id = e.published_snapshot_id
-               where cm.kind = 'global'), 0) as globals_bytes`;
+               where cm.kind in ${EXPORT_GLOBAL_MODEL_KINDS_SQL}), 0) as globals_bytes`;
 
 /** Binds the exclusive path and a row limit; routed entries after it, with their sizes. */
 export const BUILD_EXPORT_CANDIDATES_SQL = `select r.path, ${STORED_EXPORT_BYTES_SQL} as stored_bytes
@@ -71,7 +80,7 @@ export const BUILD_EXPORT_RECORD_CANDIDATES_SQL = `select e.model_key, e.id, ${S
    from content_models m
    cross join content_entries e on e.model_key = m.key
    join content_snapshots s on s.id = e.published_snapshot_id
-  where m.kind = 'collection' and ${ROUTE_LESS_PUBLISHED_SQL}
+  where m.kind in ${EXPORT_RECORD_MODEL_KINDS_SQL} and ${ROUTE_LESS_PUBLISHED_SQL}
     and (e.model_key, e.id) > (?, ?)
   order by e.model_key asc, e.id asc
   limit ?`;
@@ -89,7 +98,7 @@ const RECORD_RANGE_SQL = "(e.model_key, e.id) > (?, ?) and (e.model_key, e.id) <
 const EXPORT_RECORD_SNAPSHOTS_SQL = `select e.published_snapshot_id
      from content_models m
      cross join content_entries e on e.model_key = m.key
-    where m.kind = 'collection' and e.published_snapshot_id is not null
+    where m.kind in ${EXPORT_RECORD_MODEL_KINDS_SQL} and e.published_snapshot_id is not null
       and ${RECORD_RANGE_SQL} and ${ROUTE_LESS_PUBLISHED_SQL}`;
 
 /**
@@ -99,7 +108,7 @@ const EXPORT_RECORD_SNAPSHOTS_SQL = `select e.published_snapshot_id
 const EXPORT_GLOBAL_SNAPSHOTS_SQL = `select ge.published_snapshot_id
      from content_models gm
      cross join content_entries ge on ge.model_key = gm.key
-    where gm.kind = 'global' and ge.published_snapshot_id is not null`;
+    where gm.kind in ${EXPORT_GLOBAL_MODEL_KINDS_SQL} and ge.published_snapshot_id is not null`;
 
 function exportSnapshotFilter(column: string, globals: boolean): string {
   return `(${column} in (${EXPORT_RANGE_SNAPSHOTS_SQL}) or ${column} in (${EXPORT_RECORD_SNAPSHOTS_SQL})${
@@ -133,7 +142,7 @@ export function buildExportPageSql(globals: boolean): {
    from content_models m
    cross join content_entries e on e.model_key = m.key
    join content_snapshots s on s.id = e.published_snapshot_id
-  where m.kind = 'global'
+  where m.kind in ${EXPORT_GLOBAL_MODEL_KINDS_SQL}
   order by e.model_key asc`,
         }
       : {}),
@@ -143,7 +152,7 @@ export function buildExportPageSql(globals: boolean): {
   where ${exportSnapshotFilter("r.snapshot_id", globals)}
     and m.status = 'active' and ${DELIVERED_REFERENCE_SQL}
   order by r.snapshot_id asc, m.id asc`,
-    records: `${PUBLIC_RECORD_SQL} and ${RECORD_RANGE_SQL} order by e.model_key asc, e.id asc`,
+    records: `${EXPORT_RECORD_SQL} and ${RECORD_RANGE_SQL} order by e.model_key asc, e.id asc`,
     routes: `${PUBLIC_ROUTE_SQL} where r.path > ? and r.path <= ? order by r.path asc`,
     snapshots: `${SNAPSHOT_COLUMNS_SQL} where ${exportSnapshotFilter("s.id", globals)}`,
   };

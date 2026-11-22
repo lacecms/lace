@@ -1,3 +1,4 @@
+import { URL_LINK_MODEL_KINDS_SQL } from "../shared/model-kind-sql.js";
 import type { InternalLinkReference, JsonValue, SnapshotEntryReference } from "@lacecms/content";
 import {
   ContentValidationError,
@@ -215,7 +216,7 @@ export function syncInternalLinkStatements(
       left join content_entries target on target.id=i.target_entry_id
       left join content_models m on m.key=target.model_key
       left join published_routes route on route.entry_id=target.id and route.snapshot_id=target.published_snapshot_id
-      where i.purpose='url' and (m.kind='global' or (e.id is not null and i.delivered=1 and route.path is null))
+      where i.purpose='url' and (m.kind not in ${URL_LINK_MODEL_KINDS_SQL} or (e.id is not null and i.delivered=1 and route.path is null))
       and not exists(select 1 from content_entry_link_references r where ${same}))`,
     });
     writes.push(

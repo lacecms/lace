@@ -1,3 +1,4 @@
+import { modelKindDescriptor } from "@lacecms/content";
 import type { ContentModelDto } from "@lacecms/contracts";
 import { Send } from "lucide-react";
 import { Button } from "../../../shared/ui/Button/index.js";
@@ -39,7 +40,8 @@ export function PublishEntryDialog({
   readonly revision?: number | undefined;
   readonly unsavedChanges?: boolean;
 }) {
-  const global = kind === "global";
+  const global =
+    kind !== undefined && modelKindDescriptor(kind).delivery.publicFamily === "globals";
   const subject = global ? "this site content" : "this entry";
   const target = global || publicPath === undefined ? "" : ` at ${publicPath}`;
   const reach = global ? " It affects every page that shows it after the next site build." : "";

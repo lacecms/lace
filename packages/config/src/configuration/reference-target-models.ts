@@ -1,3 +1,4 @@
+import { modelKindDescriptor } from "@lacecms/content";
 import type { BlockRegistry, FieldDefinition, ModelFieldDefinitions } from "@lacecms/content";
 import type { ContentModelDefinition } from "../models/types.js";
 import { fail } from "../shared/errors.js";
@@ -17,7 +18,8 @@ export function assertReferenceTargetModels(
       for (const key of definition.models) {
         const model = byKey.get(key);
         if (model === undefined) fail(`${path} references unknown model "${key}".`);
-        if (model.kind === "global") fail(`${path} references global model "${key}".`);
+        if (!modelKindDescriptor(model.kind).referenceTarget)
+          fail(`${path} references global model "${key}".`);
       }
     }
   }

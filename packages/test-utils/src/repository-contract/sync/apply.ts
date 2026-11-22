@@ -1,12 +1,13 @@
 import { prepareConfigurationSynchronization } from "@lacecms/application";
 
-import { contentModelKey } from "@lacecms/domain";
+import { CONTENT_MODEL_KINDS, contentModelKey } from "@lacecms/domain";
 import {
   type RepositoryContractCase,
   sequence,
   count,
   entry,
   syncPage,
+  syncGlobal,
   syncCollection,
   syncResolver,
   applySync,
@@ -15,6 +16,61 @@ import {
 
 export const cases: RepositoryContractCase[] = [];
 const contract = registerContract(cases);
+
+contract("enforces the registered model kinds in migrated databases", async (runtime, expect) => {
+  const { sql } = await runtime.open({ resolveModel: () => undefined });
+  const insert =
+    "insert into content_models (key,kind,label,config_version,structure_hash,projection_hash,created_at,updated_at) values (?,?,?,1,'structure','projection',0,0)";
+  for (const kind of CONTENT_MODEL_KINDS) {
+    await sql.run(insert, kind, kind, kind);
+  }
+  await expect(sql.run(insert, "article", "article", "Article")).rejects.toThrow(
+    /CHECK constraint failed.*content_models_kind_check/iu,
+  );
+  expect(await sql.all("select kind from content_models order by kind")).toEqual(
+    CONTENT_MODEL_KINDS.toSorted().map((kind) => ({ kind })),
+  );
+});
+
+contract(
+  "provisions only singletons and refuses a kind-changing rename",
+  async (runtime, expect) => {
+    const home = syncPage();
+    const posts = syncCollection();
+    const credits = syncCollection({ key: "credits", route: undefined });
+    const settings = syncGlobal();
+    const models = [home, posts, credits, settings];
+    const { repository } = await runtime.open({ resolveModel: syncResolver(models) });
+    await expect(applySync(repository, models, 10)).resolves.toMatchObject({ status: "applied" });
+    await expect(applySync(repository, models, 11)).resolves.toMatchObject({ status: "noop" });
+    const before = await repository.readConfigurationSyncState();
+    expect(before).toMatchObject([
+      { key: "credits", entryCount: 0 },
+      { key: "home", entryCount: 1 },
+      { key: "posts", entryCount: 0 },
+      { key: "settings", entryCount: 1 },
+    ]);
+
+    const attempted = [
+      home,
+      credits,
+      settings,
+      syncGlobal({ key: "articles", renamedFrom: "posts" }),
+    ];
+    const prepared = await prepareConfigurationSynchronization({
+      models: attempted,
+      state: repository,
+    });
+    expect(prepared.plan).toMatchObject({
+      isValid: false,
+      diagnostics: [expect.objectContaining({ code: "RENAME_KIND_CHANGED" })],
+    });
+    await expect(applySync(repository, attempted, 12, prepared)).rejects.toMatchObject({
+      code: "CONTENT_INVALID_STATE",
+    });
+    expect(await repository.readConfigurationSyncState()).toEqual(before);
+  },
+);
 
 contract(
   "applies guarded configuration sync atomically, coalesces build work, and rejects stale plans",

@@ -1,3 +1,5 @@
+import { resolveModelKind } from "@lacecms/application";
+import type { ContentModelKind } from "@lacecms/application";
 import * as v from "valibot";
 
 /** Stable `lace import` result codes; never carry supplied values. */
@@ -150,9 +152,8 @@ export function parseImportPackage(value: unknown): ImportPackage {
 /** The model facts that format rules depend on. */
 export interface ImportModelFacts {
   readonly key: string;
-  readonly kind: "collection" | "global" | "page";
-  /** True for a collection without a route: its entries carry no slug. */
-  readonly routeLess?: boolean;
+  readonly kind: ContentModelKind;
+  readonly route?: string;
   readonly seo: boolean;
 }
 
@@ -173,33 +174,33 @@ export function modelRuleIssues(
       issues.push({ pointer: at("model"), message: "names no model in lace.config.ts." });
       continue;
     }
-    const routed = model.kind === "collection" && model.routeLess !== true;
-    if (routed && entry.slug === undefined)
+    const behavior = resolveModelKind(model);
+    const hasSlug = behavior.routing === "slug";
+    const systemTitle = behavior.admin.title === "system";
+    if (hasSlug && entry.slug === undefined)
       issues.push({ pointer: at("slug"), message: "is required for a collection entry." });
-    if (!routed && entry.slug !== undefined)
+    if (!hasSlug && entry.slug !== undefined)
       issues.push({
         pointer: at("slug"),
         message:
-          model.kind === "collection"
+          behavior.publicFamily === "records"
             ? "is not allowed for a collection without a route."
             : `is not allowed for a ${model.kind}.`,
       });
-    if (model.kind === "global" && entry.title !== undefined)
+    if (systemTitle && entry.title !== undefined)
       issues.push({ pointer: at("title"), message: "is not allowed for a global." });
-    if (model.kind !== "global" && entry.title === undefined)
+    if (!systemTitle && entry.title === undefined)
       issues.push({ pointer: at("title"), message: `is required for a ${model.kind}.` });
     if (entry.seo !== undefined && !model.seo)
       issues.push({ pointer: at("seo"), message: "is not enabled for this model." });
-    if (model.kind === "collection" && !routed) continue;
-    const identity =
-      model.kind === "collection" ? `${entry.model}\u0000${entry.slug}` : entry.model;
+    if (behavior.cardinality === "many" && !hasSlug) continue;
+    const identity = hasSlug ? `${entry.model}\u0000${entry.slug}` : entry.model;
     if (seen.has(identity))
       issues.push({
-        pointer: at(model.kind === "collection" ? "slug" : "model"),
-        message:
-          model.kind === "collection"
-            ? "duplicates another entry of this model with the same slug."
-            : `duplicates another entry of this ${model.kind}.`,
+        pointer: at(hasSlug ? "slug" : "model"),
+        message: hasSlug
+          ? "duplicates another entry of this model with the same slug."
+          : `duplicates another entry of this ${model.kind}.`,
       });
     seen.add(identity);
   }

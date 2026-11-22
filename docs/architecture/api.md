@@ -48,6 +48,11 @@ a draft, revision, editor name or other editorial key; the shapes are in
 [rest-contracts](../../openspec/specs/rest-contracts/spec.md) ("Public content
 responses return published entries").
 
+Public model reads use the family selected by the model kind descriptor and
+the configured route. Shared export queries use descriptor eligibility and
+the route of the published snapshot to assign entries to export sections.
+[Content-model kinds](content-configuration.md#content-model-kinds)
+
 - `blocks` hold visible blocks only and never carry `hidden`. Media referenced
   only by hidden blocks are absent from `media` dictionaries and not served by
   the public media route, yet keep their reference rows and stay protected by

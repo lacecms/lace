@@ -1,6 +1,6 @@
 import type { NormalizedContentModel } from "@lacecms/config";
 import { ContentValidationError, MAX_DRAFT_MEDIA_REFERENCES } from "@lacecms/content";
-import { DomainError, mediaId } from "@lacecms/domain";
+import { DomainError, mediaId, resolveModelKind } from "@lacecms/domain";
 import type { CompleteDraftInput, ContentUseCaseDependencies } from "./use-case-inputs.js";
 import { normalizeDraftCandidate } from "./draft-normalization.js";
 import type { NormalizedDraft } from "./draft-normalization.js";
@@ -73,8 +73,7 @@ export async function validateDraft(
       ]),
       routeLessModelKeys(dependencies.config.content),
     );
-    const routable =
-      model.kind === "page" || (model.kind === "collection" && model.route !== undefined);
+    const routable = resolveModelKind(model).routing !== "none";
     const issues = internalLinks.flatMap((reference) => {
       const status = statuses[reference.targetId];
       const self = publishingEntryId === reference.targetId && routable;

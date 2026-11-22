@@ -88,7 +88,7 @@ function classifyMatchedModel(
       ...(current.removedBlocks === undefined ? {} : { removedBlocks: current.removedBlocks }),
       ...(current.removedFields === undefined ? {} : { removedFields: current.removedFields }),
       ...(current.renamedFields === undefined ? {} : { renamedFields: current.renamedFields }),
-      ...(current.kind !== "global" && current.removedSeo === true ? { removedSeo: true } : {}),
+      ...("removedSeo" in current && current.removedSeo === true ? { removedSeo: true } : {}),
       renamedModels,
     };
     const issues = validateStructureHints(stored.structure!, hints);

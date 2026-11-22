@@ -1,7 +1,7 @@
 import { readFile, realpath, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { normalizeDraftCandidate } from "@lacecms/application";
+import { isContentModelKind, normalizeDraftCandidate, seoEnabled } from "@lacecms/application";
 import type { CompleteDraftInput, NormalizedDraftCandidate } from "@lacecms/application";
 import type { NormalizedContentModel, RuntimeConfigProjection } from "@lacecms/config";
 import {
@@ -58,7 +58,11 @@ export async function loadImportConfiguration(cwd: string): Promise<ImportConfig
   }
   const runtime = (module as { default?: { runtime?: Partial<RuntimeConfigProjection> } }).default
     ?.runtime;
-  if (!Array.isArray(runtime?.content) || typeof runtime.blocks?.get !== "function")
+  if (
+    !Array.isArray(runtime?.content) ||
+    runtime.content.some((model) => !isContentModelKind(model?.kind)) ||
+    typeof runtime.blocks?.get !== "function"
+  )
     throw new ImportError("IMPORT_SETTINGS", "Invalid root lace.config.ts.");
   return {
     blocks: runtime.blocks,
@@ -70,8 +74,8 @@ export function modelFacts(model: NormalizedContentModel): ImportModelFacts {
   return {
     key: model.key,
     kind: model.kind,
-    ...(model.kind === "collection" && model.route === undefined ? { routeLess: true } : {}),
-    seo: model.kind !== "global" && model.seo !== undefined,
+    ...("route" in model && model.route !== undefined ? { route: model.route } : {}),
+    seo: seoEnabled(model),
   };
 }
 

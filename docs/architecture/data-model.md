@@ -18,6 +18,11 @@ the content tables ([ADR 0026](../adr/0026-code-defined-models-two-snapshots.md)
 `content_models` holds each configured model's `key`, `kind` (`page`,
 `collection` or `global`), label, configuration version and sync hashes.
 
+- The live Drizzle schema generates the `kind` CHECK from the descriptor keys.
+  A new kind requires a versioned table rebuild for SQLite and D1 that
+  preserves model rows, their referencing entries and foreign-key actions.
+  Released migration SQL and snapshots retain the constraints of their
+  versions. [ADR 0010](../adr/0010-global-models.md)
 - `key` is a stable programmatic identifier. Labels may change freely; renaming
   a key is a migration, not a display-name edit.
 - `structure_json` is the canonical structure as of the last successful sync,

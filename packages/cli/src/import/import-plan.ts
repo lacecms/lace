@@ -1,4 +1,4 @@
-import { canonicalizeJson, normalizeMediaText } from "@lacecms/application";
+import { canonicalizeJson, normalizeMediaText, resolveModelKind } from "@lacecms/application";
 import type { NormalizedDraftCandidate } from "@lacecms/application";
 import {
   adminContentEntrySchema,
@@ -267,21 +267,22 @@ async function findEntry(
   issues: ImportIssue[],
 ): Promise<AdminEntry | undefined> {
   const { entry, index, model } = validated;
+  const behavior = resolveModelKind(model);
   const recorded = state.entry(entry.key);
-  if (model.kind === "collection" && recorded?.model === model.key) {
+  if (behavior.cardinality === "many" && recorded?.model === model.key) {
     const current = await readEntry(client, entry.key, recorded.id);
     if (current?.model.key === model.key && current.draft.slug === entry.slug) return current;
   }
   // A route-less entry has no slug to look up: only its state-file mapping matches it.
-  if (model.kind === "collection" && model.route === undefined) return undefined;
+  if (behavior.publicFamily === "records") return undefined;
   const items = await listEntries(
     client,
     entry.key,
     model.key,
-    model.kind === "collection" ? entry.slug : undefined,
+    behavior.routing === "slug" ? entry.slug : undefined,
   );
   if (items.length === 0) {
-    if (model.kind !== "collection")
+    if (behavior.cardinality === "one")
       issues.push({
         pointer: pointer("entries", index, "model"),
         message: `has no ${model.kind} entry on the server; run lace content sync against this installation.`,

@@ -1,3 +1,4 @@
+import { resolveModelKind } from "@lacecms/application";
 import { randomBytes } from "node:crypto";
 import type { AdminContentEntryDto } from "@lacecms/contracts";
 import { cycleIssues, findDependencyCycle, snapshotDependencies } from "./import-dependencies.js";
@@ -177,13 +178,12 @@ export function importOrders(
     const dependencies = localTargets(validated.dependencies, keyById);
     for (const edge of dependencies) {
       const targetModel = byKey.get(edge.target)!.validated.model;
-      if (
-        (edge.purpose === "reference" && !edge.models?.includes(targetModel.key)) ||
-        targetModel.kind === "global" ||
-        (edge.purpose === "url" &&
-          targetModel.kind === "collection" &&
-          targetModel.route === undefined)
-      )
+      const behavior = resolveModelKind(targetModel);
+      const eligible =
+        edge.purpose === "reference"
+          ? behavior.referenceTarget && edge.models?.includes(targetModel.key)
+          : behavior.routing !== "none";
+      if (!eligible)
         issues.push({
           pointer: edge.pointer,
           message: `"${edge.target}" is ineligible for this field.`,

@@ -1,3 +1,4 @@
+import { CONTENT_MODEL_KINDS } from "@lacecms/domain";
 import { sql } from "drizzle-orm";
 import {
   check,
@@ -9,6 +10,7 @@ import {
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import { modelKindSqlList } from "../shared/model-kind-sql.js";
 import { timestamp } from "./columns.js";
 
 export const contentModels = sqliteTable(
@@ -29,7 +31,10 @@ export const contentModels = sqliteTable(
     updatedAt: timestamp("updated_at"),
   },
   (table) => [
-    check("content_models_kind_check", sql`${table.kind} in ('page', 'collection', 'global')`),
+    check(
+      "content_models_kind_check",
+      sql`${table.kind} in ${sql.raw(modelKindSqlList(CONTENT_MODEL_KINDS))}`,
+    ),
     check("content_models_config_version_check", sql`${table.configVersion} > 0`),
   ],
 );

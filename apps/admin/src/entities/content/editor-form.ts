@@ -10,6 +10,7 @@ import {
   MAX_JSON_BYTES,
   canonicalJsonByteLength,
   normalizeBlockClassName,
+  resolveModelKind,
   validateFieldValue,
 } from "@lacecms/content";
 import type { BlockMetadata, FieldMetadata, JsonObject, JsonValue } from "@lacecms/content";
@@ -216,7 +217,7 @@ function fieldErrors(
   else if (values.title.length > MAX_TITLE_LENGTH)
     errors.title = error(`Title must not exceed ${MAX_TITLE_LENGTH} characters.`);
   if (
-    model.kind === "collection" &&
+    resolveModelKind(model).routing === "slug" &&
     values.slug !== undefined &&
     values.slug.length > MAX_SLUG_LENGTH
   )

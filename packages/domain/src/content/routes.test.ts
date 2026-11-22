@@ -1,10 +1,17 @@
 import { expect, test } from "vitest";
-import { contentEntryId, contentSnapshotId, unixMilliseconds } from "../shared/brands.js";
+import {
+  contentEntryId,
+  contentModelKey,
+  contentSnapshotId,
+  unixMilliseconds,
+} from "../shared/brands.js";
 import { expectDomainError } from "../test-support/assertions.js";
 import { assertEntryCreationAllowed } from "./entries.js";
 import {
   assertPublicPathAvailable,
   isSingletonKind,
+  hasPublicRoute,
+  isRouteLessCollection,
   normalizeCollectionPublicRoute,
   resolveCollectionPublicPath,
 } from "./routes.js";
@@ -60,4 +67,16 @@ test("collection route failures use the shared parameter wording", () => {
   expect(() => normalizeCollectionPublicRoute("/blog/:slug/:id")).toThrow(
     "route must contain exactly one :slug segment and no other parameters.",
   );
+});
+
+test("distinguishes route-less collections from globals and routed models", () => {
+  const key = contentModelKey("items");
+  const page = { key, kind: "page", path: "/" } as const;
+  const routed = { key, kind: "collection", route: "/items/:slug" } as const;
+  const records = { key, kind: "collection" } as const;
+  const global = { key, kind: "global" } as const;
+  expect([page, routed, records, global].filter(hasPublicRoute)).toEqual([page, routed]);
+  expect([page, routed, records, global].filter(isRouteLessCollection)).toEqual([records]);
+  // @ts-expect-error A runtime caller supplied an unregistered kind.
+  expect(isSingletonKind("constructor")).toBe(false);
 });

@@ -1,16 +1,24 @@
+import { modelKindDescriptor, resolveModelKind } from "@lacecms/content";
 import type { ContentModelDto } from "@lacecms/contracts";
 
-/** Pages and globals have exactly one configuration-defined entry. */
 export function isSingletonModel(model: Pick<ContentModelDto, "kind">): boolean {
-  return model.kind === "page" || model.kind === "global";
+  return modelKindDescriptor(model.kind).cardinality === "one";
 }
 
-/** Pages and collections that declare a route have public paths; globals and route-less collections do not. */
 export function hasPublicRoute(model: Pick<ContentModelDto, "kind" | "route">): boolean {
-  return model.kind === "page" || (model.kind === "collection" && model.route !== undefined);
+  return resolveModelKind(model).routing !== "none";
 }
 
-/** A collection without a route: its entries have no slug and no public path. */
 export function isRouteLessCollection(model: Pick<ContentModelDto, "kind" | "route">): boolean {
-  return model.kind === "collection" && model.route === undefined;
+  return resolveModelKind(model).publicFamily === "records";
+}
+
+export function modelPublicPath(
+  model: Pick<ContentModelDto, "kind" | "path" | "route">,
+  slug: string | undefined,
+): string | undefined {
+  const { routing } = resolveModelKind(model);
+  if (routing === "fixed") return model.path;
+  if (routing === "slug" && slug !== undefined) return model.route?.replace(":slug", slug);
+  return undefined;
 }

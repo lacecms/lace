@@ -19,6 +19,7 @@ import {
   DomainError,
   CollectionQueryValidationError,
   isContentSlug,
+  isSingletonKind,
   auditActor,
   assertCollectionEntryOperation,
   blockKey,
@@ -52,6 +53,7 @@ import type {
   ContentEntryStatus,
 } from "../ports/content.js";
 import type { PublicationIdempotencyKey } from "../shared/brands.js";
+import { contentModelRoute } from "../shared/model-route.js";
 import { siteBuildEvent } from "../ports/outbox.js";
 import { validateDraft } from "./draft-validation.js";
 import {
@@ -83,7 +85,6 @@ import {
   type NormalizedDraft,
   seoEnabled,
   detached,
-  contentModelRoute,
   systemTitle,
 } from "./draft-normalization.js";
 const FIELD_SORT_PATTERN = new RegExp(`^-?field:${FIELD_KEY_SOURCE}$`, "u");
@@ -248,7 +249,7 @@ export class ContentUseCases {
     ) {
       throw new DomainError("CONTENT_INVALID_STATE", "Entry sort is unsupported.");
     }
-    if (input.slug !== undefined && (model.kind !== "collection" || !isContentSlug(input.slug)))
+    if (input.slug !== undefined && (isSingletonKind(model.kind) || !isContentSlug(input.slug)))
       throw new CollectionQueryValidationError("/slug");
     // A request without sort uses the collection's configured default.
     const sort =

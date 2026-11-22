@@ -47,6 +47,29 @@ test("routes collections to their entry list and pages back to the landing route
   expect(screen.queryByRole("button", { name: /Create entry/ })).not.toBeInTheDocument();
 });
 
+test.each(["editor", "viewer"] as const)("opens the record list for a %s", async (role) => {
+  renderRoute(
+    "/content/credits",
+    staticSessionSource({ id: role, role }),
+    stubClient({
+      listModels: async () => ({
+        listQueryLimits: { maxSearchLength: 200, maxLikePatternBytes: null },
+        items: [{ key: "credits", kind: "collection", blocks: [], fields: {}, version: 1 }],
+      }),
+      listEntries: async () => entryList([]),
+    }),
+  );
+  expect(await screen.findByRole("region", { name: "No entries yet" })).toBeInTheDocument();
+  if (role === "viewer") {
+    expect(screen.queryByRole("button", { name: "Create entry" })).not.toBeInTheDocument();
+    return;
+  }
+  await userEvent.setup().click(screen.getByRole("button", { name: "Create entry" }));
+  const dialog = within(screen.getByRole("dialog", { name: "Create entry" }));
+  expect(dialog.getByRole("textbox", { name: "Title" })).toBeInTheDocument();
+  expect(dialog.queryByRole("textbox", { name: "Slug" })).not.toBeInTheDocument();
+});
+
 test("reports unknown models and failed model loads without an entry list", async () => {
   renderRoute("/content/missing", editor);
   expect(await screen.findByRole("heading", { name: "Page not found" })).toBeInTheDocument();

@@ -23,10 +23,12 @@ The primary routes are `/login`; the public `/accept-invite`,
 `/builds`; `/users` (`users:manage`); and `/settings` (`settings:manage`)
 ([admin-application-shell](../../openspec/specs/admin-application-shell/spec.md)).
 
-- The content-model response drives navigation and field forms. Pages and
-  globals open their singleton editor directly; collections open a paginated
-  entry list; the model route of a page or global only points back to the
-  content overview.
+- The content-model response and model kind descriptors drive navigation and
+  field forms. Pages and globals open their singleton editor directly.
+  Both collection shapes open a paginated entry list. A page or global model
+  route points back to the content overview. The admin supplies group labels
+  and fallback icons, and configured icons take precedence.
+  [Content-model kinds](content-configuration.md#content-model-kinds)
 - Shell surfaces never show internal entry or user IDs; the publication card
   also hides ISO timestamps.
 - Collection-list search, status, sort and field filters live in the route's

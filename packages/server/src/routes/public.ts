@@ -11,12 +11,7 @@ import {
   type JsonResponse,
 } from "../shared/http.js";
 import { collectionItemParams, modelKeyParams, pagination, publicPath } from "../shared/request.js";
-import {
-  collectionModel,
-  globalModel,
-  pageModel,
-  routeLessCollectionModel,
-} from "../shared/content-config.js";
+import { publicModel } from "../shared/content-config.js";
 import {
   authenticationFailure,
   describePolicy,
@@ -101,7 +96,11 @@ export function createPublicRoutes(routeContext: RouteContext) {
       }),
       validate("param", modelKeyParams),
       async (context) => {
-        const model = globalModel(capabilities.config, context.req.valid("param").modelKey);
+        const model = publicModel(
+          capabilities.config,
+          context.req.valid("param").modelKey,
+          "globals",
+        );
         if (model === undefined) return notFound();
         const global = await capabilities.publicContent.loadPublicGlobal(
           configuredModelKey(model.key),
@@ -127,7 +126,11 @@ export function createPublicRoutes(routeContext: RouteContext) {
       }),
       validate("param", modelKeyParams),
       async (context) => {
-        const model = pageModel(capabilities.config, context.req.valid("param").modelKey);
+        const model = publicModel(
+          capabilities.config,
+          context.req.valid("param").modelKey,
+          "pages",
+        );
         if (model === undefined) return notFound();
         const entry = await capabilities.publicContent.loadPublic(model.path);
         return entry === null
@@ -155,9 +158,10 @@ export function createPublicRoutes(routeContext: RouteContext) {
       }),
       validate("param", modelKeyParams),
       async (context) => {
-        const model = routeLessCollectionModel(
+        const model = publicModel(
           capabilities.config,
           context.req.valid("param").modelKey,
+          "records",
         );
         if (model === undefined) return notFound();
         const page = await capabilities.publicContent.listPublicRecords({
@@ -184,7 +188,11 @@ export function createPublicRoutes(routeContext: RouteContext) {
       }),
       validate("param", modelKeyParams),
       async (context) => {
-        const model = collectionModel(capabilities.config, context.req.valid("param").modelKey);
+        const model = publicModel(
+          capabilities.config,
+          context.req.valid("param").modelKey,
+          "collections",
+        );
         if (model === undefined) return notFound();
         const page = await capabilities.publicContent.listPublic({
           modelKey: configuredModelKey(model.key),
@@ -212,7 +220,11 @@ export function createPublicRoutes(routeContext: RouteContext) {
       }),
       validate("param", collectionItemParams),
       async (context) => {
-        const model = collectionModel(capabilities.config, context.req.valid("param").modelKey);
+        const model = publicModel(
+          capabilities.config,
+          context.req.valid("param").modelKey,
+          "collections",
+        );
         if (model === undefined) return notFound();
         const resolved = collectionPathFailure(model.route, context.req.valid("param").slug);
         if (!("path" in resolved))

@@ -1,3 +1,4 @@
+import { resolveModelKind } from "@lacecms/content";
 import type { ComponentProps } from "react";
 import { RichTextEditor } from "../../../entities/rich-text/index.js";
 import { LINK_URL_MESSAGE, fieldEditorServices } from "../../../entities/content/index.js";
@@ -329,8 +330,8 @@ function EntryEditorPage({
   const saveErrorCode = save.error instanceof AdminClientError ? save.error.code : undefined;
   const titleError = form.formState.errors.title;
   const slugError = form.formState.errors.slug;
-  // Only a routed collection has the slug control; route-less entries carry no slug.
-  const hasSlug = model.kind === "collection" && model.route !== undefined;
+  const behavior = resolveModelKind(model);
+  const hasSlug = behavior.routing === "slug";
   const hasEntryFields = hasSlug || Object.keys(model.fields).length > 0;
   // A model without block types (and no leftover blocks) has nothing for the
   // main column, so its fields take the place of the Blocks section.
@@ -431,7 +432,7 @@ function EntryEditorPage({
                 open={publishDialogOpen}
                 pending={publish.isPending || savingToPublish}
                 kind={model.kind}
-                publicPath={resolvedPublicPath(model, currentEntry)}
+                publicPath={publicPath}
                 revision={currentEntry.draft.revision}
                 unsavedChanges={dirty}
               />
@@ -440,7 +441,7 @@ function EntryEditorPage({
           saveDisabled={busy || !dirty}
           state={saveState}
         />
-        {model.kind !== "global" && can(session, "content:read") && (
+        {behavior.referenceTarget && can(session, "content:read") && (
           <WhereUsedButton
             key={entryId}
             disabled={busy}
@@ -569,7 +570,7 @@ function EntryEditorPage({
                     reloading={reloadServerDraft.isPending}
                   />
                 )}
-                {model.kind === "global" ? (
+                {behavior.admin.title === "system" ? (
                   // A global's title is its model label and is owned by the system.
                   <div className="grid gap-1">
                     <p className="m-0 py-1 text-2xl font-semibold tracking-tight">
@@ -641,7 +642,7 @@ function EntryEditorPage({
                     </div>
                   ) : undefined}
                 </EntryPublicationDetails>
-                {can(session, "content:read") && (model.kind === "page" || hasSlug) && (
+                {can(session, "content:read") && behavior.routing !== "none" && (
                   <EntryPreviewActions
                     key={entryId}
                     entryId={entryId}
@@ -650,7 +651,7 @@ function EntryEditorPage({
                     canWrite={!readOnly}
                     dirty={dirty}
                     busy={busy}
-                    eligible={model.kind === "page" || Boolean(currentEntry.draft.slug)}
+                    eligible={!hasSlug || Boolean(currentEntry.draft.slug)}
                     onIssues={editor.applyServerIssues}
                   />
                 )}

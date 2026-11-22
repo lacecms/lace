@@ -1,7 +1,7 @@
 import { isCliRecord as isObject } from "../shared/record.js";
-import { encodeEntryLink } from "@lacecms/application";
+import { encodeEntryLink, resolveModelKind } from "@lacecms/application";
 import { pointer } from "./import-format.js";
-import type { ImportEntry, ImportIssue } from "./import-format.js";
+import type { ImportEntry, ImportIssue, ImportModelFacts } from "./import-format.js";
 
 /** The structural part of a field descriptor that reference walking needs. */
 export interface FieldShape {
@@ -25,10 +25,7 @@ export interface EntryReference {
 /** Keys a package defines and the eligibility of each entry's model. */
 export interface PackageKeys {
   readonly media: ReadonlySet<string>;
-  readonly entries: ReadonlyMap<
-    string,
-    { readonly key: string; readonly kind: string; readonly routeLess?: boolean }
-  >;
+  readonly entries: ReadonlyMap<string, Pick<ImportModelFacts, "key" | "kind" | "route">>;
 }
 
 /** Removes the reference's location: an object property or a list element. */
@@ -216,13 +213,14 @@ export function collectReferences(
         return undefined;
       }
       const target = keys.entries.get(key);
+      const behavior = target === undefined ? undefined : resolveModelKind(target);
       if (kind === "media" && !keys.media.has(key))
         issues.push({ pointer: at(path), message: "names no media item of the package." });
       else if (kind !== "media" && target === undefined)
         issues.push({ pointer: at(path), message: "names no entry of the package." });
-      else if (kind !== "media" && target?.kind === "global")
+      else if (kind !== "media" && behavior?.referenceTarget === false)
         issues.push({ pointer: at(path), message: "must name a page or collection entry." });
-      else if (kind === "entry" && target?.routeLess === true)
+      else if (kind === "entry" && behavior?.routing === "none")
         issues.push({ pointer: at(path), message: "must name an entry with a route." });
       else if (kind === "reference" && !shape?.models?.includes(target!.key))
         issues.push({

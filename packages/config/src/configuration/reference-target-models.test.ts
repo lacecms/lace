@@ -77,3 +77,15 @@ test("rejects duplicate models in a forged model field and forbids targeting a f
     'model "articles" fields/author references unknown model "people".',
   );
 });
+
+test.each(["article", "constructor"])(
+  "rejects model kind %s before checking references",
+  async (kind) => {
+    await expect(
+      defineConfig({
+        // @ts-expect-error Deliberately invalid configuration from an untyped caller.
+        content: [{ ...page, kind }],
+      }),
+    ).rejects.toThrow("config.content[0] has an invalid model kind.");
+  },
+);

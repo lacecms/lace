@@ -10,7 +10,6 @@ import {
   entryStatus,
   hasEntryActions,
   resolvedPublicPath,
-  isRouteLessCollection,
 } from "../../entities/content/index.js";
 import { DeleteEntryDialog } from "../../features/delete-entry/index.js";
 import { RevertEntryDialog } from "../../features/revert-entry/index.js";
@@ -155,11 +154,10 @@ export function EntryActionsMenu({
           {...dialogState("unpublish")}
           entryId={entry.id}
           expectedPublishedSnapshotId={entry.published.id}
-          kind={model.kind}
+          model={model}
           onReload={onReload}
           onUnpublished={onUnpublished}
           publicPath={resolvedPublicPath(model, entry)}
-          routeLess={isRouteLessCollection(model)}
         />
       ) : undefined}
       {actions.delete ? (

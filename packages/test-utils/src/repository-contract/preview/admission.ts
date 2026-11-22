@@ -1,9 +1,64 @@
-import { unixMilliseconds } from "@lacecms/domain";
-import { save } from "../shared.js";
+import { PreviewAdmissionService } from "@lacecms/application";
+import { defineCollection, defineConfig, defineGlobal } from "@lacecms/config";
+import { contentEntryId, contentModelKey, unixMilliseconds } from "@lacecms/domain";
+import { applySync, editor, entry, save, sequence, syncResolver } from "../shared.js";
 import type { RepositoryContractCase } from "../shared.js";
 import { openPreview, previewInput } from "./fixtures.js";
 
 export const cases: readonly RepositoryContractCase[] = [
+  {
+    name: "preview admission requires a configured public route",
+    async run(runtime, expect) {
+      const config = await defineConfig({
+        content: [
+          defineCollection({ key: "posts", route: "/blog/:slug", version: 1 }),
+          defineCollection({ key: "testimonials", version: 1 }),
+          defineGlobal({ key: "settings", version: 1 }),
+        ],
+      });
+      const { repository } = await runtime.open({
+        resolveModel: syncResolver(config.runtime.content),
+      });
+      await applySync(repository, config.runtime.content, 10);
+      for (const draft of [
+        entry("post", "posts", { updatedAt: 11, slug: "post" }),
+        entry("record", "testimonials", { updatedAt: 11 }),
+      ]) {
+        await repository.create({ entry: draft, mediaReferences: [] });
+      }
+      const globals = await repository.list({
+        modelKey: contentModelKey("settings"),
+        listFields: [],
+        sort: "title",
+        limit: 1,
+      });
+      const service = new PreviewAdmissionService({
+        clock: { now: () => unixMilliseconds(100) },
+        config: config.runtime,
+        content: repository,
+        idGenerator: { next: sequence("preview") },
+        media: repository,
+        preview: repository.preview,
+        source: { commit: "a".repeat(40), executor: "fixture" },
+      });
+      const create = (id: string) =>
+        service.create(editor, {
+          entryId: contentEntryId(id),
+          expectedRevision: 1,
+          idempotencyKey: id,
+        });
+      for (const id of ["record", globals.items[0]!.id]) {
+        await expect(create(id)).resolves.toEqual({
+          kind: "rejected",
+          reason: "PREVIEW_INELIGIBLE",
+        });
+      }
+      await expect(create("post")).resolves.toMatchObject({
+        kind: "admitted",
+        generation: { path: "/blog/post" },
+      });
+    },
+  },
   {
     name: "preview admission deduplicates races and guards the installation slot",
     async run(runtime, expect) {

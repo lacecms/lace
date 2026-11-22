@@ -53,6 +53,14 @@ function stored() {
   );
 }
 
+test.each(["article", "constructor"])("rejects the stored model kind %s", (kind) => {
+  database.exec(`insert into content_models
+    (key,kind,label,config_version,structure_hash,projection_hash,created_at,updated_at)
+    values ('home','page','Home',1,'structure','projection',0,0)`);
+  const row = database.prepare(STORED_MODEL_STATE_SQL).get() as unknown as StoredModelStateRow;
+  expect(() => storedModelStates([{ ...row, kind }])).toThrow("Stored model kind is invalid.");
+});
+
 function reviewed(models: readonly Model[], at = 10): ApplyConfigurationSynchronizationInput {
   const expectedStoredModels = stored();
   const appliedAt = unixMilliseconds(at);
