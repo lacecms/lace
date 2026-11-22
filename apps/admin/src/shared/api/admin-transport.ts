@@ -92,6 +92,10 @@ export async function request(
   path: string,
   init: RequestInit = {},
 ): Promise<unknown> {
+  return (await requestExchange(fetcher, path, init)).body;
+}
+
+export async function requestExchange(fetcher: Fetcher, path: string, init: RequestInit) {
   let response: Response;
   try {
     response = await fetcher(path, {
@@ -105,7 +109,7 @@ export async function request(
   const body = response.status === 204 ? undefined : await json(response);
   if (!response.ok)
     throw responseError(response.status, response.headers.get("x-request-id") ?? undefined, body);
-  return body;
+  return { body, status: response.status };
 }
 
 export function postJson(fetcher: Fetcher, path: string, body: unknown): Promise<unknown> {

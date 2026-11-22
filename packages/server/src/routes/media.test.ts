@@ -564,11 +564,12 @@ test("removing a media block from a draft releases the media only after republic
 });
 
 test("detach=drafts clears draft-only usage before deletion and rejects other values", async () => {
+  let current = editor;
   const {
     app,
     sqlite: { connection },
   } = await fixture({
-    actor: editor,
+    resolveActor: async () => current,
     blocks: mediaBlocks,
     maxBodyBytes: 8192,
     models: mediaModels,
@@ -616,7 +617,54 @@ test("detach=drafts clears draft-only usage before deletion and rejects other va
   });
   expect((await json(app, `/api/v1/admin/entries/${created.body.id}`)).body.draft.revision).toBe(1);
 
+  for (const [query, path] of [
+    ["step=entry", "step"],
+    ["detach=drafts&step=entry&entryId=x", "expectedRevision"],
+    ["detach=drafts&step=entry&expectedRevision=1", "entryId"],
+    ["detach=drafts&step=finish&entryId=x", "entryId"],
+    ["expectedRevision=1", "expectedRevision"],
+    ["detach=drafts&step=none", "step"],
+    ["detach=drafts&step=entry&step=finish", "step"],
+    ["detach=drafts&step=entry&entryId=x&entryId=y&expectedRevision=1", "entryId"],
+    ...["0", "-1", "1.5", "9007199254740992", "1&expectedRevision=1"].map((r) => [
+      "detach=drafts&step=entry&entryId=x&expectedRevision=" + r,
+      "expectedRevision",
+    ]),
+  ]) {
+    expect(await remove("?" + query)).toMatchObject({
+      body: {
+        error: {
+          code: "VALIDATION_FAILED",
+          details: {
+            issues: expect.arrayContaining([expect.objectContaining({ path: "/" + path })]),
+          },
+        },
+      },
+      response: { status: 422 },
+    });
+  }
   expect(await remove("?detach=drafts")).toMatchObject({
+    body: { state: "drafts", drafts: [{ entryId: created.body.id, expectedRevision: 1 }] },
+    response: { status: 200 },
+  });
+  const step = "?detach=drafts&step=entry&entryId=" + created.body.id + "&expectedRevision=";
+  current = { ...editor, role: "viewer" };
+  for (const q of [step + "1", "?detach=drafts&step=finish"])
+    expect(await remove(q)).toMatchObject({
+      response: { status: 403 },
+      body: { error: { code: "AUTHORIZATION_DENIED" } },
+    });
+  current = editor;
+  expect(await remove(step + "2")).toMatchObject({
+    response: { status: 409 },
+    body: { error: { code: "CONTENT_REVISION_CONFLICT" } },
+  });
+  for (let i = 0; i < 2; i++)
+    expect(await remove(step + "1")).toMatchObject({
+      response: { status: 200 },
+      body: { state: "entry-complete", entryId: created.body.id },
+    });
+  expect(await remove("?detach=drafts&step=finish")).toMatchObject({
     body: { id: image.id, status: "deleting", usageCount: 0 },
     response: { status: 202 },
   });

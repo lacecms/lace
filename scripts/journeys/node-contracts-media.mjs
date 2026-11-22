@@ -118,9 +118,20 @@ export async function nodeContractsMediaJourney({
     },
   });
   assert.equal(created.response.status, 201, JSON.stringify(created.body));
-  const detached = await invoke(`admin/media/${uploaded.body.id}?detach=drafts`, {
-    method: "DELETE",
+  const detachPath = `admin/media/${uploaded.body.id}?detach=drafts`;
+  const plan = await invoke(detachPath, { method: "DELETE" });
+  assert.equal(plan.response.status, 200);
+  assert.deepEqual(plan.body, {
+    state: "drafts",
+    drafts: [{ entryId: created.body.id, expectedRevision: 1 }],
   });
+  const step = await invoke(
+    `${detachPath}&step=entry&entryId=${encodeURIComponent(created.body.id)}&expectedRevision=1`,
+    { method: "DELETE" },
+  );
+  assert.equal(step.response.status, 200);
+  assert.deepEqual(step.body, { state: "entry-complete", entryId: created.body.id });
+  const detached = await invoke(detachPath + "&step=finish", { method: "DELETE" });
   assert.equal(detached.response.status, 202);
   assert.equal(detached.body.status, "deleting");
   assert.equal(detached.body.usageCount, 0);

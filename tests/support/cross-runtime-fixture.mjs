@@ -309,7 +309,7 @@ export async function openProductRuntime(kind, options = {}) {
         },
       };
       dispatchPending = async () => {
-        await Promise.all(pending);
+        while (pending.size) await Promise.all(pending);
       };
       let worker = createCloudflareWorker({
         config,

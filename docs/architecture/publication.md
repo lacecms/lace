@@ -59,6 +59,14 @@ The outbox dispatcher runs after commit and invokes `SiteBuildTrigger`. Failed
 dispatches stay recoverable with bounded exponential backoff, and a scheduled
 recovery process handles events left pending after a Worker or container
 terminates ([outbox-dispatch](../../openspec/specs/outbox-dispatch/spec.md)).
+
+On the VPS, each poll claims at most one build when it is ready to call the
+builder. Other due builds stay available to a peer or the next poll while the
+active call renews its lease. Recovery can reclaim the same build ID when an
+unfinished lease expires. If the builder already acted before the dispatcher
+stopped and the result was never recorded, recovery can invoke that build ID
+again. See the [site-build dispatch specification](../../openspec/specs/site-build-dispatch/spec.md).
+
 On the Worker, a request whose committed D1 batch inserted or coalesced an
 outbox event registers one best-effort `waitUntil` pass, whatever its route
 or transport (REST or MCP); scheduled dispatch remains the recovery path

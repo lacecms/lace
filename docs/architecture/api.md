@@ -48,6 +48,18 @@ a draft, revision, editor name or other editorial key; the shapes are in
 [rest-contracts](../../openspec/specs/rest-contracts/spec.md) ("Public content
 responses return published entries").
 
+Public model reads use the family selected by the model kind descriptor and
+the configured route. Shared export queries use descriptor eligibility and
+the route of the published snapshot to assign entries to export sections.
+[Content-model kinds](content-configuration.md#content-model-kinds)
+
+Each page, global, collection item, by-path lookup and collection or records
+list response comes from one committed database state. A republish at the same
+address can return the complete earlier or later publication. The selected
+items, visible blocks, local link manifests, media and continuation cursor all
+come from that state. Each list page request sees its own committed state.
+The build export pins its sequence to a published-state version.
+
 - `blocks` hold visible blocks only and never carry `hidden`. Media referenced
   only by hidden blocks are absent from `media` dictionaries and not served by
   the public media route, yet keep their reference rows and stay protected by
@@ -158,6 +170,10 @@ description.
   deletion and unpublication. Draft-only deletion review and existing URL
   review use separate receipts. Content validation may include a bounded cycle
   witness and a verified source to publish first for an authorized reader.
+- Media deletion with `detach=drafts` uses the session-authenticated DELETE
+  route for admission, one named entry and revision per request, and finish.
+  Every request requires both write permissions. HTTP 200 carries progress,
+  and HTTP 202 carries the deleting item after the outbox commit.
 - Media tags are read with `content:read` and changed with `media:write`; tag
   filters and the tag catalog are bounded reads
   ([media-use-cases](../../openspec/specs/media-use-cases/spec.md), "Media

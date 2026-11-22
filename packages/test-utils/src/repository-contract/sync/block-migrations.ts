@@ -4,7 +4,7 @@ import { defineCollection, defineConfig } from "@lacecms/config";
 
 import { builtInBlocks, defineBlock, field, validateBlockData } from "@lacecms/content";
 
-import { blockKey, contentEntryId, mediaId } from "@lacecms/domain";
+import { contentEntryId, mediaId } from "@lacecms/domain";
 
 import {
   type ContractRepository,
@@ -155,60 +155,21 @@ contract(
   },
 );
 
-contract(
-  "refuses stored built-in blocks below their version without writing",
-  async (runtime, expect) => {
-    const gallery = builtInBlocks.gallery;
-    const old = defineBlock({
-      fields: gallery.fields,
-      settings: gallery.settings!,
-      type: "gallery",
-      version: 4,
-    });
-    const make = (block: typeof gallery, version: number) =>
-      defineConfig({
-        blocks: [block],
-        content: [
-          defineCollection({ blocks: ["gallery"], key: "posts", route: "/blog/:slug", version }),
-        ],
-      });
-    const before = await make(old, 1);
-    const after = await make(gallery, 2);
-    const { repository, sql } = await runtime.open({
-      resolveModel: syncResolver(before.runtime.content),
-    });
-    await syncNotes(repository, before, 10);
-    await repository.create({
-      entry: entry("old-gallery", "posts", {
-        blocks: [
-          {
-            data: { images: [] },
-            hidden: false,
-            key: blockKey("g1"),
-            position: 1000,
-            schemaVersion: 4,
-            settings: {},
-            type: "gallery",
-          },
-        ],
-        slug: "old-gallery",
-        title: "Old gallery",
-        updatedAt: 20,
-      }),
-      mediaReferences: [],
-    });
-    const state = await noteState(sql);
-    const prepared = await prepareNotes(repository, after);
-    expect(prepared.plan.isValid).toBe(false);
-    expect(prepared.plan.diagnostics).toMatchObject([
-      { blockType: "gallery", code: "BLOCK_MIGRATION_MISSING" },
-    ]);
-    await expect(syncNotes(repository, after, 30, prepared)).rejects.toMatchObject({
-      code: "CONTENT_INVALID_STATE",
-    });
-    expect(await noteState(sql)).toEqual(state);
-  },
-);
+contract("refuses a missing custom block migration without writing", async (runtime, expect) => {
+  const { repository, sql } = await openNotes(runtime);
+  const missingStep = defineBlock({ type: "note", version: 2, fields: noteV1.fields });
+  const after = await noteConfig(missingStep, 2);
+  const state = await noteState(sql);
+  const prepared = await prepareNotes(repository, after);
+  expect(prepared.plan.isValid).toBe(false);
+  expect(prepared.plan.diagnostics).toMatchObject([
+    { blockType: "note", code: "BLOCK_MIGRATION_MISSING" },
+  ]);
+  await expect(syncNotes(repository, after, 30, prepared)).rejects.toMatchObject({
+    code: "CONTENT_INVALID_STATE",
+  });
+  expect(await noteState(sql)).toEqual(state);
+});
 
 contract(
   "resumes block migration and nested backfills after an interrupted synchronization",

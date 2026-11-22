@@ -1,6 +1,8 @@
 import type { JsonValue, JsonObject } from "../shared/json.js";
 import type { ContentModelKind } from "../shared/identifiers.js";
 import { MAX_SLUG_LENGTH } from "../shared/identifiers.js";
+import { isContentModelKind, modelKindDescriptor } from "../shared/model-kinds.js";
+import type { ModelKindDescriptor } from "../shared/model-kinds.js";
 import type { ValidationPathSegment } from "../shared/errors.js";
 import { invalid, assertExactKeys } from "../shared/errors.js";
 import { canonicalJsonByteLength } from "./canonical-json.js";
@@ -60,7 +62,7 @@ export function validateEntryPayload(
   input: EntryPayloadInput,
   mode: ContentValidationMode,
 ): EntryPayloadInput {
-  if (input.kind !== "collection" && input.kind !== "global" && input.kind !== "page") {
+  if (!isContentModelKind(input.kind)) {
     invalid(["kind"], "invalid_model_kind", "must be page, collection, or global.");
   }
   if (typeof input.title !== "string" || input.title.length === 0) {
@@ -75,15 +77,17 @@ export function validateEntryPayload(
   ) {
     invalid(["slug"], "slug_too_long", `must not exceed ${MAX_SLUG_LENGTH} characters.`);
   }
-  if (input.kind === "global" && input.slug !== undefined) {
+  const descriptor: ModelKindDescriptor = modelKindDescriptor(input.kind);
+  const { delivery, routeLessDelivery } = descriptor;
+  if (delivery.routing === "none" && input.slug !== undefined) {
     invalid(["slug"], "slug_not_allowed", "is not allowed for a global.");
   }
-  if (input.kind === "collection" && input.routeLess === true && input.slug !== undefined) {
+  if (routeLessDelivery !== undefined && input.routeLess === true && input.slug !== undefined) {
     invalid(["slug"], "slug_not_allowed", "is not allowed for a collection without a route.");
   }
   if (
     mode === "publish" &&
-    input.kind === "collection" &&
+    delivery.routing === "slug" &&
     input.routeLess !== true &&
     (input.slug === undefined || input.slug.length === 0)
   ) {

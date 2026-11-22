@@ -3,14 +3,12 @@ import { Button } from "../../shared/ui/Button/index.js";
 
 /** Revision-conflict recovery: local values stay until the writer explicitly reloads. */
 export function EntryConflictAlert({
-  conflict,
   copyError,
   onCopy,
   onReload,
   reloadError,
   reloading,
 }: {
-  readonly conflict: "publish" | "save";
   readonly copyError: string | undefined;
   readonly onCopy: () => void;
   readonly onReload: () => void;
@@ -29,8 +27,7 @@ export function EntryConflictAlert({
           Draft changed elsewhere
         </h2>
         <p className="m-0 text-muted-foreground">
-          Your local {conflict} values are still available. Reloading is the only action that
-          replaces them.
+          Your local draft is still open. Reload the server draft to replace your local edits.
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Button disabled={reloading} onClick={onReload} size="sm">

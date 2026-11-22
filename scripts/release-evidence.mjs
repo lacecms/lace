@@ -7,7 +7,7 @@ import { withArtifactLock } from "./release-lock.mjs";
 
 export const hashBytes = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const fields = new Set(
-  `schemaVersion recordedAt recordedDateEuropeRome artifactDirectory inventorySha256 harnessRevision harnessChangesAfterPackaging shippingArtifactsChangedAfterPackaging imageSmokePlatforms consumerPlatform remotePublicationPerformed realDeploymentVerified audit ownerPrerequisites acceptance preparedImages allPreparedImages sourceChecks registryChecks releaseSpecificAcceptance result version templateVersion platform source builds journeys packages images revision preview fingerprint first failed retried firstVersion recoveredVersion name file sha256 kind coordinate manifestCoordinate localTag imageId smokePassed licenseRecords vulnerabilities high moderate critical policy releaseTests generatorTests focusedCliTests focusedWorkspaceTasks fullWorkspaceTasks rootFiles rootTests openSpecItems typecheck lint format openapi frozenInstall thirdPartyDependenciesChanged sourceRevision alphaFivePublicPackages alphaFivePublicImageManifests alphaSixPackageVersionStatuses alphaSixImageManifestStatuses npmRights ghcrWriteRights node cloudflareLocal checks`.split(
+  `schemaVersion recordedAt recordedDateEuropeRome artifactDirectory inventorySha256 harnessRevision harnessChangesAfterPackaging shippingArtifactsChangedAfterPackaging imageSmokePlatforms consumerPlatform remotePublicationPerformed realDeploymentVerified audit ownerPrerequisites acceptance preparedImages allPreparedImages sourceChecks registryChecks releaseSpecificAcceptance result version templateVersion platform source builds journeys packages images revision preview fingerprint first failed retried firstVersion recoveredVersion name file sha256 kind coordinate manifestCoordinate localTag imageId smokePassed licenseRecords vulnerabilities high moderate critical policy releaseTests generatorTests focusedCliTests focusedWorkspaceTasks fullWorkspaceTasks rootFiles rootTests openSpecItems typecheck lint format openapi frozenInstall thirdPartyDependenciesChanged sourceRevision alphaFivePublicPackages alphaFivePublicImageManifests alphaSixPackageVersionStatuses alphaSixImageManifestStatuses npmRights ghcrWriteRights node cloudflareLocal checks rc5Cutovers generatorSha256 beforeFingerprint upgradedFingerprint restoredFingerprint originalOutput stableOutput restoredOutput newMediaSha256 originalMediaSha256 migrationsApplied`.split(
     /\s+/u,
   ),
 );
@@ -45,6 +45,30 @@ export function validateAcceptance(report, inventory, inventorySha256) {
     !accepted.journeys.length
   )
     throw new Error("Acceptance identity/results differ from inventory");
+  if (inventory.release.version === "1.0.0") {
+    for (const kind of ["node", "cloudflareLocal"]) {
+      const proof = accepted.rc5Cutovers?.[kind];
+      if (
+        !proof ||
+        proof.sourceRevision !== "bb3d17e813f504c2133a7664af0174c5e0a60cf0" ||
+        proof.generatorSha256 !==
+          "a436e4b08913ad512a35b734c50c04a772cd3b92e841960746da5e303be22260" ||
+        proof.migrationsApplied !== 5 ||
+        proof.beforeFingerprint !== proof.upgradedFingerprint ||
+        proof.beforeFingerprint !== proof.restoredFingerprint ||
+        proof.originalOutput !== proof.restoredOutput ||
+        ![
+          proof.beforeFingerprint,
+          proof.originalOutput,
+          proof.stableOutput,
+          proof.originalMediaSha256,
+          proof.newMediaSha256,
+        ].every((value) => typeof value === "string" && /^[a-f0-9]{64}$/u.test(value)) ||
+        proof.originalMediaSha256 === proof.newMediaSha256
+      )
+        throw new Error("Incomplete RC5 cutover and restore evidence for " + kind);
+    }
+  }
   const expected = inventory.images.filter((image) => image.platform === accepted.platform);
   if (JSON.stringify(accepted.images) !== JSON.stringify(expected))
     throw new Error("Acceptance image identity differs");

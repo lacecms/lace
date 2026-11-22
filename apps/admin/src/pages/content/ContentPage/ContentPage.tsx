@@ -1,7 +1,11 @@
 import type { ContentModelDto } from "@lacecms/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { EntryStatusBadge, useEntryOverview } from "../../../entities/content/index.js";
+import {
+  EntryStatusBadge,
+  isRouteLessCollection,
+  useEntryOverview,
+} from "../../../entities/content/index.js";
 import { useSessionRecovery } from "../../../entities/session/index.js";
 import {
   adminQueryKeys,
@@ -182,7 +186,7 @@ function CollectionCard({ model }: { readonly model: ContentModelDto }) {
         <Link className={cardLinkClass} params={{ modelKey: model.key }} to="/content/$modelKey">
           {label}
         </Link>
-        {model.route === undefined ? undefined : (
+        {isRouteLessCollection(model) ? undefined : (
           <span className="truncate font-mono text-xs text-muted-foreground">{model.route}</span>
         )}
       </div>

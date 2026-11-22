@@ -1,6 +1,6 @@
 # ADR 0030: rc2 is the oldest supported release
 
-- Status: Accepted
+- Status: Superseded by [ADR 0035](0035-stable-rc5-upgrade-origin.md)
 - Date: 2026-11-10
 - Amends: [ADR 0029](0029-rc1-baseline.md) (support floor only)
 - Governing architecture: [section 22](../architecture/distribution.md#22-migration-and-compatibility-policy)

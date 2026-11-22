@@ -1,7 +1,7 @@
-import { contentPublicPath, PREVIEW_MAX_MODELS } from "@lacecms/domain";
+import { contentPublicPath, PREVIEW_MAX_MODELS, resolveModelKind } from "@lacecms/domain";
 import type { Actor, PreviewFailureReason } from "@lacecms/domain";
 import type { ContentUseCaseDependencies } from "../content/use-case-inputs.js";
-import { contentModelRoute } from "../content/draft-normalization.js";
+import { contentModelRoute } from "../shared/model-route.js";
 import { validateDraft } from "../content/draft-validation.js";
 import { publishedProjection } from "../content/publication-projection.js";
 import type {
@@ -84,12 +84,7 @@ export class PreviewAdmissionService {
       return { kind: "rejected", reason: "PREVIEW_CONFIGURATION_UNAVAILABLE" };
     const entry = await content.load({ entryId: request.entryId });
     const model = config.content.find((candidate) => candidate.key === entry?.model.key);
-    if (
-      entry === null ||
-      model === undefined ||
-      model.kind === "global" ||
-      (model.kind === "collection" && model.route === undefined)
-    )
+    if (entry === null || model === undefined || resolveModelKind(model).routing === "none")
       return { kind: "rejected", reason: "PREVIEW_INELIGIBLE" };
     if (entry.draft.revision !== request.expectedRevision)
       return { kind: "rejected", reason: "PREVIEW_REVISION_CONFLICT" };

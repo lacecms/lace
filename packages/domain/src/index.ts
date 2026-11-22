@@ -1,7 +1,14 @@
 // Directory dependencies: shared ← access, media, builds ← content; preview.
-export { LaceError } from "@lacecms/content";
-export type { ContentModelKind } from "@lacecms/content";
-export { isContentSlug } from "@lacecms/content";
+export type { ContentModelKind, ModelKindDescriptor, ResolvedModelKind } from "@lacecms/content";
+export {
+  CONTENT_MODEL_KINDS,
+  LaceError,
+  isContentModelKind,
+  isContentSlug,
+  modelKindDescriptor,
+  modelKindDescriptors,
+  resolveModelKind,
+} from "@lacecms/content";
 
 export const packageName = "@lacecms/domain";
 

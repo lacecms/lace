@@ -125,7 +125,10 @@ interface RowsMeta {
 }
 
 /** Counts queries and bound parameters issued through a D1 binding. */
-export function countingD1(database: D1Database): { binding: D1Database; stats: D1Counts } {
+export function countingD1(
+  database: D1Database,
+  afterRead?: (rows: readonly unknown[]) => void,
+): { binding: D1Database; stats: D1Counts } {
   const stats: D1Counts = {
     batches: 0,
     maxParameters: 0,
@@ -144,9 +147,11 @@ export function countingD1(database: D1Database): { binding: D1Database; stats: 
     return result;
   };
   const wrap = (statement: D1PreparedStatement, parameters = 0): CountedStatement => ({
-    all: <Row>() => {
+    all: async <Row>() => {
       stats.queries += 1;
-      return measure(statement.all<Row>());
+      const result = await measure(statement.all<Row>());
+      afterRead?.(result.results);
+      return result;
     },
     bind: (...values: unknown[]) => {
       stats.maxParameters = Math.max(stats.maxParameters, values.length);

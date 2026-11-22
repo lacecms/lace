@@ -2,6 +2,7 @@ import {
   mediaDetailSchema,
   mediaListSchema,
   mediaMetadataSchema,
+  mediaDetachProgressSchema,
   mediaTagCatalogSchema,
   updateMediaMetadataResultSchema,
   entityTagForVersion,
@@ -9,6 +10,8 @@ import {
 } from "@lacecms/contracts";
 import {
   responseError,
+  AdminClientError,
+  requestExchange,
   request,
   parse,
   type Fetcher,
@@ -57,17 +60,42 @@ export function mediaClient(fetcher: Fetcher, upload: MediaUploader) {
         throw responseError(exchange.status, exchange.requestId, exchange.body);
       return parse(mediaMetadataSchema, exchange.body);
     },
-    deleteMedia: async (mediaId: string, options: { readonly detachDrafts?: boolean } = {}) =>
+    deleteMedia: async (id: string) =>
       parse(
         mediaMetadataSchema,
-        await request(
-          fetcher,
-          `/api/v1/admin/media/${encodeURIComponent(mediaId)}${
-            options.detachDrafts === true ? "?detach=drafts" : ""
-          }`,
-          { method: "DELETE" },
-        ),
+        await request(fetcher, `/api/v1/admin/media/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+        }),
       ),
+    detachMedia: async (
+      id: string,
+      step?: "finish" | { entryId: string; expectedRevision: number },
+    ) => {
+      const query = new URLSearchParams({ detach: "drafts" });
+      if (step === "finish") query.set("step", "finish");
+      else if (step) {
+        query.set("step", "entry");
+        query.set("entryId", step.entryId);
+        query.set("expectedRevision", String(step.expectedRevision));
+      }
+      const { status, body } = await requestExchange(
+        fetcher,
+        `/api/v1/admin/media/${encodeURIComponent(id)}?${query}`,
+        { method: "DELETE" },
+      );
+      if (status === 202 && typeof step !== "object") {
+        const item = parse(mediaMetadataSchema, body);
+        if (item.id === id && item.status === "deleting" && item.usageCount === 0) return item;
+      }
+      if (status === 200 && step !== "finish") {
+        const result = parse(mediaDetachProgressSchema, body);
+        if (result.state === "drafts" ? step === undefined : result.entryId === step?.entryId)
+          return result;
+      }
+      throw new AdminClientError({
+        message: "The API returned an unexpected media deletion response.",
+      });
+    },
     retryMediaDeletion: async (mediaId: string) =>
       parse(
         mediaMetadataSchema,

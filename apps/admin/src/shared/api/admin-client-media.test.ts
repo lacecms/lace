@@ -180,11 +180,37 @@ test("uploads and requests media deletion with validated credentialed responses"
     "/api/v1/admin/media/media%2F1",
     expect.objectContaining({ credentials: "same-origin", method: "DELETE" }),
   );
-  await expect(client.deleteMedia("media-1", { detachDrafts: true })).resolves.toEqual(item);
+  const owner = { entryId: "entry/1", expectedRevision: 1 };
+  const plan = { state: "drafts", drafts: [owner] };
+  const ack = { state: "entry-complete", entryId: owner.entryId };
+  const receipt = { ...item, status: "deleting" };
+  fetcher.mockResolvedValueOnce(Response.json(plan));
+  await expect(client.detachMedia("media-1")).resolves.toEqual(plan);
   expect(fetcher).toHaveBeenLastCalledWith(
     "/api/v1/admin/media/media-1?detach=drafts",
     expect.objectContaining({ credentials: "same-origin", method: "DELETE" }),
   );
+  fetcher.mockResolvedValueOnce(Response.json(ack));
+  await expect(client.detachMedia("media-1", owner)).resolves.toEqual(ack);
+  expect(fetcher).toHaveBeenLastCalledWith(
+    "/api/v1/admin/media/media-1?detach=drafts&step=entry&entryId=entry%2F1&expectedRevision=1",
+    expect.anything(),
+  );
+  fetcher.mockResolvedValueOnce(Response.json(receipt, { status: 202 }));
+  await expect(client.detachMedia("media-1", "finish")).resolves.toEqual(receipt);
+  for (const [body, status, step] of [
+    [receipt, 200, "finish"],
+    [item, 202, "finish"],
+    [{ ...receipt, id: "other" }, 202, "finish"],
+    [{ ...receipt, usageCount: 1 }, 202, "finish"],
+    [plan, 202, undefined],
+    [{ ...plan, drafts: [owner, owner] }, 200, undefined],
+    [{ ...ack, entryId: "other" }, 200, owner],
+    [receipt, 202, owner],
+  ] as const) {
+    fetcher.mockResolvedValueOnce(Response.json(body, { status }));
+    await expect(client.detachMedia("media-1", step)).rejects.toBeInstanceOf(AdminClientError);
+  }
   await expect(client.retryMediaDeletion("media-1")).resolves.toEqual(item);
   expect(fetcher).toHaveBeenLastCalledWith(
     "/api/v1/admin/media/media-1/retry-deletion",

@@ -12,11 +12,10 @@ test("an empty or checked-in ledger has no unchecked migrations", () => {
   expect(uncheckedD1Migrations(checkedInMigrations.map((item) => item.name))).toEqual([]);
 });
 
-test("ledger entries from before the baseline are reported", () => {
-  expect(uncheckedNodeMigrations([1789240330790, baseline?.createdAt ?? 0])).toEqual([
-    1789240330790,
+test("unrecognized ledger entries are reported", () => {
+  expect(uncheckedNodeMigrations([123456789, baseline?.createdAt ?? 0])).toEqual([123456789]);
+  expect(uncheckedD1Migrations(["unknown_fixture.sql", "unknown_fixture_b.sql"])).toEqual([
+    "unknown_fixture.sql",
+    "unknown_fixture_b.sql",
   ]);
-  expect(
-    uncheckedD1Migrations(["0000_exotic_tarantula.sql", "0015_import_credentials.sql"]),
-  ).toEqual(["0000_exotic_tarantula.sql", "0015_import_credentials.sql"]);
 });

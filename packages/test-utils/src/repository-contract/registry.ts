@@ -19,6 +19,7 @@ import { cases as entryReferences } from "./links/entry-references.js";
 import { cases as run16 } from "./links/removal.js";
 import { cases as run17 } from "./delivery/queries.js";
 import { cases as run18 } from "./media/tags.js";
+import { cases as mediaUploads } from "./media/uploads.js";
 import { cases as run19 } from "./media/import-lookups.js";
 import { cases as mediaCatalog } from "./media/catalog.js";
 import { cases as globalsSeo } from "./entries/globals-seo.js";
@@ -37,6 +38,8 @@ import { cases as previewExecution } from "./preview/execution.js";
 import { cases as previewInvalidation } from "./preview/invalidation.js";
 import { cases as previewMaintenance } from "./preview/maintenance.js";
 import { cases as previewBudgets } from "./preview/budgets.js";
+import { cases as publishedReads } from "./delivery/published-reads.js";
+import { cases as publishedBudget } from "./delivery/published-budget.js";
 import type { RepositoryContractCase } from "./shared.js";
 
 export const contentRepositoryContractCases: readonly RepositoryContractCase[] = Object.freeze([
@@ -63,6 +66,7 @@ export const contentRepositoryContractCases: readonly RepositoryContractCase[] =
   ...run16,
   ...run17,
   ...run18,
+  ...mediaUploads,
   ...run19,
   ...conditional,
   ...resultParity,
@@ -79,4 +83,6 @@ export const contentRepositoryContractCases: readonly RepositoryContractCase[] =
   ...previewInvalidation,
   ...previewMaintenance,
   ...previewBudgets,
+  ...publishedReads,
+  ...publishedBudget,
 ]);

@@ -13,6 +13,7 @@ import {
   type SiteBuildTrigger,
   type SiteBuildWorkLease,
 } from "../ports/builds.js";
+import { DISPATCHER_LEASE_DURATION_MS } from "../shared/limits.js";
 
 type TimerHandle = unknown;
 
@@ -53,10 +54,23 @@ export class SiteBuildDispatcher {
       limit,
       now: this.options.clock.now(),
     });
-    for (const lease of leases) await this.dispatchLease(lease);
+    for (const [index, lease] of leases.entries()) await this.dispatchLease(lease, index > 0);
   }
 
-  private async dispatchLease(lease: SiteBuildWorkLease): Promise<void> {
+  private async dispatchLease(lease: SiteBuildWorkLease, deferred: boolean): Promise<void> {
+    let expiresAt = lease.expiresAt;
+    if (deferred) {
+      const now = this.options.clock.now();
+      try {
+        if (!(await this.options.work.renewSiteBuildLease({ leaseId: lease.id, now }))) return;
+      } catch {
+        return;
+      }
+      // The durable renewal starts from the time sent with the request.
+      expiresAt = unixMilliseconds(now + DISPATCHER_LEASE_DURATION_MS);
+    }
+    if (this.options.clock.now() >= expiresAt) return;
+
     let result: Awaited<ReturnType<SiteBuildTrigger["trigger"]>>;
     let lostLease = false;
     let pendingRenewal: Promise<void> = Promise.resolve();

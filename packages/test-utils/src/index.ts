@@ -1,4 +1,5 @@
-// Directory dependencies: shared ← adapters; fixtures, delivery, visibility ← repository-contract ← security-contract; errors; filters.
+// Directory dependencies: shared ← adapters; adapters, delivery, fixtures, shared,
+// visibility ← repository-contract ← security-contract; errors; filters.
 export const packageName = "@lacecms/test-utils";
 export { assertAtomicCheckpoints, assertQueryPlanUsesIndex } from "./shared/assertions.js";
 export {

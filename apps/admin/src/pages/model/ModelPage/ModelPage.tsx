@@ -1,8 +1,9 @@
+import { resolveModelKind } from "@lacecms/content";
 import { useEffect } from "react";
 import { NODE_LIST_QUERY_LIMITS } from "@lacecms/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
-import { isSingletonModel, resolveCollectionListSearch } from "../../../entities/content/index.js";
+import { resolveCollectionListSearch } from "../../../entities/content/index.js";
 import { useSessionRecovery } from "../../../entities/session/index.js";
 import { adminQueryKeys, useAdminClient } from "../../../shared/api/index.js";
 import { PageError, PageLoading, PagePlaceholder } from "../../../shared/ui/PageState/index.js";
@@ -40,7 +41,7 @@ export function ModelPage() {
     return (
       <PagePlaceholder description="This content model does not exist." title="Page not found" />
     );
-  if (isSingletonModel(model))
+  if (resolveModelKind(model).admin.navigation === "editor")
     return (
       <PagePlaceholder
         description={`Open this ${model.kind === "global" ? "global" : "page"} from the content landing route.`}

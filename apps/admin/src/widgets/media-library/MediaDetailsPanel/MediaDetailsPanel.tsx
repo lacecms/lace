@@ -2,7 +2,7 @@ import type { MediaMetadataDto } from "@lacecms/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Copy, RotateCcw } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { EntryStatusBadge } from "../../../entities/content/index.js";
 import {
   formatMediaDimensions,
@@ -13,6 +13,7 @@ import {
 import { can, useSession, useSessionRecovery } from "../../../entities/session/index.js";
 import {
   DeleteMediaDialog,
+  discardMediaDetachCheckpoint,
   mediaDeletionDescription,
   useMediaDeletion,
 } from "../../../features/delete-media/index.js";
@@ -22,6 +23,7 @@ import {
   MissingAltWarning,
 } from "../../../features/edit-media-metadata/index.js";
 import {
+  AdminClientError,
   adminQueryKeys,
   errorDescription,
   technicalDetails,
@@ -170,7 +172,12 @@ function MediaDetails({
   const reload = useCallback(() => void refetch(), [refetch]);
   const usage = detail.data?.usage;
   const usageCount = detail.data?.usageCount ?? item.usageCount;
-  const canEditContent = can(useSession(), "content:write");
+  const session = useSession();
+  const canEditContent = can(session, "content:write");
+  const absent = detail.error instanceof AdminClientError && detail.error.status === 404;
+  useEffect(() => {
+    if (absent || latest.status !== "active") discardMediaDetachCheckpoint(session.id, item.id);
+  }, [absent, latest.status, session.id, item.id]);
 
   async function copyUrl() {
     try {
@@ -295,12 +302,13 @@ function MediaDetails({
           </p>
         </section>
 
-        {canWrite && item.status !== "deleting" ? (
+        {absent && <p role="status">This media is no longer in the library.</p>}
+        {canWrite && !absent && latest.status !== "deleting" ? (
           <section aria-labelledby="media-delete-heading" className="grid gap-2">
             <h2 className={sectionHeadingClass} id="media-delete-heading">
               Deletion
             </h2>
-            {item.status === "delete_failed" ? (
+            {latest.status === "delete_failed" ? (
               <>
                 <p className="m-0 text-sm text-muted-foreground">
                   Removing the file from storage failed. Retry to queue the removal again.
@@ -323,8 +331,8 @@ function MediaDetails({
             ) : (
               <MediaDeletionActions
                 canEditContent={canEditContent}
-                deletion={usageDeletion(usageCount, usage)}
-                item={item}
+                deletion={detail.isError ? { kind: "unknown" } : usageDeletion(usageCount, usage)}
+                item={latest}
                 onChanged={onChanged}
               />
             )}
@@ -347,26 +355,37 @@ function MediaDeletionActions({
   readonly item: MediaMetadataDto;
   readonly onChanged: (item: MediaMetadataDto) => void;
 }) {
-  const hint = "m-0 text-sm text-muted-foreground";
-  const unavailable = (
-    <Button className="justify-self-start" disabled variant="outline">
-      Delete media
-    </Button>
+  const eligible = deletion.kind === "unused" || (deletion.kind === "drafts" && canEditContent);
+  return (
+    <>
+      <UsageGuidance deletion={deletion} canEditContent={canEditContent} />
+      <div className="justify-self-start">
+        <DeleteMediaDialog
+          disabled={!eligible}
+          {...(deletion.kind === "drafts" && canEditContent
+            ? { detachFrom: deletion.entries }
+            : {})}
+          item={item}
+          onChanged={onChanged}
+        />
+      </div>
+    </>
   );
+}
+
+function UsageGuidance({
+  deletion,
+  canEditContent,
+}: {
+  deletion: UsageDeletion;
+  canEditContent: boolean;
+}) {
+  const hint = "m-0 text-sm text-muted-foreground";
   switch (deletion.kind) {
     case "unused":
-      return (
-        <div className="justify-self-start">
-          <DeleteMediaDialog item={item} onChanged={onChanged} />
-        </div>
-      );
+      return null;
     case "unknown":
-      return (
-        <>
-          <p className={hint}>Deletion is available once the usage of this media has loaded.</p>
-          {unavailable}
-        </>
-      );
+      return <p className={hint}>Deletion is available once the usage of this media has loaded.</p>;
     case "published":
       return (
         <>
@@ -394,36 +413,22 @@ function MediaDeletionActions({
               </li>
             ))}
           </ul>
-          {unavailable}
         </>
       );
     case "truncated":
       return (
-        <>
-          <p className={hint}>
-            More entries use this media than can be changed at once. Remove it from some of them
-            before deleting it.
-          </p>
-          {unavailable}
-        </>
+        <p className={hint}>
+          More entries use this media than can be changed at once. The limit is 50 entries. Remove
+          it from some of them before deleting it.
+        </p>
       );
     case "drafts":
-      return canEditContent ? (
-        <>
-          <p className={hint}>
-            Only drafts use this media. Deleting it removes it from those drafts first.
-          </p>
-          <div className="justify-self-start">
-            <DeleteMediaDialog detachFrom={deletion.entries} item={item} onChanged={onChanged} />
-          </div>
-        </>
-      ) : (
-        <>
-          <p className={hint}>
-            Only drafts use this media. Someone who can edit content must remove it from them first.
-          </p>
-          {unavailable}
-        </>
+      return (
+        <p className={hint}>
+          {canEditContent
+            ? "Only drafts use this media. Deleting it removes it from those drafts first."
+            : "Only drafts use this media. Someone who can edit content must remove it from them first."}
+        </p>
       );
   }
 }

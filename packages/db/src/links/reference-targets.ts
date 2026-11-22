@@ -1,3 +1,4 @@
+import { REFERENCE_MODEL_KINDS_SQL } from "../shared/model-kind-sql.js";
 import type { SnapshotEntryReference } from "@lacecms/content";
 import type { WritePlanSql } from "../write-plan/plan.js";
 import type { ReferencePhase } from "./reference-graph.js";
@@ -67,7 +68,7 @@ export function referenceTargetsQuery(
       checked as (
         select o.ordinal as "index", case
           when e.id is null and o.position>coalesce(a.amount,0) then 'reference_target_missing'
-          when e.id is not null and (m.kind='global'
+          when e.id is not null and (m.kind not in ${REFERENCE_MODEL_KINDS_SQL}
             or e.model_key not in (select value from json_each(o.models))) then 'reference_target_model'
           when ?='published' and e.published_snapshot_id is null then 'reference_target_unpublished'
         end as code

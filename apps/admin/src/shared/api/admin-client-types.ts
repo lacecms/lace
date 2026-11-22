@@ -36,6 +36,7 @@ import {
   type ContentEntryListDto,
   type ContentModelListDto,
   type MediaDetailDto,
+  type MediaDetachProgressDto,
   type MediaListDto,
   type MediaMetadataDto,
   type MediaMimeTypeDto,
@@ -190,11 +191,11 @@ export interface AdminClient {
   }): Promise<MediaTagCatalogDto>;
   getMedia(mediaId: string): Promise<MediaDetailDto>;
   uploadMedia(file: File, options?: MediaUploadOptions): Promise<MediaMetadataDto>;
-  /** With `detachDrafts`, the server first removes the item from every using draft. */
-  deleteMedia(
+  deleteMedia(mediaId: string): Promise<MediaMetadataDto>;
+  detachMedia(
     mediaId: string,
-    options?: { readonly detachDrafts?: boolean },
-  ): Promise<MediaMetadataDto>;
+    step?: "finish" | { entryId: string; expectedRevision: number },
+  ): Promise<MediaMetadataDto | MediaDetachProgressDto>;
   retryMediaDeletion(mediaId: string): Promise<MediaMetadataDto>;
   /**
    * Changes descriptive metadata, guarded by the `updatedAt` of the item the

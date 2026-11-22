@@ -93,9 +93,9 @@ from committed outbox work, and `401 AUTHENTICATION_REQUIRED`.
 | EX2 | Shared write plans | L | EX2A → EX2B → EX2C → EX2D | done |
 | EX3 | Typed outbox events | M | EX3A → EX3B | done |
 | EX4 | Route policies and security use cases | L | EX4A → EX4B → EX4C → EX4D | done |
-| EX5 | Model kind descriptor | S | EX5A | planned |
+| EX5 | Model kind descriptor | S | EX5A | done |
 | EX6 | Trusted client identity and production Compose ingress | M | EX6A and EX6B independent | done |
-| EX7 | pnpm 12.21.0 toolchain | S | EX7A | planned |
+| EX7 | pnpm 12.21.0 toolchain | S | EX7A | done |
 
 **Deployment maintenance outside EX1–EX7:** the owner selected
 [`adopt-silo-object-storage`](../openspec/changes/archive/2026-11-17-adopt-silo-object-storage/)
@@ -425,13 +425,15 @@ Behavior-touching, with delta specs for the affected REST contracts:
 
 ### Session EX5A — Kind descriptor table
 
-A descriptor per model kind in `domain` (singleton or collection, routed,
-public endpoint family, export section, admin behavior), like the field-type
-capability registry. `isSingletonKind` and the kind literal comparisons in
-32 files read the table; an unknown kind fails at compile time instead of
-becoming a singleton. The `kind` CHECK constraint is generated from the table.
-Open question: whether a future kind still needs a table rebuild migration or
-the constraint moves to application validation.
+A descriptor per model kind in `content`, the owner of the portable vocabulary
+in architecture §6. Server-side consumers access it through `domain` or their
+existing allowed facade. Like the field-type capability registry, the table
+defines cardinality, routing, public endpoint family, export section and admin
+behavior. Collection delivery depends on the configured route. Replace the
+`isSingletonKind` fallback and duplicated policy comparisons measured in §3.
+Adding a kind requires a complete descriptor at compile time. Generate the
+live `content_models.kind` CHECK from the table. Widening the accepted kinds
+requires a separate table-rebuild migration for SQLite and D1.
 
 ## Step EX6 — Trusted client identity and production Compose ingress
 
@@ -487,6 +489,15 @@ local Worker, and the API and builder images on `linux/amd64` and `linux/arm64`.
 Complete exact-artifact acceptance for the new build set before recording
 `12.21.0` as the tested baseline. See [the runtime tooling policy](../openspec/specs/runtime-tooling-minimum-policy/spec.md).
 
+## After EX7A — CMS 1.0.0 release preparation
+
+Local qualification completed on 2026-11-22. All 16 stable packages and four
+platform images were prepared from `357ebbbc`. Exact-artifact acceptance
+verified the direct RC5 upgrade and restore on Node and Cloudflare-local.
+The owner's real deployments, independent-site restore and publication decision
+are pending. [Candidate handoff](../openspec/changes/prepare-cms-1-0-0/handoff.md)
+and [support floor](adr/0035-stable-rc5-upgrade-origin.md).
+
 ## 6. Progress log
 
 Each row links to the change and its decisions and verification. Archived
@@ -495,6 +506,9 @@ recorded event.
 
 | Date | Session | Change | Status |
 | --- | --- | --- | --- |
+| 2026-11-22 | CMS 1.0.0 | [RC5 upgrade and release qualification](../openspec/changes/prepare-cms-1-0-0/verification.md) | Locally verified, awaiting owner staging and publication |
+| 2026-11-22 | EX7A | [pnpm release toolchain](../openspec/changes/archive/2026-11-22-ex07a-upgrade-pnpm-toolchain/verification.md) | done. Verified the frozen install, native SQLite, packed starter and local Worker with pnpm 12.21.0. Both Linux platforms passed API and builder smoke checks. Full acceptance on linux/arm64 matched the 16 tarballs and host images from revision `0f8f8be0`. |
+| 2026-11-22 | EX5A | [Model kind descriptors](../openspec/changes/archive/2026-11-22-ex05a-model-kind-descriptors/) | done. Synchronized both specs after verification on both Node SQLite modes and local D1. The [comparison inventory and verification](#ex5a-model-kind-comparisons) record the results. |
 | 2026-11-16 | EX4D | [HTTP consistency](../openspec/changes/archive/2026-11-16-ex04d-http-consistency/) | done. Verified entry tags and protected cursor pages through Node/SQLite and Worker/local D1, 105-build traversal on both SQLite modes and local D1, and continuation recovery and refresh in Admin. OpenAPI, docs, typecheck, lint, format and strict OpenSpec validation passed. |
 | 2026-11-16 | EX4C | [Typed handlers](../openspec/changes/archive/2026-11-16-ex04c-typed-handlers/) | done. Production route `as never` casts fell from 24 after EX4B to zero, and the shared hook cast was removed. Hono client types passed against source and emitted declarations. The server suite, shared Node/SQLite and Worker/local D1 HTTP tests, and OpenAPI comparison passed. |
 | 2026-11-16 | EX4B | [Security use cases](../openspec/changes/archive/2026-11-16-ex04b-security-use-cases/) | done. Application use cases authorize account, user, token, settings, and build operations. Removed twelve route-level helper calls and the inline build-site permission check. Node/SQLite and Worker/local D1, the shared HTTP security scenarios, OpenAPI comparison, and MCP compatibility passed. |
@@ -511,3 +525,27 @@ recorded event.
 | 2026-11-15 | EX1A | [Test size ceiling](../openspec/changes/archive/2026-11-15-ex01a-test-size-ceiling/) | done: workspace test files above 1,000 lines fell from 8 to 0; standalone OAuth/MCP fixture remains outside the guard |
 | 2026-11-15 | EX6A | [Preserve trusted client identity](../openspec/changes/archive/2026-11-15-ex06a-preserve-trusted-client-identity/) | done: request identity survives body replacement on Node and Worker |
 | 2026-11-15 | EX6B | [Restrict production Compose ingress](../openspec/changes/archive/2026-11-15-ex06b-restrict-production-compose-ingress/) | done: production reaches the private API through loopback Nginx; development retains a separate loopback API port |
+
+### EX5A model kind comparisons
+
+The §3 baseline recorded 32 files on 2026-11-14. A fresh inventory of
+production source under `packages/*/src` and `apps/admin/src` counted
+41 files at the start of EX5A. It counted equality checks against the
+three kind literals, matching switch cases, and SQL predicates with literal
+kind values. The scope excludes tests, test helpers, the test-utils package
+and historical migrations. The same search after implementation counts
+25 TypeScript comparisons in 9 files (down from 113) and zero literal kind
+predicates in live SQL (down from 12).
+
+The remaining literal comparisons narrow discriminated model shapes in
+configuration validation, projections, list metadata and path access, or choose
+model groupings and labels in the admin. Dynamic identity checks still compare
+configured kinds with stored or submitted kinds, guard sync writes, and match
+admin models to their display groups.
+
+All 171 shared repository contracts passed on each of file-backed Node SQLite,
+in-memory Node SQLite and local D1. The focused domain, configuration, REST,
+admin and CLI import suites passed, including the shipped import schema and
+package entry points. Drizzle schema verification and the OpenAPI comparison
+passed against the checked-in artifacts. `pnpm typecheck`, `pnpm lint`,
+`pnpm format:check`, strict validation of EX5A and `pnpm spec:validate` passed.

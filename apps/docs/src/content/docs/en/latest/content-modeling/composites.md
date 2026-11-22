@@ -2,7 +2,7 @@
 title: Groups, lists and form layout
 description: Model nested values with groups and lists, organize long editor forms, and add reusable list layouts and choice cards.
 kind: guide
-verifiedAgainst: 0.1.0-rc2
+verifiedAgainst: 1.0.0
 ---
 
 Groups store JSON objects and lists store JSON arrays of one item type. Use
@@ -246,23 +246,7 @@ column count. Cells skipped to honor a placement stay empty, and the next item
 continues after it, so stored order is kept. In a single column every placement
 uses that column. Flex lists keep the value without effect.
 
-The `featured-first` grid preset of rc2 no longer exists. Gallery version 6
-rewrites it during synchronization to `columns-2` with a `full` first item. A
-custom block that stored it adopts `listLayoutItemFields()`, raises its version
-and declares the same rewrite as a
-[block migration](../synchronization/#migrate-block-data):
-
-```ts
-migrations: {
-  2: ({ data, settings }) =>
-    settings.layoutPreset !== "featured-first"
-      ? { data, settings }
-      : {
-          data: { ...data, cards: data.cards.map((c, i) => (i === 0 ? { ...c, placement: "full" } : c)) },
-          settings: { ...settings, layoutPreset: "columns-2" },
-        },
-},
-```
+Custom blocks can evolve stored layout settings through a declared [block migration](../synchronization/#migrate-block-data).
 
 ### Show settings only for some layouts
 

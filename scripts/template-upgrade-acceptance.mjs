@@ -62,7 +62,9 @@ export async function templateUpgradeJourney(temporary, operations) {
     .filter((entry) => entry.isDirectory() && /^template-\d+\.\d+\.\d+$/u.test(entry.name))
     .map((entry) => entry.name)
     .sort();
-  if (directories.length === 0) throw new Error("No published-template fixtures retained");
+  const origin = JSON.parse(await readFile(join(workspace, "release/upgrade-origin.json"), "utf8"));
+  if (directories.length !== 1 || directories[0] !== `template-${origin.templateVersion}`)
+    throw new Error("Upgrade fixtures differ from supported release origin");
   const variants = directories.flatMap((directory) =>
     ["default", "cloudflare"].map((name) => ({
       name,
@@ -117,7 +119,7 @@ export async function templateUpgradeJourney(temporary, operations) {
         { mode: 0o600 },
       );
     }
-    if (fixture.provenance?.templateVersion !== version)
+    if (Object.entries(origin).some(([key, value]) => fixture.provenance?.[key] !== value))
       throw new Error("Missing immutable fixture provenance");
     const baseline = JSON.parse(fixture.files[".lace/manifest.json"]);
     for (const [path, entry] of Object.entries(baseline.files)) {
@@ -263,10 +265,12 @@ export async function templateUpgradeJourney(temporary, operations) {
       throw new Error(`upgrade-${version}-${variant.name}: legacy storage was not retired`);
     if (
       !changed.some(
-        (decision) => decision.path === "docker-compose.dev.yml" && decision.action === "add",
+        (decision) => decision.path === "docker-compose.dev.yml" && decision.action === "replace",
       )
     )
-      throw new Error(`upgrade-${version}-${variant.name}: development Compose file was not added`);
+      throw new Error(
+        `upgrade-${version}-${variant.name}: managed development Compose file was not updated`,
+      );
     for (const decision of changed) {
       if (decision.action === "remove") {
         if (decision.path in after)

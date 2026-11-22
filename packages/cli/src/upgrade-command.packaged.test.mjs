@@ -9,10 +9,6 @@ import { parseUpgradeArguments } from "../dist/upgrade/upgrade-command.js";
 import { upgradeHash } from "../dist/upgrade/upgrade-input.js";
 
 const roots = [];
-/** Release coordinate the generated template pins; rewinds replace it with an older one. */
-const { version: releaseVersion } = JSON.parse(
-  await readFile(new URL("../package.json", import.meta.url), "utf8"),
-);
 const bin = fileURLToPath(new URL("../dist/bin.js", import.meta.url));
 const generator = fileURLToPath(new URL("../../create-lace/dist/bin.js", import.meta.url));
 // These integration scenarios start several real CLI processes and audit disk bytes.
@@ -59,13 +55,13 @@ async function fixture(cloudflare = false, projectFlags = [], templateFlags = pr
     );
   return { root, project, template };
 }
-/** Rewinds a generated project to a 0.10.0 manifest with older managed guides. */
+/** Rewinds a generated project to a synthetic manifest with older managed guides. */
 async function rewind(project, { legacy = false } = {}) {
   const manifestPath = join(project, ".lace/manifest.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  manifest.templateVersion = "0.10.0";
+  manifest.templateVersion = "fixture-before";
   if (legacy) delete manifest.site;
-  const old = Buffer.from("old 0.10 template docs/lace-operations.md\n");
+  const old = Buffer.from("fixture template docs/lace-operations.md\n");
   await writeFile(join(project, "docs/lace-operations.md"), old);
   manifest.files["docs/lace-operations.md"].sha256 = upgradeHash(old);
   await writeFile(manifestPath, JSON.stringify(manifest));
@@ -89,7 +85,7 @@ async function updateTemplate(root, path, bytes) {
   await writeFile(join(root, path), bytes);
   const location = join(root, ".lace/manifest.json");
   const manifest = JSON.parse(await readFile(location, "utf8"));
-  manifest.templateVersion = "0.3.0";
+  manifest.templateVersion = "fixture-after";
   manifest.files[path].sha256 = upgradeHash(Buffer.from(bytes));
   await writeFile(location, JSON.stringify(manifest));
   const instructionsPath = join(root, ".lace/upgrade-instructions.json");
@@ -139,79 +135,6 @@ describe("upgrade CLI", () => {
       expect(Object.keys(manifest.files).some((path) => path.startsWith("site/"))).toBe(false);
       expect(await readdir(project)).not.toContain("site");
       expect(await outside()).toEqual(before);
-    },
-    integrationTimeout,
-  );
-  it(
-    "upgrades 0.13 release coordinates to the current template without touching .env, README or site",
-    async () => {
-      const { root, project, template } = await fixture();
-      const manifestPath = join(project, ".lace/manifest.json");
-      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      manifest.templateVersion = "0.13.0";
-      const managed = ["package.json", ".env.example", "docs/lace-operations.md"];
-      for (const path of managed) {
-        const previous = (await readFile(join(project, path), "utf8")).replaceAll(
-          releaseVersion,
-          "0.1.0-alpha.1",
-        );
-        await writeFile(join(project, path), previous);
-        manifest.files[path].sha256 = upgradeHash(Buffer.from(previous));
-      }
-      await writeFile(manifestPath, JSON.stringify(manifest));
-      await rm(join(project, ".lace/upgrade-instructions.json"));
-      const environment = "LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-alpha.1\n";
-      await writeFile(join(project, ".env"), environment);
-      await writeFile(join(project, "README.md"), "user README\n");
-      const before = await snapshot(join(project, "site"));
-
-      // An operator edit to a managed file blocks apply; only conflict review records are written.
-      await writeFile(join(project, "docs/lace-operations.md"), "operator edit\n");
-      const projectFiles = async () =>
-        Object.fromEntries(
-          Object.entries(await snapshot(project)).filter(
-            ([path]) => !path.startsWith(".lace/conflicts/") && !path.startsWith(".lace/upgrade/"),
-          ),
-        );
-      const blockedBefore = await projectFiles();
-      const blocked = cli(
-        ["--project", project, "--template", template, "--apply", "--json"],
-        root,
-      );
-      expect(blocked.status, blocked.stdout + blocked.stderr).not.toBe(0);
-      expect(blocked.stdout + blocked.stderr).toContain("docs/lace-operations.md");
-      expect(await projectFiles()).toEqual(blockedBefore);
-      await writeFile(
-        join(project, "docs/lace-operations.md"),
-        (await readFile(join(template, "docs/lace-operations.md"), "utf8")).replaceAll(
-          releaseVersion,
-          "0.1.0-alpha.1",
-        ),
-      );
-
-      const result = cli(["--project", project, "--template", template, "--apply", "--json"], root);
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      const outcome = JSON.parse(result.stdout);
-      expect(outcome.data.instructions.templateVersion).toBe(TEMPLATE_VERSION);
-      // Only the step from the latest published template is described.
-      expect(outcome.guidance).toContain(`Template ${TEMPLATE_VERSION}`);
-      expect(outcome.guidance).toContain("baseline migration");
-      expect(outcome.guidance).toContain("pnpm db:migrate");
-      expect(outcome.guidance).toMatch(/before rc2.*unsupported/u);
-      expect(outcome.guidance).toContain("Nginx defaults to 127.0.0.1:8080");
-      expect(outcome.guidance).toContain("LACE_API_BASE_URL");
-      expect(outcome.guidance).not.toMatch(/Template 0\.(?:[0-3]\d|4\d)\.0/u);
-      expect(outcome.guidance).not.toMatch(/\b00(?:0\d|1[0-5])_[a-z_]+/u);
-      for (const path of managed)
-        expect(await readFile(join(project, path), "utf8")).toBe(
-          await readFile(join(template, path), "utf8"),
-        );
-      expect(await readFile(join(project, ".env"), "utf8")).toBe(environment);
-      expect(await readFile(join(project, "README.md"), "utf8")).toBe("user README\n");
-      expect(await snapshot(join(project, "site"))).toEqual(before);
-      expect(JSON.parse(await readFile(manifestPath, "utf8")).templateVersion).toBe(
-        TEMPLATE_VERSION,
-      );
     },
     integrationTimeout,
   );
@@ -380,12 +303,15 @@ registerHooks({ resolve(specifier, context, next) {
       expect(JSON.parse(apply.stdout)).toMatchObject({
         ok: false,
         code: "UPGRADE_CONFLICTS",
-        data: { conflictPath: ".lace/conflicts/0.3.0" },
+        data: { conflictPath: ".lace/conflicts/fixture-after" },
       });
       const after = await snapshot(root);
       for (const [path, bytes] of Object.entries(before)) expect(after[path]).toBe(bytes);
       expect(
-        await readFile(join(project, ".lace/conflicts/0.3.0/proposed/docker-compose.yml"), "utf8"),
+        await readFile(
+          join(project, ".lace/conflicts/fixture-after/proposed/docker-compose.yml"),
+          "utf8",
+        ),
       ).toBe("target deployment\n");
     },
     integrationTimeout,
@@ -432,7 +358,7 @@ registerHooks({ resolve(specifier, context, next) {
         join(template, ".lace/upgrade-instructions.json"),
         JSON.stringify({
           schemaVersion: 1,
-          templateVersion: "0.3.0",
+          templateVersion: "fixture-after",
           database: ["Back up, then run lace db migrate --target node."],
           configuration: ["Review config, then run lace content sync."],
         }),
@@ -446,7 +372,7 @@ registerHooks({ resolve(specifier, context, next) {
       expect(result).toMatchObject({
         ok: true,
         code: "UPGRADE_APPLIED",
-        data: { status: "applied", instructions: { templateVersion: "0.3.0" } },
+        data: { status: "applied", instructions: { templateVersion: "fixture-after" } },
       });
       expect(result.guidance).toContain("lace db migrate");
       expect(await readFile(join(project, targetPath), "utf8")).toBe(target);

@@ -179,7 +179,7 @@ function deniedOperations(
     () => cases.delete({ actor, entryId, expectedRevision: 1 }),
     () => cases.revertDraft({ actor, entryId, expectedRevision: 1 }),
     () => cases.duplicate({ actor, entryId }),
-    () => cases.detachMedia({ actor, entryId, mediaId: mediaId("media") }),
+    () => cases.detachMedia({ expectedRevision: 1, actor, entryId, mediaId: mediaId("media") }),
     () => cases.describeActor({ actor, actorId: actor.id }),
     () => cases.loadDraft({ actor, entryId }),
     () => cases.loadPublished({ actor, entryId }),

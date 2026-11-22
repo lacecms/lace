@@ -141,11 +141,18 @@ stops at the list's remaining capacity and says which limit it reached.
 
 ## Remove media
 
-An item that content still uses cannot be deleted. Inspect its usage, remove
-it from drafts and published content, publish those changes, then delete it.
-Detaching it from a draft alone does not detach published uses. Retry a failed
-upload or deletion from its message in Admin; do not delete files in storage
-behind the CMS.
+Open the item’s **Used in** list. If a published version uses the image,
+edit and publish a replacement, or unpublish that entry. For an image used
+only in drafts, an editor can confirm **Remove from drafts and delete** for
+up to 50 listed entries. Check the entry names before confirming. Each save
+advances that draft’s revision, so anyone editing it should reload. A cleared
+required image must be replaced before publication.
+
+Admin shows how many drafts have completed. If you close the tab or lose your
+connection, reopen the item in the same browser and account and choose
+**Continue deletion**. A changed revision or new use requires fresh review.
+Earlier draft saves are kept. Once deletion is queued, the item shows pending
+removal. If removal fails, use **Retry deletion**.
 
 ## Build a gallery
 

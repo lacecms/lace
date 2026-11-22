@@ -1,3 +1,4 @@
+import { isContentModelKind, resolveModelKind } from "@lacecms/domain";
 import type { LinkTargetStatus } from "../ports/links.js";
 
 /** The keys of configured collections without a route, sorted for stable query scopes. */
@@ -5,7 +6,10 @@ export function routeLessModelKeys(
   models: readonly { readonly key: string; readonly kind: string; readonly route?: string }[],
 ): readonly string[] {
   return models
-    .filter((model) => model.kind === "collection" && model.route === undefined)
+    .filter(
+      ({ kind, route }) =>
+        isContentModelKind(kind) && resolveModelKind({ kind, route }).publicFamily === "records",
+    )
     .map((model) => model.key)
     .sort();
 }

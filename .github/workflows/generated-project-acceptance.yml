@@ -27,7 +27,7 @@ jobs:
       - name: Enable the pinned pnpm release
         run: |
           corepack enable
-          corepack prepare pnpm@12.3.4 --activate
+          corepack prepare pnpm@12.21.0 --activate
 
       - name: Install frozen dependencies
         run: pnpm install --frozen-lockfile

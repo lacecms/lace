@@ -123,11 +123,11 @@ as an explicit deployment step.
 Compatibility exists at three boundaries: the database schema version, the
 `lace.config.ts` API version, and the REST/build-export contract version.
 
-- Database changes use forward migrations after one baseline migration, the
-  oldest supported schema ([ADR 0029](../adr/0029-rc1-baseline.md)). rc2 is
-  the oldest supported release ([ADR 0030](../adr/0030-rc2-oldest-supported.md));
-  later releases migrate rc2 data forward. A database migrated by an older
-  engine is refused, not upgraded, and is recreated. Automatic database or content-schema downgrade is not promised.
+- Database changes use the shared baseline and ordered forward migrations.
+  Fully migrated and synchronized RC5 (template 0.50.0) is the supported
+  prerelease origin for 1.0 on Node and Cloudflare. Unknown ledger entries
+  are refused. Recovery restores the matching database, objects and engine.
+  [ADR 0035](../adr/0035-stable-rc5-upgrade-origin.md)
 - Content blocks and field objects carry `schema_version`. Stored block data is
   migrated only by configuration synchronization through the block's declared
   migrations (§8, §11, [ADR 0007](../adr/0007-schema-evolution-during-sync.md)),
@@ -157,7 +157,7 @@ only after the uncached path is correct; a first-party fixed-command VPS
 builder rather than an arbitrary command or external CI dependency
 ([ADR 0004](../adr/0004-fixed-command-vps-builder.md)); npm scope `@lacecms/*`,
 generator `create-lace` and images `ghcr.io/lacecms/api` and
-`ghcr.io/lacecms/builder`; prerelease versions on npm channel `next` with an
+`ghcr.io/lacecms/builder`; stable versions on npm `latest` and prerelease versions on `next` with an
 independent ownership template version. If package-name ownership differs, only
 published names and generator templates change; package boundaries and domain
 contracts stay the same.

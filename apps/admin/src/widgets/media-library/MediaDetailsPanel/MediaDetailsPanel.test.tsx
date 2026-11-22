@@ -113,15 +113,23 @@ test("draft-only usage is detached and deleted after a confirmation naming the d
   const user = userEvent.setup();
   const onChanged = vi.fn();
   const twoDrafts = [usageEntry("Hello", ["draft"]), usageEntry("About", ["draft"])];
-  const deleteMedia = vi
+  const plan = {
+    state: "drafts",
+    drafts: twoDrafts.map((d) => ({ entryId: d.entryId, expectedRevision: 1 })),
+  };
+  const detachMedia = vi
     .fn()
+    .mockResolvedValueOnce(plan)
     .mockRejectedValueOnce(
       new AdminClientError({ code: "MEDIA_IN_USE", message: "In use.", status: 409 }),
     )
+    .mockResolvedValueOnce(plan)
+    .mockResolvedValueOnce({ state: "entry-complete", entryId: twoDrafts[0]!.entryId })
+    .mockResolvedValueOnce({ state: "entry-complete", entryId: twoDrafts[1]!.entryId })
     .mockResolvedValueOnce({ ...usedItem, status: "deleting", usageCount: 0 });
   mount({
     client: {
-      deleteMedia,
+      detachMedia,
       getMedia: async () => ({ ...usedItem, usage: twoDrafts, usageCount: 2 }),
     },
     onChanged,
@@ -148,7 +156,7 @@ test("draft-only usage is detached and deleted after a confirmation naming the d
   await waitFor(() =>
     expect(onChanged).toHaveBeenCalledWith(expect.objectContaining({ status: "deleting" })),
   );
-  expect(deleteMedia).toHaveBeenLastCalledWith("media-1", { detachDrafts: true });
+  expect(detachMedia).toHaveBeenLastCalledWith("media-1", "finish");
 });
 
 test("published usage withholds deletion and says whether publishing releases the media", async () => {

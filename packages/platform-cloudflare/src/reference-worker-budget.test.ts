@@ -184,6 +184,37 @@ test("complete Worker reference invocations stay inside the D1 statement and bin
     })),
   };
   const source = await invoke("mixed-create", create, "POST", mixed, 201);
+  const copy = await invoke(
+    "mixed-detach-setup",
+    create,
+    "POST",
+    { ...mixed, slug: "detach-mixed" },
+    201,
+  );
+  const detachPath = `/api/v1/admin/media/${media[0]}?detach=drafts&step=entry&entryId=${copy.id}&expectedRevision=1`;
+  expect(await invoke("mixed-detach", detachPath, "DELETE", undefined, 200)).toEqual({
+    state: "entry-complete",
+    entryId: copy.id,
+  });
+  const draftId = (await db
+    .prepare("select draft_snapshot_id from content_entries where id=?")
+    .bind(copy.id)
+    .first<{ draft_snapshot_id: string }>())!.draft_snapshot_id;
+  const counts = await db
+    .prepare(`select (select count(*) from content_blocks where snapshot_id=?1) as blocks,
+    (select count(*) from content_media_references where snapshot_id=?1) as media,
+    (select count(*) from content_entry_link_references where snapshot_id=?1) as links`)
+    .bind(draftId)
+    .first();
+  expect(counts).toEqual({ blocks: 200, media: 199, links: 200 });
+  const saved = object((await fixture.call(`/api/v1/admin/entries/${copy.id}`)).body);
+  expect(object(saved.draft)).toMatchObject({
+    revision: 2,
+    blocks: mixed.blocks.map((b, i) => ({
+      ...b,
+      data: i === 0 ? { related: deep(1950) } : b.data,
+    })),
+  });
   const path = `/api/v1/admin/entries/${string(source.id)}`;
   await invoke("mixed-save", `${path}/draft`, "PUT", { ...mixed, expectedRevision: 1 }, 200);
   await invoke("mixed-stale-save", `${path}/draft`, "PUT", { ...mixed, expectedRevision: 1 }, 409);

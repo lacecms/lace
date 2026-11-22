@@ -1,3 +1,4 @@
+import { REFERENCE_MODEL_KINDS_SQL } from "../shared/model-kind-sql.js";
 import { CONFIGURATION_SYNC_NAMED_SNAPSHOT_LIMIT } from "@lacecms/application";
 import type {
   ConfigurationSyncReferenceInspection,
@@ -57,7 +58,7 @@ function targetIssues(input: ConfigurationSyncReferenceInspection): WritePlanSql
           v.value ->> 3 as sourceKey,v.value ->> 4 as pointer,
           case
             when e.id is null and (v.value ->> 6 = 0 or v.value ->> 5 = 1) then 'reference_target_missing'
-            when e.id is not null and (m.kind='global' or coalesce(r.new_key,e.model_key)
+            when e.id is not null and (m.kind not in ${REFERENCE_MODEL_KINDS_SQL} or coalesce(r.new_key,e.model_key)
               not in (select value from json_each(v.value -> 2))) then 'reference_target_model'
             when v.value ->> 5 = 1 and e.published_snapshot_id is null then 'reference_target_unpublished'
           end as code

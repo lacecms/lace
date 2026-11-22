@@ -419,3 +419,19 @@ test("index-ID publication resumes one uploaded platform and verifies flattened 
   await expect(publishRelease({ ...options, target: "images" }, operations)).rejects.toThrow();
   expect(commands).toEqual([]);
 });
+
+test("stable publication uses latest and refuses to replace a newer stable release", async () => {
+  const stable = {
+    ...inventory,
+    packages: packages.map((item) => ({ ...item, version: "1.0.0" })),
+    release: { ...inventory.release, version: "1.0.0", channel: "latest" },
+  };
+  const h = harness({ verify: async () => stable });
+  h.operations.lookupPackage = async () => ({ tags: { latest: "0.1.0-alpha.6" } });
+  await publishRelease({ ...options, dryRun: true }, h.operations);
+  expect(h.commands.every((args) => args.includes("latest"))).toBe(true);
+  h.operations.lookupPackage = async () => ({ dist: local, tags: { latest: "1.10.0" } });
+  h.commands.length = 0;
+  await expect(publishRelease(options, h.operations)).rejects.toThrow("Conflicting latest");
+  expect(h.commands).toEqual([]);
+});

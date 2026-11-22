@@ -2,7 +2,7 @@ import * as v from "valibot";
 import { describe, expect, test } from "vitest";
 import { blockMetadataSchema } from "./metadata.js";
 import { toContentModelDto } from "./model-projection.js";
-import { contentModelListSchema } from "./models.js";
+import { contentModelListSchema, contentModelRouteSchema, contentModelSchema } from "./models.js";
 
 describe("shared REST contract DTOs", () => {
   test("validates portable allowed block metadata against each model", () => {
@@ -109,4 +109,16 @@ test("block definitions match allowed blocks by type in any order", () => {
   );
   expect(accepts(model.blocks, [hero, hero])).toBe(false);
   expect(accepts(["hero", "hero"], [hero, hero])).toBe(false);
+});
+
+test.each(["article", "constructor"])("rejects the unregistered model kind %s", (kind) => {
+  const result = v.safeParse(contentModelSchema, {
+    key: "home",
+    kind,
+    blocks: [],
+    fields: {},
+    version: 1,
+  });
+  expect(result.issues?.[0]?.path?.[0]?.key).toBe("kind");
+  expect(v.safeParse(contentModelRouteSchema, { key: "home", kind }).success).toBe(false);
 });

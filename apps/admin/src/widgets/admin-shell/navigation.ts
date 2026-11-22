@@ -17,25 +17,18 @@ type ModelSummary = Pick<ContentModelDto, "icon" | "key" | "kind" | "label">;
 
 export type ResourcePath = "/builds" | "/media" | "/settings" | "/users";
 
+type ModelNavigationGroup = "pages" | "collections" | "globals";
+
+export type ModelNavigationItem = {
+  readonly icon: ModelNavigationIcon;
+  readonly kind: ModelSummary["kind"];
+  readonly group: ModelNavigationGroup;
+  readonly label: string;
+  readonly modelKey: string;
+};
+
 export type NavigationItem =
-  | {
-      readonly icon: ModelNavigationIcon;
-      readonly kind: "page";
-      readonly label: string;
-      readonly modelKey: string;
-    }
-  | {
-      readonly icon: ModelNavigationIcon;
-      readonly kind: "collection";
-      readonly label: string;
-      readonly modelKey: string;
-    }
-  | {
-      readonly icon: ModelNavigationIcon;
-      readonly kind: "global";
-      readonly label: string;
-      readonly modelKey: string;
-    }
+  | ModelNavigationItem
   | {
       readonly icon: LucideIcon;
       readonly kind: "resource";
@@ -56,6 +49,19 @@ export function modelLabel(model: Pick<ContentModelDto, "key" | "label">): strin
   return model.label ?? model.key;
 }
 
+const modelNavigation = {
+  page: { key: "pages", label: "Pages", icon: FileText },
+  collection: { key: "collections", label: "Collections", icon: Layers },
+  global: { key: "globals", label: "Globals", icon: Globe },
+} as const satisfies Record<
+  ModelSummary["kind"],
+  {
+    readonly key: ModelNavigationGroup;
+    readonly label: string;
+    readonly icon: LucideIcon;
+  }
+>;
+
 /**
  * Shell navigation groups for a session. Pages, Collections and Site follow
  * the configured models; resource items appear only with the permission their
@@ -66,42 +72,19 @@ export function navigationGroups(
   models: readonly ModelSummary[] = [],
 ): readonly NavigationGroup[] {
   const groups: NavigationGroup[] = [
-    {
+    ...Object.entries(modelNavigation).map(([kind, { key, label, icon }]) => ({
+      key,
+      label,
       items: models
-        .filter((model) => model.kind === "page")
+        .filter((model) => model.kind === kind)
         .map((model) => ({
-          icon: resolveModelNavigationIcon(model.icon, FileText),
-          kind: "page" as const,
+          icon: resolveModelNavigationIcon(model.icon, icon),
+          kind: model.kind,
+          group: key,
           label: modelLabel(model),
           modelKey: model.key,
         })),
-      key: "pages",
-      label: "Pages",
-    },
-    {
-      items: models
-        .filter((model) => model.kind === "collection")
-        .map((model) => ({
-          icon: resolveModelNavigationIcon(model.icon, Layers),
-          kind: "collection" as const,
-          label: modelLabel(model),
-          modelKey: model.key,
-        })),
-      key: "collections",
-      label: "Collections",
-    },
-    {
-      items: models
-        .filter((model) => model.kind === "global")
-        .map((model) => ({
-          icon: resolveModelNavigationIcon(model.icon, Globe),
-          kind: "global" as const,
-          label: modelLabel(model),
-          modelKey: model.key,
-        })),
-      key: "globals",
-      label: "Globals",
-    },
+    })),
     {
       items: [
         { icon: Image, kind: "resource", label: "Media", path: "/media", requires: "content:read" },

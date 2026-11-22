@@ -81,8 +81,9 @@ new confirmed publish attempt.
   attempt
 
 ### Requirement: Revision-conflict recovery preserves local authoring
-When a complete-draft save or publish receives `CONTENT_REVISION_CONFLICT`, the
-editor SHALL retain all current local form values and dirty state and SHALL
+When a complete-draft save or publish receives `CONTENT_REVISION_CONFLICT`, or
+when a background read detects a newer revision while the open draft has unsaved
+changes, the editor SHALL retain all current local form values and dirty state and SHALL
 present an accessible conflict recovery state. That state SHALL offer explicit
 actions to reload the current server draft or copy a stable JSON representation
 of the local complete draft. Reloading SHALL replace local values only after
@@ -105,6 +106,23 @@ after a revision conflict.
 - **WHEN** a writer selects copy-my-JSON from a revision-conflict state
 - **THEN** the editor copies the local complete-draft representation and leaves
   the same local values and conflict recovery state visible
+
+#### Scenario: A background read reveals the conflict before any write
+
+- **WHEN** a newer draft arrives while the local form has unsaved changes
+- **THEN** an accessible alert explains that the draft changed elsewhere, and offers Reload server draft and Copy my JSON without requiring an attempted save
+- **AND** copying includes the local draft's content and block order, excludes editor-only transient state and leaves unfinished controls intact
+
+#### Scenario: Explicit reload fails and the writer retries
+
+- **WHEN** a writer selects Reload server draft and the read fails with a recoverable error
+- **THEN** the editor shows the failure, retains local input, the baseline revision and the recovery actions, and allows retry
+- **AND** when a retry returns a validated current draft for the same entry, the editor adopts its values and revision, clears unfinished input and the alert, and shows a clean form without sending a write
+
+#### Scenario: Save and publish encounters a conflict already detected by a read
+
+- **WHEN** an authorized writer confirms Save and publish with valid local edits based on revision 4 after a refresh has reported revision 5
+- **THEN** the save uses revision 4, and a revision conflict preserves the local form and sends no publish request
 
 ### Requirement: Later draft edits remain separate from public output
 After a successful publication, the editor SHALL adopt the returned entry as

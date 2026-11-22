@@ -199,7 +199,7 @@ test(
     const root = await directory();
     const db = new DatabaseSync(join(root, "db.sqlite"));
     db.exec(
-      "create table __drizzle_migrations (created_at integer); insert into __drizzle_migrations values (1789240330790)",
+      "create table __drizzle_migrations (created_at integer); insert into __drizzle_migrations values (123456789)",
     );
     db.close();
     const before = await snapshot(root);

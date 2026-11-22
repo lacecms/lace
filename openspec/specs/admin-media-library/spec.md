@@ -58,7 +58,15 @@ The library SHALL offer upload only to roles allowed to write media. A writer SH
   labelled GIF and appears under the GIF type filter
 
 ### Requirement: Media deletion remains confirmed and recoverable
-The library SHALL offer a writer deletion of an active item from its details panel only after an explicit confirmation dialog, and a retry action for an item in `delete_failed`. It SHALL label `deleting` as pending asynchronous removal, not completed deletion. When the item's usage count is zero, the confirmation SHALL request an ordinary deletion. When the usage count is greater than zero, the panel SHALL decide from the loaded usage: while usage is loading or has failed to load, deletion SHALL be unavailable; when any listed location is used by a published version, or when the usage list is truncated, deletion SHALL be unavailable and the panel SHALL explain that the published versions must stop using the item first, naming each entry whose published version uses it and, for an entry whose draft no longer uses the item, saying that publishing or unpublishing that entry releases the item; when every using entry is listed and uses the item only in its draft, and the writer may also edit content, the panel SHALL offer deletion through a confirmation that names each entry whose draft will lose the item, states that the item is removed from those drafts and not from any published version, warns that a required field may then block publication and that someone editing one of those entries will have to reload, and requests deletion with draft detaching. After an accepted detaching deletion the library SHALL refresh the affected entries' remote state. It SHALL update the visible state only from validated API results, preserve the item and show a non-sensitive error when a request fails, and explain a rejected deletion of referenced media without suggesting the reference was removed; a rejection after some drafts were detached SHALL say that some drafts may already have changed. These controls SHALL be keyboard operable and SHALL return focus predictably when the confirmation closes; API authorization and reference checks remain authoritative.
+The media details panel SHALL offer deletion of an active item to a permitted writer after explicit confirmation. An unused item takes the ordinary deletion path. The panel SHALL label `deleting` as pending asynchronous removal and offer retry for `delete_failed`.
+
+For a used item the panel SHALL wait for complete usage information. While usage loads, on a read error, or when the list is truncated, deletion SHALL be unavailable. For truncation the panel SHALL explain the 50-entry limit. For published usage it SHALL disable deletion, name each listed entry whose published version uses the item and explain that the published use must be released. For a published-only use it SHALL link to the entry and explain that publishing the edited draft or unpublishing the entry releases that use.
+
+For complete, draft-only usage the panel SHALL also require content editing permission. Its confirmation SHALL name each affected entry, explain that only those drafts lose the media, and warn that a missing required field can block publication and an open editor will need to reload.
+
+After confirmation, the library SHALL compare the admitted IDs with the displayed set, send matching entry steps sequentially at their admitted revisions, then finish. A different set SHALL require fresh review before editing. The library SHALL show the number of acknowledged steps out of the confirmed total and offer continuation when the same account returns to the item on the same browser and installation. It SHALL replay an interrupted step with its original revision and stop on conflict or loss of permission.
+
+The library SHALL refresh affected entries, lists and usage after success or possible partial progress. Only a validated final receipt SHALL cause the library to announce that this request queued deletion. On rejection it SHALL preserve the item, show a non-sensitive reason, and explain that some drafts may already have changed if a step was attempted. Controls SHALL support keyboard operation and restore focus predictably when confirmation closes. The API remains authoritative for permission and reference checks.
 
 #### Scenario: An unreferenced item is queued for deletion
 - **WHEN** a permitted writer confirms deletion and the API accepts the request
@@ -91,6 +99,18 @@ The library SHALL offer a writer deletion of an active item from its details pan
 #### Scenario: A failed deletion is retried
 - **WHEN** a permitted writer retries a `delete_failed` item and the API accepts the request
 - **THEN** the item returns to a pending deletion state without claiming the object has already been removed
+
+#### Scenario: Closing the tab between steps
+- **WHEN** an editor confirms 50 drafts, closes the tab after several saves and returns to the item
+- **THEN** the editor can continue the original set, a lost acknowledgment causes no second revision increment, and the library shows pending deletion only after the final receipt
+
+#### Scenario: A newly using entry needs fresh review
+- **WHEN** the dialog named two entries and admission returns a different set
+- **THEN** the library refreshes usage for confirmation and sends no entry step
+
+#### Scenario: An interrupted operation cannot resume under another account
+- **WHEN** a different editor signs in on a browser with a saved detach plan
+- **THEN** that account cannot resume the first editor's confirmation
 
 ### Requirement: Library search, type filter, sort, and view are URL state
 The `/media` route SHALL keep its filename search term, type filter, tag filter, sort order, and grid or list view in the route's URL search parameters and SHALL request media from the API with exactly the search, type, tags, and sort values. The tag filter SHALL hold up to five tags combined with AND, entered through the shared tag input in the compact toolbar form defined by the toolbar requirement, shown as removable chips, with an accessible name and description stating that items must have all of them. Opening or reloading a library URL with these parameters SHALL restore the same search box contents, type filter, tag filter, sort order, view, and results. Unsupported type, sort, or view values, search terms that are blank or longer than the API accepts, and tags that are not valid after normalization SHALL be ignored rather than causing an error; tags SHALL be normalized, deduplicated, and sorted in ascending order, and only the first five of that order SHALL be kept. Default values (no search, all types, no tags, newest first, grid view) SHALL not be written to the URL. Search input SHALL update the URL after the user pauses typing without adding a history entry per keystroke. Changing the search, type, tags, or sort SHALL restart pagination at the first page; pagination cursors SHALL never be written to the URL. A filtered library with no results SHALL offer to clear the filters instead of claiming the library is empty, and clearing the filters SHALL clear the search, type, and tags.

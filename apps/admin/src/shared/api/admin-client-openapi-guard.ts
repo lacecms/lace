@@ -86,7 +86,7 @@ function strings(node: Node, scope: Node, seen = new Set<string>()): string[] {
     node.arguments.length === 0
   )
     return ["~query~"];
-  if (isIdentifier(node) && node.text === "search") return ["~query~"];
+  if (isNewExpression(node) && node.expression.getText() === "URLSearchParams") return ["~query~"];
   if (isIdentifier(node) && !seen.has(node.text)) {
     const name = node.text;
     let initializer: Node | undefined;
@@ -99,7 +99,7 @@ function strings(node: Node, scope: Node, seen = new Set<string>()): string[] {
   return fail(node, `unsupported route expression: ${node.getText()}`);
 }
 function method(call: Node, args: readonly Node[], kind: string): string {
-  if (kind !== "request") return "POST";
+  if (kind !== "request" && kind !== "requestExchange") return "POST";
   const init = args[2];
   if (init === undefined) return "GET";
   if (isConditionalExpression(init)) {
@@ -207,24 +207,33 @@ export function extractOperations(files: readonly string[]): Operation[] {
           fail(property, "unsupported client method declaration");
         const calls: Node[] = [];
         const queryNames = new Set<string>();
+        const builders = new Set<string>();
         walk(property.initializer, (node) => {
           if (
             isIdentifier(node) &&
-            ["fetcher", "request", "postJson", "upload"].includes(node.text)
+            ["fetcher", "request", "requestExchange", "postJson", "upload"].includes(node.text)
           ) {
             const parent = node.parent;
             const callee =
               isCallExpression(parent) &&
               parent.expression === node &&
-              ["request", "postJson", "upload"].includes(node.text);
+              ["request", "requestExchange", "postJson", "upload"].includes(node.text);
             const fetcherArgument =
               node.text === "fetcher" &&
               isCallExpression(parent) &&
               parent.arguments[0] === node &&
-              ["request", "postJson"].includes(parent.expression.getText());
+              ["request", "requestExchange", "postJson"].includes(parent.expression.getText());
             if (!callee && !fetcherArgument) fail(node, "unsupported transport reference");
           }
-          if (isIdentifier(node) && node.text === "search") {
+          if (
+            isVariableDeclaration(node) &&
+            isIdentifier(node.name) &&
+            node.initializer &&
+            isNewExpression(node.initializer) &&
+            node.initializer.expression.getText() === "URLSearchParams"
+          )
+            builders.add(node.name.text);
+          if (isIdentifier(node) && builders.has(node.text)) {
             const parent = node.parent;
             const declared = isVariableDeclaration(parent) && parent.name === node;
             const member =
@@ -241,7 +250,17 @@ export function extractOperations(files: readonly string[]): Operation[] {
           if (isNewExpression(node) && node.expression.getText() === "URLSearchParams") {
             if ((node.arguments?.length ?? 0) > 1)
               fail(node, "unsupported URLSearchParams initializer");
-            if (
+            const initial = node.arguments?.[0];
+            if (initial && isObjectLiteralExpression(initial)) {
+              for (const key of initial.properties) {
+                if (
+                  !isPropertyAssignment(key) ||
+                  !(isIdentifier(key.name) || isStringLiteral(key.name))
+                )
+                  fail(key, "query name must be a literal");
+                queryNames.add(key.name.text);
+              }
+            } else if (
               node.arguments?.length === 1 &&
               !node.arguments[0]!.getText()
                 .replace(/\s+/gu, "")
@@ -253,7 +272,7 @@ export function extractOperations(files: readonly string[]): Operation[] {
           }
           if (!isCallExpression(node)) return;
           const name = node.expression.getText();
-          if (["request", "postJson", "upload"].includes(name)) calls.push(node);
+          if (["request", "requestExchange", "postJson", "upload"].includes(name)) calls.push(node);
           if (
             ["fetch", "fetcher", "globalThis.fetch", "window.fetch", "XMLHttpRequest"].includes(
               name,
@@ -262,7 +281,7 @@ export function extractOperations(files: readonly string[]): Operation[] {
             fail(node, "direct transport is not supported");
           if (
             isPropertyAccessExpression(node.expression) &&
-            node.expression.expression.getText() === "search"
+            builders.has(node.expression.expression.getText())
           ) {
             const member = node.expression.name.text;
             if (member === "set" || member === "append") {

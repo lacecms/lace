@@ -4,7 +4,7 @@ export const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 export const MAX_SLUG_LENGTH = 100;
 /** Model keys: a lowercase ASCII letter, then lowercase letters or digits in runs joined by single hyphens. */
 export const MODEL_KEY_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
-/** Model kinds: routed singletons, routed lists, and route-less singletons. */
+/** Model kinds: fixed-path pages, collections with optional routes, and site-wide globals. */
 export type ContentModelKind = "collection" | "global" | "page";
 /** Maximum entry search length at the transport boundary; runtime bounds may be narrower. */
 export const MAX_ENTRY_SEARCH_LENGTH = 200;

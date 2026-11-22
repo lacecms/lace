@@ -136,14 +136,14 @@ export function githubClient(repository, command = tool) {
         if (entries.length < 100) return null;
       }
     },
-    create: (tag, revision, body) =>
+    create: (tag, revision, body, prerelease) =>
       api(`${base}/releases`, "POST", {
         tag_name: tag,
         target_commitish: revision,
         name: tag,
         body,
         draft: true,
-        prerelease: true,
+        prerelease,
         make_latest: "false",
       }),
     async upload(release, name, bytes) {
@@ -163,11 +163,11 @@ export function githubClient(repository, command = tool) {
         "-H",
         "Accept: application/octet-stream",
       ]),
-    publish: (release) =>
+    publish: (release, prerelease) =>
       api(`${base}/releases/${release.id}`, "PATCH", {
         draft: false,
-        prerelease: true,
-        make_latest: "false",
+        prerelease,
+        make_latest: String(!prerelease),
       }),
   };
 }
@@ -205,7 +205,7 @@ export async function releaseContext(root, inventory, operations = {}, apply = f
     existing &&
     (existing.tag_name !== tag ||
       existing.body !== body ||
-      !existing.prerelease ||
+      existing.prerelease !== (inventory.release.channel === "next") ||
       (existing.draft && existing.target_commitish !== inventory.source.revision))
   )
     throw new Error("Existing release body/source conflicts; reconcile explicitly");
@@ -303,7 +303,12 @@ export async function finalizeGithub(
     }
     let release =
       context.existing ??
-      (await context.client.create(context.tag, inventory.source.revision, context.body));
+      (await context.client.create(
+        context.tag,
+        inventory.source.revision,
+        context.body,
+        inventory.release.channel === "next",
+      ));
     await verifyAssets(context, release, assets, release.draft);
     if (release.draft) {
       for (const [name, bytes] of Object.entries(assets))
@@ -314,13 +319,13 @@ export async function finalizeGithub(
       const currentTag = await context.client.tag(context.tag);
       if (currentTag && currentTag !== inventory.source.revision)
         throw new Error("Version tag changed before publication");
-      release = await context.client.publish(release);
+      release = await context.client.publish(release, inventory.release.channel === "next");
     }
     release = await context.client.release(context.tag);
     if (
       !release ||
       release.draft ||
-      !release.prerelease ||
+      release.prerelease !== (inventory.release.channel === "next") ||
       (await context.client.tag(context.tag)) !== inventory.source.revision
     )
       throw new Error("Published GitHub release identity verification failed");

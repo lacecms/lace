@@ -74,7 +74,7 @@ components directly.
 
 | Package | Rule |
 | --- | --- |
-| `content` | Owns the portable shared vocabulary: slug identifiers, model kinds, canonical route rules, transport limits and object helpers. Other packages import or re-export these definitions under their existing public names; failure construction stays local to each layer. |
+| `content` | Owns the portable shared vocabulary: slug identifiers, model kinds and their descriptors, canonical route rules, transport limits and object helpers. Other packages import or re-export these definitions under their existing public names; failure construction stays local to each layer. |
 | `content`, `config` | Stay runtime-portable and import no Node-only API. |
 | `domain` | Imports no framework or infrastructure package. |
 | `application` | May depend on domain rules, content validation and the normalized configuration, never on REST DTOs, Hono, Drizzle, Cloudflare or Node adapters, or the MCP SDK. Its only contracts import is the portable `@lacecms/contracts/outbox` subpath for registered event requests and dispatch. Use cases supply request-owned event data on portable mutation commands. |

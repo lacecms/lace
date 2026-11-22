@@ -2,16 +2,16 @@
 title: Operate and recover Lace
 description: Observe, back up, restore, upgrade and roll back an installation, and rotate its credentials.
 kind: guide
-verifiedAgainst: 0.1.0-rc6
+verifiedAgainst: 1.0.0
 ---
 
-Running Lace means keeping its database, media and configuration consistent, telling content publication apart from site deployment, and changing versions and credentials deliberately. This guide covers observation, backup and restore, upgrades from rc2, rollback and credential rotation for both runtimes. The generated `docs/lace-operations.md` contains the exact commands for your project's layout.
+Running Lace means keeping its database, media and configuration consistent, telling content publication apart from site deployment, and changing versions and credentials deliberately. This guide covers observation, backup and restore, upgrades from RC5, rollback and credential rotation for both runtimes. The generated `docs/lace-operations.md` contains the exact commands for your project's layout.
 
 ## Before you start
 
 - A deployed installation on [Docker/VPS](../deployment/node/) or [Cloudflare](../deployment/cloudflare/).
 - Your project in version control: site source, `lace.config.ts`, `.lace/manifest.json` and package locks. Keep environment files, the authentication secret, build tokens and remote management credentials private and outside version control.
-- For upgrades: an installation on **0.1.0-rc2** or later. rc2 is the oldest supported release.
+- For upgrades: a fully migrated and synchronized **0.1.0-rc5** installation (template 0.50.0).
 
 ## Observe the system
 
@@ -33,20 +33,20 @@ It includes a stopped volume backup for restoring on-disk storage metadata.
 
 ## Upgrade and roll back
 
-Upgrades are supported from **rc2** (`0.1.0-rc2`) onward. An rc2 database already starts from the baseline migration, so it is upgraded in place with forward migrations, never recreated. Databases created before rc2 predate the baseline and are not supported: `lace db migrate` and `lace doctor` report `SCHEMA_UNSUPPORTED` for them and change nothing.
+RC5 upgrades directly to 1.0.0. Five forward migrations backfill actor profiles, add the invitation index, install preview state and classify existing entry references as URL links. Rehearse the upgrade and recovery on a private copy with verified backups before the live cutover.
 
 1. **Back up** configuration, source, package locks, deployment settings, the database and media objects together, as above.
 2. **Update managed project files.** Generate a pristine project with the target `create-lace` release in a separate directory, using the same project name, site mode and `--cloudflare` choice. From your project, review the plan, then apply it:
 
    ```sh
    mkdir -p /work/upgrade-target && cd /work/upgrade-target
-   pnpm dlx create-lace@<target-release> create my-site --starter
+   pnpm dlx create-lace@1.0.0 create my-site --starter
    cd /work/my-site
-   pnpm exec lace upgrade --template /work/upgrade-target/my-site
-   pnpm exec lace upgrade --template /work/upgrade-target/my-site --apply
+   pnpm dlx @lacecms/cli@1.0.0 upgrade --template /work/upgrade-target/my-site
+   pnpm dlx @lacecms/cli@1.0.0 upgrade --template /work/upgrade-target/my-site --apply
    ```
 
-   Replace the paths, `<target-release>` and the site-mode flag with your own.
+   Replace the paths and the site-mode flag with your own.
 
    The plan is read-only. Files you edited conflict instead of being overwritten; apply then changes nothing and writes proposed files and diffs under `.lace/conflicts/` for you to merge. `lace.config.ts`, the site, README and environment files are never changed. `lace upgrade` does not install packages, migrate databases or contact services.
 
@@ -55,7 +55,7 @@ Upgrades are supported from **rc2** (`0.1.0-rc2`) onward. An rc2 database alread
 5. **Synchronize configuration** with `pnpm content:sync` or the selected Cloudflare target.
 6. **Restart or redeploy and rebuild.** Run `pnpm prod:start`, or deploy the Worker, then rebuild the site and check it on the selected runtime: CMS version, sign-in, media and a successful build.
 
-For the production ingress update, review managed-file conflicts and all user-owned Compose overrides before applying. Preserve `.env` and data; point the TLS proxy to Nginx on `127.0.0.1:8080` by default, and move host HTTP clients and manual builds to the HTTPS origin (`LACE_API_BASE_URL`). Recreate the services with the production Compose definition, then inspect `docker compose config` and `docker compose ps` to confirm the API has no host port and Nginx has the intended binding. For rollback, restore matching proxy settings along with the prior Compose files and restrict the host ports they publish.
+RC5 already uses private API ingress. Preserve your working proxy overrides. For the Node storage switch verify existing and new media after a SILO restart before reopening traffic. On Cloudflare use the same D1/R2 bindings and secrets when deploying the matching Worker. Confirm the five pending steps were recorded, verify the original draft and published values, gallery, sign-in and role, then fetch media from the rebuilt site. Keep protected preview off until explicitly configured.
 
 Rollback means restoring the backed-up packages, images, configuration, source, database and media together. `lace upgrade --rollback` restores only the managed project files of the latest upgrade; it does not undo database migrations, uploaded media or content. Migrations are forward-only and a newer engine may store shapes an older one cannot read, so a package-only downgrade is not supported. Builder and Pages caches are disposable and never part of a backup.
 

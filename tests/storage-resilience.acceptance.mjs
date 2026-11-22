@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { openProductRuntime, png } from "./support/cross-runtime-fixture.mjs";
-import { MediaDeletionDispatcher } from "../packages/application/dist/index.js";
+import { MediaCreateError, MediaDeletionDispatcher } from "../packages/application/dist/index.js";
 import { MEDIA_DELETE_REQUESTED } from "../packages/contracts/dist/outbox.js";
 
 for (const kind of ["node", "worker"]) {
@@ -24,7 +24,7 @@ for (const kind of ["node", "worker"]) {
       const written = vi.spyOn(storage, "put");
       const failedMetadata = vi
         .spyOn(f.runtime.repository, "createMedia")
-        .mockRejectedValueOnce(new Error("private SQL fault"));
+        .mockRejectedValueOnce(new MediaCreateError("rolled-back", new Error("private SQL fault")));
       expect((await upload()).status).toBe(500);
       const orphanKey = written.mock.calls[0][0].key;
       expect(await storage.get(orphanKey)).toBeNull();

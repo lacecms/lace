@@ -204,12 +204,27 @@ independent of page size; anchors are never resolved by per-entry reads or
 full JSON loads, and query counts distinguish first pages from anchored
 continuations.
 
+Ordinary public reads prepare a bounded candidate query and three payload
+queries before opening a read transaction on Node SQLite or submitting one
+atomic D1 batch. The extra list candidate supplies the continuation decision.
+Only the returned published snapshots contribute fields, local link manifests,
+visible blocks or active media. The boundary covers one response. Build export
+applies its published-version check across its two read groups and across
+continuations.
+
 Collection summaries, media catalog reads, snapshot hydration and publication
 role reads resolve attribution with indexed access to the security-owned
 projection. Explicit editor descriptions use the same profile under the
 existing authorized read. The number of actors on a page adds no statements
 or binds to list and export queries, and publication keeps its existing
 transaction and D1 batch boundaries.
+
+Media draft detachment reads the active item and at most 51 grouped owners in
+one statement. A named draft step uses the shared guarded save plan and returns
+an acknowledgment. The Worker budgets session resolution, the command and all
+registered work together. The post-commit pass claims up to two media deletions
+and one build. Scheduled recovery can claim five media deletions. See the
+[per-phase measurements](../verification.md#media-draft-detachment).
 
 Media tag filtering adds at most five indexed EXISTS lookups per candidate in
 the single list-page query. Tags are read with a bounded correlated projection,
@@ -263,6 +278,7 @@ results.
 | Entry plan admission | predicate and diagnostics inside the write transaction | first guarded write and diagnostics inside one atomic batch | typed outcomes; replay → stale revision → link targets → route conflict; contract cases for concurrent saves and stale publication |
 | Publication result | materialized from the state read inside the transaction | pre-batch prediction, stored in the same batch as the idempotency record | returned entry, its replay and the unpublication result equal a later `load` |
 | `mutation_guards` | in-transaction dirty token for shared sync link statements | batch-unique guard tokens, removed inside the batch | no persistent plan token |
+| Ordinary public content | one deferred read transaction | one atomic `batch()` | shared contract covers complete responses across republish and published-only payloads |
 | Build export page | both read groups in one read transaction | two `batch()` calls with a version re-read | contract build-export cases; Node one extra in-transaction version read |
 | Collection `list` and configuration-sync scans | numbered parameters, `NODE_LIST_QUERY_LIMITS` | positional parameters, `CLOUDFLARE_LIST_QUERY_LIMITS` | collection-query contract cases (§12 limits differ by design) |
 | Final configuration-sync apply | revalidates the report and reads recursive rewrite inputs inside the immediate write transaction | reads before one batch that guards every mutation on the stored summary and link predicates | shared plan preserves operation order, baselines, rewrites, stale and link errors, and commit-time build version |

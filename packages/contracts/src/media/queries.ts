@@ -1,4 +1,4 @@
-import { MAX_MEDIA_SEARCH_LENGTH } from "@lacecms/content";
+import { MAX_MEDIA_USAGE_ENTRIES, MAX_MEDIA_SEARCH_LENGTH } from "@lacecms/content";
 import {
   MAX_MEDIA_TAG_FILTERS,
   MAX_MEDIA_TAG_INPUT_LENGTH,
@@ -12,6 +12,7 @@ import * as v from "valibot";
 import {
   adminPageLimitQuerySchema,
   cursorPageSchema,
+  identifierSchema,
   opaqueCursorSchema,
   pageLimitQuerySchema,
   positiveIntegerSchema,
@@ -112,10 +113,55 @@ export const mediaListQuerySchema = v.object({
   type: v.optional(mediaMimeTypeSchema),
 });
 
-/** `detach=drafts` removes the item from using drafts before deletion is requested. */
-export const mediaDeleteQuerySchema = v.object({
-  detach: v.optional(v.picklist(["drafts"])),
-});
+export const mediaDeleteQuerySchema = v.pipe(
+  v.object({
+    detach: v.optional(v.literal("drafts")),
+    step: v.optional(v.picklist(["entry", "finish"])),
+    entryId: v.optional(identifierSchema),
+    expectedRevision: v.optional(
+      v.pipe(
+        v.string(),
+        v.regex(/^[1-9][0-9]*$/u),
+        v.check((value) => Number.isSafeInteger(Number(value))),
+      ),
+    ),
+  }),
+  v.rawCheck(({ dataset, addIssue }) => {
+    if (!dataset.typed) return;
+    const query = dataset.value;
+    const issue = (key: keyof typeof query, message: string) =>
+      addIssue({
+        message,
+        path: [{ type: "object", origin: "value", input: query, key, value: query[key] }],
+      });
+    if (query.step && !query.detach) issue("step", "A step requires detach=drafts.");
+    for (const key of ["entryId", "expectedRevision"] as const) {
+      if (query.step === "entry" && query[key] === undefined)
+        issue(key, "Required for an entry step.");
+      if (query.step !== "entry" && query[key] !== undefined)
+        issue(key, "Only accepted for an entry step.");
+    }
+  }),
+);
+
+export const mediaDetachProgressSchema = v.variant("state", [
+  v.strictObject({
+    state: v.literal("drafts"),
+    drafts: v.pipe(
+      v.array(
+        v.strictObject({
+          entryId: identifierSchema,
+          expectedRevision: v.pipe(positiveIntegerSchema, v.maxValue(Number.MAX_SAFE_INTEGER)),
+        }),
+      ),
+      v.minLength(1),
+      v.maxLength(MAX_MEDIA_USAGE_ENTRIES),
+      v.check((rows) => new Set(rows.map((row) => row.entryId)).size === rows.length),
+    ),
+  }),
+  v.strictObject({ state: v.literal("entry-complete"), entryId: identifierSchema }),
+]);
+export type MediaDetachProgressDto = v.InferOutput<typeof mediaDetachProgressSchema>;
 
 export type MediaSortDto = v.InferOutput<typeof mediaSortSchema>;
 export type MediaMimeTypeDto = v.InferOutput<typeof mediaMimeTypeSchema>;

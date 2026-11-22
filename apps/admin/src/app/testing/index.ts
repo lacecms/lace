@@ -214,6 +214,9 @@ export function stubClient(overrides: Partial<AdminClient> = {}): AdminClient {
     listMedia: async () => ({ items: [] }),
     getMedia: async () => ({ ...mediaItem, usage: [] }),
     uploadMedia: async () => ({}) as never,
+    detachMedia: async () => {
+      throw new Error("Unexpected detach request");
+    },
     deleteMedia: async () => ({}) as never,
     retryMediaDeletion: async () => ({}) as never,
     updateMediaMetadata: async () => ({}) as never,
@@ -244,8 +247,11 @@ export function stubClient(overrides: Partial<AdminClient> = {}): AdminClient {
   };
 }
 
-function renderWithProviders(router: Parameters<typeof RouterProvider>[0]["router"]) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function renderWithProviders(
+  router: Parameters<typeof RouterProvider>[0]["router"],
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+  container?: HTMLElement,
+) {
   render(
     createElement(
       QueryClientProvider,
@@ -257,6 +263,7 @@ function renderWithProviders(router: Parameters<typeof RouterProvider>[0]["route
         createElement(Toaster),
       ),
     ),
+    container === undefined ? undefined : { container },
   );
   return queryClient;
 }
@@ -266,13 +273,14 @@ export function renderRoute(
   path: string,
   sessionSource: AdminSessionSource,
   adminClient = stubClient(),
+  options?: { readonly queryClient?: QueryClient; readonly container?: HTMLElement },
 ) {
   const router = createAdminRouter(
     sessionSource,
     createMemoryHistory({ initialEntries: [path] }),
     adminClient,
   );
-  renderWithProviders(router);
+  renderWithProviders(router, options?.queryClient, options?.container);
   return router;
 }
 

@@ -18,6 +18,7 @@ const inventory = {
   source: { preview: false, revision: "a".repeat(40) },
   release: {
     version: "0.1.0-alpha.1",
+    channel: "next",
     platforms: ["linux/arm64"],
     sourceRepository: "https://github.com/lacecms/lace",
   },

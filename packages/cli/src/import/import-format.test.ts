@@ -75,7 +75,7 @@ describe("import format v1", () => {
 
   test("model rules require collection slugs and refuse global titles", () => {
     const models = new Map<string, import("./import-format.js").ImportModelFacts>([
-      ["posts", { key: "posts", kind: "collection", seo: false }],
+      ["posts", { key: "posts", kind: "collection", route: "/posts/:slug", seo: false }],
       ["about", { key: "about", kind: "page", seo: true }],
       ["settings", { key: "settings", kind: "global", seo: false }],
     ]);
@@ -105,7 +105,7 @@ describe("import format v1", () => {
 
   test("route-less collection entries refuse slugs and need no distinct slug", () => {
     const models = new Map<string, import("./import-format.js").ImportModelFacts>([
-      ["quotes", { key: "quotes", kind: "collection", routeLess: true, seo: false }],
+      ["quotes", { key: "quotes", kind: "collection", seo: false }],
     ]);
     const parsed = parseImportPackage(
       pkg({

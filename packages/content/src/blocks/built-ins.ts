@@ -8,7 +8,6 @@ import {
   lightboxSetting,
   listLayoutSettingsVisibility,
 } from "./list-layout.js";
-import { migrateGalleryToV6 } from "./gallery-migration.js";
 
 // The optional link of an `image` block and of each `gallery` item.
 const imageLinkField = field.url({
@@ -209,7 +208,6 @@ export const builtInBlocks = deepFreeze({
     },
     type: "gallery",
     version: 6,
-    migrations: { 6: migrateGalleryToV6 },
   }),
   hero: defineBlock({
     description: "Large heading with optional text, image, and action.",

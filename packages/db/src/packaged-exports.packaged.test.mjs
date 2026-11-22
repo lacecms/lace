@@ -264,6 +264,7 @@ test("packaged entry point keeps its public exports", async () => {
     "snapshotIdsOf",
     "snapshotValue",
     "sqliteWriteError",
+    "sqliteWriteFailure",
     "staleBlockMigration",
     "staleSynchronizationPlan",
     "storedModelStates",

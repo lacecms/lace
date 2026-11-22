@@ -272,7 +272,7 @@ test("scheduled dispatch runs build, tracking and media in order and post-commit
   expect(fixture.pending).toHaveLength(1);
   await fixture.settle();
   expect(order).toEqual([
-    ["media", 5],
+    ["media", 2],
     ["build", 1],
   ]);
 });

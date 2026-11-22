@@ -1,7 +1,7 @@
 import { failure } from "../shared/failures.js";
 import { parseObject } from "../shared/values.js";
 import type { StoredContentModelState } from "@lacecms/application";
-import { contentModelKey } from "@lacecms/domain";
+import { contentModelKey, isContentModelKind } from "@lacecms/domain";
 
 export interface StoredModelStateRow {
   readonly draft_snapshot_count: number;
@@ -93,8 +93,7 @@ export function storedModelStates(
 ): readonly StoredContentModelState[] {
   return Object.freeze(
     rows.map((row) => {
-      if (row.kind !== "collection" && row.kind !== "global" && row.kind !== "page")
-        failure("Stored model kind is invalid.");
+      if (!isContentModelKind(row.kind)) failure("Stored model kind is invalid.");
       return Object.freeze({
         draftSnapshotCount: row.draft_snapshot_count,
         entryCount: row.entry_count,

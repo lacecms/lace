@@ -22,6 +22,8 @@ import type { ContentModelResolver, EntryRow } from "./entries.js";
 import type { BlockRow } from "./blocks.js";
 import { storedBlock } from "./block-row.js";
 
+export { SNAPSHOT_COLUMNS_SQL } from "./snapshot-columns.js";
+
 export interface SnapshotRow {
   readonly created_at: number;
   readonly entry_id: string;
@@ -50,10 +52,6 @@ export interface StoredSnapshot {
   readonly updatedAt: number;
   readonly updatedBy: Actor;
 }
-
-export const SNAPSHOT_COLUMNS_SQL = `select s.id, s.entry_id, s.revision, s.slug, s.title, s.fields_json, s.seo_json, s.schema_version,
-        s.created_at, s.updated_at, s.updated_by, profile.role
-   from content_snapshots s left join content_actor_profiles profile on profile.actor_id = s.updated_by`;
 
 /** Idempotency scope of one actor's publications of one entry. */
 export function publicationScope(entryId: string, actorId: string): string {

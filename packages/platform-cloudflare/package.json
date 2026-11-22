@@ -1,6 +1,6 @@
 {
   "name": "@lacecms/platform-cloudflare",
-  "version": "0.1.0-rc6",
+  "version": "1.0.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -22,7 +22,7 @@
   },
   "publishConfig": {
     "access": "public",
-    "tag": "next"
+    "tag": "latest"
   },
   "scripts": {
     "build": "node ../../scripts/platform-release-version.mjs && tsc -p tsconfig.json && node scripts/copy-admin-assets.mjs",

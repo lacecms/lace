@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 import {
+  draftEntry,
   logOut,
   renderRoute,
   stubClient as client,
@@ -54,7 +55,10 @@ test("admin root redirects through the session guard and user-menu logout clears
 });
 
 test("typed route foundations render valid paths and reject malformed model keys", async () => {
-  renderRoute("/content/posts/entry-123", staticSessionSource({ id: "admin-1", role: "admin" }));
+  renderRoute(
+    `/content/${draftEntry.model.key}/${draftEntry.id}`,
+    staticSessionSource({ id: "admin-1", role: "admin" }),
+  );
   expect(await screen.findByRole("heading", { name: "Edit posts" })).toBeInTheDocument();
 
   document.body.replaceChildren();

@@ -150,14 +150,17 @@ test("the invitation index migrates existing rows and both account keysets use i
   }
 });
 
-test("a seeded baseline database migrates to 0001 with each index once and rows unchanged", async () => {
-  const [baseline, ...forward] = checkedInMigrations;
-  assert(baseline);
-  expect(forward.map((migration) => migration.name)).toContain("0001_persistence_hygiene.sql");
+test("a populated RC5 database upgrades with each index once and its rows intact", async () => {
+  const rc5 = checkedInMigrations.slice(0, 2);
+  const forward = checkedInMigrations.slice(2);
+  expect(rc5.map((migration) => migration.name)).toEqual([
+    "0000_baseline.sql",
+    "0001_persistence_hygiene.sql",
+  ]);
   const database = new DatabaseSync(":memory:");
   try {
     database.exec("pragma foreign_keys=on");
-    database.exec(await migrationSql(baseline.name));
+    for (const migration of rc5) database.exec(await migrationSql(migration.name));
     database.exec(`
       insert into content_models (key,kind,label,config_version,structure_hash,projection_hash,created_at,updated_at) values ('posts','collection','Posts',1,'s','p',1,1);
       insert into content_entries (id,model_key,created_by,created_at,updated_at) values ('entry','posts','admin',1,1);
@@ -208,13 +211,4 @@ test("a seeded baseline database migrates to 0001 with each index once and rows 
   } finally {
     database.close();
   }
-});
-
-test("migration 0001 only creates indexes", async () => {
-  const statements = (await migrationSql("0001_persistence_hygiene.sql"))
-    .split("--> statement-breakpoint")
-    .map((statement) => statement.trim())
-    .filter(Boolean);
-  expect(statements).toHaveLength(persistenceIndexes.length);
-  for (const statement of statements) expect(statement).toMatch(/^CREATE INDEX /u);
 });

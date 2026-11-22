@@ -13,7 +13,7 @@ import { present } from "../test-support/fixtures.js";
 import { expect, test } from "vitest";
 import { DeterministicClock, DeterministicIdGenerator, InMemoryObjectStorage } from "../index.js";
 import {
-  DomainError,
+  contentEntryId,
   actorId,
   blockKey,
   contentSnapshotId,
@@ -445,13 +445,19 @@ test("detaches one media item from a draft's fields, blocks and SEO image", asyn
   });
   await expect(
     content.detachMedia({
+      expectedRevision: 1,
       actor: { id: actorId("viewer"), role: "viewer" },
       entryId: created.id,
       mediaId: mediaId("media-1"),
     }),
   ).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
   await expect(
-    content.detachMedia({ actor: admin, entryId: created.id, mediaId: mediaId("media-1") }),
+    content.detachMedia({
+      expectedRevision: 1,
+      actor: admin,
+      entryId: created.id,
+      mediaId: mediaId("media-1"),
+    }),
   ).resolves.toBe(true);
   const draft = present(await store.load({ entryId: created.id })).draft;
   expect(draft).toMatchObject({
@@ -472,7 +478,12 @@ test("detaches one media item from a draft's fields, blocks and SEO image", asyn
   expect(present(await store.loadMediaCatalogItem("media-1")).usageCount).toBe(0);
   expect(present(await store.loadMediaCatalogItem("media-2")).usageCount).toBe(1);
   await expect(
-    content.detachMedia({ actor: admin, entryId: created.id, mediaId: mediaId("media-1") }),
+    content.detachMedia({
+      expectedRevision: 1,
+      actor: admin,
+      entryId: created.id,
+      mediaId: mediaId("media-1"),
+    }),
   ).resolves.toBe(false);
   expect(present(await store.load({ entryId: created.id })).draft.revision).toBe(2);
 });
@@ -486,103 +497,106 @@ test("deletion with draft detaching clears draft-only usage and queues the item"
   ).rejects.toMatchObject({
     code: "MEDIA_IN_USE",
   });
-  await expect(
-    media.requestDeletion({ actor: editor, detach: "drafts", mediaId: mediaId("media-1") }),
-  ).resolves.toMatchObject({ status: "deleting", usageCount: 0 });
+  const input = { actor: editor, mediaId: mediaId("media-1") };
+  expect(await media.detachDeletion(input)).toEqual({
+    state: "drafts",
+    drafts: [first, second].map(({ id }) => ({ entryId: id, expectedRevision: 1 })),
+  });
   for (const { id } of [first, second]) {
-    expect(present(await content.load({ actor: editor, entryId: id })).draft).toMatchObject({
+    expect(
+      await media.detachDeletion({ ...input, step: "entry", entryId: id, expectedRevision: 1 }),
+    ).toEqual({ state: "entry-complete", entryId: id });
+    expect((await content.load({ actor: editor, entryId: id }))?.draft).toMatchObject({
       revision: 2,
       updatedBy: { id: "editor" },
     });
   }
+  expect(deletionRequests()).toEqual([]);
+  const finishes = await Promise.allSettled([
+    media.detachDeletion({ ...input, step: "finish" }),
+    media.detachDeletion({ ...input, step: "finish" }),
+  ]);
+  expect(finishes.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+  expect(finishes.find((r) => r.status === "fulfilled")?.value).toMatchObject({
+    status: "deleting",
+    usageCount: 0,
+  });
   expect(deletionRequests()).toEqual(["media-1"]);
+  for (const phase of [
+    {},
+    { step: "finish" },
+    { step: "entry", entryId: first.id, expectedRevision: 1 },
+  ] as const)
+    await expect(media.detachDeletion({ ...input, ...phase })).rejects.toMatchObject({
+      code: "CONTENT_INVALID_STATE",
+    });
 });
 
-test("draft detaching refuses published usage, inactive media and missing ports before any draft change", async () => {
-  const { asset, deletionRequests, content, create, media, mediaDependencies, store } =
-    await detachFixture();
-  const published = await create("published", { blocks: [asset("hero", "media-1")] });
-  const draftOnly = await create("draft", { fields: { cover: "media-1" } });
-  await content.publish({ actor: admin, entryId: published.id, expectedRevision: 1 });
-  await expect(
-    media.requestDeletion({ actor: editor, detach: "drafts", mediaId: mediaId("media-1") }),
-  ).rejects.toMatchObject({ code: "MEDIA_IN_USE" });
-  for (const { id } of [published, draftOnly]) {
-    expect(present(await store.load({ entryId: id })).draft.revision).toBe(1);
-  }
-  await expect(
-    media.requestDeletion({
-      actor: { id: actorId("viewer"), role: "viewer" },
-      detach: "drafts",
-      mediaId: mediaId("media-1"),
-    }),
-  ).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
-  await expect(
-    new MediaUseCases(mediaDependencies).requestDeletion({
-      actor: editor,
-      detach: "drafts",
-      mediaId: mediaId("media-2"),
-    }),
-  ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
-  await media.requestDeletion({ actor: editor, mediaId: mediaId("media-2") });
-  await expect(
-    media.requestDeletion({ actor: editor, detach: "drafts", mediaId: mediaId("media-2") }),
-  ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
-  expect(deletionRequests()).toEqual(["media-2"]);
-});
+test.each(["publication", "limit", "stale", "replay"] as const)(
+  "checks %s inside the guarded draft write",
+  async (kind) => {
+    const { content, create, media, store, deletionRequests } = await detachFixture();
+    const input = { actor: editor, mediaId: mediaId("media-1") };
+    const use = { fields: { cover: "media-1" } };
+    const first = await create("first", use);
+    const second = await create("second", use);
+    const step = (id: typeof first.id) =>
+      media.detachDeletion({ ...input, step: "entry", entryId: id, expectedRevision: 1 });
+    await step(first.id);
+    const save = store.saveDetachedDraft.bind(store);
+    store.saveDetachedDraft = async (write) => {
+      if (kind === "publication")
+        await content.publish({ actor: admin, entryId: second.id, expectedRevision: 1 });
+      if (kind === "limit") for (let i = 0; i < 50; i++) await create("late-" + i, use);
+      if (kind === "stale" || kind === "replay")
+        await content.save({
+          actor: admin,
+          entryId: second.id,
+          expectedRevision: 1,
+          title: "Concurrent",
+          fields: kind === "stale" ? use.fields : {},
+          blocks: [],
+        });
+      return save(write);
+    };
+    if (kind === "replay")
+      await expect(step(second.id)).resolves.toMatchObject({ state: "entry-complete" });
+    else
+      await expect(step(second.id)).rejects.toMatchObject({
+        code: kind === "stale" ? "CONTENT_REVISION_CONFLICT" : "MEDIA_IN_USE",
+      });
+    expect((await store.load({ entryId: first.id }))?.draft.revision).toBe(2);
+    const current = await store.load({ entryId: second.id });
+    expect(current?.draft.revision).toBe(kind === "stale" || kind === "replay" ? 2 : 1);
+    expect(current?.draft.fields).toEqual(kind === "replay" ? {} : use.fields);
+    expect(current?.published?.fields).toEqual(kind === "publication" ? use.fields : undefined);
+    expect((await store.loadMedia(input.mediaId))?.status).toBe("active");
+    expect(deletionRequests()).toEqual([]);
+  },
+);
 
-test("draft detaching stops on a concurrent save, too many entries or a new reference", async () => {
-  const { deletionRequests, content, create, media, mediaDependencies, store } =
-    await detachFixture();
-  const first = await create("first", { fields: { cover: "media-1" } });
-  const second = await create("second", { fields: { cover: "media-1" } });
-  const conflicting = new MediaUseCases({
-    ...mediaDependencies,
-    drafts: {
-      async detachMedia(input) {
-        throw new DomainError("CONTENT_REVISION_CONFLICT", `Conflict for ${input.entryId}.`);
-      },
-    },
-  });
+test("new and removed owners between steps are reconciled against live usage", async () => {
+  const { create, content, media, store, deletionRequests } = await detachFixture();
+  const item = { mediaId: mediaId("media-1"), actor: editor };
+  const used = await create("original", { fields: { cover: "media-1" } });
+  await media.detachDeletion(item);
+  await content.delete({ actor: admin, entryId: used.id, expectedRevision: 1 });
   await expect(
-    conflicting.requestDeletion({ actor: editor, detach: "drafts", mediaId: mediaId("media-1") }),
-  ).rejects.toMatchObject({ code: "CONTENT_REVISION_CONFLICT" });
-  expect(present(await store.loadMediaCatalogItem("media-1")).media.status).toBe("active");
-
-  const loaded = await store.loadMediaCatalogItem("media-1");
-  const truncated = new MediaUseCases({
-    ...mediaDependencies,
-    drafts: { detachMedia: async () => expect.unreachable() },
-    media: Object.create(store, {
-      loadMediaCatalogItem: { value: async () => ({ ...loaded, usageCount: 51 }) },
-    }),
+    media.detachDeletion({ ...item, step: "entry", entryId: used.id, expectedRevision: 1 }),
+  ).resolves.toEqual({ state: "entry-complete", entryId: used.id });
+  const late = await create("late", { fields: { cover: "media-1" } });
+  await expect(media.detachDeletion({ ...item, step: "finish" })).rejects.toMatchObject({
+    code: "MEDIA_IN_USE",
   });
-  await expect(
-    truncated.requestDeletion({ actor: editor, detach: "drafts", mediaId: mediaId("media-1") }),
-  ).rejects.toMatchObject({ code: "MEDIA_IN_USE" });
-  for (const { id } of [first, second]) {
-    expect(present(await store.load({ entryId: id })).draft.revision).toBe(1);
-  }
-
-  let late: Awaited<ReturnType<typeof create>> | undefined;
-  const racing = new MediaUseCases({
-    ...mediaDependencies,
-    drafts: {
-      async detachMedia(input) {
-        await content.detachMedia(input);
-        late ??= await create("late", { fields: { cover: "media-1" } });
-      },
-    },
-  });
-  await expect(
-    racing.requestDeletion({ actor: editor, detach: "drafts", mediaId: mediaId("media-1") }),
-  ).rejects.toMatchObject({ code: "MEDIA_IN_USE" });
-  expect(present(await store.loadMediaCatalogItem("media-1")).media.status).toBe("active");
-  expect(present(await store.load({ entryId: present(late).id })).draft.fields).toEqual({
-    cover: "media-1",
-  });
+  expect((await store.load({ entryId: late.id }))?.draft.revision).toBe(1);
   expect(deletionRequests()).toEqual([]);
   await expect(
-    media.requestDeletion({ actor: editor, detach: "drafts", mediaId: mediaId("media-1") }),
-  ).resolves.toMatchObject({ status: "deleting" });
+    media.detachDeletion({
+      ...item,
+      mediaId: mediaId("absent"),
+      step: "entry",
+      entryId: contentEntryId("absent"),
+      expectedRevision: 1,
+    }),
+  ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
 });

@@ -20,7 +20,7 @@ are detached, portable JSON ([field-descriptors]).
 ### Content-model kinds
 
 `content_models.kind` is `page` (a singleton with one fixed path),
-`collection` (any number of entries, each routed by its slug) or `global` (a
+`collection` (any number of entries with an optional slug-based route) or `global` (a
 route-less singleton for site-wide content such as settings or a footer, read
 by model key and never served by path;
 [ADR 0010](../adr/0010-global-models.md)). `defineGlobal` accepts `key`,
@@ -34,6 +34,13 @@ between any two kinds, also through `renamedFrom`
 ([content-domain-rules], [configuration-synchronization]). A collection
 without `route` ([ADR 0031](../adr/0031-route-less-collections.md)) has no slug,
 published route, `seo` or `entry:` link targets; its entries are export `records`.
+
+`@lacecms/content` owns the model kind descriptor table. Each registered kind
+declares cardinality, routing, public read family, build-export section,
+reference-field target eligibility and admin entry behavior. The resolver
+selects a collection's delivery policy from its configured route. Runtime
+input and stored-row validation use the registered keys. Backend callers
+access the same policy through `domain` or a package facade allowed by §6.
 
 ### System fields and routes
 

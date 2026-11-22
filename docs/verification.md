@@ -7,7 +7,7 @@ See the [internal index](README.md) for document status and the
 
 ## Commands
 
-Use the pinned verification toolchain, Node 24.12.0 and pnpm 12.3.4, with dependencies installed using
+Use the pinned verification toolchain, Node 24.12.0 and pnpm 12.21.0, with dependencies installed using
 `pnpm install --frozen-lockfile`. Run commands from the engine checkout.
 The [script catalog](../DEVELOPMENT.md#script-catalog) lists all root commands.
 Verification runners build their required packages. Docker/Compose, a local
@@ -92,7 +92,7 @@ built API and builder images. The prior storage image must be MinIO
 `RELEASE.2025-02-07T23-21-09Z` from commit
 `703f51164d3d0c44af41b0d86075a1f61e4779e7`. Use a known cached image or
 build the unchanged `deploy/minio.Dockerfile` from
-[the retained template fixture](../tests/fixtures/template-0.49.0/default.json)
+[the retained template fixture](../tests/fixtures/template-0.50.0/default.json)
 in a separate build directory.
 
 ```sh
@@ -179,6 +179,32 @@ original scope and does not establish later candidates' readiness.
 | Worker Better Auth AsyncLocalStorage compatibility | Worker bundle/smoke tests and generated `cf:build`/local onboarding | cloudflare-worker.md | Covered locally / owner scenario 3 |
 
 ## Recorded D1 budget measurements
+
+### Media draft detachment
+
+The shared HTTP fixture runs the protocol against migrated Node/SQLite and
+Worker/local D1 with real editor sessions and 0, 1, 2, 50 and 51 owners.
+Counters reset after setup and the preceding request settle. Every batch
+statement and all work registered with `waitUntil` count toward the invocation.
+
+| Phase | Status | Statements | Largest batch | Most binds |
+| --- | --- | ---: | ---: | ---: |
+| Admission with owners | 200 | 3 | 0 | 2 |
+| Simple draft save | 200 | 17 | 12 | 10 |
+| Save with 200 blocks, 200 media references and mixed entry/link projections | 200 | 43 | 35 | 100 |
+| Replay with absent usage | 200 | 3 | 0 | 2 |
+| Admission or direct step with 51 owners, stale revision | 409 | 3 | 0 | 2 |
+| Finish with remaining usage | 409 | 10 | 8 | 6 |
+| Zero-use admission with due media and build work | 202 | 33 | 8 | 9 |
+| Finish with due media and build work | 202 | 32 | 8 | 9 |
+| Repeated finish after deletion | 422 | 10 | 8 | 6 |
+
+The busy cases seed five older deletion events and a due build. The post-commit
+pass claims two media events and one build. The ceilings per request are 50
+statements, 40 per mutation batch and 100 binds per statement. The maximum
+draft and mixed scheduled-dispatch tests also run against local D1.
+
+### Internal links
 
 Recorded local measurements from 2026-10-23 justify the internal-link query
 limits in architecture §8/§9.6/§16; these are fixture context, not a new run or

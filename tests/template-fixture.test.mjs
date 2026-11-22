@@ -11,11 +11,19 @@ const directories = (await readdir(root, { withFileTypes: true }))
   .filter((entry) => entry.isDirectory() && /^template-\d+\.\d+\.\d+$/u.test(entry.name))
   .map((entry) => entry.name)
   .sort();
-assert.ok(directories.length > 0, "No published-template fixtures retained");
+const origin = JSON.parse(
+  await readFile(new URL("../release/upgrade-origin.json", import.meta.url)),
+);
+assert.deepEqual(directories, [`template-${origin.templateVersion}`]);
+assert.deepEqual((await readdir(join(root, directories[0]))).sort(), [
+  "cloudflare.json",
+  "default.json",
+]);
 
 async function verifyFixture(path, version) {
   const fixture = JSON.parse(await readFile(path, "utf8"));
   const provenance = fixture.provenance;
+  assert.deepEqual(provenance, origin);
   assert.equal(provenance.templateVersion, version, `${path}: provenance version`);
   assert.match(provenance.sourceRevision, /^[a-f0-9]{40}$/u, `${path}: source revision`);
   assert.match(provenance.generator, /^create-lace@\S+$/u, `${path}: generator`);

@@ -1,4 +1,4 @@
-import { canonicalizeJson, type JsonValue } from "@lacecms/content";
+import { canonicalizeJson, resolveModelKind, type JsonValue } from "@lacecms/content";
 import type {
   ContentBlockDto,
   ContentEntryDto,
@@ -11,6 +11,7 @@ import {
   type DraftEditorValues,
 } from "./editor-form.js";
 import { fieldStartingValues } from "./composite-values.js";
+import { modelPublicPath } from "./model-kind.js";
 import { seoFormValues, seoInput } from "./seo.js";
 
 /** Form values for an entry draft, with block defaults filled from the block definitions. */
@@ -29,7 +30,7 @@ export function draftValues(model: ContentModelDto, entry: ContentEntryDto): Dra
     fields: initialModelFieldValues(model, entry.draft.fields),
     ...(model.seo === undefined ? {} : { seo: seoFormValues(entry.draft.seo) }),
     // The slug input holds "" for a slugless routed collection entry, so the baseline must match it.
-    ...(model.kind === "collection" && model.route !== undefined
+    ...(resolveModelKind(model).routing === "slug"
       ? { slug: entry.draft.slug ?? "" }
       : entry.draft.slug === undefined
         ? {}
@@ -43,10 +44,7 @@ export function resolvedPublicPath(
   model: ContentModelDto,
   entry: ContentEntryDto,
 ): string | undefined {
-  if (model.kind === "page") return model.path;
-  if (model.kind !== "collection" || model.route === undefined) return undefined;
-  const slug = (entry.published ?? entry.draft).slug;
-  return slug === undefined ? undefined : model.route?.replace(":slug", slug);
+  return modelPublicPath(model, (entry.published ?? entry.draft).slug);
 }
 
 /** The absolute site URL of a public path, resolved under the configured site base URL. */

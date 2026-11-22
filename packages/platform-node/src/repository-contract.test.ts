@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import { contentModelKey } from "@lacecms/domain";
 import type { ListContentEntriesInput } from "@lacecms/application";
-import type { RepositoryContractRuntime } from "@lacecms/test-utils";
+import type { ContractRepositoryOptions, RepositoryContractRuntime } from "@lacecms/test-utils";
 import { contractSql } from "./test-support/contract-sql.js";
 import { afterEach, expect, test } from "vitest";
 import { NODE_LIST_QUERY_LIMITS } from "@lacecms/content";
@@ -26,26 +26,49 @@ function trackGuards(connection: Database.Database) {
   });
 }
 
-function observedConnection(connection: Database.Database) {
+function observedConnection(
+  connection: Database.Database,
+  { beforePrepare, afterRead, afterWrite }: Partial<ContractRepositoryOptions>,
+) {
   const statements: string[] = [];
+  let maxParameters = 0;
   return {
     reads: {
       reset: () => {
         statements.length = 0;
+        maxParameters = 0;
       },
-      snapshot: () => ({ statements: statements.length, sql: [...statements] }),
+      snapshot: () => ({ statements: statements.length, sql: [...statements], maxParameters }),
     },
     connection: new Proxy(connection, {
       get(target, property) {
+        if (property === "transaction" && afterWrite !== undefined)
+          return (body: Parameters<Database.Database["transaction"]>[0]) => {
+            const transaction = target.transaction(body);
+            return Object.assign(() => transaction(), {
+              immediate() {
+                const result = transaction.immediate();
+                afterWrite();
+                return result;
+              },
+            });
+          };
         if (property === "prepare")
           return (sql: string) => {
+            beforePrepare?.(sql);
             const statement = target.prepare(sql);
             return new Proxy(statement, {
               get(value, key) {
                 if (key === "all" || key === "get")
                   return (...args: unknown[]) => {
                     statements.push(sql);
-                    return value[key](...args);
+                    maxParameters = Math.max(maxParameters, args.length);
+                    const result: unknown = value[key](...args);
+                    afterRead?.(
+                      key === "all" ? (result as unknown[]) : [result],
+                      target.inTransaction,
+                    );
+                    return result;
                   };
                 const member: unknown = Reflect.get(value, key);
                 return typeof member === "function" ? member.bind(value) : member;
@@ -62,6 +85,7 @@ function observedConnection(connection: Database.Database) {
 const runtimes: Record<string, RepositoryContractRuntime> = {
   "file-backed SQLite": {
     listQueryLimits: NODE_LIST_QUERY_LIMITS,
+    publicReadOverlap: "wal",
     recordEvidence: (value) => console.log("Collection query SQLite file", JSON.stringify(value)),
     async open(options) {
       const directory = await mkdtemp(join(tmpdir(), "lace-contract-"));
@@ -79,11 +103,18 @@ const runtimes: Record<string, RepositoryContractRuntime> = {
         await rm(directory, { force: true, recursive: true });
       });
       trackGuards(connection);
-      const observed = observedConnection(connection);
+      const observed = observedConnection(connection, options);
       return {
         reads: observed.reads,
         reopen: (overrides = {}) =>
-          new NodeContentRepository(connect(), options.resolveModel, { ...options, ...overrides }),
+          new NodeContentRepository(
+            observedConnection(connect(), overrides).connection,
+            options.resolveModel,
+            {
+              ...options,
+              ...overrides,
+            },
+          ),
         repository: new NodeContentRepository(observed.connection, options.resolveModel, options),
         sql: contractSql(connection),
       };
@@ -96,7 +127,7 @@ const runtimes: Record<string, RepositoryContractRuntime> = {
       const { connection, close } = openSqliteFixture(options.resolveModel, options);
       cleanups.push(close);
       trackGuards(connection);
-      const observed = observedConnection(connection);
+      const observed = observedConnection(connection, options);
       return {
         reads: observed.reads,
         reopen: (overrides = {}) =>

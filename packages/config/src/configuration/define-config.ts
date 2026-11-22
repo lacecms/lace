@@ -1,4 +1,4 @@
-import { deepFreeze, isPlainObject } from "@lacecms/content";
+import { deepFreeze, isContentModelKind, isPlainObject } from "@lacecms/content";
 import {
   defineBlockRegistry,
   sha256CanonicalJson,
@@ -40,7 +40,9 @@ function assertUniqueModels(models: readonly ContentModelDefinition[]): void {
   >();
   let seoDefaultsGlobal: GlobalModelDefinition | undefined;
 
-  for (const model of models) {
+  for (const [index, model] of models.entries()) {
+    if (!isContentModelKind(model?.kind))
+      fail(`config.content[${index}] has an invalid model kind.`);
     const duplicateCurrent = currentKeys.get(model.key);
     if (duplicateCurrent !== undefined) {
       fail(`models "${duplicateCurrent.key}" and "${model.key}" share key "${model.key}".`);

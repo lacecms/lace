@@ -35,12 +35,12 @@ The generated root `README.md` is a short index of requirements, layout and thes
 
 ## Prerequisites and generation
 
-Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. These are minimums: Lace is tested with Node `24.12.0` and pnpm `12.3.4`, and newer majors are eligible but unverified until the compatibility matrix records them. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.50.0` and Lace `0.1.0-rc6` packages and images. Releases before rc2 are not supported, and an rc2 project upgrades as described in [Database baseline and upgrading from rc2](#database-baseline-and-upgrading-from-rc2). The npm prerelease channel is `next`; use the exact version below for reproducible generation. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
+Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. See [tested versions](https://github.com/lacecms/lace/blob/main/docs/compatibility.md#minimum-requirements-and-tested-versions) for verified toolchains. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.52.0` and Lace `1.0.0` packages and images. Follow the [RC5 upgrade procedure](#upgrading-from-rc5). The stable npm channel is `latest`. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
 
 After the owner publishes the complete compatible release set, generate and install:
 
 ```bash
-pnpm create lace@0.1.0-rc6 my-site
+pnpm create lace@1.0.0 my-site
 cd my-site
 pnpm install
 pnpm env:prepare
@@ -745,16 +745,35 @@ redaction and disabling. Unpublication and deletion remain forbidden.
 Tags are admin-only ASCII letters, digits and hyphens, lowercased with surrounding
 spaces trimmed; tags-only edits request no build.
 
-## Database baseline and upgrading from rc2
+## Upgrading from RC5
 
-The database starts from one baseline migration; later schema changes are
-forward migrations after it. rc2 is the oldest supported release, and an rc2
-database already starts from the baseline, so it is upgraded in place, never
-recreated. Stop Compose `api` and `dispatcher`, back up `.lace/data` and the
-object store, upgrade all Lace packages and both images together, then run
-`pnpm db:migrate` (Cloudflare: `pnpm cf:db:migrate` or
-`pnpm exec lace db migrate --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`),
-which applies only the checked-in forward migrations, followed by
-`pnpm content:sync`, and rebuild the site. A database created before rc2
-predates the baseline and is not supported: `lace db migrate` and `lace doctor`
-report `SCHEMA_UNSUPPORTED` and change nothing.
+Start with a synchronized `0.1.0-rc5` installation and ownership template
+`0.50.0`. Record its release, site mode and path, project/volume or D1/R2
+identities, original media checksums, a draft, its published version and
+the last served build. Keep preview disabled through the cutover.
+
+1. Quiesce writers, builders and scheduled work. Take a coordinated backup of
+   the database, objects, configuration, source, lockfiles and managed manifest.
+   Restore and verify a private RC5 copy. On Node retain the old storage image
+   and entire stopped volume as described in [Switch the object storage image](#switch-the-object-storage-image).
+2. Generate a pristine 1.0.0 target of the same project name, site mode/path
+   and Cloudflare choice. Run the 1.0.0 CLI from the working project with
+   `pnpm dlx @lacecms/cli@1.0.0 upgrade --template <target>`. Resolve managed
+   conflicts, rerun the plan and apply with `--apply`. Keep the README, site,
+   ignored environment and operator configuration. Preserve the RC5 ingress.
+3. Install matching root and site packages and image overrides. Update SDK,
+   Astro/render and installed block components with conflict review. Refresh
+   and retain the site lockfile. On Node follow the SILO storage switch.
+4. With conflicting services stopped, run `pnpm db:migrate` and
+   `pnpm content:sync` for Node. For local D1 use the generated `cf:db:migrate`
+   and `cf:content:sync` commands. For remote D1 select the verified account,
+   binding and operator file with `lace db migrate --target cloudflare-remote
+--operator-env .lace/cloudflare-operator.env` and the matching
+   `lace content sync` command. RC5 already has the first two schema steps.
+   Five forward migrations preserve content in place. Check the ledger and
+   readiness before restarting writers.
+5. Rebuild and verify original sign-in, roles, draft and published values,
+   gallery, links, old and new media bytes and served output. Repeating migration
+   and planning should report current state. On failure retain maintenance and
+   restore the matching RC5 runtime, database, object store, files and static
+   release. Verify the restored site before reopening traffic.

@@ -1,0 +1,208 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-11-22T17:00:34.220Z",
+  "inventorySha256": "8be5e95234a622cac36e65a6050665505c686b7fa16fe01930b3b30762510341",
+  "harnessRevision": "b57f2970ba7d7d68b8ccd2a32798b111ddfb3acc",
+  "imageSmokePlatforms": [
+    "linux/amd64",
+    "linux/arm64"
+  ],
+  "consumerPlatform": "linux/arm64",
+  "remotePublicationPerformed": false,
+  "realDeploymentVerified": false,
+  "acceptance": {
+    "result": "passed",
+    "version": "1.0.0",
+    "templateVersion": "0.52.0",
+    "platform": "linux/arm64",
+    "source": {
+      "revision": "357ebbbc8d2eb73acf164ae62db40647dce2a046",
+      "preview": false,
+      "fingerprint": "f63bd2fa2e5d7578f9eedcd43b73caa22b5628131c643b4b0f0a50b98aec9914"
+    },
+    "builds": {
+      "first": "2875367d-897a-422f-a6c4-bfae2256f0a0",
+      "failed": "01M822M6K2P69JNFT0F1B45NJ2",
+      "retried": "01M822NCJ99XCKCX59NKE93H0E",
+      "firstVersion": 8,
+      "recoveredVersion": 9
+    },
+    "journeys": [
+      "snapshots",
+      "node-development-guide-browser",
+      "compose-release",
+      "cloudflare-pages-preview",
+      "publication-visibility",
+      "existing-astro",
+      "cloudflare-consumer",
+      "cloudflare-pages-tracking",
+      "template-upgrade",
+      "rc5-cutover-and-restore-node",
+      "rc5-cutover-and-restore-cloudflareLocal",
+      "node-contracts-media",
+      "consumer-security-probes",
+      "gif-proxy-cache",
+      "image-delivery-starter-image-variants-lightbox-links-warm-cache",
+      "image-delivery-local-cloudflare-gif-validators",
+      "published-template-upgrade",
+      "scenario-guides",
+      "block-order",
+      "weak-etag",
+      "builder-source-diagnostics",
+      "cloudflare-credentials",
+      "packed-platform-restore-rotation",
+      "list-settings-mcp-proxy",
+      "cloudflare-list-settings-mcp-proxy"
+    ],
+    "rc5Cutovers": {
+      "node": {
+        "sourceRevision": "bb3d17e813f504c2133a7664af0174c5e0a60cf0",
+        "generatorSha256": "a436e4b08913ad512a35b734c50c04a772cd3b92e841960746da5e303be22260",
+        "beforeFingerprint": "a6061fb07d8a010afbf4dda559ab30f697df727d9b1e14a26b751638032149c2",
+        "upgradedFingerprint": "a6061fb07d8a010afbf4dda559ab30f697df727d9b1e14a26b751638032149c2",
+        "restoredFingerprint": "a6061fb07d8a010afbf4dda559ab30f697df727d9b1e14a26b751638032149c2",
+        "originalOutput": "7f394a17518dc335aa080fc7ab83cd03005acd78ae37f91e04d5d15d9e44eb0b",
+        "stableOutput": "7f394a17518dc335aa080fc7ab83cd03005acd78ae37f91e04d5d15d9e44eb0b",
+        "restoredOutput": "7f394a17518dc335aa080fc7ab83cd03005acd78ae37f91e04d5d15d9e44eb0b",
+        "newMediaSha256": "9cdaec55dfb347ed9d7a6349c0c135e7c60b3f7ad2141d86e950dfb8139d4e89",
+        "originalMediaSha256": "46247e558592da0a57ccd6933c0596c3dd4adccbdc6213e7a929f545ad3f9f3c",
+        "migrationsApplied": 5
+      },
+      "cloudflareLocal": {
+        "sourceRevision": "bb3d17e813f504c2133a7664af0174c5e0a60cf0",
+        "generatorSha256": "a436e4b08913ad512a35b734c50c04a772cd3b92e841960746da5e303be22260",
+        "beforeFingerprint": "6d3316744fb08f81a15eef3bfa3c1e3746132f8c8571309b50cb530a796b240e",
+        "upgradedFingerprint": "6d3316744fb08f81a15eef3bfa3c1e3746132f8c8571309b50cb530a796b240e",
+        "restoredFingerprint": "6d3316744fb08f81a15eef3bfa3c1e3746132f8c8571309b50cb530a796b240e",
+        "originalOutput": "69e75d41c8c34dff89b6587b5f36454d4896d89212d3b71f18d7ee988d5ccd34",
+        "stableOutput": "69e75d41c8c34dff89b6587b5f36454d4896d89212d3b71f18d7ee988d5ccd34",
+        "restoredOutput": "69e75d41c8c34dff89b6587b5f36454d4896d89212d3b71f18d7ee988d5ccd34",
+        "newMediaSha256": "9cdaec55dfb347ed9d7a6349c0c135e7c60b3f7ad2141d86e950dfb8139d4e89",
+        "originalMediaSha256": "46247e558592da0a57ccd6933c0596c3dd4adccbdc6213e7a929f545ad3f9f3c",
+        "migrationsApplied": 5
+      }
+    },
+    "packages": [
+      {
+        "name": "@lacecms/content",
+        "version": "1.0.0",
+        "file": "packages/lacecms-content-1.0.0.tgz",
+        "sha256": "10d9408c4f6d8477a07edd0639d516c5d73e8273bcefb285ec5a9f8e020336b1"
+      },
+      {
+        "name": "@lacecms/config",
+        "version": "1.0.0",
+        "file": "packages/lacecms-config-1.0.0.tgz",
+        "sha256": "b72918503eab4f5741a731113c0436e3a8ead7e3c81aeb0b88e50a7f4a9ec371"
+      },
+      {
+        "name": "@lacecms/domain",
+        "version": "1.0.0",
+        "file": "packages/lacecms-domain-1.0.0.tgz",
+        "sha256": "75f9466af1e2f52cd8ddbdc2b30661ebd57728a13a15f8552817aa7b1247d697"
+      },
+      {
+        "name": "@lacecms/contracts",
+        "version": "1.0.0",
+        "file": "packages/lacecms-contracts-1.0.0.tgz",
+        "sha256": "ff7f2ad26f5603d56e938cb688758965f74fa95f01b5da0c59b0b634bd737efd"
+      },
+      {
+        "name": "@lacecms/application",
+        "version": "1.0.0",
+        "file": "packages/lacecms-application-1.0.0.tgz",
+        "sha256": "721b1b9d4903ffe04919ed491ad0b36442b2c998d1e936d4734fcf7bb84e77ae"
+      },
+      {
+        "name": "@lacecms/render",
+        "version": "1.0.0",
+        "file": "packages/lacecms-render-1.0.0.tgz",
+        "sha256": "2ab7cdd9496870bbb005184f8a87cdf3da2dbf7c8df92c481e1be1468656de20"
+      },
+      {
+        "name": "@lacecms/sdk",
+        "version": "1.0.0",
+        "file": "packages/lacecms-sdk-1.0.0.tgz",
+        "sha256": "1d2357a1557a612a90f4be63e59de72a49cb769cfac8b5175e3c353a06408841"
+      },
+      {
+        "name": "@lacecms/astro",
+        "version": "1.0.0",
+        "file": "packages/lacecms-astro-1.0.0.tgz",
+        "sha256": "716b8ec2abab4133928f17c688c3a894f8af66f5684aeac64a79b7a2c50f26ba"
+      },
+      {
+        "name": "@lacecms/auth",
+        "version": "1.0.0",
+        "file": "packages/lacecms-auth-1.0.0.tgz",
+        "sha256": "54b9f3011c78462a9efcbdcc0823a4fbe545062306a85501c86b132f689354ed"
+      },
+      {
+        "name": "@lacecms/db",
+        "version": "1.0.0",
+        "file": "packages/lacecms-db-1.0.0.tgz",
+        "sha256": "96285d77e749732cb63024b646250590978e6fbcd618f3f7e5f9acf666b752ea"
+      },
+      {
+        "name": "@lacecms/mcp",
+        "version": "1.0.0",
+        "file": "packages/lacecms-mcp-1.0.0.tgz",
+        "sha256": "c69132d3da4afde8ba0ad33fd19f87df96fe79ac02647bccb7b356c6d4a4b0f8"
+      },
+      {
+        "name": "@lacecms/server",
+        "version": "1.0.0",
+        "file": "packages/lacecms-server-1.0.0.tgz",
+        "sha256": "6681563ec77aeaad7924748fa3274f41112fd59b55d67b3b98c9e2314d9435af"
+      },
+      {
+        "name": "@lacecms/platform-cloudflare",
+        "version": "1.0.0",
+        "file": "packages/lacecms-platform-cloudflare-1.0.0.tgz",
+        "sha256": "923deb48ae8f4f7491ca646271aae4948f8465363037eb7bf06b5b06e21c8bdf"
+      },
+      {
+        "name": "@lacecms/platform-node",
+        "version": "1.0.0",
+        "file": "packages/lacecms-platform-node-1.0.0.tgz",
+        "sha256": "7749cdaeddb559eb2201defa003fd11c55ddcfcc5f48ef8ed9c83d8d9f2077bc"
+      },
+      {
+        "name": "@lacecms/cli",
+        "version": "1.0.0",
+        "file": "packages/lacecms-cli-1.0.0.tgz",
+        "sha256": "7138051d071ed6f970c38f8d87437cc651cab98f07334a600a0aac4ee2d01c5c"
+      },
+      {
+        "name": "create-lace",
+        "version": "1.0.0",
+        "file": "packages/create-lace-1.0.0.tgz",
+        "sha256": "0b36902f81891a05c80955a4f90faf616d3067f4ed1739489f615d2d193bd85a"
+      }
+    ],
+    "images": [
+      {
+        "kind": "api",
+        "coordinate": "ghcr.io/lacecms/api:1.0.0-arm64",
+        "manifestCoordinate": "ghcr.io/lacecms/api:1.0.0",
+        "localTag": "ghcr.io/lacecms/api:1.0.0-arm64-f63bd2fa2e5d",
+        "platform": "linux/arm64",
+        "imageId": "sha256:de8d892dd5730d5da3756930dc01c150253947a04e7a620473562f8484e5d170",
+        "file": "images/api-1.0.0-arm64.tar",
+        "sha256": "a7832312dc52bee60ae4960ad4b85f9ee0b5607dd2d52dfdbb7fe48a72c0ccb2",
+        "smokePassed": true
+      },
+      {
+        "kind": "builder",
+        "coordinate": "ghcr.io/lacecms/builder:1.0.0-arm64",
+        "manifestCoordinate": "ghcr.io/lacecms/builder:1.0.0",
+        "localTag": "ghcr.io/lacecms/builder:1.0.0-arm64-f63bd2fa2e5d",
+        "platform": "linux/arm64",
+        "imageId": "sha256:cfe6f9a8c4b612efb1d5824889ccd6b19bb8a0f3cae7729660004ff728e35a27",
+        "file": "images/builder-1.0.0-arm64.tar",
+        "sha256": "890fab747ebfa1b38a5da6b8b9972e95f4975b7b230dbebd2e174f7e000caed3",
+        "smokePassed": true
+      }
+    ]
+  }
+}

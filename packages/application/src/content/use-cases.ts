@@ -19,6 +19,7 @@ import {
   DomainError,
   CollectionQueryValidationError,
   isContentSlug,
+  isSingletonKind,
   auditActor,
   assertCollectionEntryOperation,
   blockKey,
@@ -47,11 +48,13 @@ import { publicationIdempotencyKey, publicationRequestFingerprint } from "../sha
 import type { ActorSummary } from "../shared/actors.js";
 import type {
   ContentCommandResult,
+  SaveCompleteDraftInput,
   ContentEntryListPage,
   ContentEntrySort,
   ContentEntryStatus,
 } from "../ports/content.js";
 import type { PublicationIdempotencyKey } from "../shared/brands.js";
+import { contentModelRoute } from "../shared/model-route.js";
 import { siteBuildEvent } from "../ports/outbox.js";
 import { validateDraft } from "./draft-validation.js";
 import {
@@ -83,7 +86,6 @@ import {
   type NormalizedDraft,
   seoEnabled,
   detached,
-  contentModelRoute,
   systemTitle,
 } from "./draft-normalization.js";
 const FIELD_SORT_PATTERN = new RegExp(`^-?field:${FIELD_KEY_SOURCE}$`, "u");
@@ -248,7 +250,7 @@ export class ContentUseCases {
     ) {
       throw new DomainError("CONTENT_INVALID_STATE", "Entry sort is unsupported.");
     }
-    if (input.slug !== undefined && (model.kind !== "collection" || !isContentSlug(input.slug)))
+    if (input.slug !== undefined && (isSingletonKind(model.kind) || !isContentSlug(input.slug)))
       throw new CollectionQueryValidationError("/slug");
     // A request without sort uses the collection's configured default.
     const sort =
@@ -302,6 +304,15 @@ export class ContentUseCases {
   public async save(input: SaveContentDraftUseCaseInput): Promise<ContentEntry> {
     authorizeContentOperation(input.actor, "save");
     const entry = await this.entry(input.entryId);
+    return commandEntry(
+      await this.dependencies.content.saveCompleteDraft(await this.draftWrite(entry, input)),
+    );
+  }
+
+  private async draftWrite(
+    entry: Pick<ContentEntry, "id" | "model">,
+    input: SaveContentDraftUseCaseInput,
+  ): Promise<SaveCompleteDraftInput> {
     const model = this.model(entry.model.key);
     const draft = await validateDraft(
       this.dependencies,
@@ -310,19 +321,17 @@ export class ContentUseCases {
       "draft",
     );
     const references = entryReferenceCandidate(model, draft.entryReferences);
-    return commandEntry(
-      await this.dependencies.content.saveCompleteDraft({
-        entryId: entry.id,
-        ...(references === undefined ? {} : { entryReferences: references }),
-        internalLinks: draft.internalLinks,
-        mutation: {
-          ...draft,
-          expectedRevision: input.expectedRevision,
-          updatedAt: this.dependencies.clock.now(),
-          updatedBy: auditActor(input.actor),
-        },
-      }),
-    );
+    return {
+      entryId: entry.id,
+      ...(references === undefined ? {} : { entryReferences: references }),
+      internalLinks: draft.internalLinks,
+      mutation: {
+        ...draft,
+        expectedRevision: input.expectedRevision,
+        updatedAt: this.dependencies.clock.now(),
+        updatedBy: auditActor(input.actor),
+      },
+    };
   }
 
   public async publish(
@@ -516,7 +525,9 @@ export class ContentUseCases {
    */
   public async detachMedia(input: DetachMediaFromDraftUseCaseInput): Promise<boolean> {
     authorizeContentOperation(input.actor, "detachMedia");
-    const entry = await this.entry(input.entryId);
+    requirePermission(input.actor, "media:write");
+    const entry = await this.dependencies.content.loadDraftForEdit({ entryId: input.entryId });
+    if (entry === null) return false;
     const model = this.model(entry.model.key);
     const { draft } = entry;
     const fields = detachFieldMedia(model.fields, draft.fields, input.mediaId);
@@ -536,7 +547,12 @@ export class ContentUseCases {
       changed = true;
     }
     if (!changed) return false;
-    await this.save({
+    if (draft.revision !== input.expectedRevision)
+      throw new DomainError(
+        "CONTENT_REVISION_CONFLICT",
+        "The draft revision no longer matches the expected revision.",
+      );
+    const write = await this.draftWrite(entry, {
       actor: input.actor,
       blocks,
       entryId: entry.id,
@@ -546,7 +562,11 @@ export class ContentUseCases {
       ...(draft.slug === undefined ? {} : { slug: draft.slug }),
       title: draft.title,
     });
-    return true;
+    return this.dependencies.content.saveDetachedDraft({
+      ...write,
+      draftId: draft.id,
+      mediaId: input.mediaId,
+    });
   }
 
   public async delete(input: DeleteContentEntryUseCaseInput): Promise<void> {

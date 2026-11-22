@@ -2,7 +2,7 @@
 title: Synchronize configuration
 description: Review and apply changes to lace.config.ts against stored content, including renames, removals and block migrations.
 kind: guide
-verifiedAgainst: 0.1.0-rc6
+verifiedAgainst: 1.0.0
 ---
 
 Editing `lace.config.ts` does not change stored models on startup.

@@ -57,14 +57,29 @@ frames.
   object or metadata row exists
 
 ### Requirement: Object and metadata creation preserve a recoverable boundary
-The system SHALL write a verified binary object before creating its media
-metadata. A successful metadata record SHALL contain only its identity, opaque
-storage key, sanitized display filename, binary-derived MIME type, byte size,
-optional image dimensions, active status, actor, and timestamps; it SHALL NOT
-contain binary bytes. If metadata creation fails after an object write, the
-system SHALL make a best-effort attempt to delete that object, return a failure,
-and record an operational error that identifies the opaque storage key without
-including the binary payload or caller secrets.
+On Node and Cloudflare, the system SHALL write the verified binary to its
+opaque key before committing an active media row. The row SHALL contain the
+media identity, opaque storage key, sanitized display filename, binary-derived
+MIME type, byte size, image dimensions, actor and timestamps. The hash and any
+normalized tags SHALL commit atomically with the row. Binary bytes SHALL reside
+only in object storage.
+
+After a successful object write, a confirmed failure to commit the metadata for
+this upload SHALL cause best-effort deletion of its unreferenced object and a
+failed response. After the metadata commits, any failure to read the created
+metadata or construct the response SHALL preserve the committed record and the
+exact stored bytes. If the commit outcome is uncertain, the system SHALL check
+authoritative metadata for the allocated media identity and object key before
+any cleanup. It SHALL delete the object only when it can establish that the
+create has finished without committing and that no media row owns the key. An
+inconclusive check SHALL leave the object in place. Recovery SHALL NOT repeat
+the upload or metadata insert.
+
+An operational error SHALL identify confirmed creation failure or unresolved
+outcome by a safe code and the opaque key. A failed cleanup attempt SHALL be
+recorded separately. Diagnostics SHALL exclude uploaded bytes, caller secrets,
+filenames and raw provider errors. Logging or cleanup failure SHALL NOT mask
+the original operation failure.
 
 #### Scenario: Object write precedes active metadata
 - **WHEN** a verified upload completes successfully
@@ -72,9 +87,44 @@ including the binary payload or caller secrets.
   the stored metadata contains no binary payload
 
 #### Scenario: Metadata persistence fails after an object write
-- **WHEN** storage accepts a verified object but metadata creation fails
-- **THEN** no active media record is returned, the system attempts cleanup of
-  the opaque storage key, and an operational error is recorded for diagnosis
+- **WHEN** storage accepts a verified object and the database rolls back the
+  create, including a failure while inserting tags
+- **THEN** no media row, tags or hash from the attempt remain, the system reports
+  failure and records the opaque key, and successful cleanup removes the object
+
+#### Scenario: Reading the result fails after commit
+- **WHEN** the upload's row, tags and hash have committed and the repository's
+  read of that row or the subsequent catalog read fails while producing the
+  response
+- **THEN** the request reports failure without deleting the object, and a later
+  authorized read finds the active item with its tags, hash and byte-for-byte
+  original image
+
+#### Scenario: Commit acknowledgment is lost but metadata is found
+- **WHEN** the create reports an uncertain outcome and reconciliation finds the
+  allocated media identity with its object key
+- **THEN** the request reports the original failure, leaves the row and file in
+  place, and performs no second insert or object write
+
+#### Scenario: Reconciliation confirms the write did not commit
+- **WHEN** a write reports an uncertain outcome and an authoritative check
+  establishes that it has finished, no row was committed for this upload and
+  its object key is unreferenced
+- **THEN** the request follows the confirmed-failure cleanup path and records the
+  failure
+
+#### Scenario: Reconciliation cannot establish the outcome
+- **WHEN** reconciliation fails, finds inconsistent identity or ownership, or
+  observes an absent row while the original write might still commit
+- **THEN** the request reports failure, records the unresolved outcome and
+  opaque key, and leaves the uploaded bytes untouched
+
+#### Scenario: Cleanup itself fails after rollback
+- **WHEN** the metadata transaction rolls back and object storage rejects
+  deletion of the unreferenced upload
+- **THEN** the database contains no media row or tags for the attempt, the file
+  can remain in storage, and the operational evidence distinguishes the cleanup
+  failure from the original write failure
 
 ### Requirement: Authorized media lifecycle operations are storage-neutral
 The system SHALL provide transport-neutral create, list, get, delete-request,
@@ -363,19 +413,13 @@ published field or block reference does.
   changes neither the published version nor build work
 
 ### Requirement: Writers can detach draft-only usage before deleting media
-A deletion request SHALL accept an explicit option to detach draft usage
-first. With the option the system SHALL, in this order:
+A writer SHALL be able to detach media from up to 50 distinct using entries across bounded requests on Node and Cloudflare. Each request SHALL require both `media:write` and `content:write` before reading or writing application data. A missing or inactive item SHALL fail with `CONTENT_INVALID_STATE`.
 
-1. require both `media:write` and `content:write` before any read or write;
-2. refuse an item that is not `active` with `CONTENT_INVALID_STATE`;
-3. refuse with `MEDIA_IN_USE`, changing no draft, when any current published
-   snapshot references the item or when the item's `usageCount` exceeds the 50
-   entries a usage read returns;
-4. remove the item from the current draft of every using entry and save each
-   such draft as an ordinary guarded draft save by the requesting actor at the
-   revision it was read with;
-5. request deletion through the unchanged guarded deletion path, which still
-   refuses with `MEDIA_IN_USE` when any reference remains.
+Admission SHALL inspect current draft and published usage in one consistent read. Any current published usage or a 51st distinct using entry SHALL fail with `MEDIA_IN_USE` before any draft changes. For 1–50 eligible entries admission SHALL return all distinct entry IDs with their current draft revisions and leave the item active. With zero uses it SHALL request guarded deletion directly.
+
+Each entry step SHALL address exactly one entry at a caller-supplied revision. It SHALL enforce active status, absence of published usage and the 50-entry ceiling at the mutation boundary, including for a direct call. It SHALL save a still-using draft only at the expected revision, with the requesting actor as editor and one revision increment. If an eligible active item is already absent from the named draft (including a removed entry), the step SHALL report completion without a write. If an edited draft still uses the item, the step SHALL fail with `CONTENT_REVISION_CONFLICT`. Every successful step SHALL leave the media active.
+
+Finishing SHALL perform the ordinary atomic zero-reference check, transition to `deleting` and enqueue exactly one `media.delete.requested` event. Any remaining use, including a new use outside the admitted set, SHALL yield `MEDIA_IN_USE` and preserve active status. The protocol SHALL never automatically add a newly discovered draft to a previously admitted set.
 
 Removing the item from a draft SHALL clear a media field whose value is the
 item, remove an element whose value is the item from a list of media, and
@@ -388,16 +432,10 @@ it. A published snapshot SHALL never be rewritten, so detaching requests no
 build and never changes public delivery. Without the option, deletion SHALL
 behave exactly as before.
 
-Each draft save SHALL be atomic on its own; the request as a whole SHALL NOT
-be. When a draft save fails with `CONTENT_REVISION_CONFLICT` or any other
-error, the request SHALL fail with that error, drafts already saved SHALL stay
-detached, later drafts SHALL stay unchanged, and the item SHALL stay `active`
-and may be detached again.
-
-The behavior SHALL be identical on the Node and Cloudflare runtimes.
+Each draft save SHALL atomically update its content and derived projections. Failure SHALL preserve the original error, previously committed steps and the current values of pending drafts. A retry SHALL operate on committed state.
 
 #### Scenario: Draft-only usage is detached and the item is queued
-- **WHEN** an editor requests deletion with the detach option of an image that
+- **WHEN** an editor completes admission, both entry steps and finish for an image that
   two entries use only in their drafts, one in a `cover` field and one in an
   `image` block and in a gallery list
 - **THEN** the `cover` field is cleared, the block's `image` value is cleared,
@@ -433,7 +471,7 @@ The behavior SHALL be identical on the Node and Cloudflare runtimes.
 
 #### Scenario: A concurrent draft edit stops detaching
 - **WHEN** a using entry's draft is saved by someone else after the detach
-  request read it and before the request saves it
+  request read it and before the request saves it, and the edited draft still uses the item
 - **THEN** the request fails with `CONTENT_REVISION_CONFLICT`, the concurrent
   draft is kept, and the item stays `active`
 
@@ -441,6 +479,18 @@ The behavior SHALL be identical on the Node and Cloudflare runtimes.
 - **WHEN** another draft starts using the item after detaching saved the last
   known using draft and before deletion is requested
 - **THEN** the request fails with `MEDIA_IN_USE` and the item stays `active`
+
+#### Scenario: A lost entry response can be replayed
+- **WHEN** the save commits but the caller loses its response and resends that entry and revision
+- **THEN** the step acknowledges the absent reference, preserves the new revision and enqueues no event
+
+#### Scenario: A publication appears between steps
+- **WHEN** another editor publishes a use after admission but before the next draft mutation
+- **THEN** the next step fails with `MEDIA_IN_USE`, earlier saves survive, and neither the named draft nor the publication changes
+
+#### Scenario: Two finish requests race
+- **WHEN** two writers finish after the last draft save
+- **THEN** at most one changes the media status and exactly one deletion event commits
 
 ### Requirement: Media items carry normalized organizational tags
 Every media item SHALL carry a set of zero to 20 tags for admin organization.
@@ -515,8 +565,10 @@ able to list, filter and read tags; only `media:write` SHALL change them.
 Every successful upload SHALL record the SHA-256 digest of the exact stored
 bytes as 64 lowercase hexadecimal characters, computed after format
 verification and before metadata is committed, identically on Node and
-Cloudflare. A failed upload SHALL record nothing. The hash SHALL never change
-after creation; metadata and tag updates SHALL keep it. Identical
+Cloudflare. An upload rejected before metadata creation or whose metadata write
+rolls back SHALL record no hash. A failure to return the result after commit
+SHALL preserve the stored hash. The hash SHALL never change after creation;
+metadata and tag updates SHALL keep it. Identical
 bytes uploaded twice SHALL create two items with the same hash; the hash SHALL
 NOT be unique and SHALL NOT refuse an upload. A media list SHALL be able to
 restrict results to `active` items with a given hash, requiring `content:read`
@@ -530,3 +582,8 @@ change the published-content version or build work.
 #### Scenario: Deleting item is not a match
 - **WHEN** an item with hash `h` is marked `deleting` and a client lists by `h`
 - **THEN** the item is not returned
+
+#### Scenario: Hash remains discoverable after a failed response
+- **WHEN** an upload commits with hash `h`, the response read fails, and an
+  authorized reader later lists active items by `h`
+- **THEN** the committed item is returned and its stored bytes have digest `h`

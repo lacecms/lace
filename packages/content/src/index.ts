@@ -4,6 +4,7 @@
 export { LaceError, InvariantError } from "./shared/errors.js";
 export * from "./shared/objects.js";
 export * from "./shared/identifiers.js";
+export * from "./shared/model-kinds.js";
 export {
   isModelIconEmoji,
   isModelIconIdentifier,

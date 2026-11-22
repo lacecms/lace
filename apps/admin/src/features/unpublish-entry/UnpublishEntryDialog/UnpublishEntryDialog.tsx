@@ -1,3 +1,4 @@
+import { resolveModelKind, type ResolvedModelKind } from "@lacecms/content";
 import {
   useLinkImpactReview,
   LinkImpactReview,
@@ -33,15 +34,14 @@ import { ErrorState } from "../../../shared/ui/ErrorState/index.js";
 const staleCodes = new Set(["CONTENT_NOT_PUBLISHED", "CONTENT_REVISION_CONFLICT"]);
 
 function consequence(
-  kind: ContentModelDto["kind"],
+  family: ResolvedModelKind["publicFamily"],
   publicPath: string | undefined,
-  routeLess: boolean,
 ): string {
-  if (routeLess)
+  if (family === "records")
     return "The entry disappears from the pages that list it after the next site build.";
-  if (kind === "global")
+  if (family === "globals")
     return "Pages that show this content fall back to their defaults after the next site build.";
-  if (kind === "page")
+  if (family === "pages")
     return publicPath === undefined
       ? "The page will return 404 after the next site build."
       : `The page's fixed path ${publicPath} will return 404 after the next site build.`;
@@ -49,6 +49,13 @@ function consequence(
     ? "The entry leaves the site after the next site build."
     : `Its public path ${publicPath} stops working after the next site build.`;
 }
+
+const subject = {
+  pages: "page",
+  collections: "entry",
+  records: "entry",
+  globals: "site content",
+} as const;
 
 /**
  * Confirms removing the displayed publication. The draft, including unsaved
@@ -58,27 +65,25 @@ function consequence(
 export function UnpublishEntryDialog({
   entryId,
   expectedPublishedSnapshotId,
-  kind,
+  model,
   onOpenChange,
   onReload,
   onUnpublished,
   open,
   publicPath,
   returnFocus,
-  routeLess = false,
 }: {
   readonly entryId: string;
   readonly expectedPublishedSnapshotId: string;
-  readonly kind: ContentModelDto["kind"];
+  readonly model: Pick<ContentModelDto, "kind" | "route">;
   readonly onOpenChange: (open: boolean) => void;
   readonly onReload: () => void;
   readonly onUnpublished: (result: UnpublishContentEntryResultDto) => void;
   readonly open: boolean;
   readonly publicPath?: string | undefined;
   readonly returnFocus?: RefObject<HTMLElement | null>;
-  /** True for an entry of a route-less collection, which has no path to name. */
-  readonly routeLess?: boolean;
 }) {
+  const { publicFamily } = resolveModelKind(model);
   const client = useAdminClient();
   const queryClient = useQueryClient();
   const impact = useLinkImpactReview(entryId, "unpublish", open);
@@ -125,15 +130,9 @@ export function UnpublishEntryDialog({
         }}
       >
         <DialogHeader>
-          <DialogTitle>
-            {kind === "page"
-              ? "Unpublish this page?"
-              : kind === "global"
-                ? "Unpublish this site content?"
-                : "Unpublish this entry?"}
-          </DialogTitle>
+          <DialogTitle>Unpublish this {subject[publicFamily]}?</DialogTitle>
           <DialogDescription>
-            {`${consequence(kind, publicPath, routeLess)} The draft and any unsaved changes are kept; publishing again makes the current draft public.`}
+            {`${consequence(publicFamily, publicPath)} The draft and any unsaved changes are kept; publishing again makes the current draft public.`}
           </DialogDescription>
         </DialogHeader>
         {unpublish.error === null ? undefined : (

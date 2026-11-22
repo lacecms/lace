@@ -48,3 +48,5 @@ export async function pendingBuilds(sql: ContractSql) {
   );
   return rows.map((row) => JSON.parse(row.payload_json) as Record<string, unknown>);
 }
+export const rejectMediaTagInsert =
+  "create trigger reject_tag before insert on media_tags begin select raise(abort, 'injected tag failure'); end";

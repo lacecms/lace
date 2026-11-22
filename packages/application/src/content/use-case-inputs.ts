@@ -153,6 +153,7 @@ export interface DuplicateContentEntryUseCaseInput {
 }
 
 export interface DetachMediaFromDraftUseCaseInput {
+  readonly expectedRevision: number;
   readonly actor: Actor;
   readonly entryId: ContentEntryId;
   readonly mediaId: MediaId;

@@ -59,6 +59,22 @@ export async function lifecycleFixture({ indexed = false } = {}) {
     packages,
     images: images.filter((image) => image.platform === "linux/arm64"),
   };
+  if (release.version === "1.0.0") {
+    const proof = {
+      sourceRevision: "bb3d17e813f504c2133a7664af0174c5e0a60cf0",
+      generatorSha256: "a436e4b08913ad512a35b734c50c04a772cd3b92e841960746da5e303be22260",
+      beforeFingerprint: "a".repeat(64),
+      upgradedFingerprint: "a".repeat(64),
+      restoredFingerprint: "a".repeat(64),
+      originalOutput: "b".repeat(64),
+      restoredOutput: "b".repeat(64),
+      stableOutput: "c".repeat(64),
+      originalMediaSha256: "d".repeat(64),
+      newMediaSha256: "e".repeat(64),
+      migrationsApplied: 5,
+    };
+    result.rc5Cutovers = { node: proof, cloudflareLocal: { ...proof } };
+  }
   await persistAcceptance(directory, inventory, result, "c".repeat(40));
   const changelog = `# Changelog\n\n## ${release.version}\n\n- Important change; [upgrade](docs/compatibility.md).\n`;
   await writeFile(join(root, "CHANGELOG.md"), changelog);
@@ -119,7 +135,7 @@ export async function lifecycleFixture({ indexed = false } = {}) {
     commit: async () => {},
     tag: async () => tag,
     release: async () => releaseRecord,
-    create: async (tagName, revision, body) => {
+    create: async (tagName, revision, body, prerelease) => {
       mutations.push("create");
       releaseRecord = {
         id: 1,
@@ -127,7 +143,7 @@ export async function lifecycleFixture({ indexed = false } = {}) {
         target_commitish: revision,
         body,
         draft: true,
-        prerelease: true,
+        prerelease,
         assets: [],
         html_url: `https://github.com/lacecms/lace/releases/tag/${tagName}`,
       };

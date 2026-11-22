@@ -7,6 +7,7 @@ import type {
   PublishContentEntryResult,
   RevertContentDraftCommand,
   SaveCompleteDraftInput,
+  SaveDetachedDraftInput,
   UnpublishContentEntryCommand,
   UnpublishContentEntryResult,
 } from "@lacecms/application";
@@ -57,27 +58,41 @@ export class NodeEntryCommands extends NodeRepositoryBase implements ContentEntr
   }
 
   public async saveCompleteDraft(input: SaveCompleteDraftInput): Promise<ContentCommandResult> {
-    assertDraftPersistenceBounds(input.mutation.blocks, input.mutation.mediaReferences);
     const existing = this.entryRow(input.entryId);
     if (existing === undefined || existing.draft_snapshot_id === null)
       failure("Content entry does not have a mutable draft.");
+    await this.writeDraft(input, existing.draft_snapshot_id);
+    const entry = this.loadEntry(input.entryId);
+    if (entry === null) failure("Saved content entry could not be reloaded.");
+    return { entry, status: "saved" };
+  }
+
+  public async saveDetachedDraft(input: SaveDetachedDraftInput): Promise<boolean> {
+    return this.writeDraft(input, input.draftId, input.mediaId);
+  }
+
+  private async writeDraft(
+    input: SaveCompleteDraftInput,
+    draftId: string,
+    detachMediaId?: string,
+  ): Promise<boolean> {
+    assertDraftPersistenceBounds(input.mutation.blocks, input.mutation.mediaReferences);
     let result: ReturnType<
       typeof executeWritePlan<ReturnType<ReturnType<typeof createDraftWritePlan>["diagnose"]>>
     >;
     try {
       result = executeWritePlan(
         this.connection,
-        saveDraftWritePlan(input, existing.draft_snapshot_id),
+        saveDraftWritePlan(input, draftId, detachMediaId),
         this.options.beforeMutation,
       );
     } catch (error) {
       if (error instanceof LaceError) throw error;
       failure("SQLite content write failed.");
     }
+    if (result.kind === "rejected" && result.reason === "detach_absent") return false;
     if (result.kind === "rejected") rejectDraftWrite(result.reason, "");
-    const entry = this.loadEntry(input.entryId);
-    if (entry === null) failure("Saved content entry could not be reloaded.");
-    return { entry, status: "saved" };
+    return true;
   }
 
   public async publish(input: PublishContentEntryCommand): Promise<PublishContentEntryResult> {

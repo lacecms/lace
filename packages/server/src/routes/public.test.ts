@@ -98,6 +98,77 @@ test("public collection slugs follow the full shared slug rule", async () => {
   ).toBe(404);
 });
 
+test("public route aliases track republication, moves and withdrawal", async () => {
+  const { app, content } = await fixture();
+  const page = await content.create({
+    actor: admin,
+    blocks: [],
+    fields: {},
+    modelKey: "home",
+    title: "Home",
+  });
+  const publishedPage = await content.publish({
+    actor: admin,
+    entryId: page.id,
+    expectedRevision: 1,
+  });
+  const post = await content.create({
+    actor: admin,
+    blocks: [],
+    fields: { author: "Ada" },
+    modelKey: "posts",
+    slug: "stable",
+    title: "First title",
+  });
+  await content.publish({ actor: admin, entryId: post.id, expectedRevision: 1 });
+
+  const byPath = (path: string) =>
+    `/api/v1/public/content/by-path?path=${encodeURIComponent(path)}`;
+  const slugPath = (slug: string) => `/api/v1/public/collections/posts/${slug}`;
+  const expectAliases = async (paths: readonly [string, string], title: string) => {
+    const [first, second] = await Promise.all(paths.map((path) => json(app, path)));
+    expect(first).toMatchObject({
+      response: { status: 200 },
+      body: { entry: { title }, media: {} },
+    });
+    expect(second?.response.status).toBe(200);
+    expect(second?.body).toEqual(first?.body);
+  };
+  const pageAliases = ["/api/v1/public/pages/home", byPath("/")] as const;
+  const stableAliases = [slugPath("stable"), byPath("/blog/stable")] as const;
+  await expectAliases(pageAliases, "Home");
+  await expectAliases(stableAliases, "First title");
+
+  const republish = async (revision: number, slug: string, title: string) => {
+    await content.save({
+      ...post.draft,
+      actor: admin,
+      entryId: post.id,
+      expectedRevision: revision,
+      slug,
+      title,
+      fields: { author: "Grace" },
+    });
+    await content.publish({ actor: admin, entryId: post.id, expectedRevision: revision + 1 });
+  };
+  await republish(1, "stable", "Revised title");
+  await expectAliases(stableAliases, "Revised title");
+  await republish(2, "moved", "Moved title");
+  await expectAliases([slugPath("moved"), byPath("/blog/moved")], "Moved title");
+
+  await content.unpublish({
+    actor: admin,
+    entryId: page.id,
+    expectedPublishedSnapshotId: publishedPage.entry.published!.id,
+  });
+  for (const path of [...stableAliases, ...pageAliases]) {
+    expect(await json(app, path)).toMatchObject({
+      response: { status: 404 },
+      body: { error: { code: "NOT_FOUND" } },
+    });
+  }
+});
+
 test("public responses return published entries with one resolved media dictionary", async () => {
   const {
     app,

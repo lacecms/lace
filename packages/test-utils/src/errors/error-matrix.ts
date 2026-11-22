@@ -19,6 +19,7 @@ import {
 } from "@lacecms/domain";
 import {
   AccountError,
+  MediaCreateError,
   ObjectStorageError,
   RateLimitExceededError,
   RuntimeConfigurationError,
@@ -373,6 +374,15 @@ export const errorMatrixCases: readonly ErrorMatrixCase[] = [
     name: "ObjectStorageError",
     errorClass: ObjectStorageError,
     create: () => new ObjectStorageError("Object storage operation failed."),
+    expected: {
+      body: { error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } },
+      status: 500,
+    },
+  },
+  {
+    name: "MediaCreateError",
+    errorClass: MediaCreateError,
+    create: () => new MediaCreateError("unknown", new Error("private provider detail")),
     expected: {
       body: { error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } },
       status: 500,

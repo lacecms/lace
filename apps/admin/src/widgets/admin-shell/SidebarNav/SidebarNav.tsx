@@ -1,3 +1,4 @@
+import { modelKindDescriptor } from "@lacecms/content";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronDown, LayoutGrid } from "lucide-react";
@@ -6,7 +7,7 @@ import { useEntryOverview } from "../../../entities/content/index.js";
 import { useSession, useSessionRecovery } from "../../../entities/session/index.js";
 import { adminQueryKeys, useAdminClient } from "../../../shared/api/index.js";
 import { Skeleton } from "../../../shared/ui/Skeleton/index.js";
-import { navigationGroups, type NavigationItem } from "../navigation.js";
+import { navigationGroups, type NavigationItem, type ModelNavigationItem } from "../navigation.js";
 import type { ModelNavigationIcon } from "../model-icons.js";
 import { UserMenu } from "../UserMenu.js";
 
@@ -131,9 +132,13 @@ function NavigationLink({
   readonly item: NavigationItem;
   readonly onNavigate?: (() => void) | undefined;
 }) {
-  if (item.kind === "page" || item.kind === "global")
-    return <SingletonLink item={item} onNavigate={onNavigate} />;
-  if (item.kind === "collection") return <CollectionLink item={item} onNavigate={onNavigate} />;
+  if (item.kind !== "resource") {
+    return modelKindDescriptor(item.kind).admin.navigation === "editor" ? (
+      <SingletonLink item={item} onNavigate={onNavigate} />
+    ) : (
+      <CollectionLink item={item} onNavigate={onNavigate} />
+    );
+  }
   const Icon = item.icon;
   return (
     <Link className={itemClass} onClick={onNavigate} to={item.path}>
@@ -160,7 +165,7 @@ function SingletonLink({
   item,
   onNavigate,
 }: {
-  readonly item: Extract<NavigationItem, { kind: "global" | "page" }>;
+  readonly item: ModelNavigationItem;
   readonly onNavigate?: (() => void) | undefined;
 }) {
   const overview = useEntryOverview(item.modelKey);
@@ -179,7 +184,7 @@ function SingletonLink({
     <Link
       activeOptions={{ includeHash: true }}
       className={itemClass}
-      hash={item.kind === "page" ? "pages" : "globals"}
+      hash={item.group}
       onClick={onNavigate}
       to="/content"
     >
@@ -202,7 +207,7 @@ function CollectionLink({
   item,
   onNavigate,
 }: {
-  readonly item: Extract<NavigationItem, { kind: "collection" }>;
+  readonly item: ModelNavigationItem;
   readonly onNavigate?: (() => void) | undefined;
 }) {
   const overview = useEntryOverview(item.modelKey);

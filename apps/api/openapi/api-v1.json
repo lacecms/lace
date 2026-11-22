@@ -8867,7 +8867,7 @@
     },
     "/api/v1/admin/media/{mediaId}": {
       "delete": {
-        "description": "With `detach=drafts`, first removes the media from the current draft of every entry that uses it; refused with `MEDIA_IN_USE` while a current publication uses it.",
+        "description": "With detach=drafts, start returns the current draft IDs and revisions, or queues an unused item. Send step=entry with entryId and expectedRevision for each confirmed draft, then step=finish to queue deletion. Both write permissions are required for every detach request. Missing or inactive media returns 422 CONTENT_INVALID_STATE.",
         "operationId": "deleteApiV1AdminMediaByMediaId",
         "parameters": [
           {
@@ -8884,12 +8884,94 @@
             "in": "query",
             "name": "detach",
             "schema": {
-              "enum": ["drafts"],
+              "const": "drafts"
+            }
+          },
+          {
+            "in": "query",
+            "name": "step",
+            "schema": {
+              "enum": ["entry", "finish"],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "entryId",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expectedRevision",
+            "schema": {
+              "pattern": "^[1-9][0-9]*$",
               "type": "string"
             }
           }
         ],
         "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "drafts": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "entryId": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "expectedRevision": {
+                                "maximum": 9007199254740991,
+                                "minimum": 1,
+                                "type": "integer"
+                              }
+                            },
+                            "required": ["entryId", "expectedRevision"],
+                            "type": "object"
+                          },
+                          "maxItems": 50,
+                          "minItems": 1,
+                          "type": "array"
+                        },
+                        "state": {
+                          "const": "drafts"
+                        }
+                      },
+                      "required": ["state", "drafts"],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entryId": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "entry-complete"
+                        }
+                      },
+                      "required": ["state", "entryId"],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Draft plan or acknowledgment for one entry"
+          },
           "202": {
             "content": {
               "application/json": {
@@ -9021,6 +9103,16 @@
               }
             },
             "description": "Permission denied (AUTHORIZATION_DENIED)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Published or excess usage, remaining usage at finish, or a stale draft revision"
           },
           "422": {
             "content": {

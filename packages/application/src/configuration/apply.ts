@@ -40,7 +40,6 @@ import {
 import type {
   ContentEntryId,
   ContentModelKey,
-  ContentModelRoute,
   ContentSnapshotId,
   UnixMilliseconds,
 } from "@lacecms/domain";
@@ -55,6 +54,7 @@ import {
   planConfigurationSynchronization,
   planConfigurationSyncScans,
 } from "./plan.js";
+import { contentModelRoute } from "../shared/model-route.js";
 import { siteBuildEvent } from "../ports/outbox.js";
 import { renderConfigurationSyncPlanJson, reportConfigurationSynchronization } from "./report.js";
 import { declaresSyncReferences, referenceBlockDescriptors } from "./reference-occurrences.js";
@@ -242,7 +242,7 @@ export function createConfigurationSyncSingletonEntry(input: {
   readonly model: NormalizedContentModel;
   readonly snapshotId: ContentSnapshotId | string;
 }): ConfigurationSyncSingletonEntry {
-  if (input.model.kind === "collection") {
+  if (!isSingletonKind(input.model.kind)) {
     throw new DomainError(
       "CONTENT_INVALID_STATE",
       "Only page and global models receive synchronized entries.",
@@ -250,12 +250,7 @@ export function createConfigurationSyncSingletonEntry(input: {
   }
   const entryId = contentEntryId(input.entryId);
   const snapshotId = contentSnapshotId(input.snapshotId);
-  const key = contentModelKey(input.model.key);
-  const model: ContentModelRoute = Object.freeze(
-    input.model.kind === "page"
-      ? { key, kind: "page" as const, path: input.model.path }
-      : { key, kind: "global" as const },
-  );
+  const model = contentModelRoute(input.model);
   const entry = createContentEntry({
     id: entryId,
     model,

@@ -517,7 +517,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
       .getByRole("link", { name: "Settings", exact: true })
       .click();
     await visible(tab.getByText("CMS version", { exact: true }), "cloudflare-cms-version");
-    await visible(tab.getByText("0.1.0-rc6", { exact: true }), "cloudflare-cms-release");
+    await visible(tab.getByText("1.0.0", { exact: true }), "cloudflare-cms-release");
     console.info("Acceptance: cloudflare-browser-complete");
     // Both publications and the Settings assertions are complete. Close the
     // browser context before the API journey to stop background polling.
@@ -868,7 +868,7 @@ async function scanProject(project, directory, secrets, prefix = "") {
   }
 }
 
-function startWorker(project, args, certificate) {
+export function startWorker(project, args, certificate) {
   const child = spawn("pnpm", ["exec", "wrangler", ...args], {
     cwd: project,
     detached: true,
@@ -884,7 +884,7 @@ function startWorker(project, args, certificate) {
   return child;
 }
 
-async function stopWorker(child) {
+export async function stopWorker(child) {
   if (child === undefined || child.exitCode !== null || child.signalCode !== null) return;
   try {
     process.kill(-child.pid, "SIGTERM");
@@ -902,7 +902,7 @@ async function stopWorker(child) {
   clearTimeout(timer);
 }
 
-async function waitReady(child, base, stage, sanitize) {
+export async function waitReady(child, base, stage, sanitize) {
   console.info(`Acceptance: ${stage}`);
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
@@ -944,7 +944,7 @@ async function waitBuild(base, cookie, predicate, timeout, beforeEach = async ()
 }
 
 /** Follows every build-export page and returns the strictly validated assembled export. */
-async function readExport(base, token) {
+export async function readExport(base, token) {
   const complete = await readCompleteBuildExport(
     (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(20_000) }),
     new URL(".", base).toString(),
@@ -953,7 +953,7 @@ async function readExport(base, token) {
   return complete.export;
 }
 
-async function json(base, path, options = {}) {
+export async function json(base, path, options = {}) {
   const response = await fetch(new URL(path, base), {
     ...options,
     headers: {
@@ -968,7 +968,7 @@ async function json(base, path, options = {}) {
   return body;
 }
 
-async function login(base, email, password, secretValues) {
+export async function login(base, email, password, secretValues) {
   const response = await fetch(new URL("api/auth/sign-in/email", base), {
     method: "POST",
     headers: { "content-type": "application/json", origin: base.slice(0, -1) },

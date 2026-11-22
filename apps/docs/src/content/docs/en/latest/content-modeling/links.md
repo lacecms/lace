@@ -2,7 +2,7 @@
 title: Link to other entries
 description: Store links to pages and collection entries that follow slug changes, and render them safely in your site.
 kind: guide
-verifiedAgainst: 0.1.0-rc6
+verifiedAgainst: 1.0.0
 ---
 
 An ordinary URL field can hold either a manual URL or a link to a CMS entry.

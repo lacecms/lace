@@ -97,7 +97,7 @@
     "errors": [],
     "visibility": [],
     "filters": [],
-    "repository-contract": ["delivery", "fixtures", "visibility"],
+    "repository-contract": ["adapters", "delivery", "fixtures", "shared", "visibility"],
     "security-contract": ["repository-contract"]
   },
   "packages/sdk": {

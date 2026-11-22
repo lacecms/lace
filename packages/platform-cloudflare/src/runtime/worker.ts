@@ -76,6 +76,8 @@ export const SCHEDULED_MEDIA_DELETION_CLAIMS = 5;
 export const SCHEDULED_TRACKING_CHECKS = 5;
 /** Dedicated invocation leaves the publication and preview query budgets independent. */
 export const PREVIEW_MAINTENANCE_CRON = "*/2 * * * *";
+// Authenticated mutation requests share their statement allowance with this pass.
+const POST_COMMIT_MEDIA_CLAIMS = 2;
 const POST_COMMIT_BUILD_DELAY_MS = SITE_BUILD_DEBOUNCE_MS + 250;
 
 export interface WorkerOperationalLogger {
@@ -463,7 +465,7 @@ export function createCloudflareWorker(input: CreateCloudflareWorkerInput): Clou
 
   async function postCommit(runtime: CloudflareRuntime): Promise<void> {
     await dispatch("media-deletion", () =>
-      runtime.deletionDispatcher.runOnce(SCHEDULED_MEDIA_DELETION_CLAIMS),
+      runtime.deletionDispatcher.runOnce(POST_COMMIT_MEDIA_CLAIMS),
     );
     await wait(input.postCommitBuildDelayMs ?? POST_COMMIT_BUILD_DELAY_MS);
     await dispatch("site-build", () =>

@@ -1,4 +1,11 @@
-import { pagePathFailure, collectionRouteFailure, collectionPathFailure } from "@lacecms/content";
+import {
+  pagePathFailure,
+  collectionRouteFailure,
+  collectionPathFailure,
+  isContentModelKind,
+  modelKindDescriptor,
+  resolveModelKind,
+} from "@lacecms/content";
 import type { ContentModelKind } from "@lacecms/content";
 import type {
   ContentEntryId,
@@ -41,19 +48,19 @@ export type ContentModelRoute =
 
 /** A model has a public route when it is a page or a collection that declares a route. */
 export function hasPublicRoute(model: ContentModelRoute): model is RoutableContentModelRoute {
-  return model.kind === "page" || (model.kind === "collection" && model.route !== undefined);
+  return resolveModelKind(model).routing !== "none";
 }
 
 /** A collection without a route, whose entries carry no slug. */
 export function isRouteLessCollection(
   model: ContentModelRoute,
 ): model is RouteLessCollectionContentModelRoute {
-  return model.kind === "collection" && model.route === undefined;
+  return resolveModelKind(model).publicFamily === "records";
 }
 
 /** Page and global models are configuration-defined singletons. */
 export function isSingletonKind(kind: ContentModelKind): boolean {
-  return kind !== "collection";
+  return isContentModelKind(kind) && modelKindDescriptor(kind).cardinality === "one";
 }
 
 export interface PublishedRoute {

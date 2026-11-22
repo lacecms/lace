@@ -1,6 +1,10 @@
 import { strict as assert } from "node:assert";
 import { siteBuildId, unixMilliseconds } from "@lacecms/domain";
-import { dispatcherEventId, dispatcherLeaseId } from "@lacecms/application";
+import {
+  DISPATCHER_LEASE_DURATION_MS,
+  dispatcherEventId,
+  dispatcherLeaseId,
+} from "@lacecms/application";
 import type { SiteBuildDispatchPort, SiteBuildWorkLease } from "@lacecms/application";
 import { expect, test } from "vitest";
 import { NodeBuilderSiteBuildTrigger, NodeSiteBuildDispatcher } from "./index.js";
@@ -101,7 +105,9 @@ test("dispatcher renews a long trigger and discards a result after lease loss", 
     let renewals = 0;
     let successes = 0;
     const work = workPort({
-      claimSiteBuilds: async () => [lease(0)],
+      claimSiteBuilds: async ({ now }) => [
+        { ...lease(0), expiresAt: unixMilliseconds(now + DISPATCHER_LEASE_DURATION_MS) },
+      ],
       renewSiteBuildLease: async () => {
         renewals += 1;
         return ownsLease;

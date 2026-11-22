@@ -6,6 +6,8 @@ export { BuildExportCursorError, BuildExportVersionChangedError } from "@lacecms
 /** Portable helpers that import clients apply exactly as the server does. */
 export { isMediaFocalCoordinate, normalizeMediaTags, normalizeMediaText } from "@lacecms/domain";
 export { canonicalizeJson, encodeEntryLink } from "@lacecms/content";
+export { isContentModelKind, resolveModelKind } from "@lacecms/domain";
+export type { ContentModelKind } from "@lacecms/domain";
 
 // Shared
 export * from "./shared/brands.js";
@@ -13,6 +15,7 @@ export * from "./shared/pagination.js";
 export * from "./shared/limits.js";
 export * from "./shared/actors.js";
 export * from "./shared/text.js";
+export { contentModelRoute } from "./shared/model-route.js";
 export {
   actorPermissions,
   effectiveActorPermissions,
@@ -55,8 +58,8 @@ export { snapshotEntryReferences } from "./content/publication-projection.js";
 export * from "./content/use-case-inputs.js";
 export {
   duplicateTitle,
-  contentModelRoute,
   normalizeDraftCandidate,
+  seoEnabled,
   type NormalizeDraftCandidateInput,
   type NormalizedDraftCandidate,
 } from "./content/draft-normalization.js";

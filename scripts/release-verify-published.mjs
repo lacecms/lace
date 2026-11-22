@@ -1,3 +1,4 @@
+import { releaseChannel } from "./release-model.mjs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { parseImageManifest } from "./release-image-identity.mjs";
@@ -59,9 +60,9 @@ export async function verifyPublishedInventory(inventory, directory, operations 
       ),
     ) ||
     inventory.images.length !== 4 ||
-    inventory.release.channel !== "next"
+    inventory.release.channel !== releaseChannel(inventory.release.version)
   )
-    throw new Error("Complete eligible alpha inventory required");
+    throw new Error("Complete eligible inventory required");
   const packages = [];
   for (const item of inventory.packages) {
     const local = await (operations.packageHashes ?? packageHashes)(join(directory, item.file));

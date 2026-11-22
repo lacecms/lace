@@ -36,7 +36,8 @@ test.each([
       loadEntry: () => pending,
       publishEntry: () => pending as unknown as ReturnType<AdminClient["publishEntry"]>,
     });
-    const setSavedEntry = vi.fn();
+    const adoptDraft = vi.fn();
+    const markConflict = vi.fn();
     const onIssues = vi.fn();
     const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
     const wrapper = ({ children }: { children: React.ReactNode }) =>
@@ -47,27 +48,20 @@ test.each([
           defaultValues: { title: "", fields: {}, blocks: [] },
         });
         const modelRef = useRef(models.items[1]);
-        const loaded = useRef<string | undefined>(undefined);
-        const suggestingSlugRef = useRef(false);
         const editor = {
           form,
           modelRef,
-          loaded,
-          suggestingSlugRef,
+          currentEntry: draftEntry,
+          adoptDraft,
+          markConflict,
           applyServerIssues: onIssues,
-          hideSummary: vi.fn(),
-          setEditorEpoch: vi.fn(),
-          setSuggestingSlug: vi.fn(),
-          setSlugManuallyEdited: vi.fn(),
           setUnmappedIssues: vi.fn(),
           showSummary: vi.fn(),
         } as unknown as ReturnType<typeof useDraftEditor>;
         return useEntryMutations({
           entryId,
           modelKey: "posts",
-          currentEntry: draftEntry,
           editor,
-          setSavedEntry,
         });
       },
       { initialProps: { entryId: "entry-1" }, wrapper },
@@ -79,7 +73,11 @@ test.each([
           ? result.current.publish
           : result.current.reloadServerDraft;
     act(() => {
-      if (action === "save") result.current.save.mutate({ title: "local", fields: {}, blocks: [] });
+      if (action === "save")
+        result.current.save.mutate({
+          expectedRevision: 2,
+          submitted: { title: "local", fields: {}, blocks: [] },
+        });
       else if (action === "publish")
         result.current.publish.mutate({ revision: 1, idempotencyKey: "key" });
       else result.current.reloadServerDraft.mutate();
@@ -100,9 +98,9 @@ test.each([
       await pending.catch(() => undefined);
     });
     await waitFor(() => expect(mutation().isPending).toBe(false));
-    expect(setSavedEntry).not.toHaveBeenCalled();
+    expect(adoptDraft).not.toHaveBeenCalled();
     expect(onIssues).not.toHaveBeenCalled();
-    expect(result.current.conflict).toBeUndefined();
+    expect(markConflict).not.toHaveBeenCalled();
     expect(queryClient.getQueryData(adminQueryKeys.entry("entry-2"))).toBeUndefined();
   },
 );

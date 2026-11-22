@@ -3,25 +3,32 @@
 Important changes and required upgrade actions; preparation alone does not
 announce publication. See [release status and evidence](docs/alpha-release.md).
 
+## 1.0.0
+
+- Upgrade directly from RC5. Back up the database and media together, adopt matching packages, images and template 0.52.0, apply five forward migrations, synchronize and rebuild. [Upgrade procedure](docs/compatibility.md#upgrading-from-rc5)
+- VPS Compose uses SILO for object storage. Preserve the stopped MinIO volume and verify existing media after the switch.
+- Protected saved-draft previews are opt-in on both deployment targets. Entry reference fields can link content by stable ID.
+- Custom REST clients can use revision ETags for conditional writes and cursors for protected lists, including build history.
+
 ## 0.1.0-rc5
 
-- Production Compose removes the API host port and binds Nginx to loopback by default; update your TLS proxy and host clients before restarting ([upgrade guide](docs/compatibility.md#upgrading-from-rc2)).
+- Production Compose removes the API host port and binds Nginx to loopback by default; update your TLS proxy and host clients before restarting ([upgrade guide](https://github.com/lacecms/lace/blob/v0.1.0-rc5/docs/compatibility.md#upgrading-from-rc2)).
 - Protected REST requests with missing or invalid credentials now return `401 AUTHENTICATION_REQUIRED`; permission and request-origin denials remain `403`, and OpenAPI reflects the contract.
 - Cloudflare dispatch now follows committed outbox work, including MCP publication; the exported `producesDispatchWork` helper is removed.
 - MCP OAuth rejects an incorrect PKCE verifier with `400 invalid_grant`, reflecting the updated OAuth provider.
 - Rate limits retain the trusted client identity while processing request bodies, and expired idempotency records and superseded snapshots are maintained consistently.
-- Upgrade all packages, both images and template `0.50.0` together; back up first, apply the forward database migration, synchronize configuration and rebuild the site ([upgrade guide](docs/compatibility.md#upgrading-from-rc2)).
+- Upgrade all packages, both images and template `0.50.0` together; back up first, apply the forward database migration, synchronize configuration and rebuild the site ([upgrade guide](https://github.com/lacecms/lace/blob/v0.1.0-rc5/docs/compatibility.md#upgrading-from-rc2)).
 
 ## 0.1.0-rc4
 
 - Collection lists have refined search, filtering and sorting controls, and admin navigation handles overflow more clearly.
 - Content import now uses the media response version for conditional updates, preventing incorrect concurrency failures.
-- Upgrade all Lace packages, both images and the project template (`0.49.0`) together. Back up first, run migrations and synchronization, and rebuild the site; existing rc2 gallery upgrade guidance still applies ([upgrade guide](docs/compatibility.md#upgrading-from-rc2)).
+- Upgrade all Lace packages, both images and the project template (`0.49.0`) together. Back up first, run migrations and synchronization, and rebuild the site; existing rc2 gallery upgrade guidance still applies ([upgrade guide](https://github.com/lacecms/lace/blob/v0.1.0-rc5/docs/compatibility.md#upgrading-from-rc2)).
 
 ## 0.1.0-rc3
 
 - Build collections without public routes and configure a default sort for the editor list.
-- Place gallery items in the grid and display images at their natural size; upgrading gallery definitions requires model version bumps, synchronization and updated installed source ([upgrade guide](docs/compatibility.md#upgrading-from-rc2)).
+- Place gallery items in the grid and display images at their natural size; upgrading gallery definitions requires model version bumps, synchronization and updated installed source ([upgrade guide](https://github.com/lacecms/lace/blob/v0.1.0-rc5/docs/compatibility.md#upgrading-from-rc2)).
 - The entry editor has a refined layout, and Site is now named Globals in the admin.
 - Remote Cloudflare D1 migration handles a fresh database when its ledger query returns HTTP 400.
 - Upgrade all Lace packages, both images and the project template (`0.48.0`) together. rc2 is the oldest supported release; back up before upgrading and rebuild the site after synchronization.
@@ -41,7 +48,7 @@ announce publication. See [release status and evidence](docs/alpha-release.md).
 - Import content and media with scoped, expiring credentials, offline validation and repeatable publication.
 - Show fields conditionally while preserving hidden draft values and omitting them from published content.
 - Optionally grant MCP assistants separate publishing permission through explicit consent; unpublication and deletion remain unavailable.
-- Upgrade engine, site and builder together, apply migrations 0014–0015 and review gallery schema 5, conditional definitions and installed source before synchronization ([upgrade guide](docs/compatibility.md#rc1-upgrade-and-rollback)).
+- Upgrade engine, site and builder together, apply migrations 0014–0015 and review gallery schema 5, conditional definitions and installed source before synchronization ([upgrade guide](https://github.com/lacecms/lace/blob/v0.1.0-rc1/docs/compatibility.md#rc1-upgrade-and-rollback)).
 
 ## 0.1.0-alpha.8
 
@@ -50,7 +57,7 @@ announce publication. See [release status and evidence](docs/alpha-release.md).
 - Configure collection sorting, filters and additional search fields for draft editing without changing published order.
 - Optionally connect OAuth assistants through MCP with explicit consent, revocable access and five read/draft tools; publishing and deletion remain unavailable.
 - Update authentication, HTTP and build dependencies with upstream security fixes.
-- Upgrade engine, site and builder together, apply migrations 0010–0013 and review installed components and deployment configuration before synchronization ([upgrade guide](docs/compatibility.md#alpha-8-upgrade-and-rollback)).
+- Upgrade engine, site and builder together, apply migrations 0010–0013 and review installed components and deployment configuration before synchronization ([upgrade guide](https://github.com/lacecms/lace/blob/v0.1.0-alpha.8/docs/compatibility.md#alpha-8-upgrade-and-rollback)).
 
 ## 0.1.0-alpha.7
 
@@ -58,14 +65,14 @@ announce publication. See [release status and evidence](docs/alpha-release.md).
 - Astro renders responsive WebP variants, preserving GIF animation, with eligible blurred placeholders and an optional full-size lightbox.
 - Image blocks and gallery items accept links that take precedence over the lightbox.
 - Site builds reuse image/package caches; successful content-hashed assets cache for thirty days while HTML revalidates.
-- Upgrade engine, site and builder together, review installed components and deployment files, then synchronize image/gallery schemas; no new SQL migration since alpha.6 ([upgrade guide](docs/compatibility.md#alpha-7-upgrade-and-rollback)).
+- Upgrade engine, site and builder together, review installed components and deployment files, then synchronize image/gallery schemas; no new SQL migration since alpha.6 ([upgrade guide](https://github.com/lacecms/lace/blob/v0.1.0-alpha.8/docs/compatibility.md#alpha-7-upgrade-and-rollback)).
 
 ## 0.1.0-alpha.6
 
 - Build exports are paginated and version-bound; the SDK assembles pages and handles publication conflicts.
 - Public SDK reads accept additive API fields while retaining required-field and rendering safety checks.
 - Media used only by drafts can be detached and deleted with confirmation; published references remain protected.
-- Upgrade API, SDK, site and builder together; custom export clients must follow cursors, with no new database migration since alpha.5 ([upgrade guide](docs/compatibility.md#alpha-6-upgrade-and-rollback)).
+- Upgrade API, SDK, site and builder together; custom export clients must follow cursors, with no new database migration since alpha.5 ([upgrade guide](https://github.com/lacecms/lace/blob/v0.1.0-alpha.8/docs/compatibility.md#alpha-6-upgrade-and-rollback)).
 
 ## 0.1.0-alpha.5
 
@@ -73,4 +80,4 @@ announce publication. See [release status and evidence](docs/alpha-release.md).
 - Media gain descriptions and resolved public references; global models and SEO provide site-wide settings and metadata.
 - Blocks support anchors, classes, hidden state and settings; nested fields, Gallery and Navigation expand content composition.
 - Rich text adds code, rules and link options; organized forms add guidance and slug suggestions.
-- Upgrade engine and site packages together, apply pending migrations and review public-contract and backup boundaries ([upgrade guide](docs/compatibility.md#alpha-5-upgrade-and-rollback)).
+- Upgrade engine and site packages together, apply pending migrations and review public-contract and backup boundaries ([upgrade guide](https://github.com/lacecms/lace/blob/v0.1.0-alpha.8/docs/compatibility.md#alpha-5-upgrade-and-rollback)).

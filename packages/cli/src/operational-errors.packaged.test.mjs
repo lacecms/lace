@@ -341,7 +341,7 @@ test(
     const old = openNodeDatabase(path);
     try {
       old.connection.exec(
-        "create table __drizzle_migrations (id integer primary key autoincrement, hash text not null, created_at numeric); insert into __drizzle_migrations (hash, created_at) values ('old', 1789240330790);",
+        "create table __drizzle_migrations (id integer primary key autoincrement, hash text not null, created_at numeric); insert into __drizzle_migrations (hash, created_at) values ('old', 123456789);",
       );
     } finally {
       old.connection.close();
@@ -362,7 +362,7 @@ test(
         local.database.prepare("create table d1_migrations (id integer primary key, name text)"),
         local.database
           .prepare("insert into d1_migrations (id, name) values (1, ?)")
-          .bind("0000_exotic_tarantula.sql"),
+          .bind("unknown_fixture.sql"),
       ]);
     } finally {
       await local.close();
@@ -375,7 +375,7 @@ test(
     try {
       expect(
         (await after.database.prepare("select name from d1_migrations").all()).results,
-      ).toEqual([{ name: "0000_exotic_tarantula.sql" }]);
+      ).toEqual([{ name: "unknown_fixture.sql" }]);
     } finally {
       await after.close();
     }
@@ -385,7 +385,7 @@ test(
       vi.fn(() =>
         Response.json({
           success: true,
-          result: [{ success: true, results: [{ name: "0015_import_credentials.sql" }] }],
+          result: [{ success: true, results: [{ name: "unknown_fixture_b.sql" }] }],
         }),
       ),
     );

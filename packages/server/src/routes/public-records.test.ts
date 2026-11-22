@@ -66,6 +66,20 @@ test("records and collection reads answer 404 for the other kind", async () => {
     expect((await json(app, path)).response.status, path).toBe(404);
 });
 
+test("both public list families retain the invalid-cursor response", async () => {
+  const { app } = await publishedTestimonials();
+  for (const path of ["/api/v1/public/collections/posts", "/api/v1/public/records/testimonials"]) {
+    expect(await json(app, `${path}?after=invalid`)).toMatchObject({
+      response: { status: 422 },
+      body: { error: { code: "CONTENT_INVALID_STATE" } },
+    });
+    expect(await json(app, `${path}?after=`)).toMatchObject({
+      response: { status: 422 },
+      body: { error: { code: "VALIDATION_FAILED" } },
+    });
+  }
+});
+
 test("the build export and model DTOs describe route-less collections", async () => {
   const { app } = await publishedTestimonials();
   const exported = await buildExportJson(app);

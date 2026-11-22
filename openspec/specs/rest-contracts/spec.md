@@ -937,6 +937,38 @@ shape. Each public entry route and the build-export route SHALL document their
 - **THEN** validation succeeds with an empty `records` list, while the strict
   variant rejects the page
 
+### Requirement: Each ordinary public content response observes one committed state
+
+On Node and Cloudflare, each anonymous page, collection item by slug, by-path lookup, routed collection list, route-less record list and global read SHALL derive its complete response from one committed state observed during that request. When a republish replaces an existing snapshot and the requested resource remains published at the same address, the read SHALL succeed with the complete earlier or later representation. This guarantee covers resource identity, applicable path and slug, title, fields, publication time, SEO, visible blocks in order, delivered internal links and the public media dictionary. Waiting for the client to retry a missing snapshot, returning a spurious 404, and combining parts of different publications SHALL NOT satisfy the requirement.
+
+For either list family, page membership, order, item contents, media and the presence and value of the continuation cursor SHALL agree with that same state under the existing limit and cursor rules. Each subsequent page request observes its own committed state.
+
+#### Scenario: Republish keeps a route live
+
+- **WHEN** an anonymous request reads a page or collection item while a republish at the same path changes fields, visible blocks, an internal link and referenced media
+- **THEN** the first request returns 200 and its entire body equals the old or the new public body, including the publication timestamp and the corresponding media dictionary
+- **AND** lookup by path and the corresponding page or collection-slug endpoint provide the same consistency guarantee
+
+#### Scenario: A republished item moves across a page boundary
+
+- **WHEN** a republish advances an item's publication time across a limited page boundary during a routed collection list or route-less record list request
+- **THEN** the items, their order, media dictionary and next cursor all match the same pre-commit or post-commit page for that request, including on a continuation read
+
+#### Scenario: A route-less global is republished
+
+- **WHEN** a global remains published at its model key while a republish replaces a field, block and image
+- **THEN** the request returns 200 with that global's complete old or new public representation and matching media
+
+#### Scenario: A path actually moves or publication is withdrawn
+
+- **WHEN** a republish moves an entry to a new path or an unpublish removes the requested publication while a client reads the old address
+- **THEN** the request may return the complete prior representation or the established 404 according to the state observed, and a later read after the commit returns 404 at the old address if it remains absent
+
+#### Scenario: Only the draft changes
+
+- **WHEN** a writer changes fields, block order or media in a draft without publishing
+- **THEN** anonymous reads continue to return the published body and omit draft-only content and media
+
 ### Requirement: Public content responses resolve referenced media
 Every public content response SHALL carry a `media` object keyed by media ID
 containing exactly one item for every media ID referenced by the returned
@@ -1306,27 +1338,32 @@ shared schema for consumers and tests.
   globals and the SEO section, and has no `nextCursor`
 
 ### Requirement: Admin media deletion accepts a draft detach option
-`DELETE /api/v1/admin/media/:mediaId` SHALL accept an optional `detach` query
-parameter whose only valid value is `drafts`. Any other value, or a repeated
-parameter, SHALL fail with `422` `VALIDATION_FAILED` at the issue path
-`/detach` before any read. With `detach=drafts` the route SHALL request
-deletion with the draft detach option; without the parameter it SHALL request
-an ordinary deletion. Both forms SHALL answer an accepted request with `202`
-and the media DTO, and SHALL report refusals with the existing stable error
-pairs (`MEDIA_IN_USE` and `CONTENT_REVISION_CONFLICT` as `409`,
-`AUTHORIZATION_DENIED` as `403`, `CONTENT_INVALID_STATE` as `422`). The
-OpenAPI document SHALL describe the parameter.
+
+`DELETE /api/v1/admin/media/:mediaId` without detach SHALL keep ordinary deletion. With `detach=drafts` it SHALL support the following session-authenticated requests, each requiring both write permissions. Responses SHALL be validated against the published OpenAPI schemas.
+
+| Query in addition to `detach=drafts` | Success | Meaning |
+| --- | --- | --- |
+| None | `200 {state:"drafts", drafts:[{entryId, expectedRevision}]}` for 1–50 distinct entries, or `202` with the deleting media DTO for zero uses | Admit the current set or queue an unused item |
+| `step=entry&entryId=…&expectedRevision=…` | `200 {state:"entry-complete", entryId}` | The specified draft no longer uses this active item |
+| `step=finish` | `202` with the deleting media DTO and `usageCount: 0` | The guarded deletion event committed |
+
+Only `drafts` SHALL be valid for `detach`. Repeated protocol parameters, unsupported values, nonpositive or unsafe integer revisions, missing required entry arguments and illegal combinations (including step arguments without detach) SHALL return `422 VALIDATION_FAILED` at the offending or missing query field before application reads or writes. Existing session, origin and error contracts SHALL apply. Published usage, excess usage or any use at finish SHALL return `409 MEDIA_IN_USE`. A stale revision of a still-using eligible draft SHALL return `409 CONTENT_REVISION_CONFLICT`, a denied permission `403 AUTHORIZATION_DENIED`, and missing or inactive media `422 CONTENT_INVALID_STATE`. A progress response SHALL never imply a queued deletion.
 
 #### Scenario: A detaching deletion is accepted
-- **WHEN** an editor sends `DELETE /api/v1/admin/media/:mediaId?detach=drafts`
-  for an image used only by drafts
-- **THEN** the API returns `202` with the media DTO in status `deleting` and
-  `usageCount` 0
+- **WHEN** an editor requests detaching deletion for two draft-only entries, follows both returned entry steps and sends finish
+- **THEN** the API returns a two-entry plan, two matching acknowledgments, then the existing `202` media DTO with status `deleting` and zero usage
 
 #### Scenario: An unsupported detach value is rejected
-- **WHEN** a client sends `detach=all`
-- **THEN** the API returns `422` `VALIDATION_FAILED` with the issue path
-  `/detach` and no draft or media changes
+- **WHEN** a client sends `detach=all` or repeats `detach`
+- **THEN** the API returns `422 VALIDATION_FAILED` at `/detach` before application reads or writes
+
+#### Scenario: An incomplete step cannot become an ordinary deletion
+- **WHEN** a client sends `step=entry` without detach, or omits the expected revision from an entry step
+- **THEN** the request fails validation and leaves media, drafts and outbox untouched
+
+#### Scenario: Permissions expire between requests
+- **WHEN** an admitted editor loses a required permission before an entry or finish request
+- **THEN** that request returns the authorization refusal before accessing content or registering deletion work
 
 ### Requirement: Admin internal link queries and receipts are strict and bounded
 The authenticated API SHALL expose:

@@ -136,47 +136,69 @@ test("a rejected save publishes nothing and keeps the unsaved values", async () 
   expect(screen.getByRole("textbox", { name: "Title" })).toHaveValue("Rejected title");
 });
 
-test("unpublishing keeps unsaved values and follows the build", async () => {
-  const user = userEvent.setup();
-  const unpublishEntry = vi.fn<AdminClient["unpublishEntry"]>(async () => ({
-    build: { status: "queued", targetVersion: 6 },
-    entry: { ...publishedEntry, published: undefined } as unknown as AdminContentEntryDto,
-    unpublication: "unpublished",
-  }));
-  renderRoute(
-    "/content/posts/entry-1",
-    admin,
-    client({
-      listBuilds: async () => ({ items: [] }),
-      loadEntry: async () => publishedEntry,
-      unpublishEntry,
-    }),
-  );
-  await screen.findByRole("heading", { name: "Edit posts" });
-  await typeTitle(user, "Unsaved title");
-  await openEntryAction(user, "Unpublish");
-  await user.click(
-    within(await screen.findByRole("dialog", { name: "Unpublish this entry?" })).getByRole(
-      "button",
-      { name: "Unpublish" },
-    ),
-  );
-  await waitFor(() =>
-    expect(unpublishEntry).toHaveBeenCalledWith("entry-1", {
-      expectedPublishedSnapshotId: "published-1",
-      idempotencyKey: expect.any(String),
-      linkImpact: { receipt: "receipt", acknowledgePublishedLinks: true },
-    }),
-  );
-  const region = screen.getByRole("region", { name: "Publication status" });
-  await waitFor(() => expect(region).toHaveTextContent("LiveNot published"));
-  expect(
-    await within(region).findByText(/^Unpublished\. Build for version 6/u),
-  ).toBeInTheDocument();
-  expect(screen.getByRole("textbox", { name: "Title" })).toHaveValue("Unsaved title");
-  expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
-  await waitFor(() => expect(screen.getByRole("button", { name: "Entry actions" })).toHaveFocus());
-});
+test.each([4, 5])(
+  "unpublishing keeps unsaved values and follows the build (server draft revision: %i)",
+  async (revision) => {
+    const user = userEvent.setup();
+    const unpublishEntry = vi.fn<AdminClient["unpublishEntry"]>(async () => ({
+      build: { status: "queued", targetVersion: 6 },
+      entry: {
+        ...publishedEntry,
+        draft: {
+          ...publishedEntry.draft,
+          revision,
+          title: revision === 4 ? publishedEntry.draft.title : "Saved concurrently",
+        },
+        published: undefined,
+      },
+      unpublication: "unpublished",
+    }));
+    renderRoute(
+      "/content/posts/entry-1",
+      admin,
+      client({
+        listBuilds: async () => ({ items: [] }),
+        loadEntry: async () => publishedEntry,
+        unpublishEntry,
+      }),
+    );
+    await screen.findByRole("heading", { name: "Edit posts" });
+    await typeTitle(user, "Unsaved title");
+    await openEntryAction(user, "Unpublish");
+    await user.click(
+      within(await screen.findByRole("dialog", { name: "Unpublish this entry?" })).getByRole(
+        "button",
+        { name: "Unpublish" },
+      ),
+    );
+    await waitFor(() =>
+      expect(unpublishEntry).toHaveBeenCalledWith("entry-1", {
+        expectedPublishedSnapshotId: "published-1",
+        idempotencyKey: expect.any(String),
+        linkImpact: { receipt: "receipt", acknowledgePublishedLinks: true },
+      }),
+    );
+    const region = screen.getByRole("region", { name: "Publication status" });
+    await waitFor(() => expect(region).toHaveTextContent("LiveNot published"));
+    expect(
+      await within(region).findByText(/^Unpublished\. Build for version 6/u),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Title" })).toHaveValue("Unsaved title");
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    expect(region).toHaveTextContent("DraftRevision 4");
+    if (revision === 5)
+      expect(
+        await screen.findByRole("alert", { name: "Draft changed elsewhere" }),
+      ).toBeInTheDocument();
+    else
+      expect(
+        screen.queryByRole("alert", { name: "Draft changed elsewhere" }),
+      ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Entry actions" })).toHaveFocus(),
+    );
+  },
+);
 
 test("reverting saved changes adopts the published version without publishing", async () => {
   const user = userEvent.setup();

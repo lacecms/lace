@@ -1,3 +1,4 @@
+import type { PackageKeys } from "./import-references.js";
 import { describe, expect, test } from "vitest";
 import {
   collectReferences,
@@ -20,13 +21,13 @@ const modelFields = {
 };
 const blockFields = (type: string) =>
   type === "image" ? { media: { type: "media" }, link: { type: "url" } } : undefined;
-const keys = {
+const keys: PackageKeys = {
   media: new Set(["hero"]),
   entries: new Map([
     ["about", { key: "pages", kind: "page" }],
-    ["contact", { key: "contacts", kind: "collection" }],
+    ["contact", { key: "contacts", kind: "collection", route: "/contacts/:slug" }],
     ["settings", { key: "settings", kind: "global" }],
-    ["review", { key: "reviews", kind: "collection", routeLess: true }],
+    ["review", { key: "reviews", kind: "collection" }],
   ]),
 };
 

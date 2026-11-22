@@ -18,6 +18,11 @@ the content tables ([ADR 0026](../adr/0026-code-defined-models-two-snapshots.md)
 `content_models` holds each configured model's `key`, `kind` (`page`,
 `collection` or `global`), label, configuration version and sync hashes.
 
+- The live Drizzle schema generates the `kind` CHECK from the descriptor keys.
+  A new kind requires a versioned table rebuild for SQLite and D1 that
+  preserves model rows, their referencing entries and foreign-key actions.
+  Released migration SQL and snapshots retain the constraints of their
+  versions. [ADR 0010](../adr/0010-global-models.md)
 - `key` is a stable programmatic identifier. Labels may change freely; renaming
   a key is a migration, not a display-name edit.
 - `structure_json` is the canonical structure as of the last successful sync,
@@ -181,6 +186,14 @@ Shared `db` write plans define media creation, edits, deletion requests and
 lease-guarded deletion outcomes for both runtimes. Metadata, hashes and tags
 commit together; object upload and idempotent deletion remain external effects.
 
+Upload writes the object first. Cleanup after a metadata failure requires a
+settled write that did not commit and an authoritative check that the object key
+has no owner. A response can fail while reading an already committed item. In
+that case the active row, tags, hash and exact object bytes remain available.
+An unresolved write leaves the object in place because a matching row may
+already exist or the write may still commit. Diagnostics identify the unresolved
+outcome using the opaque key. [Media creation contract](../../openspec/specs/media-use-cases/spec.md#requirement-object-and-metadata-creation-preserve-a-recoverable-boundary)
+
 The projection is the only source of media usage: an entry uses an item when
 its current draft or current published snapshot references it in an entry
 field, a block field or its SEO image. Only current snapshots keep references,
@@ -206,11 +219,13 @@ outbox event atomically. The dispatcher deletes the object, then the metadata
 row; failures set `delete_failed` and stay retryable. Neither a dangling
 published reference nor an SQL/object-storage half-delete can remain.
 
-The `detach=drafts` option removes the item from every using draft through
-ordinary guarded draft saves, then requests deletion through the unchanged
-guard. It refuses before any change when a current published snapshot uses the
-item or when more entries use it than the usage read returns. Draft saves are
-atomic and never touch published snapshots, so detaching requests no build.
+Draft detachment admits up to 50 distinct entry IDs and revisions from the
+current reference projection. Any published use blocks admission. Each
+confirmed draft is a separate atomic save with live media, usage and revision
+guards. Replaying a step after its reference disappeared acknowledges it without
+advancing the revision. Published snapshots stay immutable. Finish checks all
+current references and atomically queues deletion. Committed edits survive a
+conflict on another draft. An unused item can queue deletion at admission.
 
 The default limit is 10 MiB and the initial allowlist is JPEG, PNG, WebP, GIF
 and AVIF. Deployment configuration may narrow both but cannot expand them

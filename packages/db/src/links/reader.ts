@@ -31,7 +31,13 @@ import type {
   LinkUsageSource,
   OpaqueCursor,
 } from "@lacecms/application";
-import { DomainError } from "@lacecms/domain";
+import { DomainError, isContentModelKind } from "@lacecms/domain";
+import {
+  isReferenceModelKind,
+  isUrlLinkModelKind,
+  REFERENCE_MODEL_KINDS_SQL,
+  URL_LINK_MODEL_KINDS_SQL,
+} from "../shared/model-kind-sql.js";
 import { encodeBase64Url, decodeBase64Url } from "../shared/base64.js";
 import {
   impactSourceCondition,
@@ -66,8 +72,10 @@ function drift(): never {
 }
 function target(row: TargetRow): LinkTargetStatus {
   if (row.id === null) return { id: row.requested_id, state: "missing" };
-  if (row.kind === "global") return { id: row.id, state: "non-routable", modelKey: row.model_key! };
-  if ((row.kind !== "page" && row.kind !== "collection") || row.title === null) return invalid();
+  if (!isContentModelKind(row.kind)) return invalid();
+  if (!isUrlLinkModelKind(row.kind))
+    return { id: row.id, state: "non-routable", modelKey: row.model_key! };
+  if (row.title === null) return invalid();
   const value = {
     id: row.id,
     modelKey: row.model_key!,
@@ -80,8 +88,9 @@ function target(row: TargetRow): LinkTargetStatus {
 }
 function referenceTarget(row: TargetRow): ReferenceTargetStatus {
   if (row.id === null) return { id: row.requested_id, state: "missing" };
-  if (row.kind === "global") return { id: row.id, state: "ineligible" };
-  if ((row.kind !== "page" && row.kind !== "collection") || row.title === null) return invalid();
+  if (!isContentModelKind(row.kind)) return invalid();
+  if (!isReferenceModelKind(row.kind)) return { id: row.id, state: "ineligible" };
+  if (row.title === null) return invalid();
   const item = {
     id: row.id,
     modelKey: row.model_key!,
@@ -236,7 +245,7 @@ export class SqlContentLinkReader implements ContentLinkReadPort, ContentReferen
       s.id as snapshot_id, p.path, e.published_snapshot_id from content_snapshots s indexed by content_snapshots_title_prefix_idx
       join content_entries e on e.id=s.entry_id and e.draft_snapshot_id=s.id join content_models m on m.key=e.model_key
       left join published_routes p on p.entry_id=e.id and p.snapshot_id=e.published_snapshot_id
-      where s.title like ? escape '\\' and m.kind in ('page','collection')
+      where s.title like ? escape '\\' and m.kind in ${purpose === "reference" ? REFERENCE_MODEL_KINDS_SQL : URL_LINK_MODEL_KINDS_SQL}
       and e.model_key not in (select value from json_each(?))
       and (? is null or e.model_key=?) and (? is null or (case when p.path is null then 'unpublished' else 'published' end)=?)
       and (? is null or s.title collate nocase > ? or (s.title collate nocase = ? and s.id > ?))

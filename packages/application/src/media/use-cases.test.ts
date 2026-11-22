@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { DomainError, mediaId, contentEntryId, contentModelKey } from "@lacecms/domain";
 import {
   mediaEditor,
@@ -10,6 +10,7 @@ import {
   bytes,
 } from "../test-support/media-fixtures.js";
 import type { MediaMetadata } from "@lacecms/domain";
+import { MediaCreateError } from "../ports/media.js";
 import type {
   MediaCatalogItem,
   ListMediaInput,
@@ -188,12 +189,16 @@ test("resolves media binary eligibility without reading object storage", async (
   expect(storageReads).toEqual(["media/media-1"]);
 });
 
-test("deletes the uploaded object if metadata persistence fails", async () => {
+test("deletes an unowned upload after confirmed rollback", async () => {
   const deleted: string[] = [];
+  const original = new Error("metadata failed");
   const media = mediaUseCases(
     {
       async createMedia() {
-        throw new Error("metadata failed");
+        throw new MediaCreateError("rolled-back", original);
+      },
+      async checkMediaUploadOwnership() {
+        return "absent";
       },
     },
     {
@@ -209,6 +214,56 @@ test("deletes the uploaded object if metadata persistence fails", async () => {
   );
   await expect(
     media.create({ actor: mediaEditor, body: bytes(pngBytes), filename: "cover.png" }),
-  ).rejects.toThrow("metadata failed");
+  ).rejects.toBe(original);
   expect(deleted).toEqual(["media/media-1"]);
+});
+
+test("retains the uploaded object when an empty read cannot rule out a pending create", async () => {
+  const original = new Error("metadata request timed out");
+  const checkMediaUploadOwnership = vi.fn(async () => "absent" as const);
+  const deleteObject = vi.fn();
+  const logError = vi.fn(async () => {
+    throw new Error("logger unavailable");
+  });
+  const media = mediaUseCases(
+    {
+      async createMedia() {
+        throw original;
+      },
+      checkMediaUploadOwnership,
+    },
+    {
+      logger: { error: logError },
+      storage: {
+        async put(input) {
+          return { contentType: input.contentType, key: input.key, size: pngBytes.byteLength };
+        },
+        delete: deleteObject,
+      },
+    },
+  );
+  await expect(
+    media.create({ actor: mediaEditor, body: bytes(pngBytes), filename: "private.png" }),
+  ).rejects.toBe(original);
+  expect(checkMediaUploadOwnership).toHaveBeenCalledExactlyOnceWith("media-1", "media/media-1");
+  expect(deleteObject).not.toHaveBeenCalled();
+  expect(logError).toHaveBeenCalledExactlyOnceWith({
+    code: "MEDIA_METADATA_CREATE_OUTCOME_UNRESOLVED",
+    storageKey: "media/media-1",
+  });
+});
+
+test("each detachment command requires both write permissions before data access", async () => {
+  const media = mediaUseCases({});
+  for (const permission of ["content:write", "media:write"] as const) {
+    const actor = { ...mediaEditor, authority: { permissions: [permission], operations: [] } };
+    for (const step of [
+      {},
+      { step: "entry", entryId: contentEntryId("entry"), expectedRevision: 1 },
+      { step: "finish" },
+    ] as const)
+      await expect(
+        media.detachDeletion({ ...step, actor, mediaId: mediaId("media") }),
+      ).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
+  }
 });

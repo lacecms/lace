@@ -1,4 +1,6 @@
 import type { CreateContentEntryInput, SaveCompleteDraftInput } from "@lacecms/application";
+import { detachOwnersSql } from "./media-detachment.js";
+import { MAX_MEDIA_USAGE_ENTRIES } from "@lacecms/content";
 import { DomainError, isSingletonKind } from "@lacecms/domain";
 import type { DraftMediaReference } from "@lacecms/domain";
 import { replaceInternalLinkStatements } from "../links/statements.js";
@@ -16,6 +18,9 @@ export type DraftGuardMiss =
   | "stale_source"
   | "missing_draft"
   | "stale_draft"
+  | "detach_inactive"
+  | "detach_blocked"
+  | "detach_absent"
   | "media";
 
 type GuardRow = {
@@ -126,28 +131,42 @@ export function createDraftWritePlan(
 export function saveDraftWritePlan(
   input: SaveCompleteDraftInput,
   draftId: string,
+  detachMediaId?: string,
 ): WritePlan<DraftGuardMiss | ReferenceMiss> {
   const m = input.mutation;
+  const detachState =
+    detachMediaId === undefined
+      ? "1"
+      : `(with owners as (${detachOwnersSql})
+    select case
+      when not exists(select 1 from media where id=? and status='active') then -1
+      when count(*) > ${MAX_MEDIA_USAGE_ENTRIES} or max(published)=1 then -2
+      when count(case when entry_id=? then 1 end)=0 then 0
+      else 1 end from owners)`;
   const stateSql = `select exists(select 1 from content_entries where id=? and draft_snapshot_id is not null) as model_ok,
     exists(select 1 from content_entries e join content_snapshots s on s.id=e.draft_snapshot_id where e.id=? and s.id=? and s.revision=?) as revision_ok,
-    ${mediaCheck} as media_ok`;
+    ${mediaCheck} as media_ok, ${detachState} as detach_ok`;
   const stateParams = [
     input.entryId,
     input.entryId,
     draftId,
     m.expectedRevision,
     mediaIds(m.mediaReferences),
+    ...(detachMediaId === undefined ? [] : [detachMediaId, detachMediaId, input.entryId]),
   ];
   const candidate = input.entryReferences;
   const links = [...(input.internalLinks ?? []), ...(candidate?.references ?? [])];
   const plan: WritePlan<DraftGuardMiss> = {
     admission: {
-      sql: `exists(select 1 from (${stateSql}) where model_ok and revision_ok and media_ok)`,
+      sql: `exists(select 1 from (${stateSql}) where model_ok and revision_ok and media_ok and detach_ok=1)`,
       params: stateParams,
     },
     diagnostics: { state: { sql: stateSql, params: stateParams } },
     diagnose: (rows) => {
-      const row = rows.state?.[0] as GuardRow;
+      const row = rows.state?.[0] as GuardRow & { detach_ok: number };
+      if (row.detach_ok === -1) return "detach_inactive";
+      if (row.detach_ok === -2) return "detach_blocked";
+      if (row.detach_ok === 0) return "detach_absent";
       return !row.model_ok ? "missing_draft" : !row.revision_ok ? "stale_draft" : "media";
     },
     statements: (g) => [
@@ -200,6 +219,15 @@ export function saveDraftWritePlan(
 export function rejectDraftWrite(reason: DraftGuardMiss | ReferenceMiss, modelKey: string): never {
   if (typeof reason !== "string") return rejectReferenceWrite(reason);
   switch (reason) {
+    case "detach_inactive":
+      throw new DomainError("CONTENT_INVALID_STATE", "Media must exist and be active.");
+    case "detach_blocked":
+      throw new DomainError(
+        "MEDIA_IN_USE",
+        "Published usage or the entry limit prevents detachment.",
+      );
+    case "detach_absent":
+      throw new Error("Absent draft usage must be acknowledged by the detach command.");
     case "missing_model":
       throw new DomainError("CONTENT_INVALID_STATE", `Content model ${modelKey} does not exist.`);
     case "singleton":

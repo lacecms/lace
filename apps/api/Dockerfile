@@ -5,7 +5,7 @@ ENV npm_config_manage_package_manager_versions=false
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends build-essential python3 \
     && rm -rf /var/lib/apt/lists/* \
-    && npm install --global pnpm@12.3.4
+    && npm install --global pnpm@12.21.0
 WORKDIR /opt/lace/workspace
 COPY . .
 RUN pnpm install --frozen-lockfile \
@@ -17,7 +17,7 @@ RUN pnpm install --frozen-lockfile \
     && cp -R apps/admin/dist /runtime/apps/admin/dist
 
 FROM node:24.22.3-bookworm-slim
-ARG LACE_VERSION=0.1.0-rc6
+ARG LACE_VERSION=1.0.0
 ARG LACE_REVISION=unrecorded
 LABEL org.opencontainers.image.source="https://github.com/lacecms/lace" \
     org.opencontainers.image.version=$LACE_VERSION \

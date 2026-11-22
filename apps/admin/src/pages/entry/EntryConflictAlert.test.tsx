@@ -9,7 +9,6 @@ test("the conflict alert offers reload and copy and reports their failures", asy
   const onReload = vi.fn();
   render(
     <EntryConflictAlert
-      conflict="save"
       copyError="Could not copy local JSON."
       onCopy={onCopy}
       onReload={onReload}
@@ -18,7 +17,7 @@ test("the conflict alert offers reload and copy and reports their failures", asy
     />,
   );
   const alert = screen.getByRole("alert", { name: "Draft changed elsewhere" });
-  expect(alert).toHaveTextContent("Your local save values are still available.");
+  expect(alert).toHaveTextContent("Your local draft is still open.");
   await user.click(screen.getByRole("button", { name: "Reload server draft" }));
   await user.click(screen.getByRole("button", { name: "Copy my JSON" }));
   expect(onReload).toHaveBeenCalledTimes(1);

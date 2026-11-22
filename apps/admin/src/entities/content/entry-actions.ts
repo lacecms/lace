@@ -1,3 +1,4 @@
+import { modelKindDescriptor } from "@lacecms/content";
 import type { ContentModelDto } from "@lacecms/contracts";
 
 /** The lifecycle actions an entry menu offers; each mirrors the API's permission rule. */
@@ -23,10 +24,10 @@ export function entryActions(input: {
   /** The editor form differs from the saved draft. */
   readonly unsavedChanges: boolean;
 }): EntryActions {
-  const collection = input.kind === "collection";
+  const many = modelKindDescriptor(input.kind).cardinality === "many";
   return {
-    delete: input.canWrite && collection && (!input.published || input.canPublish),
-    duplicate: input.canWrite && collection,
+    delete: input.canWrite && many && (!input.published || input.canPublish),
+    duplicate: input.canWrite && many,
     revert: input.canWrite && input.published && (input.savedChanges || input.unsavedChanges),
     unpublish: input.canPublish && input.published,
   };

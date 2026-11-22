@@ -333,11 +333,14 @@ test("accepts a global payload without a slug and rejects other kinds", () => {
       /\$\.slug.*not allowed/u,
     );
   }
-  // Exercise rejection of an invalid model kind at runtime.
-  // @ts-expect-error Deliberately invalid model kind.
-  expect(() => validateEntryPayload({ ...global, kind: "singleton" }, "draft")).toThrow(
-    /\$\.kind/u,
-  );
+  for (const kind of ["article", "constructor"]) {
+    expect(
+      issueFrom(() =>
+        // @ts-expect-error Deliberately invalid model kind.
+        validateEntryPayload({ ...global, kind, title: "" }, "publish"),
+      ),
+    ).toMatchObject({ path: ["kind"], code: "invalid_model_kind" });
+  }
 });
 
 test("route-less collection payloads publish without a slug and reject one", () => {
