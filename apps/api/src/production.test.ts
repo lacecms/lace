@@ -32,9 +32,11 @@ test("separate dispatcher keeps polling after one build dispatch failure", async
   let media = 0;
   let errors = 0;
   const loop = startDispatchLoop({
-    build: async () => {
-      builds += 1;
-      if (builds === 1) throw new Error("offline");
+    buildDispatcher: {
+      runOnce: async () => {
+        builds += 1;
+        if (builds === 1) throw new Error("offline");
+      },
     },
     media: async () => {
       media += 1;

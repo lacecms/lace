@@ -10,7 +10,7 @@ async function main(): Promise<void> {
   await runtime.maintainOperations();
   await runtime.verifyStorage();
   const loop = startDispatchLoop({
-    build: () => runtime.buildDispatcher.runOnce(),
+    buildDispatcher: runtime.buildDispatcher,
     media: async () => {
       await runtime.maintainOAuth();
       await runtime.maintainOperations();
