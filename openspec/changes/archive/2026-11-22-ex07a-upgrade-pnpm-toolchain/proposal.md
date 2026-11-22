@@ -20,6 +20,6 @@ None.
 
 ## Impact
 
-Generated projects continue to declare pnpm `>=12`. This session covers release engineering and compatibility guidance. Node versions, public package and image coordinates, publication, database migrations and deployed environments are outside scope. The release matrix records RC5 as published and RC6 as the selected candidate. See [roadmap EX7A](../../../docs/extensibility-roadmap.md#session-ex7a--upgrade-the-pinned-release-toolchain-to-pnpm-12210) and the [release matrix](../../../docs/compatibility.md#release-line).
+Generated projects continue to declare pnpm `>=12`. This session covers release engineering and compatibility guidance. Node versions, public package and image coordinates, publication, database migrations and deployed environments are outside scope. The release matrix records RC5 as published and RC6 as the selected candidate. See [roadmap EX7A](../../../../docs/extensibility-roadmap.md#session-ex7a--upgrade-the-pinned-release-toolchain-to-pnpm-12210) and the [release matrix](../../../../docs/compatibility.md#release-line).
 
-Architecture §§6, 19–20 govern the workspace, dependency policy and checks. Sections 7 and 22 govern generated projects and compatibility. [Workspace architecture](../../../docs/architecture/workspace.md) · [Distribution architecture](../../../docs/architecture/distribution.md)
+Architecture §§6, 19–20 govern the workspace, dependency policy and checks. Sections 7 and 22 govern generated projects and compatibility. [Workspace architecture](../../../../docs/architecture/workspace.md) · [Distribution architecture](../../../../docs/architecture/distribution.md)

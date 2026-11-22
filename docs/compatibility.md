@@ -140,7 +140,7 @@ versions and dependency locks are separate from the minimums:
 | Acceptance pnpm | `12.21.0` for the current candidate | The harness selects the workspace pin for installs and commands in disposable consumers |
 | Dependencies | exact versions | `pnpm-lock.yaml` and the workspace catalog |
 
-On 2026-11-22, Node `24.12.0` and pnpm `12.21.0` passed a clean frozen install and native SQLite query on macOS arm64. The packed starter and local Worker passed. Both API and builder images passed smoke checks on `linux/amd64` and `linux/arm64` with Node `24.22.3`. Full exact-artifact acceptance passed on `linux/arm64` for revision `0f8f8be0`. The saved inventory and acceptance receipt are in `.release-artifacts/ex7a-0f8f8be0/`. See the [EX7A verification record](../openspec/changes/ex07a-upgrade-pnpm-toolchain/verification.md) for the hashes and dependency review.
+On 2026-11-22, Node `24.12.0` and pnpm `12.21.0` passed a clean frozen install and native SQLite query on macOS arm64. The packed starter and local Worker passed. Both API and builder images passed smoke checks on `linux/amd64` and `linux/arm64` with Node `24.22.3`. Full exact-artifact acceptance passed on `linux/arm64` for revision `0f8f8be0`. The saved inventory and acceptance receipt are in `.release-artifacts/ex7a-0f8f8be0/`. See the [EX7A verification record](../openspec/changes/archive/2026-11-22-ex07a-upgrade-pnpm-toolchain/verification.md) for the hashes and dependency review.
 
 Dependency engine audit (2026-10-06, resolved lockfile metadata): Astro 7.3.1
 `>=22.12.0`, better-sqlite3 13.0.3 `>=22`, Wrangler 4.129.0 and Miniflare
