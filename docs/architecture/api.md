@@ -170,6 +170,10 @@ description.
   deletion and unpublication. Draft-only deletion review and existing URL
   review use separate receipts. Content validation may include a bounded cycle
   witness and a verified source to publish first for an authorized reader.
+- Media deletion with `detach=drafts` uses the session-authenticated DELETE
+  route for admission, one named entry and revision per request, and finish.
+  Every request requires both write permissions. HTTP 200 carries progress,
+  and HTTP 202 carries the deleting item after the outbox commit.
 - Media tags are read with `content:read` and changed with `media:write`; tag
   filters and the tag catalog are bounded reads
   ([media-use-cases](../../openspec/specs/media-use-cases/spec.md), "Media

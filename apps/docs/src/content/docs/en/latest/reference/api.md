@@ -159,10 +159,78 @@ source and phase. If that limit is reached, reduce dependencies and retry.
 | POST   | `/api/v1/admin/media`                          | Upload a file (multipart `file`) with optional `tags` parts.                        | `media:write`, or import token                           |
 | GET    | `/api/v1/admin/media/{mediaId}`                | Read media details and its `ETag`.                                                  | `content:read`, or import token                          |
 | PATCH  | `/api/v1/admin/media/{mediaId}`                | Update alt text, caption, focal point or tags with the item's `ETag` in `If-Match`. | `media:write`, or import token                           |
-| DELETE | `/api/v1/admin/media/{mediaId}`                | Request media deletion; `?detach=drafts` first removes it from current drafts.      | `media:write`; also `content:write` with `detach=drafts` |
+| DELETE | `/api/v1/admin/media/{mediaId}`                | Queue an unused item or start, advance and finish draft detachment.                 | `media:write`; also `content:write` with `detach=drafts` |
 | POST   | `/api/v1/admin/media/{mediaId}/retry-deletion` | Retry a failed media deletion.                                                      | `media:write`                                            |
 | GET    | `/api/v1/admin/media/{mediaId}/preview`        | Stream the media file for Admin previews.                                           | `content:read`                                           |
 | GET    | `/api/v1/admin/media/tags`                     | List media tags with item counts by prefix.                                         | `content:read`                                           |
+
+#### Delete media used by drafts
+
+**Compatibility change.** A direct client that previously expected one
+`202` for `?detach=drafts` must now handle intermediate `200` responses.
+Use a same-origin editor session. Pass the distinct entry IDs the editor
+confirmed in the usage list to this example.
+
+```js
+async function deleteFromDrafts(mediaId, confirmedIds) {
+  const path = "/api/v1/admin/media/" + encodeURIComponent(mediaId);
+  async function send(params = {}) {
+    const query = new URLSearchParams({ detach: "drafts", ...params });
+    const response = await fetch(path + "?" + query, {
+      method: "DELETE",
+      credentials: "same-origin",
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error.code);
+    return { status: response.status, body };
+  }
+  function receipt({ status, body }) {
+    if (
+      status !== 202 ||
+      body.id !== mediaId ||
+      body.status !== "deleting" ||
+      body.usageCount !== 0
+    )
+      throw new Error("Unexpected deletion receipt");
+    return body;
+  }
+  const start = await send();
+  if (start.status === 202) return receipt(start);
+  const approved = new Set(confirmedIds);
+  const { drafts, state } = start.body;
+  if (
+    start.status !== 200 ||
+    state !== "drafts" ||
+    !Array.isArray(drafts) ||
+    !drafts.length ||
+    drafts.length > 50 ||
+    drafts.length !== approved.size ||
+    !drafts.every(
+      (d) =>
+        approved.delete(d.entryId) &&
+        Number.isSafeInteger(d.expectedRevision) &&
+        d.expectedRevision > 0,
+    )
+  )
+    throw new Error("Refresh usage and review the current drafts");
+  for (const { entryId, expectedRevision } of drafts) {
+    const ack = await send({ step: "entry", entryId, expectedRevision: String(expectedRevision) });
+    if (ack.status !== 200 || ack.body.state !== "entry-complete" || ack.body.entryId !== entryId)
+      throw new Error("Unexpected draft acknowledgment");
+  }
+  return receipt(await send({ step: "finish" }));
+}
+```
+
+If a response is lost, fetch the media details. For active media, replay
+the uncertain entry at its original revision or retry finish. A pending,
+failed or missing item ends the saved plan. A `409 MEDIA_IN_USE` means
+published usage, more than 50 owners, or a remaining reference at finish.
+A `409 CONTENT_REVISION_CONFLICT` requires review of the changed draft.
+Previously acknowledged saves remain committed. A missing or inactive item
+returns `422 CONTENT_INVALID_STATE`. Invalid or repeated query parameters
+return `422 VALIDATION_FAILED`. An expired session returns `401` and missing
+write permission returns `403 AUTHORIZATION_DENIED`.
 
 ### Builds and tokens
 

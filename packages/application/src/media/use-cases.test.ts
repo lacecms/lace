@@ -252,3 +252,18 @@ test("retains the uploaded object when an empty read cannot rule out a pending c
     storageKey: "media/media-1",
   });
 });
+
+test("each detachment command requires both write permissions before data access", async () => {
+  const media = mediaUseCases({});
+  for (const permission of ["content:write", "media:write"] as const) {
+    const actor = { ...mediaEditor, authority: { permissions: [permission], operations: [] } };
+    for (const step of [
+      {},
+      { step: "entry", entryId: contentEntryId("entry"), expectedRevision: 1 },
+      { step: "finish" },
+    ] as const)
+      await expect(
+        media.detachDeletion({ ...step, actor, mediaId: mediaId("media") }),
+      ).rejects.toMatchObject({ code: "AUTHORIZATION_DENIED" });
+  }
+});

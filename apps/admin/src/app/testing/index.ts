@@ -214,6 +214,9 @@ export function stubClient(overrides: Partial<AdminClient> = {}): AdminClient {
     listMedia: async () => ({ items: [] }),
     getMedia: async () => ({ ...mediaItem, usage: [] }),
     uploadMedia: async () => ({}) as never,
+    detachMedia: async () => {
+      throw new Error("Unexpected detach request");
+    },
     deleteMedia: async () => ({}) as never,
     retryMediaDeletion: async () => ({}) as never,
     updateMediaMetadata: async () => ({}) as never,

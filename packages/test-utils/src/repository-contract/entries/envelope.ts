@@ -485,3 +485,87 @@ contract(
     ).toBe("deleting");
   },
 );
+
+contract(
+  "detaches a named draft once preserving nested content and envelopes",
+  async (runtime, expect) => {
+    const config = await defineConfig({
+      blocks: [
+        defineBlock({
+          type: "gallery",
+          version: 1,
+          fields: {
+            cells: field.list({
+              item: field.group({ fields: { image: field.media(), caption: field.text() } }),
+            }),
+          },
+          settings: { tone: field.text({ defaultValue: "white" }) },
+        }),
+      ],
+      content: [
+        defineCollection({
+          key: "posts",
+          version: 1,
+          route: "/posts/:slug",
+          blocks: ["gallery"],
+          seo: true,
+          fields: { cover: field.media(), photos: field.list({ item: field.media() }) },
+        }),
+      ],
+    });
+    const { repository, sql } = await runtime.open({
+      resolveModel: syncResolver(config.runtime.content),
+    });
+    await seedModels(sql, "posts");
+    for (const id of ["used", "keep"]) await seedMedia(sql, id);
+    const content = new ContentUseCases({
+      content: repository,
+      media: repository,
+      config: config.runtime,
+      listQueryLimits: runtime.listQueryLimits,
+      clock: { now: () => unixMilliseconds(2) },
+      idGenerator: { next: sequence("detach") },
+    });
+    const block = {
+      key: blockKey("gallery"),
+      type: "gallery",
+      schemaVersion: 1,
+      position: 1000,
+      hidden: true,
+      settings: { tone: "blue" },
+      anchor: "gallery",
+      className: "wide",
+      data: { cells: [{ image: "used", caption: "one" }, { image: "keep" }] },
+    };
+    const created = await content.create({
+      actor: editor,
+      modelKey: "posts",
+      title: "A",
+      slug: "post",
+      fields: { cover: "used", photos: ["used", "keep"] },
+      seo: { image: "used", title: "SEO" },
+      blocks: [block],
+    });
+    const input = {
+      actor: admin,
+      entryId: created.id,
+      mediaId: mediaId("used"),
+      expectedRevision: 1,
+    };
+    expect(await content.detachMedia(input)).toBe(true);
+    expect(await content.detachMedia(input)).toBe(false);
+    expect((await repository.load(input))?.draft).toMatchObject({
+      title: "A",
+      slug: "post",
+      revision: 2,
+      updatedBy: { id: admin.id },
+      fields: { photos: ["keep"] },
+      seo: { title: "SEO" },
+      blocks: [{ ...block, data: { cells: [{ caption: "one" }, { image: "keep" }] } }],
+    });
+    expect(await repository.loadDetachDrafts(mediaId("used"))).toEqual([]);
+    expect(await repository.loadDetachDrafts(mediaId("keep"))).toEqual([
+      { entryId: created.id, expectedRevision: 2 },
+    ]);
+  },
+);

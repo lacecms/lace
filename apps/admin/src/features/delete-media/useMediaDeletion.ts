@@ -1,4 +1,6 @@
-import type { MediaMetadataDto, MediaUsageEntryDto } from "@lacecms/contracts";
+import type { MediaMetadataDto } from "@lacecms/contracts";
+import { runDetach, type ConfirmedEntry } from "./detach-sequence.js";
+import type { Checkpoint } from "./detach-checkpoint.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AdminClientError,
@@ -7,44 +9,40 @@ import {
   useAdminClient,
 } from "../../shared/api/index.js";
 
-/** Entries whose drafts a detaching deletion changes. */
-export type DetachedEntries = readonly Pick<MediaUsageEntryDto, "entryId" | "modelKey">[];
-
-/**
- * Requests deletion of an active item, or retries a failed deletion. With
- * `detachFrom`, the server first removes the item from those entries' drafts,
- * whose cached state is then refreshed.
- */
+interface DeleteInput {
+  id: string;
+  retry: boolean;
+  detach?: {
+    key: string;
+    confirmed: readonly ConfirmedEntry[];
+    resume: Checkpoint | null;
+    active: () => boolean;
+    progress: (p: Checkpoint) => void;
+    attempt: () => void;
+  };
+}
 export function useMediaDeletion(onChanged: (item: MediaMetadataDto) => void) {
   const client = useAdminClient();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      detachFrom,
-      id,
-      retry,
-    }: {
-      readonly detachFrom?: DetachedEntries;
-      readonly id: string;
-      readonly retry: boolean;
-    }) =>
-      retry
-        ? client.retryMediaDeletion(id)
-        : detachFrom === undefined
-          ? client.deleteMedia(id)
-          : client.deleteMedia(id, { detachDrafts: true }),
-    onSettled: async (_item, _error, { detachFrom = [] }) => {
-      // A refused detaching request may still have changed earlier drafts.
-      await Promise.all(
-        detachFrom.flatMap((entry) => [
+    mutationFn: ({ id, retry, detach }: DeleteInput) =>
+      detach
+        ? runDetach({ client, id, ...detach })
+        : retry
+          ? client.retryMediaDeletion(id)
+          : client.deleteMedia(id),
+    onSuccess: (item) => onChanged(item),
+    onSettled: async (_item, _error, { detach }) => {
+      const entries = detach?.resume?.drafts ?? detach?.confirmed ?? [];
+      await Promise.all([
+        ...entries.map((entry) =>
           queryClient.invalidateQueries({ queryKey: adminQueryKeys.entry(entry.entryId) }),
-          queryClient.invalidateQueries({ queryKey: adminQueryKeys.modelEntries(entry.modelKey) }),
-        ]),
-      );
-    },
-    onSuccess: async (item) => {
-      onChanged(item);
-      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.media });
+        ),
+        ...[...new Set(entries.map((entry) => entry.modelKey))].map((key) =>
+          queryClient.invalidateQueries({ queryKey: adminQueryKeys.modelEntries(key) }),
+        ),
+        queryClient.invalidateQueries({ queryKey: adminQueryKeys.media }),
+      ]);
     },
   });
 }

@@ -25,6 +25,8 @@ import type {
   CreateMediaUseCaseInput,
   GetMediaUseCaseInput,
   DeleteMediaUseCaseInput,
+  MediaDetachStep,
+  MediaDetachProgress,
   ListMediaUseCaseInput,
   UpdateMediaMetadataUseCaseInput,
   UpdateMediaMetadataUseCaseResult,
@@ -178,7 +180,6 @@ export class MediaUseCases {
 
   public async requestDeletion(input: DeleteMediaUseCaseInput): Promise<MediaView> {
     requirePermission(input.actor, "media:write");
-    if (input.detach === "drafts") await this.detachDraftUsage(input);
     const requestedAt = this.dependencies.clock.now();
     const result = await this.dependencies.media.markForDeletion({
       events: [
@@ -325,39 +326,36 @@ export class MediaUseCases {
     });
   }
 
-  /**
-   * Detaches the item from every using draft before a deletion request. It
-   * refuses, before changing any draft, an inactive item, an item a current
-   * publication uses, and usage beyond the bounded usage read. Each draft save
-   * is atomic on its own; the final deletion guard stays authoritative.
-   */
-  private async detachDraftUsage(input: DeleteMediaUseCaseInput): Promise<void> {
+  public async detachDeletion(
+    input: DeleteMediaUseCaseInput & MediaDetachStep,
+  ): Promise<MediaView | MediaDetachProgress> {
+    requirePermission(input.actor, "media:write");
     requirePermission(input.actor, "content:write");
+    if (input.step === "finish") return this.requestDeletion(input);
     const drafts = this.dependencies.drafts;
-    if (drafts === undefined) failure("Detaching media from drafts is unavailable.");
-    const item = await this.dependencies.media.loadMediaCatalogItem(input.mediaId);
-    if (item === null) failure("Media does not exist.");
-    if (item.media.status !== "active") failure("Only active media can be detached.");
-    const usage = await this.dependencies.media.loadMediaUsage({
-      limit: MAX_MEDIA_USAGE_ENTRIES,
-      mediaId: input.mediaId,
-    });
-    const published = usage.some((entry) =>
-      entry.locations.some((location) => location.states.includes("published")),
-    );
-    if (published) {
-      throw new DomainError("MEDIA_IN_USE", "A current publication still uses this media.");
+    if (!drafts) failure("Detaching media from drafts is unavailable.");
+    const owners = await this.dependencies.media.loadDetachDrafts(input.mediaId);
+    if (input.step === "entry") {
+      const owner = owners.find((owner) => owner.entryId === input.entryId);
+      if (owner) {
+        if (owner.expectedRevision !== input.expectedRevision)
+          throw new DomainError(
+            "CONTENT_REVISION_CONFLICT",
+            "The draft revision no longer matches the expected revision.",
+          );
+        if (!(await drafts.detachMedia(input))) {
+          // A concurrent edit or entry removal may have raced the initial admission.
+          const current = await this.dependencies.media.loadDetachDrafts(input.mediaId);
+          if (current.some((entry) => entry.entryId === input.entryId))
+            throw new DomainError(
+              "CONTENT_REVISION_CONFLICT",
+              "The draft still uses this media. Review its current revision.",
+            );
+        }
+      }
+      return { state: "entry-complete", entryId: input.entryId };
     }
-    if (item.usageCount > usage.length) {
-      throw new DomainError("MEDIA_IN_USE", "Too many entries use this media to detach it.");
-    }
-    for (const entry of usage) {
-      await drafts.detachMedia({
-        actor: input.actor,
-        entryId: entry.entryId,
-        mediaId: input.mediaId,
-      });
-    }
+    return owners.length ? { state: "drafts", drafts: owners } : this.requestDeletion(input);
   }
 
   private async catalogView(id: MediaId, missing: string): Promise<MediaView> {

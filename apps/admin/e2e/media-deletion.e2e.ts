@@ -65,6 +65,17 @@ test("deletes media used only by a draft after a confirmation that detaches it",
       return json(route, { ...item, usage: item.usageCount === 0 ? [] : usage });
     if (url.pathname === "/api/v1/admin/media/media-1" && method === "DELETE") {
       deletions.push(url.search);
+      const step = url.searchParams.get("step");
+      if (!step)
+        return json(route, {
+          state: "drafts",
+          drafts: [{ entryId: "entry-1", expectedRevision: 1 }],
+        });
+      if (step === "entry") {
+        item = { ...item, usageCount: 0 };
+        return json(route, { state: "entry-complete", entryId: "entry-1" });
+      }
+      expect(step).toBe("finish");
       item = { ...item, status: "deleting", usageCount: 0 };
       return json(route, item, 202);
     }
@@ -86,6 +97,10 @@ test("deletes media used only by a draft after a confirmation that detaches it",
   );
   await confirm.getByRole("button", { name: "Remove from drafts and delete" }).click();
   await expect(confirm).toBeHidden();
-  expect(deletions).toEqual(["?detach=drafts"]);
+  expect(deletions).toEqual([
+    "?detach=drafts",
+    "?detach=drafts&step=entry&entryId=entry-1&expectedRevision=1",
+    "?detach=drafts&step=finish",
+  ]);
   await expect(panel.getByText("Deletion pending")).toBeVisible();
 });

@@ -1,10 +1,11 @@
-import { mediaId } from "../shared/application-input.js";
+import { mediaId, entryId } from "../shared/application-input.js";
 import { invalid, notFound, response } from "../shared/http.js";
 import { cursorPageInput, mediaIdParams, pagination } from "../shared/request.js";
 import {
   authenticationFailure,
   authorizationFailure,
   describePolicy,
+  conflictFailure,
   validate,
   validationFailure,
 } from "../shared/openapi.js";
@@ -14,6 +15,7 @@ import {
   MAX_MEDIA_TAGS_PER_ITEM,
   mediaDetailSchema,
   mediaDeleteQuerySchema,
+  mediaDetachProgressSchema,
   mediaListQuerySchema,
   mediaTagCatalogQuerySchema,
   mediaTagCatalogSchema,
@@ -161,6 +163,13 @@ export function createMediaRoutes(routeContext: RouteContext) {
       routes.delete.path,
       describePolicy(routes.delete, {
         responses: {
+          200: {
+            content: { "application/json": { schema: resolver(mediaDetachProgressSchema) } },
+            description: "Draft plan or acknowledgment for one entry",
+          },
+          ...conflictFailure(
+            "Published or excess usage, remaining usage at finish, or a stale draft revision",
+          ),
           202: {
             content: { "application/json": { schema: resolver(mediaMetadataSchema) } },
             description: "Deletion requested",
@@ -171,19 +180,34 @@ export function createMediaRoutes(routeContext: RouteContext) {
         },
         summary: "Request media deletion",
         description:
-          "With `detach=drafts`, first removes the media from the current draft of every entry that uses it; refused with `MEDIA_IN_USE` while a current publication uses it.",
+          "With detach=drafts, start returns the current draft IDs and revisions, or queues an unused item. Send step=entry with entryId and expectedRevision for each confirmed draft, then step=finish to queue deletion. Both write permissions are required for every detach request. Missing or inactive media returns 422 CONTENT_INVALID_STATE.",
         tags: ["admin"],
       }),
       validate("param", mediaIdParams),
       validate("query", mediaDeleteQuerySchema),
       async (context) => {
-        const { detach } = context.req.valid("query");
-        const deleted = await media().requestDeletion({
+        const query = context.req.valid("query");
+        const input = {
           actor: await actor(context),
-          ...(detach === undefined ? {} : { detach }),
           mediaId: mediaId(context.req.valid("param").mediaId),
-        });
-        return response(mediaMetadataSchema, mediaDto(deleted), 202);
+        };
+        const result =
+          query.detach === undefined
+            ? await media().requestDeletion(input)
+            : await media().detachDeletion({
+                ...input,
+                ...(query.step === "entry"
+                  ? {
+                      step: "entry",
+                      entryId: entryId(query.entryId!),
+                      expectedRevision: Number(query.expectedRevision),
+                    }
+                  : query.step === "finish"
+                    ? { step: "finish" }
+                    : {}),
+              });
+        if ("state" in result) return response(mediaDetachProgressSchema, result);
+        return response(mediaMetadataSchema, mediaDto(result), 202);
       },
     )
     .on(

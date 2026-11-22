@@ -68,8 +68,10 @@ import {
   hydrateEntries,
   SNAPSHOT_COLUMNS_SQL,
   snapshotIdsOf,
+  snapshotValue,
   storedSnapshots,
 } from "../content/snapshots.js";
+import { SNAPSHOT_FIELDS_SQL, SNAPSHOT_FROM_SQL } from "../content/snapshot-columns.js";
 import type { SnapshotRow, StoredSnapshot } from "../content/snapshots.js";
 import { PUBLIC_MEDIA_SQL, publicGlobalContent, publicRecordContent } from "../delivery/public.js";
 import type { PublicGlobalRow, PublicRow } from "../delivery/public.js";
@@ -94,6 +96,11 @@ import {
   mediaMetadata,
 } from "../media/catalog.js";
 import { mediaListFilters, mediaTagCatalogQuery } from "../media/tags.js";
+import {
+  admittedDrafts,
+  detachAdmissionSql,
+  type DetachAdmissionRow,
+} from "../content/media-detachment.js";
 import { MEDIA_USAGE_SQL, mediaUsageEntries } from "../media/usage.js";
 import type { MediaUsageRow } from "../media/usage.js";
 import {
@@ -164,6 +171,29 @@ export class SqlContentReader implements ContentLinkReadPort, ContentReferenceRe
 
   public async load(input: LoadContentEntryInput): Promise<ContentEntry | null> {
     return this.loadEntry(input.entryId);
+  }
+
+  public async loadDraftForEdit({ entryId }: LoadContentEntryInput) {
+    const [[snapshotRows, blockRows]] = await this.sql.readGroups(
+      [
+        {
+          sql: `select e.model_key, ${SNAPSHOT_FIELDS_SQL} ${SNAPSHOT_FROM_SQL}
+        join content_entries e on e.draft_snapshot_id=s.id where e.id=?`,
+          params: [entryId],
+        },
+        {
+          sql: `${BLOCK_COLUMNS_SQL} where snapshot_id=(select draft_snapshot_id from content_entries where id=?) order by position`,
+          params: [entryId],
+        },
+      ],
+      () => [],
+    );
+    const row = snapshotRows?.[0] as (SnapshotRow & { model_key: string }) | undefined;
+    if (!row) return null;
+    const model = this.resolveModel(row.model_key);
+    if (!model) failure("Content model is unavailable in runtime configuration.");
+    const stored = storedSnapshots([row], blockRows as readonly BlockRow[]).get(row.id)!;
+    return { id: entryId, model, draft: snapshotValue(stored, "draft") };
   }
 
   public async loadDraft(input: LoadContentEntryInput): Promise<DraftSnapshot | null> {
@@ -330,6 +360,10 @@ export class SqlContentReader implements ContentLinkReadPort, ContentReferenceRe
       id,
     );
     return row === undefined ? null : mediaCatalogItem(row);
+  }
+
+  public async loadDetachDrafts(id: string) {
+    return admittedDrafts(await this.sql.all<DetachAdmissionRow>(detachAdmissionSql, id, id));
   }
 
   public async loadMediaUsage(input: LoadMediaUsageInput): Promise<readonly MediaUsageEntry[]> {

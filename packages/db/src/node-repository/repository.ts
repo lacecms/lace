@@ -60,6 +60,7 @@ import type {
   PublicContentReadPort,
   RevertContentDraftCommand,
   SaveCompleteDraftInput,
+  SaveDetachedDraftInput,
   RetryDispatcherLeaseInput,
   UnpublishContentEntryCommand,
   UnpublishContentEntryResult,
@@ -208,6 +209,10 @@ export class NodeContentRepository
     return this.entries.create(input);
   }
 
+  public async saveDetachedDraft(input: SaveDetachedDraftInput) {
+    return this.entries.saveDetachedDraft(input);
+  }
+
   public async saveCompleteDraft(input: SaveCompleteDraftInput): Promise<ContentCommandResult> {
     return this.entries.saveCompleteDraft(input);
   }
@@ -293,6 +298,10 @@ export class NodeContentRepository
     return this.reader.load(input);
   }
 
+  public loadDraftForEdit(input: LoadContentEntryInput) {
+    return this.reader.loadDraftForEdit(input);
+  }
+
   public async loadDraft(input: LoadContentEntryInput): Promise<DraftSnapshot | null> {
     return this.reader.loadDraft(input);
   }
@@ -368,6 +377,10 @@ export class NodeContentRepository
 
   public async loadMediaCatalogItem(id: string): Promise<MediaCatalogItem | null> {
     return this.reader.loadMediaCatalogItem(id);
+  }
+
+  public async loadDetachDrafts(id: string) {
+    return this.reader.loadDetachDrafts(id);
   }
 
   public async loadMediaUsage(input: LoadMediaUsageInput): Promise<readonly MediaUsageEntry[]> {

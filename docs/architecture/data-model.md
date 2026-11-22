@@ -219,11 +219,13 @@ outbox event atomically. The dispatcher deletes the object, then the metadata
 row; failures set `delete_failed` and stay retryable. Neither a dangling
 published reference nor an SQL/object-storage half-delete can remain.
 
-The `detach=drafts` option removes the item from every using draft through
-ordinary guarded draft saves, then requests deletion through the unchanged
-guard. It refuses before any change when a current published snapshot uses the
-item or when more entries use it than the usage read returns. Draft saves are
-atomic and never touch published snapshots, so detaching requests no build.
+Draft detachment admits up to 50 distinct entry IDs and revisions from the
+current reference projection. Any published use blocks admission. Each
+confirmed draft is a separate atomic save with live media, usage and revision
+guards. Replaying a step after its reference disappeared acknowledges it without
+advancing the revision. Published snapshots stay immutable. Finish checks all
+current references and atomically queues deletion. Committed edits survive a
+conflict on another draft. An unused item can queue deletion at admission.
 
 The default limit is 10 MiB and the initial allowlist is JPEG, PNG, WebP, GIF
 and AVIF. Deployment configuration may narrow both but cannot expand them

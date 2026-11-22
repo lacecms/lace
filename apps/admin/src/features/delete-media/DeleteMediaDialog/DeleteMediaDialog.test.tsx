@@ -60,9 +60,16 @@ test("a detaching confirmation names the drafts, can be cancelled, and refreshes
   const user = userEvent.setup();
   const onChanged = vi.fn();
   const deleteMedia = vi.fn(async () => ({ ...mediaItem, status: "deleting" as const }));
+  const finish = Promise.withResolvers<import("@lacecms/contracts").MediaMetadataDto>();
+  const owner = { entryId: "entry-1", expectedRevision: 4 };
+  const detachMedia = vi
+    .fn()
+    .mockResolvedValueOnce({ state: "drafts", drafts: [owner] })
+    .mockResolvedValueOnce({ state: "entry-complete", entryId: "entry-1" })
+    .mockImplementationOnce(() => finish.promise);
   const { queryClient } = renderInRouter(
     <DeleteMediaDialog detachFrom={drafts} item={mediaItem} onChanged={onChanged} />,
-    { client: stubClient({ deleteMedia }) },
+    { client: stubClient({ deleteMedia, detachMedia }) },
   );
   const invalidate = vi.spyOn(queryClient, "invalidateQueries");
   const trigger = await screen.findByRole("button", { name: "Delete media" });
@@ -79,11 +86,31 @@ test("a detaching confirmation names the drafts, can be cancelled, and refreshes
   await user.click(trigger);
   dialog = await screen.findByRole("dialog", { name: "Delete cover.png?" });
   await user.click(within(dialog).getByRole("button", { name: "Remove from drafts and delete" }));
+  await screen.findByText("1 of 1 drafts completed.");
+  expect(onChanged).not.toHaveBeenCalled();
+  finish.resolve({ ...mediaItem, status: "deleting", usageCount: 0 });
   await waitFor(() =>
     expect(onChanged).toHaveBeenCalledWith(expect.objectContaining({ status: "deleting" })),
   );
-  expect(deleteMedia).toHaveBeenCalledWith("media-1", { detachDrafts: true });
+  expect(detachMedia.mock.calls).toEqual([["media-1"], ["media-1", owner], ["media-1", "finish"]]);
   expect(invalidate).toHaveBeenCalledWith({ queryKey: ["admin", "entry", "entry-1"] });
   expect(invalidate).toHaveBeenCalledWith({ queryKey: ["admin", "entries", "posts"] });
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ["admin", "media"] });
+});
+
+test("a changed admission set refreshes usage for review without editing a draft", async () => {
+  const user = userEvent.setup();
+  const detachMedia = vi
+    .fn()
+    .mockResolvedValue({ state: "drafts", drafts: [{ entryId: "new", expectedRevision: 1 }] });
+  const { queryClient } = renderInRouter(
+    <DeleteMediaDialog detachFrom={drafts} item={mediaItem} onChanged={vi.fn()} />,
+    { client: stubClient({ detachMedia }) },
+  );
+  const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+  await user.click(await screen.findByRole("button", { name: "Delete media" }));
+  await user.click(await screen.findByRole("button", { name: "Remove from drafts and delete" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Review the refreshed list");
+  expect(detachMedia.mock.calls).toEqual([["media-1"]]);
   expect(invalidate).toHaveBeenCalledWith({ queryKey: ["admin", "media"] });
 });

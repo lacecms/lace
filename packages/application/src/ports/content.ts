@@ -9,6 +9,7 @@ import type {
   ContentSnapshotId,
   DraftMediaReference,
   MediaMetadata,
+  MediaId,
   PublishedSnapshot,
   UnixMilliseconds,
 } from "@lacecms/domain";
@@ -155,6 +156,10 @@ export interface ContentEntryReadPort {
   /** Returns one summary per requested ID, in order, with display-name fallbacks applied. */
   describeActors(ids: readonly ActorId[]): Promise<readonly ActorSummary[]>;
   load(input: LoadContentEntryInput): Promise<ContentEntry | null>;
+  /** Reads the editable snapshot and model from a single database view. */
+  loadDraftForEdit(
+    input: LoadContentEntryInput,
+  ): Promise<Pick<ContentEntry, "id" | "model" | "draft"> | null>;
   loadDraft(input: LoadContentEntryInput): Promise<ContentEntry["draft"] | null>;
   loadPublished(input: LoadContentEntryInput): Promise<PublishedSnapshot | null>;
   list(input: ListContentEntriesInput): Promise<ContentEntryListPage>;
@@ -180,6 +185,11 @@ export interface SaveCompleteDraftInput {
   readonly entryReferences?: EntryReferenceCandidate;
   readonly entryId: ContentEntryId;
   readonly mutation: CompleteDraftMutation;
+}
+
+export interface SaveDetachedDraftInput extends SaveCompleteDraftInput {
+  readonly draftId: ContentSnapshotId;
+  readonly mediaId: MediaId;
 }
 
 export interface PublishContentEntryCommand {
@@ -298,6 +308,7 @@ export interface ContentEntryCommandPort {
   publish(input: PublishContentEntryCommand): Promise<PublishContentEntryResult>;
   /** Copies the current publication into the draft and aligns both revisions. */
   revertDraft(input: RevertContentDraftCommand): Promise<ContentCommandResult>;
+  saveDetachedDraft(input: SaveDetachedDraftInput): Promise<boolean>;
   saveCompleteDraft(input: SaveCompleteDraftInput): Promise<ContentCommandResult>;
   /** Removes the current publication and its route while keeping the draft. */
   unpublish(input: UnpublishContentEntryCommand): Promise<UnpublishContentEntryResult>;

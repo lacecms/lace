@@ -1,4 +1,12 @@
-import { actorId, blockKey, contentModelKey, mediaId, unixMilliseconds } from "@lacecms/domain";
+import {
+  actorId,
+  blockKey,
+  contentEntryId,
+  contentSnapshotId,
+  contentModelKey,
+  mediaId,
+  unixMilliseconds,
+} from "@lacecms/domain";
 import type { Actor } from "@lacecms/domain";
 import {
   type RepositoryContractCase,
@@ -8,6 +16,7 @@ import {
   base64Url,
   count,
   seedModels,
+  seedMedia,
   seedUser,
   entry,
   save,
@@ -510,3 +519,60 @@ contract(
 );
 
 declare function atob(data: string): string;
+
+contract(
+  "admits up to fifty distinct draft owners and refuses current publications",
+  async (runtime, expect) => {
+    const { repository, sql } = await runtime.open({ resolveModel: resolveRoute });
+    await seedModels(sql, "posts");
+    const id = mediaId("used");
+    await seedMedia(sql, id);
+    const admit = () => repository.loadDetachDrafts(id);
+    const write = (revision: number) =>
+      repository.saveDetachedDraft({
+        ...save("post-00", revision, 40),
+        draftId: contentSnapshotId("post-00-draft"),
+        mediaId: id,
+      });
+    expect(await admit()).toEqual([]);
+    const owners = [];
+    for (let index = 0; index < 51; index++) {
+      const entryId = "post-" + String(index).padStart(2, "0");
+      await repository.create({
+        entry: entry(entryId, "posts", {
+          updatedAt: 1,
+          slug: entryId,
+          fields: { cover: id, image: id },
+        }),
+        mediaReferences: [
+          { sourceKey: "$fields", fieldPath: "cover", mediaId: id },
+          { sourceKey: "$fields", fieldPath: "image", mediaId: id },
+        ],
+      });
+      owners.push({ entryId, expectedRevision: 1 });
+      if (index === 0) {
+        expect(await admit()).toEqual(owners);
+        await repository.publish(publish(entryId, 1, 30, "published"));
+        await expect(admit()).rejects.toMatchObject({ code: "MEDIA_IN_USE" });
+        await expect(write(1)).rejects.toMatchObject({ code: "MEDIA_IN_USE" });
+        await repository.saveCompleteDraft(
+          save(entryId, 1, 31, { slug: entryId, fields: {}, mediaReferences: [] }),
+        );
+        await expect(admit()).rejects.toMatchObject({ code: "MEDIA_IN_USE" });
+        await repository.publish(publish(entryId, 2, 32, "released"));
+        await repository.saveCompleteDraft(
+          save(entryId, 2, 33, {
+            fields: { cover: id },
+            mediaReferences: [{ sourceKey: "$fields", fieldPath: "cover", mediaId: id }],
+          }),
+        );
+        owners[0]!.expectedRevision = 3;
+      }
+      if (index === 49) expect(await admit()).toEqual(owners);
+    }
+    await expect(admit()).rejects.toMatchObject({ code: "MEDIA_IN_USE" });
+    await expect(write(3)).rejects.toMatchObject({ code: "MEDIA_IN_USE" });
+    const remaining = await repository.loadDraftForEdit({ entryId: contentEntryId("post-00") });
+    expect(remaining?.draft).toMatchObject({ revision: 3, fields: { cover: id } });
+  },
+);

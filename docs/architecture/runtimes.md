@@ -219,6 +219,13 @@ existing authorized read. The number of actors on a page adds no statements
 or binds to list and export queries, and publication keeps its existing
 transaction and D1 batch boundaries.
 
+Media draft detachment reads the active item and at most 51 grouped owners in
+one statement. A named draft step uses the shared guarded save plan and returns
+an acknowledgment. The Worker budgets session resolution, the command and all
+registered work together. The post-commit pass claims up to two media deletions
+and one build. Scheduled recovery can claim five media deletions. See the
+[per-phase measurements](../verification.md#media-draft-detachment).
+
 Media tag filtering adds at most five indexed EXISTS lookups per candidate in
 the single list-page query. Tags are read with a bounded correlated projection,
 with no per-item round trips. Catalog pages use one indexed aggregate query

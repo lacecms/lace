@@ -8,6 +8,7 @@ import type {
   PublishContentEntryResult,
   RevertContentDraftCommand,
   SaveCompleteDraftInput,
+  SaveDetachedDraftInput,
   UnpublishContentEntryCommand,
   UnpublishContentEntryResult,
 } from "@lacecms/application";
@@ -57,10 +58,25 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
   }
 
   public async saveCompleteDraft(input: SaveCompleteDraftInput): Promise<ContentCommandResult> {
-    assertDraftPersistenceBounds(input.mutation.blocks, input.mutation.mediaReferences);
     const existing = await this.entryRow(input.entryId);
     if (existing === undefined || existing.draft_snapshot_id === null)
       failure("Content entry does not have a mutable draft.");
+    await this.writeDraft(input, existing.draft_snapshot_id);
+    const entry = await this.reader.loadEntry(input.entryId);
+    if (entry === null) failure("Saved content entry could not be reloaded.");
+    return { entry, status: "saved" };
+  }
+
+  public async saveDetachedDraft(input: SaveDetachedDraftInput): Promise<boolean> {
+    return this.writeDraft(input, input.draftId, input.mediaId);
+  }
+
+  private async writeDraft(
+    input: SaveCompleteDraftInput,
+    draftId: string,
+    detachMediaId?: string,
+  ): Promise<boolean> {
+    assertDraftPersistenceBounds(input.mutation.blocks, input.mutation.mediaReferences);
     let result: Awaited<
       ReturnType<
         typeof executeWritePlan<ReturnType<ReturnType<typeof createDraftWritePlan>["diagnose"]>>
@@ -69,7 +85,7 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
     try {
       result = await executeWritePlan(
         this.database,
-        saveDraftWritePlan(input, existing.draft_snapshot_id),
+        saveDraftWritePlan(input, draftId, detachMediaId),
         input.mutation.updatedAt,
         this.options.beforeMutation,
       );
@@ -77,10 +93,9 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
       if (error instanceof LaceError) throw error;
       failure("D1 content write failed.");
     }
+    if (result.kind === "rejected" && result.reason === "detach_absent") return false;
     if (result.kind === "rejected") rejectDraftWrite(result.reason, "");
-    const entry = await this.reader.loadEntry(input.entryId);
-    if (entry === null) failure("Saved content entry could not be reloaded.");
-    return { entry, status: "saved" };
+    return true;
   }
 
   public async publish(input: PublishContentEntryCommand): Promise<PublishContentEntryResult> {

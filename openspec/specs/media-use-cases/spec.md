@@ -413,19 +413,13 @@ published field or block reference does.
   changes neither the published version nor build work
 
 ### Requirement: Writers can detach draft-only usage before deleting media
-A deletion request SHALL accept an explicit option to detach draft usage
-first. With the option the system SHALL, in this order:
+A writer SHALL be able to detach media from up to 50 distinct using entries across bounded requests on Node and Cloudflare. Each request SHALL require both `media:write` and `content:write` before reading or writing application data. A missing or inactive item SHALL fail with `CONTENT_INVALID_STATE`.
 
-1. require both `media:write` and `content:write` before any read or write;
-2. refuse an item that is not `active` with `CONTENT_INVALID_STATE`;
-3. refuse with `MEDIA_IN_USE`, changing no draft, when any current published
-   snapshot references the item or when the item's `usageCount` exceeds the 50
-   entries a usage read returns;
-4. remove the item from the current draft of every using entry and save each
-   such draft as an ordinary guarded draft save by the requesting actor at the
-   revision it was read with;
-5. request deletion through the unchanged guarded deletion path, which still
-   refuses with `MEDIA_IN_USE` when any reference remains.
+Admission SHALL inspect current draft and published usage in one consistent read. Any current published usage or a 51st distinct using entry SHALL fail with `MEDIA_IN_USE` before any draft changes. For 1–50 eligible entries admission SHALL return all distinct entry IDs with their current draft revisions and leave the item active. With zero uses it SHALL request guarded deletion directly.
+
+Each entry step SHALL address exactly one entry at a caller-supplied revision. It SHALL enforce active status, absence of published usage and the 50-entry ceiling at the mutation boundary, including for a direct call. It SHALL save a still-using draft only at the expected revision, with the requesting actor as editor and one revision increment. If an eligible active item is already absent from the named draft (including a removed entry), the step SHALL report completion without a write. If an edited draft still uses the item, the step SHALL fail with `CONTENT_REVISION_CONFLICT`. Every successful step SHALL leave the media active.
+
+Finishing SHALL perform the ordinary atomic zero-reference check, transition to `deleting` and enqueue exactly one `media.delete.requested` event. Any remaining use, including a new use outside the admitted set, SHALL yield `MEDIA_IN_USE` and preserve active status. The protocol SHALL never automatically add a newly discovered draft to a previously admitted set.
 
 Removing the item from a draft SHALL clear a media field whose value is the
 item, remove an element whose value is the item from a list of media, and
@@ -438,16 +432,10 @@ it. A published snapshot SHALL never be rewritten, so detaching requests no
 build and never changes public delivery. Without the option, deletion SHALL
 behave exactly as before.
 
-Each draft save SHALL be atomic on its own; the request as a whole SHALL NOT
-be. When a draft save fails with `CONTENT_REVISION_CONFLICT` or any other
-error, the request SHALL fail with that error, drafts already saved SHALL stay
-detached, later drafts SHALL stay unchanged, and the item SHALL stay `active`
-and may be detached again.
-
-The behavior SHALL be identical on the Node and Cloudflare runtimes.
+Each draft save SHALL atomically update its content and derived projections. Failure SHALL preserve the original error, previously committed steps and the current values of pending drafts. A retry SHALL operate on committed state.
 
 #### Scenario: Draft-only usage is detached and the item is queued
-- **WHEN** an editor requests deletion with the detach option of an image that
+- **WHEN** an editor completes admission, both entry steps and finish for an image that
   two entries use only in their drafts, one in a `cover` field and one in an
   `image` block and in a gallery list
 - **THEN** the `cover` field is cleared, the block's `image` value is cleared,
@@ -483,7 +471,7 @@ The behavior SHALL be identical on the Node and Cloudflare runtimes.
 
 #### Scenario: A concurrent draft edit stops detaching
 - **WHEN** a using entry's draft is saved by someone else after the detach
-  request read it and before the request saves it
+  request read it and before the request saves it, and the edited draft still uses the item
 - **THEN** the request fails with `CONTENT_REVISION_CONFLICT`, the concurrent
   draft is kept, and the item stays `active`
 
@@ -491,6 +479,18 @@ The behavior SHALL be identical on the Node and Cloudflare runtimes.
 - **WHEN** another draft starts using the item after detaching saved the last
   known using draft and before deletion is requested
 - **THEN** the request fails with `MEDIA_IN_USE` and the item stays `active`
+
+#### Scenario: A lost entry response can be replayed
+- **WHEN** the save commits but the caller loses its response and resends that entry and revision
+- **THEN** the step acknowledges the absent reference, preserves the new revision and enqueues no event
+
+#### Scenario: A publication appears between steps
+- **WHEN** another editor publishes a use after admission but before the next draft mutation
+- **THEN** the next step fails with `MEDIA_IN_USE`, earlier saves survive, and neither the named draft nor the publication changes
+
+#### Scenario: Two finish requests race
+- **WHEN** two writers finish after the last draft save
+- **THEN** at most one changes the media status and exactly one deletion event commits
 
 ### Requirement: Media items carry normalized organizational tags
 Every media item SHALL carry a set of zero to 20 tags for admin organization.

@@ -170,6 +170,7 @@ test("packaged entry point keeps its public exports", async () => {
     "mcpSettingsStatusSchema",
     "mcpToolArgumentSchemas",
     "mediaDeleteQuerySchema",
+    "mediaDetachProgressSchema",
     "mediaDetailSchema",
     "mediaEntityTag",
     "mediaFocalPointSchema",

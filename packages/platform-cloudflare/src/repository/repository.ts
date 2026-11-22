@@ -61,6 +61,7 @@ import type {
   RetryDispatcherLeaseInput,
   RevertContentDraftCommand,
   SaveCompleteDraftInput,
+  SaveDetachedDraftInput,
   UnpublishContentEntryCommand,
   UnpublishContentEntryResult,
   UpdateMediaMetadataInput,
@@ -216,6 +217,10 @@ export class D1ContentRepository
     return this.reader.load(input);
   }
 
+  public loadDraftForEdit(input: LoadContentEntryInput) {
+    return this.reader.loadDraftForEdit(input);
+  }
+
   public async loadDraft(input: LoadContentEntryInput): Promise<DraftSnapshot | null> {
     return this.reader.loadDraft(input);
   }
@@ -287,6 +292,10 @@ export class D1ContentRepository
     return this.reader.loadMediaCatalogItem(id);
   }
 
+  public async loadDetachDrafts(id: string) {
+    return this.reader.loadDetachDrafts(id);
+  }
+
   public async loadMediaUsage(input: LoadMediaUsageInput): Promise<readonly MediaUsageEntry[]> {
     return this.reader.loadMediaUsage(input);
   }
@@ -309,6 +318,10 @@ export class D1ContentRepository
 
   public async create(input: CreateContentEntryInput): Promise<ContentCommandResult> {
     return this.entries.create(input);
+  }
+
+  public async saveDetachedDraft(input: SaveDetachedDraftInput) {
+    return this.entries.saveDetachedDraft(input);
   }
 
   public async saveCompleteDraft(input: SaveCompleteDraftInput): Promise<ContentCommandResult> {

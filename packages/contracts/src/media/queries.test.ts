@@ -3,7 +3,12 @@ import * as v from "valibot";
 import { describe, expect, test } from "vitest";
 import { toMediaDetailDto } from "./mappers.js";
 import { mediaDetailSchema, mediaMetadataSchema } from "./metadata.js";
-import { mediaDeleteQuerySchema, mediaListQuerySchema, normalizeMediaTag } from "./queries.js";
+import {
+  mediaDeleteQuerySchema,
+  mediaDetachProgressSchema,
+  mediaListQuerySchema,
+  normalizeMediaTag,
+} from "./queries.js";
 
 describe("admin entry list contracts", () => {
   test("validates media list queries, uploader summaries, and bounded usage details", () => {
@@ -147,4 +152,23 @@ test("ASCII media tag contracts normalize input and preserve precise issue point
     false,
   );
   expect(v.safeParse(c.mediaMetadataSchema, {}).success).toBe(false);
+});
+
+test("detachment wire shapes distinguish admission, entry acknowledgment and finish", () => {
+  const owner = { entryId: "owner", expectedRevision: 2 };
+  const entry = { detach: "drafts", step: "entry", entryId: "owner", expectedRevision: "2" };
+  for (const query of [entry, { detach: "drafts", step: "finish" }])
+    expect(v.parse(mediaDeleteQuerySchema, query)).toEqual(query);
+  for (const result of [
+    { state: "drafts", drafts: [owner] },
+    { state: "entry-complete", entryId: "owner" },
+  ])
+    expect(v.parse(mediaDetachProgressSchema, result)).toEqual(result);
+  for (const result of [
+    { state: "drafts", drafts: [] },
+    { state: "drafts", drafts: [owner, owner] },
+    { state: "drafts", drafts: [{ ...owner, expectedRevision: 2 ** 53 }] },
+    { state: "entry-complete" },
+  ])
+    expect(v.safeParse(mediaDetachProgressSchema, result).success).toBe(false);
 });

@@ -165,7 +165,13 @@ export interface LoadMediaUsageInput {
  * Presentation reads derived from the same reference projection that guards
  * deletion; lifecycle reads stay on `MediaReadPort`.
  */
+export interface MediaDraftOwner {
+  readonly entryId: ContentEntryId;
+  readonly expectedRevision: number;
+}
+
 export interface MediaCatalogPort {
+  loadDetachDrafts(id: MediaId): Promise<readonly MediaDraftOwner[]>;
   loadMediaCatalogItem(id: string): Promise<MediaCatalogItem | null>;
   loadMediaUsage(input: LoadMediaUsageInput): Promise<readonly MediaUsageEntry[]>;
 }

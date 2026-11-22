@@ -11,6 +11,7 @@ import type {
   ByteStream,
   ImageInspector,
   MediaCatalogPort,
+  MediaDraftOwner,
   MediaCommandPort,
   MediaListPort,
   MediaMimeType,
@@ -70,21 +71,22 @@ export interface GetMediaUseCaseInput {
   readonly mediaId: MediaId;
 }
 
-export interface DeleteMediaUseCaseInput extends GetMediaUseCaseInput {
-  /**
-   * `drafts` first removes the item from the current draft of every using
-   * entry; it is refused while any current publication uses the item.
-   */
-  readonly detach?: "drafts";
-}
+export type DeleteMediaUseCaseInput = GetMediaUseCaseInput;
+export type MediaDetachStep =
+  | { readonly step?: "finish" }
+  | ({ readonly step: "entry" } & MediaDraftOwner);
+export type MediaDetachProgress =
+  | { readonly state: "drafts"; readonly drafts: readonly MediaDraftOwner[] }
+  | { readonly state: "entry-complete"; readonly entryId: ContentEntryId };
 
 /** Removes one media item from an entry's current draft (a guarded draft save). */
 export interface MediaDraftDetachPort {
   detachMedia(input: {
+    readonly expectedRevision: number;
     readonly actor: Actor;
     readonly entryId: ContentEntryId;
     readonly mediaId: MediaId;
-  }): Promise<unknown>;
+  }): Promise<boolean>;
 }
 
 /** An omitted value stays unchanged; `null` (or empty text) clears it. */

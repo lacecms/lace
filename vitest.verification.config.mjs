@@ -57,6 +57,7 @@ export default defineConfig({
             "tests/video-embed.acceptance.mjs",
             "tests/content-import.acceptance.mjs",
             "tests/conditional-fields.acceptance.mjs",
+            "tests/media-detachment.acceptance.mjs",
           ],
           fileParallelism: false,
           maxWorkers: 1,
