@@ -81,3 +81,37 @@ the stable target and still refuses to overwrite a newer release. The repository
 test exercises the observed `0.1.0-alpha.6` tag. The cross-runtime browser
 check now waits for the rendered screen and fonts before the accessibility
 audit, allowing background connections to remain open.
+
+The final full workspace suite passed 64/64 Turbo tasks and 440 root tests
+in 43 files. Root typecheck and Drizzle/OpenAPI verification passed. The
+documentation check, production build and extra locale/fixed-version build
+passed. The audited moderate advisory is the policy-dispositioned esbuild
+tooling finding; the report contained zero high or critical vulnerabilities.
+The npm and image dry runs planned 16 packages and both image indexes.
+
+The security verification completed on the saved arm64 API/builder images.
+Its storage recovery exercise injected a confirmed SQL rollback, which permits
+orphan cleanup under the accepted media contract. Generic provider errors can
+leave write completion unknown. Local evidence directories are
+`.lace-acceptance/verify-security-r6RKK0` and
+`.lace-acceptance/verify-operations-MvHXYX`.
+
+## Exact acceptance and decision
+
+The complete cross-runtime verification, including `pnpm acceptance:release`
+on the reviewed inventory, passed all phases. The [saved receipt](acceptance.json)
+records 25 journeys on linux/arm64, five forward steps on each runtime,
+original/upgraded/restored state fingerprints, restored static output and
+old/new media digests. The receipt SHA-256 is
+`28fe346680efa37494154edc3506c3bae4ddd897439c372cf70ea5c2361fda53`
+and the harness revision is `b57f2970ba7d7d68b8ccd2a32798b111ddfb3acc`.
+The local run is `.lace-acceptance/verify-cross-runtime-qPN9mk`.
+Toolchain: Node 24.22.1, pnpm 12.21.0 and Docker 29.8.2. The final lint,
+format, type, schema and strict change checks passed. After acceptance the
+only code cleanup removed an unused import from the private repository test
+fixture. Its replacement custom-block refusal case passed on Node and local D1.
+All package and image checksums are those of the reviewed shipping revision.
+
+The GitHub read-only preview returned `blocked` because stable packages have
+yet to be published. The [owner handoff](handoff.md) records the real-environment
+rehearsals, independent-site restore, approval and publication steps.

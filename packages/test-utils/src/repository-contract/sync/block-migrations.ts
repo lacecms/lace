@@ -4,7 +4,7 @@ import { defineCollection, defineConfig } from "@lacecms/config";
 
 import { builtInBlocks, defineBlock, field, validateBlockData } from "@lacecms/content";
 
-import { blockKey, contentEntryId, mediaId } from "@lacecms/domain";
+import { contentEntryId, mediaId } from "@lacecms/domain";
 
 import {
   type ContractRepository,
