@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { useForm, useWatch, type FieldPath, type Resolver } from "react-hook-form";
 import type { FieldMetadata } from "@lacecms/content";
 import type {
@@ -35,7 +35,7 @@ export interface DraftEditorServices {
 
 export function useDraftEditor(
   model: ContentModelDto | undefined,
-  currentEntry: AdminContentEntryDto | undefined,
+  observedEntry: AdminContentEntryDto | undefined,
   services: DraftEditorServices,
 ) {
   const modelRef = useRef<ContentModelDto | undefined>(undefined);
@@ -49,7 +49,7 @@ export function useDraftEditor(
     ...(model === undefined ? {} : { resolver: services.createDraftResolver(model) }),
   });
   const transient = useWatch({ control: form.control, name: "__transient" });
-  const transientDirty = Object.keys(transient ?? {}).length > 0;
+  const dirty = form.formState.isDirty || Object.keys(transient ?? {}).length > 0;
   // Model fields decide which conditional fields apply.
   const fieldValues = useWatch({ control: form.control, name: "fields" });
   const [summaryShown, setSummaryShown] = useState(false);
@@ -116,25 +116,74 @@ export function useDraftEditor(
     setReferenceCycle(issues.find((issue) => "details" in issue)?.details);
     showSummary();
   };
-  const loaded = useRef<string | undefined>(undefined);
   const [suggestingSlug, setSuggestingSlug] = useState(false);
   const suggestingSlugRef = useRef(false);
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
   const titleValue = form.watch("title");
-  const initial =
-    model === undefined || currentEntry === undefined
-      ? undefined
-      : services.draftValues(model, currentEntry);
-  useEffect(() => {
-    if (initial === undefined || currentEntry === undefined) return;
-    const key = `${currentEntry.id}:${currentEntry.draft.revision}`;
-    if (loaded.current === key) return;
+  const [currentEntry, setCurrentEntry] = useState<AdminContentEntryDto>();
+  const baseline = useRef<AdminContentEntryDto>(undefined);
+  const isAdoptedEntry = useCallback(
+    (entry: AdminContentEntryDto) => baseline.current === entry,
+    [],
+  );
+  const [conflict, setConflict] = useState(false);
+  const recordEntry = (entry: AdminContentEntryDto) => {
+    baseline.current = entry;
+    setCurrentEntry(entry);
+  };
+  const adoptDraft = (entry: AdminContentEntryDto) => {
+    const activeModel = modelRef.current;
+    const previous = baseline.current;
+    if (
+      activeModel?.key !== entry.model.key ||
+      (previous !== undefined &&
+        (previous.id !== entry.id || entry.draft.revision < previous.draft.revision))
+    )
+      return false;
     suggestingSlugRef.current = false;
-    form.reset(initial);
-    loaded.current = key;
     setSuggestingSlug(false);
     setSlugManuallyEdited(false);
-  }, [currentEntry, form, initial]);
+    setEditorEpoch((value) => value + 1);
+    form.reset(services.draftValues(activeModel, entry));
+    hideSummary();
+    setConflict(false);
+    recordEntry(entry);
+    return true;
+  };
+  const updatePublication = (entry: AdminContentEntryDto) => {
+    const previous = baseline.current;
+    if (
+      previous === undefined ||
+      entry.id !== previous.id ||
+      entry.draft.revision < previous.draft.revision ||
+      entry.published === previous.published
+    )
+      return;
+    const { published: _published, ...draft } = previous;
+    recordEntry({
+      ...draft,
+      ...(entry.published === undefined ? {} : { published: entry.published }),
+    });
+  };
+  const reconcileRead = useEffectEvent((entry: AdminContentEntryDto) => {
+    const previous = baseline.current;
+    if (previous !== undefined) {
+      if (entry.id !== previous.id || entry.draft.revision < previous.draft.revision) return;
+      if (entry.draft.revision === previous.draft.revision) {
+        // Publishing can change the entry without changing the draft revision.
+        if (entry !== previous) recordEntry(entry);
+        return;
+      }
+      if (dirty || conflict) {
+        setConflict(true);
+        return;
+      }
+    }
+    adoptDraft(entry);
+  });
+  useEffect(() => {
+    if (observedEntry !== undefined) reconcileRead(observedEntry);
+  }, [observedEntry]);
   useEffect(() => {
     if (!suggestingSlugRef.current || slugManuallyEdited) return;
     const suggested = services.suggestSlug(titleValue);
@@ -147,7 +196,13 @@ export function useDraftEditor(
     editorEpoch,
     setEditorEpoch,
     form,
-    transientDirty,
+    currentEntry,
+    isAdoptedEntry,
+    dirty,
+    conflict,
+    markConflict: () => setConflict(true),
+    adoptDraft,
+    updatePublication,
     fieldValues,
     summaryShown,
     unmappedIssues,
@@ -157,7 +212,6 @@ export function useDraftEditor(
     showSummary,
     hideSummary,
     applyServerIssues,
-    loaded,
     suggestingSlug,
     setSuggestingSlug,
     suggestingSlugRef,

@@ -34,7 +34,7 @@ export function useReferenceOccurrence({
   const banner = useRef<HTMLDivElement>(null);
   const applied = useRef<string | undefined>(undefined);
   const resolved = result?.key === key && result?.version === version ? result?.use : undefined;
-  const { form, loaded } = editor;
+  const { form, isAdoptedEntry } = editor;
   useEffect(() => {
     if (!key || !referenceUse) {
       applied.current = undefined;
@@ -47,7 +47,7 @@ export function useReferenceOccurrence({
       version === undefined ||
       !model ||
       entry?.id !== entryId ||
-      loaded.current !== `${entryId}:${entry.draft.revision}`
+      !isAdoptedEntry(entry)
     )
       return;
     applied.current = key;
@@ -56,7 +56,7 @@ export function useReferenceOccurrence({
       version,
       use: verifyReferenceUse(model, entry, form.getValues(), referenceUse),
     });
-  }, [key, version, referenceUse, fetching, model, entry, entryId, form, loaded]);
+  }, [key, version, referenceUse, fetching, model, entry, entryId, form, isAdoptedEntry]);
   useEffect(() => {
     if (!resolved) return;
     const frame = requestAnimationFrame(() => {

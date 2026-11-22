@@ -8,10 +8,10 @@ import {
   ReferenceField,
   ReferencePicker,
 } from "../../../features/select-reference/index.js";
-import type { AdminContentEntryDto, UnpublishContentEntryResultDto } from "@lacecms/contracts";
+import type { UnpublishContentEntryResultDto } from "@lacecms/contracts";
 import { useIsMutating, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useBlocker } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type BaseSyntheticEvent } from "react";
+import { useRef, useState } from "react";
 import {
   applicableErrors,
   createDraftResolver,
@@ -49,6 +49,7 @@ import {
   AdminClientError,
   adminQueryKeys,
   errorDescription,
+  isSessionExpiredError,
   useAdminClient,
 } from "../../../shared/api/index.js";
 import { requestFocus, useSaveShortcut } from "../../../shared/lib/index.js";
@@ -134,6 +135,22 @@ const draftEditorServices = {
 
 export function EntryPage() {
   const { entryId, modelKey } = entryRoute.useParams();
+  return (
+    <EntryEditorPage
+      entryId={entryId}
+      key={JSON.stringify([modelKey, entryId])}
+      modelKey={modelKey}
+    />
+  );
+}
+
+function EntryEditorPage({
+  entryId,
+  modelKey,
+}: {
+  readonly entryId: string;
+  readonly modelKey: string;
+}) {
   const { referenceUse } = entryRoute.useSearch();
   const navigate = entryRoute.useNavigate();
   const client = useAdminClient();
@@ -145,12 +162,10 @@ export function EntryPage() {
     queryFn: () => client.loadEntry(entryId),
     queryKey: adminQueryKeys.entry(entryId),
   });
-  const [savedEntry, setSavedEntry] = useState<AdminContentEntryDto | undefined>(undefined);
   const [copyError, setCopyError] = useState<string | undefined>(undefined);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   /** Set once the entry is deleted, so leaving for the list needs no discard prompt. */
   const leaving = useRef(false);
-  const currentEntry = savedEntry ?? entry.data;
   const model = models.data?.items.find((item) => item.key === modelKey);
   const seoDefaults = useSeoDefaults(model?.seo === undefined ? undefined : models.data?.items);
   const buildSite = useQuery({
@@ -159,7 +174,12 @@ export function EntryPage() {
     queryFn: client.loadBuildSite,
     queryKey: adminQueryKeys.buildSite,
   });
-  const editor = useDraftEditor(model, currentEntry, draftEditorServices);
+  const observedEntry =
+    model !== undefined && entry.data?.id === entryId && entry.data.model.key === model.key
+      ? entry.data
+      : undefined;
+  const editor = useDraftEditor(model, observedEntry, draftEditorServices);
+  const { currentEntry, dirty, conflict } = editor;
   const occurrence = useReferenceOccurrence({
     editor,
     entry: currentEntry,
@@ -174,66 +194,56 @@ export function EntryPage() {
     modelRef,
     setEditorEpoch,
     form,
-    transientDirty,
     fieldValues,
     summaryShown,
     unmappedIssues,
     referenceCycle,
-    setUnmappedIssues,
     summaryRef,
-    showSummary,
     hideSummary,
     suggestingSlug,
     setSuggestingSlug,
     suggestingSlugRef,
     setSlugManuallyEdited,
   } = editor;
-  useEffect(() => {
-    setSavedEntry(undefined);
-  }, [entryId]);
   const blocker = useBlocker({
-    enableBeforeUnload: () => !leaving.current && (form.formState.isDirty || transientDirty),
-    shouldBlockFn: () => !leaving.current && (form.formState.isDirty || transientDirty),
+    enableBeforeUnload: () => !leaving.current && dirty,
+    shouldBlockFn: () => !leaving.current && dirty,
     withResolver: true,
   });
   const {
     save,
     publish,
     reloadServerDraft,
-    conflict,
     publishAttempt,
-    setPublishAttempt,
     latestBuild,
     setLatestBuild,
     savingToPublish,
     adoptServerDraft,
+    adoptUnpublishedEntry,
+    isActiveEntry,
     retryPublish,
     startPublish,
+    submitDraft,
     saveAndPublish,
-  } = useEntryMutations({ entryId, modelKey, currentEntry, editor, setSavedEntry });
+  } = useEntryMutations({ entryId, modelKey, editor });
   const readOnly = !can(session, "content:write");
-  const submitDraft = (event?: BaseSyntheticEvent) => {
-    setUnmappedIssues([]);
-    return form.handleSubmit(
-      (values) => save.mutate(values),
-      () => showSummary(),
-    )(event);
-  };
   useSaveShortcut(() => {
-    if (readOnly || busy || !(form.formState.isDirty || transientDirty)) return;
+    if (readOnly || busy || !dirty) return;
     void submitDraft();
   });
   const duplicate = useDuplicateEntry(modelKey);
-  useSessionRecovery(models.error ?? entry.error);
+  const readError = models.error ?? entry.error;
+  useSessionRecovery(isSessionExpiredError(entry.error) ? entry.error : readError);
   useSessionRecovery(save.error);
   useSessionRecovery(publish.error);
   useSessionRecovery(reloadServerDraft.error);
   useSessionRecovery(seoDefaults.error);
   useSessionRecovery(buildSite.error);
   if (models.isPending || entry.isPending) return <PageLoading label="Loading draft" />;
-  if (models.error !== null) return <PageError error={models.error} />;
-  if (entry.error !== null) return <PageError error={entry.error} />;
-  if (model === undefined || currentEntry === undefined || currentEntry.model.key !== model.key)
+  if (currentEntry === undefined && readError !== null) return <PageError error={readError} />;
+  if (currentEntry === undefined && observedEntry !== undefined)
+    return <PageLoading label="Loading draft" />;
+  if (model === undefined || currentEntry === undefined)
     return (
       <PagePlaceholder
         description="This entry is not available for the requested model."
@@ -259,7 +269,6 @@ export function EntryPage() {
     | Record<string, Record<string, unknown>>
     | undefined;
   const canPublish = can(session, "content:publish");
-  const dirty = form.formState.isDirty || transientDirty;
   const saveState: SaveState = readOnly
     ? { kind: "view-only" }
     : save.isPending
@@ -276,15 +285,13 @@ export function EntryPage() {
     savingToPublish ||
     duplicate.isPending;
   const adoptUnpublished = (result: UnpublishContentEntryResultDto) => {
-    // The draft revision is unchanged, so the form keeps any unsaved values.
-    queryClient.setQueryData(adminQueryKeys.entry(entryId), result.entry);
-    setSavedEntry(result.entry);
-    setPublishAttempt(undefined);
+    if (!adoptUnpublishedEntry(result.entry)) return;
     setLatestBuild({ build: result.build, change: "unpublished" });
     toast.success("Unpublished. The draft is kept.");
     void queryClient.invalidateQueries({ queryKey: adminQueryKeys.modelEntries(modelKey) });
   };
   const leaveAfterDelete = () => {
+    if (!isActiveEntry()) return;
     leaving.current = true;
     requestFocus(collectionFocusTarget(modelKey));
     void navigate({ params: { modelKey }, to: "/content/$modelKey" }).then(() =>
@@ -319,6 +326,7 @@ export function EntryPage() {
     : [];
   const validationRejected = (error: unknown) =>
     error instanceof AdminClientError && (error.issues?.length ?? 0) > 0;
+  const saveErrorCode = save.error instanceof AdminClientError ? save.error.code : undefined;
   const titleError = form.formState.errors.title;
   const slugError = form.formState.errors.slug;
   // Only a routed collection has the slug control; route-less entries carry no slug.
@@ -457,10 +465,10 @@ export function EntryPage() {
           }
           onReload={() => {
             // Refresh the publication without discarding unsaved values of an unchanged draft.
-            void entry.refetch().then(() => setSavedEntry(undefined));
+            void entry.refetch();
           }}
           onReverted={(reverted) => {
-            adoptServerDraft(reverted);
+            if (!adoptServerDraft(reverted)) return;
             toast.success("Reverted to the published version.");
             void queryClient.invalidateQueries({ queryKey: adminQueryKeys.modelEntries(modelKey) });
           }}
@@ -518,37 +526,41 @@ export function EntryPage() {
                       ) && <ReferenceCycleGuidance cycle={referenceCycle} />}
                   </EntryValidationSummary>
                 )}
-                {conflict === undefined ? (
-                  save.error === null || validationRejected(save.error) ? undefined : (
-                    <div className="grid gap-2">
-                      <PageError error={save.error} />
-                      {save.error instanceof AdminClientError &&
-                      save.error.code === "CONTENT_INVALID_STATE" ? (
-                        <div className="grid gap-2 text-sm">
-                          <p>
-                            Your unsaved changes are still here. Retry Save draft to send the
-                            displayed block order. Copy your JSON before reloading if the problem
-                            continues.
-                          </p>
-                          <Button
-                            className="justify-self-start"
-                            onClick={() => void copyLocalDraft()}
-                            size="sm"
-                            variant="outline"
-                          >
-                            Copy my JSON
-                          </Button>
-                          {copyError === undefined ? undefined : <p role="alert">{copyError}</p>}
-                        </div>
-                      ) : undefined}
-                    </div>
-                  )
-                ) : (
+                {readError === null ? undefined : <PageError error={readError} />}
+                {save.error === null ||
+                validationRejected(save.error) ||
+                saveErrorCode === "CONTENT_REVISION_CONFLICT" ? undefined : (
+                  <div className="grid gap-2">
+                    <PageError error={save.error} />
+                    {!conflict && saveErrorCode === "CONTENT_INVALID_STATE" ? (
+                      <div className="grid gap-2 text-sm">
+                        <p>
+                          Your unsaved changes are still here. Retry Save draft to send the
+                          displayed block order. Copy your JSON before reloading if the problem
+                          continues.
+                        </p>
+                        <Button
+                          className="justify-self-start"
+                          onClick={() => void copyLocalDraft()}
+                          size="sm"
+                          variant="outline"
+                        >
+                          Copy my JSON
+                        </Button>
+                        {copyError === undefined ? undefined : <p role="alert">{copyError}</p>}
+                      </div>
+                    ) : undefined}
+                  </div>
+                )}
+                {conflict && (
                   <EntryConflictAlert
-                    conflict={conflict}
                     copyError={copyError}
                     onCopy={() => void copyLocalDraft()}
-                    onReload={() => reloadServerDraft.mutate()}
+                    onReload={() =>
+                      reloadServerDraft.mutate(undefined, {
+                        onSuccess: () => setCopyError(undefined),
+                      })
+                    }
                     reloadError={
                       reloadServerDraft.error === null
                         ? undefined

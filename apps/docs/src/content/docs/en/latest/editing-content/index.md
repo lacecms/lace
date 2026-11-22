@@ -217,10 +217,17 @@ earlier publication.
 
 ## Resolve conflicts and check builds
 
-If someone saved the entry after you opened it, Save reports a revision
-conflict and keeps your unsaved work. Use **Copy my JSON** to keep a copy, then
-**Reload server draft** to adopt the other version, and reapply your changes.
-Do not overwrite another editor's work blindly.
+When you return to the Admin tab, the editor checks for a newer draft. A clean
+editor shows the latest revision. If you have unsaved edits and someone else
+saved a newer draft, **Draft changed elsewhere** appears and your open form
+keeps your work. Saving against an older revision also shows this conflict.
+
+**Copy my JSON** copies your draft content and block order and leaves the form
+intact. For example, if you cleared a numeric list item, the JSON contains its
+last stored number and the input stays empty in the form.
+
+**Reload server draft** replaces your unsaved edits once the latest server
+draft loads. If the read fails, your form stays open and you can try again.
 
 Open **Builds** for the site build results. During local development, reload
 existing routes after publication and restart the site for new or renamed
