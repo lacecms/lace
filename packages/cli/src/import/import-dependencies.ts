@@ -22,7 +22,7 @@ type Snapshot = {
 };
 
 export type SnapshotDependency = Dependency & {
-  readonly purpose: "url" | "reference";
+  readonly purpose: ReturnType<typeof snapshotEntryReferences>[number]["purpose"];
   readonly delivered: boolean;
   readonly models?: readonly string[];
   readonly packageKey: boolean;

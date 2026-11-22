@@ -1,4 +1,6 @@
-export type ImpactPurpose = "url" | "reference";
+import type { SnapshotEntryReference } from "@lacecms/content";
+
+export type ImpactPurpose = SnapshotEntryReference["purpose"];
 
 export const EXTERNAL_URL_USAGE = "not (e.id=? and (?='delete' or e.published_snapshot_id=s.id))";
 

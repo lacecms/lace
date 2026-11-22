@@ -1,3 +1,4 @@
+import type { SnapshotEntryReference } from "@lacecms/content";
 import { AdminClientError } from "../../shared/api/index.js";
 
 const changedCodes = {
@@ -9,7 +10,10 @@ const changedCodes = {
   ]),
 };
 
-export function isIncomingImpactChanged(error: unknown, purpose: "url" | "reference"): boolean {
+export function isIncomingImpactChanged(
+  error: unknown,
+  purpose: SnapshotEntryReference["purpose"],
+): boolean {
   return (
     error instanceof AdminClientError &&
     error.code !== undefined &&

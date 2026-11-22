@@ -1,3 +1,4 @@
+import type { SnapshotEntryReference } from "@lacecms/content";
 import type { LinkUsageSourceDto } from "@lacecms/contracts";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -20,7 +21,7 @@ export function IncomingImpactSource({
   readonly action: "delete" | "unpublish";
   readonly onChanged: () => void;
   readonly reportLocations: (id: string, blocked: boolean) => void;
-  readonly purpose: "url" | "reference";
+  readonly purpose: SnapshotEntryReference["purpose"];
   readonly renderLocation?: (location: LinkUsageSourceDto["locations"][number]) => ReactNode;
 }) {
   const client = useAdminClient();

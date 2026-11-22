@@ -211,7 +211,7 @@ export class SqlContentLinkReader implements ContentLinkReadPort, ContentReferen
     return { ...page, items: rows.map((row) => referenceTarget(row) as ReferenceTarget) };
   }
 
-  private async listTargets(input: LinkTargetQuery, purpose: "url" | "reference") {
+  private async listTargets(input: LinkTargetQuery, purpose: ImpactPurpose) {
     assertLinkPageLimit(input.limit);
     const search = input.search?.trim() ?? "";
     if (
