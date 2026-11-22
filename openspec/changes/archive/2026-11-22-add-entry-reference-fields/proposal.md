@@ -55,7 +55,7 @@ site delivery and preview, REL1E editor workflows, and REL1F import and
 end-to-end acceptance. Each has a verification checkpoint. Shipping any
 writer before the removal, projection and cycle guards are integrated would
 expose an incomplete integrity contract. EX5, EX7 and RC5 preparation proceed
-independently. See the [active roadmap](../../../docs/extensibility-roadmap.md).
+independently. See the [active roadmap](../../../../docs/extensibility-roadmap.md).
 
 Architecture §§8–10, 12–13, 16–17 and 22/25 govern this change. It builds on
 accepted `conditional-fields`, `content-repository-contracts`,

@@ -24,7 +24,8 @@ shape → `field-descriptors`; value validation → `content-validation`;
 visibility → `conditional-fields`; structural change between versions →
 `schema-evolution`; synchronization planning and reports →
 `configuration-synchronization`; collection list queries →
-`collection-query-options`; links to entries → `internal-url-links`.
+`collection-query-options`; navigation links → `internal-url-links`; typed
+entry selections and dependency integrity → `entry-reference-fields`.
 
 - [content-model-configuration](content-model-configuration/spec.md)
 - [field-descriptors](field-descriptors/spec.md)
@@ -34,6 +35,7 @@ visibility → `conditional-fields`; structural change between versions →
 - [configuration-synchronization](configuration-synchronization/spec.md)
 - [collection-query-options](collection-query-options/spec.md)
 - [internal-url-links](internal-url-links/spec.md)
+- [entry-reference-fields](entry-reference-fields/spec.md)
 
 ## Content domain and persistence
 

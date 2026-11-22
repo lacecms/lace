@@ -1,4 +1,4 @@
-import { canonicalizeJson, encodeEntryLink, normalizeMediaText } from "@lacecms/application";
+import { canonicalizeJson, normalizeMediaText } from "@lacecms/application";
 import type { NormalizedDraftCandidate } from "@lacecms/application";
 import {
   adminContentEntrySchema,
@@ -13,18 +13,17 @@ import type { ImportClient } from "./import-client.js";
 import { ImportError, pointer } from "./import-format.js";
 import type { ImportIssue } from "./import-format.js";
 import type { MediaMetadataPatch, PackageMediaFile } from "./import-files.js";
-import { STRIP } from "./import-references.js";
-import type { Resolution } from "./import-references.js";
+import { importOrders } from "./import-order.js";
+import type { EntryAction, EntryPlan, PublishAction } from "./import-order.js";
+import { idResolver } from "./import-references.js";
 import type { ImportState, StateEntry } from "./import-state.js";
-import { draftInput, normalizeDraft } from "./import-validate.js";
+import { draftInput, draftIssues, normalizeDraft } from "./import-validate.js";
 import type { ValidatedEntry, ValidatedPackage } from "./import-validate.js";
 
 export type AdminEntry = v.InferOutput<typeof adminContentEntrySchema>;
 type MediaDto = v.InferOutput<typeof mediaListSchema>["items"][number];
 
 export type MediaAction = "upload" | "update" | "unchanged";
-export type EntryAction = "create" | "update" | "unchanged" | "conflict";
-export type PublishAction = "publish" | "published" | "not-requested";
 
 export interface MediaPlan {
   readonly key: string;
@@ -38,18 +37,10 @@ export interface MediaPlan {
   readonly sameAs?: string;
 }
 
-export interface EntryPlan {
-  readonly key: string;
-  readonly model: string;
-  readonly action: EntryAction;
-  readonly validated: ValidatedEntry;
-  readonly current?: AdminEntry;
-  readonly publish: PublishAction;
-}
-
 export interface ImportPlan {
   readonly media: readonly MediaPlan[];
   readonly entries: readonly EntryPlan[];
+  readonly draftOrder: readonly string[];
   /** Entry keys in publication order. */
   readonly publishOrder: readonly string[];
   readonly publication: "requested" | "skipped";
@@ -361,18 +352,6 @@ export function draftProjection(draft: {
   } as never);
 }
 
-/** Resolves references from known IDs; STRIP marks a target that does not exist yet. */
-export function idResolver(
-  mediaIds: ReadonlyMap<string, string>,
-  entryIds: ReadonlyMap<string, string>,
-) {
-  return (kind: "media" | "entry", key: string): Resolution => {
-    const id = kind === "media" ? mediaIds.get(key) : entryIds.get(key);
-    if (id === undefined) return STRIP;
-    return kind === "media" ? id : encodeEntryLink(id);
-  };
-}
-
 /** The normalized candidate with every reference resolved, or null when one is still unknown. */
 export function resolvedCandidate(
   validated: ValidatedEntry,
@@ -384,63 +363,24 @@ export function resolvedCandidate(
     (reference.kind === "media" ? mediaIds : entryIds).has(reference.key),
   );
   if (!known) return null;
-  return normalizeDraft(
-    draftInput(validated.entry, validated.model, config, idResolver(mediaIds, entryIds)),
-    validated.model,
-    config,
-    "draft",
-  );
-}
-
-function isPublished(entry: AdminEntry | undefined): boolean {
-  return entry?.published !== undefined;
+  try {
+    return normalizeDraft(
+      draftInput(validated.entry, validated.model, config, idResolver(mediaIds, entryIds)),
+      validated.model,
+      config,
+      "draft",
+    );
+  } catch (error) {
+    throw new ImportError(
+      "IMPORT_INVALID",
+      `Entry "${validated.entry.key}" is invalid with the resolved IDs.`,
+      draftIssues(error, (path) => pointer("entries", validated.index, ...path)),
+    );
+  }
 }
 
 function isCurrentPublication(entry: AdminEntry | undefined): boolean {
   return entry?.published !== undefined && entry.published.revision === entry.draft.revision;
-}
-
-/** Orders publication so that link targets without a published version come first. */
-function publicationOrder(entries: readonly EntryPlan[], issues: ImportIssue[]): string[] {
-  const byKey = new Map(entries.map((plan) => [plan.key, plan]));
-  const publishing = entries.filter((plan) => plan.publish === "publish");
-  const set = new Set(publishing.map((plan) => plan.key));
-  const dependencies = new Map<string, Set<string>>();
-  for (const plan of publishing) {
-    const needs = new Set<string>();
-    for (const reference of plan.validated.references) {
-      if (reference.kind !== "entry" || !reference.delivered || reference.key === plan.key)
-        continue;
-      const target = byKey.get(reference.key);
-      if (target === undefined || isPublished(target.current)) continue;
-      if (!set.has(reference.key))
-        issues.push({
-          pointer: reference.pointer,
-          message: `links to "${reference.key}", which has no published version and is not published by this import.`,
-        });
-      else needs.add(reference.key);
-    }
-    dependencies.set(plan.key, needs);
-  }
-  const order: string[] = [];
-  const done = new Set<string>();
-  while (order.length < publishing.length) {
-    const ready = publishing.find(
-      (plan) =>
-        !done.has(plan.key) && [...dependencies.get(plan.key)!].every((key) => done.has(key)),
-    );
-    if (ready === undefined) {
-      const cycle = publishing.filter((plan) => !done.has(plan.key)).map((plan) => plan.key);
-      issues.push({
-        pointer: "/entries",
-        message: `Entries ${cycle.map((key) => `"${key}"`).join(", ")} link to each other without a published version, so none can be published first. Publish one without the link first.`,
-      });
-      break;
-    }
-    done.add(ready.key);
-    order.push(ready.key);
-  }
-  return order;
 }
 
 function conflictWith(recorded: StateEntry | undefined, current: AdminEntry): boolean {
@@ -509,13 +449,15 @@ export async function planImport(
       publish,
     };
   });
-  const publishOrder = options.publish ? publicationOrder(entries, issues) : [];
+  const orders = entries.some(({ action }) => action === "conflict")
+    ? { draftOrder: [], publishOrder: [] }
+    : importOrders(entries, validated.config, mediaIds, issues);
   if (issues.length > 0)
-    throw new ImportError("IMPORT_INVALID", "Publication cannot be ordered.", issues);
+    throw new ImportError("IMPORT_INVALID", "Import writes cannot be ordered.", issues);
   return {
     media,
     entries,
-    publishOrder,
+    ...orders,
     publication: options.publish ? "requested" : "skipped",
   };
 }

@@ -8,14 +8,55 @@ import { promisify } from "node:util";
 const execute = promisify(execFile);
 const workspace = fileURLToPath(new URL("../../", import.meta.url));
 
+export function referenceSiteExport() {
+  const content = {
+    fields: {},
+    blocks: [],
+    internalLinks: [],
+    publishedAt: "2026-09-20T00:00:00.000Z",
+  };
+  const home = { ...content, id: "home", modelKey: "home", path: "/", title: "Service" };
+  return {
+    formatVersion: 2,
+    version: 1,
+    records: ["Anna", "Boris", "Clara"].map((title) => ({
+      ...content,
+      title,
+      id: title,
+      modelKey: "testimonials",
+    })),
+    globals: [],
+    media: {},
+    seo: { defaults: null, models: {} },
+    entries: [
+      {
+        ...home,
+        blocks: [
+          {
+            key: "reviews",
+            type: "selection",
+            position: 0,
+            schemaVersion: 1,
+            data: { reviews: ["Clara", "Anna", "Boris"] },
+          },
+        ],
+      },
+    ],
+  };
+}
+
 /** Build the same site-owned route and block from a published or detached preview export. */
-export async function buildReferenceSite(exported, previewClient) {
+export async function buildReferenceSite(
+  exported,
+  previewClient,
+  modules = join(workspace, "apps/site/node_modules"),
+) {
   const directory = await mkdtemp(join(tmpdir(), "lace-reference-site-"));
   try {
     const pages = join(directory, "src/pages");
     const blocks = join(directory, "src/blocks");
     await Promise.all([mkdir(pages, { recursive: true }), mkdir(blocks, { recursive: true })]);
-    await symlink(join(workspace, "apps/site/node_modules"), join(directory, "node_modules"));
+    await symlink(modules, join(directory, "node_modules"));
     await Promise.all([
       copyFile(
         new URL("./reference-site/index.astro", import.meta.url),
@@ -31,11 +72,10 @@ export async function buildReferenceSite(exported, previewClient) {
         'import { lacePreview } from "@lacecms/astro/preview";\nexport default { integrations: [lacePreview()] };\n',
       ),
     ]);
-    const { stageAstroPreviewInput, packageAstroPreview } =
-      await import("../../packages/astro/dist/preview.js");
-    const input = previewClient
-      ? await stageAstroPreviewInput(join(directory, "scratch"), previewClient)
+    const preview = previewClient
+      ? await import("../../packages/astro/dist/preview.js")
       : undefined;
+    const input = await preview?.stageAstroPreviewInput(join(directory, "scratch"), previewClient);
     await execute("pnpm", ["exec", "astro", "build"], {
       cwd: directory,
       env: {
@@ -45,7 +85,7 @@ export async function buildReferenceSite(exported, previewClient) {
       },
     });
     if (!input) return { html: await readFile(join(directory, "dist", "index.html"), "utf8") };
-    const packaged = await packageAstroPreview(input);
+    const packaged = await preview.packageAstroPreview(input);
     const files = await Promise.all(
       packaged.manifest.files.map(async ({ path, contentType }) => ({
         path,

@@ -1,6 +1,6 @@
 ## Context
 
-The [proposal](proposal.md) and [ADR 0034](../../../docs/adr/0034-acyclic-entry-reference-fields.md)
+The [proposal](proposal.md) and [ADR 0034](../../../../docs/adr/0034-acyclic-entry-reference-fields.md)
 cover the product decision. Today `posts.author` in `lace.config.ts` is text.
 CE10 tracks URL fields by snapshot and pointer, its picker infers routability
 from published routes, and a reviewed URL usage can survive withdrawal. The

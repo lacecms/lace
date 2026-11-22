@@ -14,10 +14,11 @@ The decoded identifier SHALL have 1–255 UTF-16 code units, contain no control
 characters or unpaired surrogates, and round-trip exactly through `encodeURIComponent`; malformed
 escapes, noncanonical encodings, an empty identifier and unencoded query/fragment
 suffixes SHALL fail. IDs SHALL be opaque, not restricted to UUIDs or ULIDs.
-References SHALL target only this installation's page entries and entries of
+These URL references SHALL target only this installation's page entries and entries of
 collections that declare a route. Globals and entries of route-less
-collections SHALL be permitted sources but SHALL NOT be targets. No descriptor
-kind, object-valued reference field or automatic path-to-ID conversion is added.
+collections SHALL be permitted sources but SHALL NOT be targets. An ordinary URL field SHALL retain its string encoding and SHALL NOT automatically
+convert literal paths into IDs. Typed fields follow the separate
+entry-reference-fields contract.
 Provider-restricted URL fields, rich text, SEO canonical URLs, media values and
 ordinary text that happens to start with `entry:` SHALL retain their contracts.
 
@@ -50,8 +51,11 @@ fields and block data, including supported groups and
 lists. Each location SHALL identify its source snapshot, source key (`$fields`
 or block key), area (`fields` or `data`) and RFC 6901 pointer relative
 to that area, with zero-based list indices. A snapshot SHALL contain at most
-200 internal-reference occurrences after defaults, independently of media caps.
-Repeated IDs and hidden blocks SHALL count. Block settings SHALL retain their
+200 ordinary internal URL and typed entry-reference occurrences combined after
+defaults, independently of media caps.
+Repeated IDs, retained hidden values and hidden blocks SHALL count in each
+normalized snapshot that contains them. Only URL occurrences SHALL enter
+URL-target checks and internalLinks manifests. Block settings SHALL retain their
 existing select/boolean/number/text allowlist and SHALL NOT produce references.
 Token-like text in settings SHALL remain ordinary text.
 Hidden-block references SHALL stay tracked but SHALL NOT be delivered or block
@@ -110,12 +114,12 @@ SHALL be validated syntactically without network availability or anchor checks.
 
 ### Requirement: Incoming usages require informed lifecycle confirmation
 Delete and unpublish SHALL expose a paginated impact view of all current draft
-and published source entities and exact locations, with draft, published-visible
+and published URL source entities and exact URL locations, with draft, published-visible
 and published-hidden groups distinguished. For unpublish, usages in the target's
 own publication disappear with that publication and SHALL NOT require additional
 acknowledgment; its retained draft usages SHALL be shown. For delete, all source
 snapshots removed by that deletion SHALL be excluded from external impact.
-Published-visible external usages SHALL require explicit additional confirmation
+Published-visible external URL usages SHALL require explicit additional confirmation
 bound to the target/action, existing target revision/snapshot guards, actor and
 the observed incoming dependency revision. Without acknowledgment the command
 SHALL fail with `CONTENT_LINKS_IN_USE`; an outdated impact receipt SHALL fail
@@ -124,9 +128,11 @@ Draft-only and hidden usages SHALL warn but SHALL NOT require the additional
 published-link acknowledgment. Confirmation SHALL NOT bypass permissions,
 singleton restrictions or existing lifecycle preconditions. No blanket force
 flag or rewriting of sources SHALL substitute for the observed impact.
+An acknowledgment SHALL apply to URL impact only. Typed reference dependencies
+SHALL be evaluated independently under entry-reference-fields.
 
 #### Scenario: Confirmed unpublication
-- **WHEN** an authorized publisher reviews published incoming links and submits the current impact receipt with explicit acknowledgment
+- **WHEN** an authorized publisher reviews published incoming URL links, there is no blocking typed dependency, and the publisher submits the current impact receipt with explicit acknowledgment
 - **THEN** unpublication succeeds atomically, keeps source IDs and drafts unchanged, advances published state and requests a rebuild
 
 #### Scenario: Incoming link changes during confirmation

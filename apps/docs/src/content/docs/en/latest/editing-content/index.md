@@ -80,6 +80,23 @@ The list header shows its count against the maximum. When an entry reaches a
 list's maximum or the entry-wide limit of 500 list items, Add and Duplicate are
 disabled with an explanation; removing and reordering stay available.
 
+### Select and reuse entries
+
+Open a reference field to search its allowed models by title. Each result
+shows its title, model and publication status. Route-less records can be
+selected. To fill a list, choose the entries in order and confirm the
+selection. Use the row controls or the same keyboard drag controls to reorder
+them. You can pick the same entry more than once. Viewers can inspect saved
+selections.
+
+Draft-only targets are available for selection in a saved draft. Publish
+each target used by a visible field or block before publishing the source.
+Lace checks for cycles in saved drafts, including hidden selections, and
+checks delivered publications independently. To reverse a published
+dependency from A → B to B → A, first clear B from A and save A, then
+select A in B and save B. Publish A before B. A cycle error can identify
+the saved correction to publish first.
+
 ## Conditional fields
 
 Some fields apply only when another field selects them, for example a Video URL
@@ -136,6 +153,12 @@ HTTPS origins you can switch between desktop and narrow widths. **Open in new
 tab** also works when the browser needs a top-level sign-in. A preview URL
 requires a current authorized Lace session.
 
+Preview uses the published versions of the entries that the draft selects.
+If a visible selection is draft-only, publish that target and create the
+preview again from the same saved draft. Publishing a route-less record may
+also update any public page that lists the whole collection. A ready preview
+keeps its captured target content when the target later changes.
+
 Each result expires 24 hours after it becomes ready. Save, revert and
 unpublish retain the captured result and its original expiry. Publishing the
 entry, deleting it or its model, or deleting included media invalidates the
@@ -176,6 +199,19 @@ The **Entry actions** menu offers what your role and the entry allow:
 Unpublish and Delete show every entry that links to this one and may ask you
 to confirm that working links will stop navigating
 ([internal links](../content-modeling/links/#delete-or-unpublish-a-linked-entry)).
+
+Use **Where used** to find direct reference selections and open the exact
+source field or block. If a service page selects a review and the review
+selects Anna, Anna's list shows the review's Author field. The service page
+appears in the review's own list.
+
+A delivered published reference blocks deleting or unpublishing its target.
+Clear or replace the selection on the source and publish that correction to
+release the blocker. If only saved drafts select the target, you can
+unpublish it and keep those selections. Deleting it requires reviewing and
+acknowledging the draft uses. The saved drafts will show a missing selection
+in its original position. Replace or clear it before publishing that source.
+
 Published content has no unlimited history: do not rely on recovering every
 earlier publication.
 

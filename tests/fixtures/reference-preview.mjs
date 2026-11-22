@@ -27,6 +27,7 @@ export function referenceConfig() {
         fields: {
           showReview: field.boolean(),
           hiddenReview: field.reference({ models: ["testimonials"] }),
+          relatedPage: field.url(),
         },
         visibility: { hiddenReview: { field: "showReview", values: [true] } },
       }),

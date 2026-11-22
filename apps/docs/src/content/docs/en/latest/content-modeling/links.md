@@ -2,7 +2,7 @@
 title: Link to other entries
 description: Store links to pages and collection entries that follow slug changes, and render them safely in your site.
 kind: guide
-verifiedAgainst: 0.1.0-rc2
+verifiedAgainst: 0.1.0-rc6
 ---
 
 An ordinary URL field can hold either a manual URL or a link to a CMS entry.
@@ -36,8 +36,9 @@ Block settings, rich-text links, video URLs and SEO canonical URLs keep their
 own rules and have no picker.
 
 Globals and entries of [route-less collections](../#add-a-collection-without-a-route)
-can contain links but cannot be link targets. One entry holds at most 200 CMS
-links across its fields and blocks, hidden blocks included.
+can contain links but cannot be link targets. Each snapshot can hold up to
+200 occurrences of CMS links and [entry references](../#select-reusable-entries)
+combined, including hidden fields and blocks.
 
 To write a token in code, for example in an import script, use the helper
 instead of concatenating strings:

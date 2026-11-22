@@ -1,10 +1,21 @@
-import { errorEnvelopeSchema } from "@lacecms/contracts";
+import { errorEnvelopeSchema, validationErrorDetailsSchema } from "@lacecms/contracts";
 import * as v from "valibot";
 import { ImportError } from "./import-format.js";
 
 export const MAX_RETRY_WAIT_SECONDS = 300;
 export const MAX_RETRY_WAITS = 10;
 const DEFAULT_RETRY_WAIT_SECONDS = 5;
+
+const referenceRecovery = new Map([
+  [
+    "reference_cycle",
+    "Review the entry's selections and correct the blocking dependency in the admin, then rerun.",
+  ],
+  ["reference_graph_limit", "Reduce the entry's reference dependencies, then rerun."],
+  ["reference_target_missing", "Select an existing entry in the package, then rerun."],
+  ["reference_target_model", "Select an entry from an allowed model in the package, then rerun."],
+  ["reference_target_unpublished", "Publish the selected target first, then rerun."],
+]);
 
 function usageError(message: string): never {
   throw new ImportError("IMPORT_USAGE", message);
@@ -162,9 +173,18 @@ export class ImportClient {
           "IMPORT_UNAUTHORIZED",
           `${request.what} was denied (HTTP ${response.status}${code}). Check that LACE_IMPORT_TOKEN is a current, unrevoked import token with the needed permissions.`,
         );
+      const validation =
+        envelope.success && envelope.output.error.code === "VALIDATION_FAILED"
+          ? v.safeParse(validationErrorDetailsSchema, envelope.output.error.details)
+          : undefined;
+      const issue = validation?.success
+        ? validation.output.issues.find(({ code }) => referenceRecovery.has(code))
+        : undefined;
+      const recovery =
+        issue === undefined ? "" : ` ${issue.code}: ${referenceRecovery.get(issue.code)}`;
       throw new ImportError(
         "IMPORT_FAILED",
-        `${request.what} failed (HTTP ${response.status}${code}).`,
+        `${request.what} failed (HTTP ${response.status}${code}).${recovery}`,
       );
     }
     if (request.schema === undefined)

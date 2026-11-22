@@ -109,9 +109,9 @@ when selected and do not yet have an implementation order or new CE numbers.
   See `docs/internal-url-links.md` and its verification record. Specs synchronized
   and change archived on 2026-10-24 at
   `openspec/changes/archive/2026-10-24-ce10-internal-url-links`.
-- **Entry reference fields (selected 2026-11-21):** the owner selected
+- **Entry reference fields (implemented and archived 2026-11-22):**
   [REL1](docs/extensibility-roadmap.md#pre-10-priority-rel1--entry-reference-fields)
-  after saved-draft preview. One [active proposal](openspec/changes/add-entry-reference-fields/proposal.md)
+  followed saved-draft preview. The [archived change](openspec/changes/archive/2026-11-22-add-entry-reference-fields/proposal.md)
   covers typed selections, direct usage and lifecycle rules, SDK and editor
   integration in six sessions.
 - **Rich-text internal links (deferred from CE10):** stable navigation

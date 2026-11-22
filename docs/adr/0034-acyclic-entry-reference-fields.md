@@ -53,5 +53,5 @@ editors to maintain a second, inverse selection would create conflicting
 orders and ownership. Automatic recursive expansion would duplicate shared
 records in the export and would provide no additional editorial capability.
 
-Implementation is proposed in
-[REL1](../../openspec/changes/add-entry-reference-fields/proposal.md).
+Implementation and verification are recorded in
+[REL1](../../openspec/changes/archive/2026-11-22-add-entry-reference-fields/proposal.md).

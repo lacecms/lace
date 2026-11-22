@@ -179,6 +179,7 @@ test("packaged entry point keeps its public exports", async () => {
     "sendTestEmail",
     "siteBuildEvent",
     "siteBuildRetryPolicy",
+    "snapshotEntryReferences",
     "summarizeUserAgent",
     "testEmailTemplate",
     "transformConfigurationSyncFields",

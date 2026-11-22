@@ -10,8 +10,9 @@ import {
 import type { ImportClient } from "./import-client.js";
 import { readVerifiedMedia } from "./import-files.js";
 import type { MediaMetadataPatch } from "./import-files.js";
-import { draftProjection, idResolver, resolvedCandidate } from "./import-plan.js";
+import { draftProjection, resolvedCandidate } from "./import-plan.js";
 import type { AdminEntry, ImportPlan } from "./import-plan.js";
+import { idResolver } from "./import-references.js";
 import type { ImportState } from "./import-state.js";
 import { draftInput } from "./import-validate.js";
 import type { ValidatedPackage } from "./import-validate.js";
@@ -138,8 +139,13 @@ export async function applyPlan(
     await record(entry.key, entry.model, body);
   }
 
-  // Pass 2: save every draft that still differs from its complete candidate.
-  for (const entry of plan.entries) {
+  const entries = new Map(plan.entries.map((entry) => [entry.key, entry]));
+  for (const entry of plan.entries)
+    if (entry.action === "unchanged") await record(entry.key, entry.model, current.get(entry.key)!);
+
+  // Pass 2: save complete candidates in the planned draft graph order.
+  for (const key of plan.draftOrder) {
+    const entry = entries.get(key)!;
     const existing = current.get(entry.key)!;
     const candidate = resolvedCandidate(entry.validated, validated.config, mediaIds, entryIds)!;
     if (draftProjection(candidate) === draftProjection(existing.draft)) {

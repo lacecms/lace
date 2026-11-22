@@ -135,7 +135,7 @@ collection's entries.
 ## Configure fields
 
 The `field` builder provides `text`, `textarea`, `richText`, `number`,
-`boolean`, `date`, `datetime`, `select`, `url` and `media`, plus `group` and
+`boolean`, `date`, `datetime`, `select`, `url`, `media` and `reference`, plus `group` and
 `list` for nested values ([groups, lists and form layout](composites/)). Every
 builder accepts `label`, `description`, `required` and `defaultValue`.
 
@@ -147,7 +147,7 @@ builder accepts `label`, `description`, `required` and `defaultValue`.
   number, select and rich-text controls, including inside groups, lists, block
   data and block settings. A placeholder is never saved as content. Set it to
   `""` to suppress the control's generic prompt. Boolean, date, datetime,
-  media, group and list fields reject it: use `description` to explain them.
+  media, reference, group and list fields use `description` for guidance.
 - **Descriptions** appear under the field and are read by assistive technology.
   Write instructions there rather than in labels.
 - **Text counters** show the current length of text and textarea values. They
@@ -176,6 +176,28 @@ content.
 To ask for some fields only in some cases, use
 [conditional fields](conditional-fields/). To link to other entries, use a URL
 field ([internal links](links/)).
+
+### Select reusable entries
+
+Use `field.reference({ models: ["authors"] })` to select one author by ID.
+Specify one or more distinct page or collection model keys. A collection can
+be route-less, and a model can allow its own key. References work in page,
+collection and global fields, including groups, lists and block data. To
+select several reviews in editorial order, wrap the reference in
+`field.list({ item: field.reference({ models: ["testimonials"] }), maxItems: 3 })`.
+Add `required: true` and `minItems: 1` if publication requires a selection.
+Repeated IDs occupy separate positions.
+
+The saved value is the entry's raw ID. It follows that entry across title and
+slug changes. Ordinary URL fields use [internal link tokens](links/) for
+navigation. Each snapshot can hold up to 200 occurrences across both field
+kinds, including repeated IDs, defaults and hidden values. List and media
+limits apply separately. Reference fields are available for editorial
+selection and excluded from collection list queries, SEO mappings, block
+settings and visibility controllers.
+
+See [rendering selected reviews](../astro-integration/#render-selected-reviews)
+and [migrating an existing text author](synchronization/#migrate-a-text-author).
 
 ## Allow blocks
 

@@ -2,7 +2,7 @@
 title: Import content
 description: Load pages, posts and images from another site with lace import.
 kind: guide
-verifiedAgainst: 0.1.0-rc2
+verifiedAgainst: 0.1.0-rc6
 ---
 
 `lace import` loads a portable **import package** into a running Lace installation: a directory with `lace-import.json` and the image files it names. Use it to move an existing site, or to load content that a script produced. The command talks to your installation's admin API, so it works the same against the Node runtime and a Cloudflare Worker, and every write goes through the same validation as the admin.
@@ -123,8 +123,26 @@ Each page and each global appears at most once, and each collection slug once pe
 
 - `{"$media": "<media key>"}` in a media field, a nested media field (for example a gallery image) or `seo.image` becomes that image.
 - `{"$entry": "<entry key>"}` in a URL field becomes an [internal link](../../content-modeling/links/) to that page or collection entry, which follows slug changes. Globals and entries of collections without a route cannot be link targets.
+- The same `$entry` marker in a [reference field](../../content-modeling/#select-reusable-entries)
+  becomes the target's raw ID. The target must be a page or collection entry
+  from an allowed model. Route-less collections are eligible, including in
+  nested groups, list items and block data. A list such as
+  `[{"$entry":"review-c"},{"$entry":"review-a"},{"$entry":"review-c"}]`
+  keeps its order and repeated selection when both keys appear in the package.
 
-A reference anywhere else is an error. With `--publish`, a published entry may link only to entries that are published too; import publishes link targets first and reports cycles.
+Literal IDs in reference fields and literal URL tokens in URL fields pass
+through as supplied. Use package keys for portable selections across
+installations. `--validate-only` detects cycles between package keys even
+when importing drafts only and when a selection is hidden.
+
+The dry run prints the order for complete drafts and requested publications.
+For a reversal it schedules the removal of the old typed dependency before
+the addition of its reverse in each phase. With `--publish`, targets that
+have never been published go first when a visible selection needs them.
+A visible selection of an unpublished package entry marked `publish: false`
+blocks the plan. If a dependency elsewhere in the installation blocks an
+actual save or publication, correct the reported entry and rerun with the
+same state file. Completed writes are matched on the next run.
 
 ## Examples for every built-in block
 

@@ -23,10 +23,15 @@ import type { NormalizedDraft } from "./draft-normalization.js";
 type ModelFieldMap = Readonly<Record<string, FieldDefinition>>;
 
 export function snapshotEntryReferences(
-  dependencies: Pick<ContentUseCaseDependencies, "config">,
+  dependencies: { readonly config: Pick<ContentUseCaseDependencies["config"], "blocks"> },
   model: NormalizedContentModel,
   fields: JsonObject,
-  blocks: readonly Pick<ContentBlock, "data" | "hidden" | "key" | "type">[],
+  blocks: readonly {
+    readonly data: ContentBlock["data"];
+    readonly hidden?: boolean;
+    readonly key: string;
+    readonly type: string;
+  }[],
 ): readonly SnapshotEntryReference[] {
   return collectSnapshotEntryReferences(
     model.fields,

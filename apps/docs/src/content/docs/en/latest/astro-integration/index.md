@@ -38,6 +38,7 @@ Keep `LACE_API_BASE_URL` and `LACE_BUILD_TOKEN` in server-side build configurati
 
 - `byPath(path)` returns a page entry; `entries(model)` lists a collection for `getStaticPaths`, and `bySlug(model, slug)` reads the current entry on each render.
 - `records(model)` lists the published entries of a collection without a `route`. These records have a title, fields, blocks, `media()`/`image()` and `link()`, but no path, slug or SEO group, and they never appear in entry lookups or the sitemap. Render them in any page, for example a team list or testimonials; they need no route files.
+- `reference(id)` resolves a raw selected ID to a published page, collection entry or route-less record in the assembled view. It returns `undefined` for an unknown ID or a global. Each lookup resolves one entry, and its own reference fields still hold raw IDs.
 - `global(model)` returns a published global such as site navigation, or `undefined` while it is unpublished. Provide a deliberate fallback for optional globals.
 - `seo(entry)`, `url` and `urlFor(path)` give SEO metadata with fallbacks, canonical URLs and sitemap entries; see [SEO](../content-modeling/seo/).
 
@@ -71,6 +72,51 @@ To change the element for one node or mark, pass `components`; an override recei
 ```
 
 An override must keep the same grammar: forward the validated `href`, `target` and `rel` attributes, and note that a `codeBlock` override is called for both the `pre` and the `code` element. Style rich text through its block wrapper as described in [Style your site](styling/#style-rich-text).
+
+## Render selected reviews
+
+This block lets an editor select up to three testimonials in the order they
+should appear. Define the route-less `testimonials` and `authors` collections,
+register the block in `lace.config.ts`, add its type to the model's allowed
+blocks, and map the component in the site's block map.
+
+```ts
+import { defineBlock, field } from "@lacecms/content";
+
+export const selection = defineBlock({
+  type: "selection",
+  version: 1,
+  fields: {
+    reviews: field.list({ item: field.reference({ models: ["testimonials"] }), maxItems: 3 }),
+    author: field.reference({ models: ["authors"] }),
+  },
+});
+```
+
+The block receives `reference(id)` from `LaceBlocks`. Use it to read each
+review in order and to resolve the optional author's photo:
+
+```astro
+---
+import type { BlockProps } from "@lacecms/render";
+
+const { data, reference } = Astro.props as BlockProps<typeof import("./definition").selection>;
+const reviews = (data.reviews ?? []).map(reference);
+const author = data.author === undefined ? undefined : reference(data.author);
+const photo = author?.fields.photo;
+const image = typeof photo === "string" ? author?.media(photo) : undefined;
+---
+
+<ol>{reviews.map((review) => review && <li>{review.title}</li>)}</ol>
+{image && <img src={image.url} alt={image.alt ?? ""} />}
+```
+
+The site view reads the complete paginated export before rendering. These
+lookups use that view, so they preserve authored positions and repeated IDs
+without a request per target. Route-less records can render as content cards.
+To render a navigation link, use the URL field and `site.link()` workflow.
+Publishing an updated author requests a new build. On that build the same
+stored ID resolves to the new published author.
 
 ## Optimize images
 
@@ -191,6 +237,13 @@ which points to the generation prefix during preview. Check dynamic imports,
 CSS backgrounds, downloads and original images. A fragment-only link stays
 in the page. Site-page links open the public site in a new tab, including its
 configured base path, such as `/journal/`.
+
+The preview site view overlays the selected saved draft on captured
+publications. Both `site.reference(id)` and the block's `reference(id)` read
+from that same view. A visible reference whose target is draft-only blocks
+preview creation. Once the target is published, the same saved draft can be
+previewed. A ready preview continues to use the captured publication if the
+author later publishes a new photo.
 
 The site owner controls external effects from site code. Use
 `(await getSite()).preview` in server code to omit analytics tags, tracking

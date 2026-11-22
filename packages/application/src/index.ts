@@ -51,6 +51,7 @@ export {
 } from "./content/internal-links.js";
 export { routeLessModelKeys } from "./content/route-less-links.js";
 export * from "./content/published-projection.js";
+export { snapshotEntryReferences } from "./content/publication-projection.js";
 export * from "./content/use-case-inputs.js";
 export {
   duplicateTitle,

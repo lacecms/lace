@@ -8,24 +8,27 @@ export interface FieldShape {
   readonly type: string;
   readonly fields?: Readonly<Record<string, FieldShape>>;
   readonly item?: FieldShape;
+  readonly models?: readonly string[];
+  readonly embedProviders?: readonly string[];
 }
 export type FieldShapes = Readonly<Record<string, FieldShape>>;
 
-export type ReferenceKind = "media" | "entry";
+export type ReferenceKind = "media" | "entry" | "reference";
 
 /** One package reference found in an entry. */
 export interface EntryReference {
   readonly kind: ReferenceKind;
   readonly key: string;
   readonly pointer: string;
-  /** In model fields or a visible block; hidden blocks and SEO are not delivered links. */
-  readonly delivered: boolean;
 }
 
-/** Keys a package defines; entry values are the target model kinds. */
+/** Keys a package defines and the eligibility of each entry's model. */
 export interface PackageKeys {
   readonly media: ReadonlySet<string>;
-  readonly entries: ReadonlyMap<string, string>;
+  readonly entries: ReadonlyMap<
+    string,
+    { readonly key: string; readonly kind: string; readonly routeLess?: boolean }
+  >;
 }
 
 /** Removes the reference's location: an object property or a list element. */
@@ -39,12 +42,12 @@ type Visitor = {
     kind: ReferenceKind,
     key: string,
     path: readonly (string | number)[],
-    allowed: boolean,
+    shape: FieldShape | undefined,
   ) => Resolution | undefined;
   readonly onMalformed: (path: readonly (string | number)[]) => void;
 };
 
-function referenceKind(value: Json): ReferenceKind | "malformed" | undefined {
+function referenceKind(value: Json): "media" | "entry" | "malformed" | undefined {
   if (!isObject(value)) return undefined;
   const keys = Object.keys(value);
   const marked = keys.filter((key) => key === "$media" || key === "$entry");
@@ -62,7 +65,7 @@ function stray(value: Json, path: readonly (string | number)[], visitor: Visitor
   }
   if (kind !== undefined) {
     const key = (value as Record<string, string>)[kind === "media" ? "$media" : "$entry"]!;
-    const resolved = visitor.onReference(kind, key, path, false);
+    const resolved = visitor.onReference(kind, key, path, undefined);
     return resolved === undefined || resolved === STRIP ? value : resolved;
   }
   if (Array.isArray(value))
@@ -87,9 +90,12 @@ function visitField(
   }
   if (kind !== undefined) {
     const key = (value as Record<string, string>)[kind === "media" ? "$media" : "$entry"]!;
-    const allowed =
-      (kind === "media" && shape.type === "media") || (kind === "entry" && shape.type === "url");
-    const resolved = visitor.onReference(kind, key, path, allowed);
+    const resolved = visitor.onReference(
+      kind === "entry" && shape.type === "reference" ? "reference" : kind,
+      key,
+      path,
+      shape,
+    );
     return resolved === undefined ? value : resolved;
   }
   if (shape.type === "group" && shape.fields !== undefined && isObject(value))
@@ -103,6 +109,11 @@ function visitField(
     return items;
   }
   return stray(value, path, visitor);
+}
+
+function allowsMarker(kind: ReferenceKind, shape: FieldShape | undefined): boolean {
+  if (kind === "entry") return shape?.type === "url" && shape.embedProviders === undefined;
+  return shape?.type === kind;
 }
 
 function visitFields(
@@ -193,33 +204,32 @@ export function collectReferences(
         pointer: at(path),
         message: "A reference object must have exactly one $media or $entry string property.",
       }),
-    onReference: (kind, key, path, allowed) => {
-      if (!allowed) {
+    onReference: (kind, key, path, shape) => {
+      if (!allowsMarker(kind, shape)) {
         issues.push({
           pointer: at(path),
           message:
             kind === "media"
               ? "A $media reference is allowed only in a media field or seo.image."
-              : "An $entry reference is allowed only in a URL field.",
+              : "An $entry reference is allowed only in an ordinary URL or reference field.",
         });
         return undefined;
       }
+      const target = keys.entries.get(key);
       if (kind === "media" && !keys.media.has(key))
         issues.push({ pointer: at(path), message: "names no media item of the package." });
-      else if (kind === "entry" && !keys.entries.has(key))
+      else if (kind !== "media" && target === undefined)
         issues.push({ pointer: at(path), message: "names no entry of the package." });
-      else if (kind === "entry" && keys.entries.get(key) === "global")
+      else if (kind !== "media" && target?.kind === "global")
         issues.push({ pointer: at(path), message: "must name a page or collection entry." });
-      else {
-        const hiddenBlock =
-          path[0] === "blocks" && entry.blocks[path[1] as number]?.hidden === true;
-        references.push({
-          kind,
-          key,
+      else if (kind === "entry" && target?.routeLess === true)
+        issues.push({ pointer: at(path), message: "must name an entry with a route." });
+      else if (kind === "reference" && !shape?.models?.includes(target!.key))
+        issues.push({
           pointer: at(path),
-          delivered: path[0] !== "seo" && !hiddenBlock,
+          message: "names an entry of a model this field does not allow.",
         });
-      }
+      else references.push({ kind, key, pointer: at(path) });
       return undefined;
     },
   });
@@ -235,10 +245,24 @@ export function rewriteReferences(
 ): RewrittenEntry {
   return walkEntry(entry, modelFields, blockFields, {
     onMalformed: () => undefined,
-    onReference: (kind, key, _path, allowed) => (allowed ? resolve(kind, key) : undefined),
+    onReference: (kind, key, _path, shape) =>
+      allowsMarker(kind, shape) ? resolve(kind, key) : undefined,
   });
 }
 
 /** Placeholder identifiers for local validation; existence is not checked in drafts. */
-export const placeholderResolver: Resolver = (kind, key) =>
-  kind === "media" ? `import-media-${key}` : encodeEntryLink(`import-entry-${key}`);
+export function placeholderResolver(kind: ReferenceKind, key: string): string {
+  return kind === "entry" ? encodeEntryLink(`import-entry-${key}`) : `import-${kind}-${key}`;
+}
+
+/** Resolves known IDs and omits marker locations whose targets do not yet exist. */
+export function idResolver(
+  mediaIds: ReadonlyMap<string, string>,
+  entryIds: ReadonlyMap<string, string>,
+): Resolver {
+  return (kind, key) => {
+    const id = kind === "media" ? mediaIds.get(key) : entryIds.get(key);
+    if (id === undefined) return STRIP;
+    return kind === "entry" ? encodeEntryLink(id) : id;
+  };
+}

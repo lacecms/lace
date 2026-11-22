@@ -28,7 +28,7 @@ checkpoint.
 ### Additive text-author migration fixture
 
 The fixture in
-[`reference-fields.test.ts`](../../../packages/application/src/configuration/reference-fields.test.ts)
+[`reference-fields.test.ts`](../../../../packages/application/src/configuration/reference-fields.test.ts)
 starts with a populated `posts` model at version 1 with
 `author: field.text()` holding `"Ada"`.
 
@@ -94,7 +94,7 @@ and route removal with typed versus URL usages.
 
 ### Local Worker invocation counts
 
-The [Worker budget case](../../../packages/platform-cloudflare/src/reference-worker-budget.test.ts)
+The [Worker budget case](../../../../packages/platform-cloudflare/src/reference-worker-budget.test.ts)
 counted every D1 statement including authentication, response reads and
 deferred dispatch. Mixed requests used 200 blocks, 200 distinct media
 references, 100 URL links and 100 typed references. The wide DAG shared a
@@ -263,6 +263,63 @@ receipts and the transition from a warning to a hard blocker during review.
 - The content suite passed 275 tests and the packaged exports check passed.
   The existing internal-link, lifecycle and route-less browser suites passed
   all 11 tests.
+- `pnpm typecheck`, `pnpm lint`, `pnpm format:check` and
+  `pnpm exec openspec validate add-entry-reference-fields --type change --strict`
+  passed.
+
+## REL1F — Import, adoption and end-to-end verification
+
+Verified locally on 2026-11-22.
+
+- Offline import resolves package markers by field descriptor and reports
+  invalid destinations at the package pointer. Draft-only validation found
+  a cycle through a hidden block and a conditional field without a request.
+  Literal typed IDs and canonical URL tokens passed through. The combined
+  200-occurrence limit included URL links, typed IDs and hidden blocks.
+- An import listing B before A still saved A and published A before B when
+  reversing A → B. Injected failures between the writes in both phases
+  preserved completed work. Retries issued only the remaining requests. A
+  literal-ID cycle between matched package entries failed before a write. A
+  cycle through a record outside the package failed at guarded save with a
+  sanitized recovery message, and the previous successful draft was skipped
+  after correction and rerun.
+- The shared Node/SQLite/S3 and local Worker/D1/R2 import journeys exercised
+  the starter configuration and a reference-enabled configuration. The
+  version-bound export rendered Clara, Anna and Boris in authored order with
+  route-less records, including records on later pages. A rerun performed no
+  mutations. A viewer could inspect published reference status and could not
+  withdraw the target. An import token could not open the browser catalog.
+  The typed target resisted unpublication. The independent URL target could
+  be withdrawn after its URL impact review, preserving the original token
+  and typed selections. Only the URL occurrence appeared in the manifest.
+- The generated starter installed 15 package tarballs and passed a frozen
+  install, typecheck and the existing site builds. With its installed Astro,
+  SDK and render packages, the site-owned block rendered the route-less
+  reviews in order. The public guide's definition and renderer match those
+  built by acceptance. The documentation build verified 28 pages, local
+  links and the published OpenAPI artifact.
+- The protected preview tests on Node and local Worker rejected unavailable
+  selected targets before dispatch. The Astro build read the captured author
+  photo. Publishing that author refreshed the next public build while the
+  protected ready preview retained its original HTML and media. Local dispatch
+  used fixture providers.
+- Populated SQLite and D1 schema upgrades preserved existing URL row identity,
+  public version and outbox work. The public operations guide documents
+  restoring the matching database, configuration and app/site artifacts
+  together. The text-author fixture covers addition, explicit ID mapping
+  and retirement of the old field. The D1 budget cases rechecked the caps
+  of 50 statements per authenticated invocation, 40 per guarded batch and
+  100 binds per statement, including rejected writes.
+
+### Checks
+
+- 48 focused CLI tests, 10 packaged CLI import/schema tests, the application
+  package export check and 15 documentation/reference fixture tests passed.
+- All three cross-runtime import journeys, five compiled preview and Astro
+  checks, the packed starter journey and the SQLite/D1 migration, lifecycle
+  and Worker budget suites passed.
+- The eight focused configuration tests exercised the text-author fixture
+  and other reference changes. All six session checkpoints are recorded.
 - `pnpm typecheck`, `pnpm lint`, `pnpm format:check` and
   `pnpm exec openspec validate add-entry-reference-fields --type change --strict`
   passed.

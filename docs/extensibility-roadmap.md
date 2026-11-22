@@ -210,12 +210,11 @@ saved-draft build through GitHub Actions and withdrawal on `test-homepage`.
 ## Pre-1.0 priority REL1 — Entry reference fields
 
 Selected on 2026-11-21 after protected single-entry preview. Status:
-**in progress** in [`add-entry-reference-fields`](../openspec/changes/add-entry-reference-fields/proposal.md).
+**implemented, synchronized and archived on 2026-11-22** in [`add-entry-reference-fields`](../openspec/changes/archive/2026-11-22-add-entry-reference-fields/proposal.md).
 The owner selected one change with six ordered implementation sessions. They
 share the same field identity, publication guarantees and checker on Node and
-Cloudflare. Each session has its own verification checkpoint. The complete
-feature is ready to ship once the editor, import and generated-site scenarios
-exercise those same guarantees.
+Cloudflare. The editor, import and generated-site scenarios verified those
+guarantees.
 
 | Session | Verification checkpoint |
 | --- | --- |
@@ -226,12 +225,13 @@ exercise those same guarantees.
 | REL1E | Exercise field selection, ordering, exact-field navigation, deleted selections and actionable publication-order errors in the editor. |
 | REL1F | Verify import and retry ordering, public documentation, generated-site journeys, upgrade/rollback and final cross-runtime checks. |
 
-REL1A through REL1E are implemented. The change records verification for
-[field descriptors and configuration](../openspec/changes/add-entry-reference-fields/verification.md#rel1a--field-descriptors-and-configuration),
-[persistence and acyclic writes](../openspec/changes/add-entry-reference-fields/verification.md#rel1b--persistence-and-acyclic-writes),
-[removal, direct impact and admin API](../openspec/changes/add-entry-reference-fields/verification.md#rel1c--removal-direct-impact-and-admin-api),
-[published SDK, Astro and saved-draft preview](../openspec/changes/add-entry-reference-fields/verification.md#rel1d--published-sdk-astro-and-saved-draft-preview),
-and [editor selection and repair](../openspec/changes/add-entry-reference-fields/verification.md#rel1e--editor-and-repair-workflows).
+The change records verification for
+[field descriptors and configuration](../openspec/changes/archive/2026-11-22-add-entry-reference-fields/verification.md#rel1a--field-descriptors-and-configuration),
+[persistence and acyclic writes](../openspec/changes/archive/2026-11-22-add-entry-reference-fields/verification.md#rel1b--persistence-and-acyclic-writes),
+[removal, direct impact and admin API](../openspec/changes/archive/2026-11-22-add-entry-reference-fields/verification.md#rel1c--removal-direct-impact-and-admin-api),
+[published SDK, Astro and saved-draft preview](../openspec/changes/archive/2026-11-22-add-entry-reference-fields/verification.md#rel1d--published-sdk-astro-and-saved-draft-preview),
+[editor selection and repair](../openspec/changes/archive/2026-11-22-add-entry-reference-fields/verification.md#rel1e--editor-and-repair-workflows),
+and [import, adoption and cross-runtime verification](../openspec/changes/archive/2026-11-22-add-entry-reference-fields/verification.md#rel1f--import-adoption-and-end-to-end-verification).
 
 [ADR 0034](adr/0034-acyclic-entry-reference-fields.md) records the scope and
 rationale. Direct published references block withdrawal and deletion.

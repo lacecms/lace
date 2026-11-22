@@ -18,6 +18,8 @@ import { inspectPackageMedia } from "./import-files.js";
 import type { PackageMedia } from "./import-files.js";
 import { collectReferences, placeholderResolver, rewriteReferences } from "./import-references.js";
 import type { EntryReference, FieldShapes, Resolver } from "./import-references.js";
+import { cycleIssues, findDependencyCycle, snapshotDependencies } from "./import-dependencies.js";
+import type { SnapshotDependency } from "./import-dependencies.js";
 
 /** The project's runtime configuration as `lace import` uses it. */
 export interface ImportConfiguration {
@@ -31,6 +33,7 @@ export interface ValidatedEntry {
   readonly index: number;
   readonly model: NormalizedContentModel;
   readonly references: readonly EntryReference[];
+  readonly dependencies: readonly SnapshotDependency[];
   readonly willPublish: boolean;
 }
 
@@ -121,7 +124,7 @@ export function normalizeDraft(
   return normalizeDraftCandidate({ blocks: config.blocks, draft, mode, model });
 }
 
-function issuesOf(
+export function draftIssues(
   error: unknown,
   at: (path: readonly (string | number)[]) => string,
 ): ImportIssue[] {
@@ -137,18 +140,29 @@ function issuesOf(
 }
 
 /** Validates one entry in draft mode, and publish mode when it will publish. */
-function entryIssues(validated: ValidatedEntry, config: ImportConfiguration): ImportIssue[] {
+function validateDrafts(
+  validated: Omit<ValidatedEntry, "dependencies">,
+  config: ImportConfiguration,
+  issues: ImportIssue[],
+): SnapshotDependency[] {
   const { entry, index, model, willPublish } = validated;
   const at = (path: readonly (string | number)[]) => pointer("entries", index, ...path);
   const draft = draftInput(entry, model, config, placeholderResolver);
-  for (const mode of willPublish ? (["draft", "publish"] as const) : (["draft"] as const)) {
-    try {
-      normalizeDraft(draft, model, config, mode);
-    } catch (error) {
-      return issuesOf(error, at);
-    }
+  try {
+    const candidate = normalizeDraft(draft, model, config, "draft");
+    const dependencies = snapshotDependencies(
+      config,
+      model,
+      index,
+      candidate,
+      validated.references,
+    );
+    if (willPublish) normalizeDraft(draft, model, config, "publish");
+    return dependencies;
+  } catch (error) {
+    issues.push(...draftIssues(error, at));
+    return [];
   }
-  return [];
 }
 
 async function readPackageJson(root: string): Promise<unknown> {
@@ -201,7 +215,7 @@ export async function validatePackage(
     entries: new Map(
       pkg.entries.flatMap((entry) => {
         const model = config.models.get(entry.model);
-        return model === undefined ? [] : [[entry.key, model.kind] as const];
+        return model === undefined ? [] : [[entry.key, modelFacts(model)] as const];
       }),
     ),
   };
@@ -226,9 +240,19 @@ export async function validatePackage(
       willPublish: options.publish && entry.publish !== false,
     };
     const ruled = issues.some((issue) => issue.pointer.startsWith(`${pointer("entries", index)}/`));
-    if (issues.length === before && !ruled) issues.push(...entryIssues(validated, config));
-    entries.push(validated);
+    const dependencies =
+      issues.length === before && !ruled ? validateDrafts(validated, config, issues) : [];
+    entries.push({ ...validated, dependencies });
   }
+  const cycle = findDependencyCycle(
+    new Map(
+      entries.map(({ entry, dependencies }) => [
+        entry.key,
+        dependencies.filter(({ purpose, packageKey }) => purpose === "reference" && packageKey),
+      ]),
+    ),
+  );
+  if (cycle !== undefined) issues.push(...cycleIssues(cycle, "draft"));
   if (issues.length > 0)
     throw new ImportError(
       "IMPORT_INVALID",
