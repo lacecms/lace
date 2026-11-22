@@ -254,7 +254,10 @@ contract(
         storageKey: "media/m-a",
         width: 1,
       }),
-    ).rejects.toMatchObject({ code: "CONTENT_INVALID_STATE" });
+    ).rejects.toMatchObject({
+      outcome: "rolled-back",
+      operationError: { code: "CONTENT_INVALID_STATE" },
+    });
     const base = { limit: 100, sort: "-createdAt" as const };
     const ids = async (input: Record<string, unknown>) =>
       (await repository.listMedia({ ...base, ...input } as never)).items.map(
