@@ -13,6 +13,7 @@
   "files": [
     "dist",
     "templates",
+    "templates/.gitignore",
     "README.md"
   ],
   "type": "module",

@@ -17,3 +17,7 @@ All six site-mode/Cloudflare combinations generated twice with stable bytes. Eac
 Corepack and the standalone launcher each resolved pnpm 12.21.0 in the disposable environment. A generated-style consumer script invoking pnpm again reported 12.21.0. Supplying a 12.3.4 executable produced the expected version-mismatch error. The packed starter passed frozen installation, typecheck, Astro builds with and without globals, image delivery and sample import validation.
 
 The packed local Worker also passed offline and ready doctor checks, D1 migration and sync, R2 media, browser setup/edit/publish, Astro build, restart persistence and Pages tracking against the local stub. Root typecheck, lint (including boundary checks), format check and strict EX7A validation passed on Node 24.12.0.
+
+## Release preparation
+
+The first preparation caught an omitted generator template during archive inspection. pnpm 12.21.0 packs `templates/.gitignore` when it appears explicitly in the package file allowlist. A focused pack of create-lace with that entry produced a byte-identical copy of the template.
