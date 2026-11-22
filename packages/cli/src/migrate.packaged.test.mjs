@@ -74,7 +74,9 @@ test("D1 migration verifies selected database before invoking Wrangler", async (
     await mkdir(join(directory, "node_modules/.bin"), { recursive: true });
     await writeFile(join(directory, "node_modules/.bin/wrangler"), "");
     const run = vi.fn(() => ({ status: 0 }));
-    const d1 = { prepare: () => ({ all: async () => ({ results: [{ name: "0000_init.sql" }] }) }) };
+    const d1 = {
+      prepare: () => ({ all: async () => ({ results: [{ name: "unknown_fixture.sql" }] }) }),
+    };
     await expect(
       runMigration({ target: "cloudflare-remote", databaseId: "wrong", wranglerConfig, d1, run }),
     ).rejects.toThrow("does not match");
@@ -87,7 +89,7 @@ test("D1 migration verifies selected database before invoking Wrangler", async (
         d1,
         run,
       }),
-    ).toEqual(["0000_init.sql"]);
+    ).toEqual(["unknown_fixture.sql"]);
     expect(run.mock.calls[0][1]).toContain("--remote");
   } finally {
     await rm(directory, { recursive: true, force: true });

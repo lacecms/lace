@@ -260,7 +260,7 @@ test("Worker readiness rejects a D1 database migrated before the baseline", asyn
     fixture.local.database.prepare("delete from d1_migrations"),
     fixture.local.database
       .prepare("insert into d1_migrations (id, name) values (1, ?), (2, ?)")
-      .bind("0000_exotic_tarantula.sql", "0015_import_credentials.sql"),
+      .bind("unknown_fixture.sql", "unknown_fixture_b.sql"),
   ]);
   const ready = await fixture.call("/health/ready");
   expect(ready.response.status).toBe(503);

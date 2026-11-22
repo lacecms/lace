@@ -3,7 +3,7 @@
 These records govern decisions within the [architecture](../architecture/README.md)
 and [accepted specifications](../../openspec/specs/). See the
 [internal index](../README.md) for document ownership. Status follows each
-record: ADR 0029 is amended by ADR 0030; every other decision remains accepted.
+record: ADR 0030 amended ADR 0029 and ADR 0035 supersedes the support floor in ADR 0030.
 An `amended` or `superseded` decision must identify its amendment or successor.
 
 | Number | Title | Status | Superseding ADR |
@@ -37,10 +37,11 @@ An `amended` or `superseded` decision must identify its amendment or successor.
 | 0027 | [Publication through an outbox-triggered rebuild](0027-outbox-triggered-rebuild.md) | accepted | — |
 | 0028 | [Spec-driven delivery and workspace toolchain](0028-spec-driven-delivery-toolchain.md) | accepted | — |
 | 0029 | [rc1 is the oldest supported state](0029-rc1-baseline.md) | amended | [0030](0030-rc2-oldest-supported.md) |
-| 0030 | [rc2 is the oldest supported release](0030-rc2-oldest-supported.md) | accepted | — |
+| 0030 | [rc2 is the oldest supported release](0030-rc2-oldest-supported.md) | superseded | [0035](0035-stable-rc5-upgrade-origin.md) |
 | 0031 | [Route-less collections](0031-route-less-collections.md) | accepted | — |
 | 0032 | [Share durable outbox contracts through a dedicated subpath](0032-outbox-contract-boundary.md) | accepted | — |
 | 0033 | [Protected static preview of one saved draft](0033-protected-static-draft-preview.md) | accepted | — |
 | 0034 | [Acyclic entry reference fields](0034-acyclic-entry-reference-fields.md) | accepted | — |
+| 0035 | [RC5 is the upgrade origin for Lace 1.0](0035-stable-rc5-upgrade-origin.md) | accepted | — |
 
 ADR 0033 implementation progress is tracked in the [PV1 roadmap](../extensibility-roadmap.md#pre-10-priority-pv1--protected-saved-draft-preview).

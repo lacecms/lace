@@ -129,7 +129,7 @@ describe("installation into an independent Astro site", () => {
   test("a fresh add reproduces the committed starter block files", async () => {
     const root = await tempRoot();
     const site = await astroSite(root);
-    await installPackages(site, "0.1.0-rc6");
+    await installPackages(site, "1.0.0");
     const result = await run(root, builtIns);
     expect(result).toMatchObject({ ok: true, code: "BLOCKS_INSTALLED", exitCode: 0 });
     expect(result.data.items.map((item) => item.status)).toEqual(
@@ -255,11 +255,11 @@ describe("installation into an independent Astro site", () => {
     const result = await run(root, ["quote", "--site", "web"]);
     expect(result.ok).toBe(true);
     expect(result.data.packages.missing).toEqual([
-      { name: "@lacecms/astro", range: "0.1.0-rc6", installed: "0.0.1" },
-      { name: "@lacecms/render", range: "0.1.0-rc6", installed: "0.0.1" },
+      { name: "@lacecms/astro", range: "1.0.0", installed: "0.0.1" },
+      { name: "@lacecms/render", range: "1.0.0", installed: "0.0.1" },
     ]);
     expect(result.data.packages.command).toBe(
-      "pnpm --dir web add @lacecms/astro@0.1.0-rc6 @lacecms/render@0.1.0-rc6",
+      "pnpm --dir web add @lacecms/astro@1.0.0 @lacecms/render@1.0.0",
     );
     expect((await readFile(join(site, "package.json"))).equals(packageJson)).toBe(true);
     await stat(join(site, "src/components/lace/QuoteBlock.astro"));
@@ -797,10 +797,10 @@ test.each([
     expect(result.data.items).toEqual([expect.objectContaining({ name: type, revision })]);
     expect(result.data.packages.missing).toContainEqual({
       name: "@lacecms/astro",
-      range: "0.1.0-rc6",
+      range: "1.0.0",
       installed: "0.1.0-rc5",
     });
-    expect(result.data.packages.command).toContain("pnpm --dir site add @lacecms/astro@0.1.0-rc6");
+    expect(result.data.packages.command).toContain("pnpm --dir site add @lacecms/astro@1.0.0");
     expect(await readFile(join(site, "src/components/lace", file), "utf8")).toContain(
       "@lacecms/astro/LaceVideo.astro",
     );

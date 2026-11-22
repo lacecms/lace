@@ -2,7 +2,7 @@
 title: Deploy on Docker or a VPS
 description: Run the packaged Node CMS with SQLite and SILO, a private static-site builder and a web proxy on your own server.
 kind: guide
-verifiedAgainst: 0.1.0-rc6
+verifiedAgainst: 1.0.0
 ---
 
 The generated Docker Compose topology runs the packaged API and Admin, SQLite, a private S3 bucket served by SILO, a dispatcher, a fixed-command site builder and an Nginx web proxy on one server. Publishing content queues a site build; the builder rebuilds your Astro site and switches the served release only after a successful build. This guide prepares a server, starts the stack, configures builds, uploads, email and the proxy, and verifies the result.

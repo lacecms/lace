@@ -4,6 +4,7 @@ import {
   verifyListSettingsStarter,
   tlsEdgeProxy,
 } from "./journeys/list-settings-mcp-proxy.mjs";
+import { rc5Cutover } from "./journeys/rc5-cutover.mjs";
 import { pinAcceptancePnpm } from "./acceptance-pnpm.mjs";
 import { acquireArtifactLock } from "./release-lock.mjs";
 import { persistAcceptance } from "./release-evidence.mjs";
@@ -2250,6 +2251,8 @@ async function main() {
       "credentials",
       "field-trial",
       "draft-preview",
+      "rc5-node",
+      "rc5-cloudflare",
     ].includes(phase)
   ) {
     throw new Error(`Unknown acceptance phase: ${phase}`);
@@ -2341,6 +2344,22 @@ async function main() {
     const context = await prepareCompose(project, parent, artifacts);
     context.shipping = shipping;
     context.sdkTarball = basename(artifacts.tarballs.get("@lacecms/sdk"));
+    const rc5Cutovers = {};
+    if (phase === "release" && artifacts.inventory.release.version === "1.0.0") {
+      for (const kind of ["node", "cloudflare"]) {
+        rc5Cutovers[kind === "node" ? "node" : "cloudflareLocal"] = await rc5Cutover(parent, kind, {
+          workspace,
+          run,
+          freePort,
+          sanitize,
+          secretValues,
+          images: artifacts.images,
+          generator: artifacts.generator,
+          cli: join(project, "node_modules/@lacecms/cli/dist/bin.js"),
+          installPackedConsumer: (dir) => installPackedConsumer(dir, artifacts.tarballs),
+        });
+      }
+    }
     const session = await nodeJourney(context);
     if (phase === "release-mcp") {
       await productionSmoke(context, session);
@@ -2370,6 +2389,7 @@ async function main() {
       workspace,
     });
     journeys.push(
+      ...Object.keys(rc5Cutovers).map((kind) => "rc5-cutover-and-restore-" + kind),
       "node-contracts-media",
       "consumer-security-probes",
       "gif-proxy-cache",
@@ -2421,6 +2441,7 @@ async function main() {
         source: artifacts.inventory.source,
         builds: context.buildEvidence,
         journeys,
+        ...(Object.keys(rc5Cutovers).length ? { rc5Cutovers } : {}),
         packages: artifacts.inventory.packages,
         images: Object.values(artifacts.images),
       },
@@ -2579,6 +2600,21 @@ async function main() {
     secretValues,
     workspace,
   };
+  if (phase === "rc5-cloudflare" || phase === "rc5-node") {
+    const kind = phase.slice(4);
+    const context = kind === "node" ? await prepareCompose(project, parent) : undefined;
+    await rc5Cutover(parent, kind, {
+      ...upgradeOperations,
+      freePort,
+      sanitize,
+      images: context && {
+        api: { imageId: context.images.api },
+        builder: { imageId: context.images.builder },
+      },
+      installPackedConsumer: (dir) => installPackedConsumer(dir, tarballs),
+    });
+    return;
+  }
   if (phase === "upgrade") {
     await templateUpgradeJourney(parent, upgradeOperations);
     return;

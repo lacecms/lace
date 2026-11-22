@@ -70,14 +70,9 @@ test("generates deterministic owned source and hashed managed files", async () =
     await readFile(join(left.path, ".lace/upgrade-instructions.json"), "utf8"),
   );
   expect(instructions).toMatchObject({ schemaVersion: 1, templateVersion: TEMPLATE_VERSION });
-  const ingress = instructions.configuration.find((step) =>
-    step.includes("no longer publishes the API port"),
+  expect(instructions.configuration).toContainEqual(
+    expect.stringContaining(`Template ${TEMPLATE_VERSION} keeps the RC5 production ingress`),
   );
-  expect(ingress).toContain(`Template ${TEMPLATE_VERSION}`);
-  expect(ingress).toMatch(/Nginx defaults to 127\.0\.0\.1:8080/u);
-  expect(ingress).toMatch(/LACE_API_BASE_URL/u);
-  expect(ingress).toMatch(/docker compose config.*docker compose ps/u);
-  expect(ingress).not.toMatch(/rc[23] installations/u);
   expect(instructions.configuration).toContainEqual(
     expect.stringMatching(
       /SILO.*deploy\/minio\.Dockerfile.*docs\/lace-operations\.md.*back up the stopped volume/u,
@@ -91,11 +86,9 @@ test("generates deterministic owned source and hashed managed files", async () =
   );
   expect(instructions.database).toHaveLength(1);
   expect(instructions.database[0]).toMatch(
-    /rc4 database.*baseline migration.*forward migrations.*pnpm db:migrate.*without recreation/u,
+    /synchronized RC5.*five forward migrations in place.*pnpm db:migrate/u,
   );
-  expect(instructions.database[0]).toMatch(/before rc2.*baseline.*unsupported/u);
-  expect(instructions.database[0]).not.toMatch(/remove the SQLite database|create a new D1/u);
-  expect(JSON.stringify(instructions)).not.toMatch(/\b00(?:0\d|1[0-5])_[a-z_]+/u);
+  expect(instructions.database[0]).toContain("db migrate --target cloudflare-remote");
 
   expect(files).not.toContain("wrangler.jsonc");
   expect(files.every((file) => !file.startsWith("apps/") && !file.startsWith("packages/"))).toBe(
@@ -319,13 +312,13 @@ test("alpha generation selects exact compatible packages and overridable images"
   for (const file of ["package.json", "site/package.json"]) {
     const manifest = JSON.parse(await readFile(join(project.path, file), "utf8"));
     for (const [name, version] of Object.entries(manifest.dependencies)) {
-      if (name.startsWith("@lacecms/")) expect(version).toBe("0.1.0-rc6");
+      if (name.startsWith("@lacecms/")) expect(version).toBe("1.0.0");
     }
   }
   const environment = await readFile(join(project.path, ".env.example"), "utf8");
-  expect(environment).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:0.1.0-rc6");
-  expect(environment).toContain("LACE_BUILDER_IMAGE=ghcr.io/lacecms/builder:0.1.0-rc6");
-  expect(TEMPLATE_VERSION).toBe("0.51.0");
+  expect(environment).toContain("LACE_API_IMAGE=ghcr.io/lacecms/api:1.0.0");
+  expect(environment).toContain("LACE_BUILDER_IMAGE=ghcr.io/lacecms/builder:1.0.0");
+  expect(TEMPLATE_VERSION).toBe("0.52.0");
   const compose = await readFile(join(project.path, "docker-compose.yml"), "utf8");
   expect(compose).toContain("image: ${LACE_API_IMAGE:");
   expect(compose).toContain("LACE_API_DOCS_ENABLED: ${LACE_API_DOCS_ENABLED:-false}");
@@ -333,7 +326,7 @@ test("alpha generation selects exact compatible packages and overridable images"
   expect(environment).not.toMatch(/^LACE_API_DOCS_ENABLED=true$/m);
   expect(compose).toContain("image: ${LACE_BUILDER_IMAGE:");
   expect(await readFile(join(project.path, "docs/lace-operations.md"), "utf8")).toContain(
-    "pnpm create lace@0.1.0-rc6",
+    "pnpm create lace@1.0.0",
   );
 });
 

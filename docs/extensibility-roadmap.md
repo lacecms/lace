@@ -489,6 +489,16 @@ local Worker, and the API and builder images on `linux/amd64` and `linux/arm64`.
 Complete exact-artifact acceptance for the new build set before recording
 `12.21.0` as the tested baseline. See [the runtime tooling policy](../openspec/specs/runtime-tooling-minimum-policy/spec.md).
 
+## After EX7A — CMS 1.0.0 release preparation
+
+**Status:** in progress after completed EX7A qualification. The
+[release proposal](../openspec/changes/prepare-cms-1-0-0/proposal.md)
+defines one release set and its [ordered acceptance tasks](../openspec/changes/prepare-cms-1-0-0/tasks.md).
+It implements direct adoption from the deployed RC5 template, retirement of
+earlier release-specific migration tests and fresh qualification on Node
+and Cloudflare. Publication and the live site's cutover follow separate
+owner decisions. [ADR 0035](adr/0035-stable-rc5-upgrade-origin.md) records the RC5 support floor.
+
 ## 6. Progress log
 
 Each row links to the change and its decisions and verification. Archived

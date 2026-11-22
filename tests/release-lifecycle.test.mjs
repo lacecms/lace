@@ -119,6 +119,11 @@ test("acceptance persists only on complete success and legacy import preserves b
     ).rejects.toThrow("Acceptance");
     await expect(readFile(join(f.directory, "acceptance.json"))).rejects.toThrow();
     report.acceptance.source = f.inventory.source;
+    if (f.inventory.release.version === "1.0.0") {
+      const bad = structuredClone(report);
+      bad.acceptance.rc5Cutovers.cloudflareLocal.restoredFingerprint = "0".repeat(64);
+      expect(() => validateAcceptance(bad, f.inventory, report.inventorySha256)).toThrow("RC5");
+    }
     report.password = "private";
     expect(() => validateAcceptance(report, f.inventory, report.inventorySha256)).toThrow();
   }));
@@ -213,8 +218,8 @@ test("gh adapter uses structured stdin and publishes prerelease without latest",
     calls.push({ tool, args, input });
     return Buffer.from("{}");
   });
-  await client.create("v1.0.0-alpha.1", "a".repeat(40), "Short notes\n\n- Important change.");
-  await client.publish({ id: 1 });
+  await client.create("v1.0.0-alpha.1", "a".repeat(40), "Short notes\n\n- Important change.", true);
+  await client.publish({ id: 1 }, true);
   expect(JSON.parse(calls[0].input)).toMatchObject({
     draft: true,
     prerelease: true,
@@ -226,6 +231,12 @@ test("gh adapter uses structured stdin and publishes prerelease without latest",
     make_latest: "false",
   });
   expect(calls[0].args).toContain("--input");
+  await client.publish({ id: 2 }, false);
+  expect(JSON.parse(calls[2].input)).toMatchObject({
+    draft: false,
+    prerelease: false,
+    make_latest: "true",
+  });
 });
 
 test("GitHub preview reports unavailable prerequisites without creating a release", () =>

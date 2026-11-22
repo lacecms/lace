@@ -2,7 +2,7 @@
 title: Define your content
 description: Define pages, collections, globals, fields and blocks in lace.config.ts and evolve them safely.
 kind: guide
-verifiedAgainst: 0.1.0-rc6
+verifiedAgainst: 1.0.0
 ---
 
 `lace.config.ts` is the source of your content structure. It declares pages,

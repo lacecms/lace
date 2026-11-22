@@ -14,7 +14,7 @@ import {
 } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { packageName, readJson, validatePackedManifest } from "./release-model.mjs";
+import { packageName, readJson, releaseChannel, validatePackedManifest } from "./release-model.mjs";
 
 export async function run(command, args, { cwd, capture = false, env = {} } = {}) {
   return new Promise((accept, reject) => {
@@ -469,6 +469,8 @@ export async function verifyInventory(directory) {
     typeof inventory.source.preview !== "boolean"
   )
     throw new Error("Invalid inventory source identity");
+  if (inventory.release.channel !== releaseChannel(inventory.release.version))
+    throw new Error("Invalid inventory release channel");
   const names = inventory.packages.map((item) => item.name);
   if (
     new Set(names).size !== names.length ||

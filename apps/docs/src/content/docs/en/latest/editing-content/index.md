@@ -2,7 +2,7 @@
 title: Edit and publish content
 description: Create entries, edit fields and blocks, publish drafts, and search collection lists in Admin.
 kind: guide
-verifiedAgainst: 0.1.0-rc6
+verifiedAgainst: 1.0.0
 ---
 
 Admin edits the content that `lace.config.ts` defines: one draft for each page

@@ -1,16 +1,8 @@
 # Compatibility baseline
 
-Lace supports `0.1.0-rc2` (ownership template `0.47.0`, npm `next`) and later
-releases ([ADR 0030](adr/0030-rc2-oldest-supported.md)). Earlier prereleases
-(`0.1.0-alpha.1`–`0.1.0-alpha.8` and `0.1.0-rc1`) stay published and immutable
-but are not supported: their databases predate the baseline migration and their
-projects and exports cannot be upgraded in place
-([ADR 0029](adr/0029-rc1-baseline.md)). See [Upgrading from rc2](#upgrading-from-rc2).
-
-## Status
-
-Lace is pre-release. This document records the initial development baseline;
-it is not a promise of production support or backward compatibility.
+Lace 1.0 supports a direct upgrade from fully migrated and synchronized
+`0.1.0-rc5` (ownership template `0.50.0`). Earlier prereleases fall outside
+the supported upgrade window. [Release floor decision](adr/0035-stable-rc5-upgrade-origin.md).
 
 ## Exact versions selected and smoke-tested
 
@@ -98,18 +90,18 @@ fixture coverage.
 
 ## Release line
 
-Lace artifacts are prereleases on the npm `next` channel. One release
+Stable artifacts use npm `latest`; prereleases use `next`. One release
 definition (`release/alpha.json`) pins the package, generator and API/builder
 image version together with the generator's ownership template version;
 mixing artifacts from different versions is unsupported.
 
 | Release | Template | Status |
 | --- | --- | --- |
-| `0.1.0-rc6` | `0.51.0` | Selected candidate; publication pending |
-| `0.1.0-rc5` | `0.50.0` | Latest published release |
+| `1.0.0` | `0.52.0` | Selected candidate; publication pending |
+| `0.1.0-rc5` | `0.50.0` | Published upgrade origin |
 | `0.1.0-rc4` | `0.49.0` | Published release |
 | `0.1.0-rc3` | `0.48.0` | Published release |
-| `0.1.0-rc2` | `0.47.0` | Oldest supported release |
+| `0.1.0-rc2` | `0.47.0` | Historical release |
 
 A candidate becomes published only when the owner publishes it. Each version is
 recorded in `publishedVersions` after that publication, before the next
@@ -214,36 +206,10 @@ plan's 128 MB memory and 50 D1 queries per invocation; staying within its
 10 ms CPU limit is best effort, because one maximal entry can exceed it on
 its own page.
 
-## Upgrading from rc2
+## Upgrading from RC5
 
-rc2 (`0.1.0-rc2`) is the oldest supported upgrade origin. Its database already
-starts from the baseline migration, so it is upgraded in place with forward
-migrations and never recreated ([database migrations](database-migrations.md)).
-The operator procedure (backup, coordinated package and image update, forward
-migration, configuration synchronization, site rebuild and rollback) is the
-public [Upgrade and roll back](../apps/docs/src/content/docs/en/latest/operations/index.md#upgrade-and-roll-back)
-guide; this document does not repeat its steps.
-
-An rc3 installation can upgrade to rc4 by backing up and updating the packages,
-images and managed template together, then running the documented migration,
-configuration synchronization and site rebuild. The rc4 changes introduce no
-new SQL migration or required user-owned source changes.
-
-rc5 adds the forward-only `0001_persistence_hygiene` index migration and
-changes production Compose ingress. The API is no longer published on a host
-port, and Nginx binds to `127.0.0.1:8080` by default. Before upgrading, back up
-the database, objects, configuration and source; review managed-file conflicts
-and Compose overrides, move the TLS proxy to Nginx, and point host clients and
-manual builds to the HTTPS origin. Apply migrations, synchronize, recreate the
-services, inspect the effective bindings and rebuild the site as described in
-the public guide. REST clients should handle `401 AUTHENTICATION_REQUIRED` for
-missing or invalid credentials; authenticated permission denials remain `403`.
-Consumers of the removed Cloudflare `producesDispatchWork` export must remove
-that dependency. Roll back by restoring the matching backed-up installation,
-database and media together, including prior proxy settings and port restrictions.
-
-A database created before rc2 predates the baseline: `lace db migrate` and
-`lace doctor` report `SCHEMA_UNSUPPORTED` for it and change nothing; such an
-installation is not supported. Rollback means returning to the backed-up rc2
-packages, images, configuration, source, database and media together; a
-package-only downgrade is not supported.
+RC5 already has the baseline and persistence indexes. Apply pending forward
+migrations in place, coordinate all packages and images with the site and
+review managed-file conflicts. Restore a coordinated RC5 database, object
+store, site, configuration and engine backup for rollback. Follow the
+[operator procedure](../apps/docs/src/content/docs/en/latest/operations/index.md#upgrade-and-roll-back).

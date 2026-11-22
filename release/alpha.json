@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "version": "0.1.0-rc6",
-  "generatorVersion": "0.1.0-rc6",
-  "templateVersion": "0.51.0",
+  "version": "1.0.0",
+  "generatorVersion": "1.0.0",
+  "templateVersion": "0.52.0",
   "publishedVersions": [
     "0.1.0-alpha.1",
     "0.1.0-alpha.2",
@@ -18,7 +18,7 @@
     "0.1.0-rc4",
     "0.1.0-rc5"
   ],
-  "channel": "next",
+  "channel": "latest",
   "sourceRepository": "https://github.com/lacecms/lace",
   "images": {
     "api": "ghcr.io/lacecms/api",

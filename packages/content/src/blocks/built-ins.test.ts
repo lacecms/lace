@@ -348,29 +348,13 @@ test("a gallery item without a kind is an image", () => {
   });
 });
 
-test("only gallery declares a migration; older stored versions have no migration step", () => {
-  for (const definition of Object.values(builtInBlocks))
-    if (definition.type !== "gallery")
-      expect(definition, definition.type).not.toHaveProperty("migrations");
-  expect(Object.keys(builtInBlocks.gallery.migrations ?? {})).toEqual(["6"]);
-  for (const [definition, from] of [
-    [builtInBlocks.gallery, 4],
-    [builtInBlocks.image, 3],
-    [builtInBlocks.videoEmbed, 1],
-  ] as const)
-    expect(() => migrateBlockData(definition, { data: {}, settings: {} }, from)).toThrowError(
-      expect.objectContaining({ code: "missing_step" }),
-    );
-  const custom = defineBlock({
-    fields: { title: field.text() },
-    migrations: { 2: (block) => block },
-    type: "custom",
-    version: 2,
-  });
-  expect(migrateBlockData(custom, { data: { title: "Kept" }, settings: {} }, 1)).toEqual({
-    data: { title: "Kept" },
-    settings: {},
-  });
+test("the synchronized RC5 gallery retains its data and settings at version 6", () => {
+  const block = {
+    data: { images: [{ media: "original", placement: "full" }] },
+    settings: { layoutPreset: "columns-2" },
+  };
+  expect(builtInBlocks.gallery.version).toBe(6);
+  expect(migrateBlockData(builtInBlocks.gallery, block, 6)).toEqual(block);
 });
 
 test("navigation allows one submenu level with safe URLs within the list budget", () => {

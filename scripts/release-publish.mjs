@@ -1,3 +1,4 @@
+import { releaseChannel } from "./release-model.mjs";
 import { assertArtifactIdle, withArtifactLock } from "./release-lock.mjs";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -109,6 +110,20 @@ export async function lookupPackage(item) {
   return { dist: metadata.versions?.[item.version]?.dist, tags: metadata["dist-tags"] ?? {} };
 }
 
+function checkStableTag(channel, item, remote) {
+  const current = remote.tags.latest;
+  if (channel !== "latest" || !current || current === item.version) return;
+  // A prerelease (or unrecognized value) under latest requires operator review.
+  const target = item.version.split(".");
+  const observed = current.split(".");
+  const differs = target.findIndex((part, index) => part !== observed[index]);
+  if (
+    releaseChannel(current) !== "latest" ||
+    (differs >= 0 && BigInt(observed[differs]) > BigInt(target[differs]))
+  )
+    throw new Error(`Conflicting latest dist-tag for ${item.name}: ${current}`);
+}
+
 export function matchingPackage(item, local, remote) {
   if (!remote.dist) return false;
   const matches = remote.dist.integrity
@@ -154,8 +169,15 @@ async function publishUnlocked(options, operations = {}) {
   const { directory, target, dryRun = false, only } = options;
   if (!["npm", "images"].includes(target)) throw new Error("Select npm or images");
   const inventory = await (operations.verify ?? verifyInventory)(directory);
-  if (!inventory.complete || !inventory.publicationEligible || inventory.release.channel !== "next")
-    throw new Error("Publication requires a complete, eligible alpha inventory with channel next");
+  if (
+    !inventory.complete ||
+    !inventory.publicationEligible ||
+    inventory.release.channel !== releaseChannel(inventory.release.version)
+  )
+    throw new Error(
+      "Publication requires a complete, eligible inventory with matching release channel",
+    );
+  const { channel } = inventory.release;
   const run = operations.command ?? command;
   const receipt = {
     target,
@@ -193,6 +215,7 @@ async function publishUnlocked(options, operations = {}) {
     for (const item of items) {
       const local = await hashes(join(directory, item.file));
       const remote = await lookup(item);
+      checkStableTag(channel, item, remote);
       const previous = submitted.find(
         (entry) => entry.name === item.name && entry.version === item.version,
       );
@@ -216,7 +239,7 @@ async function publishUnlocked(options, operations = {}) {
           "--access",
           "public",
           "--tag",
-          "next",
+          channel,
           "--registry",
           registry,
           "--ignore-scripts",
@@ -248,15 +271,21 @@ async function publishUnlocked(options, operations = {}) {
     if (!dryRun) {
       // Send the whole batch before checking registry processing or repairing tags.
       for (const { item, remote, exists } of plans) {
-        if (exists && remote.tags.next !== item.version)
+        if (exists && remote.tags[channel] !== item.version) {
+          if (channel === "latest") {
+            const current = await lookup(item);
+            checkStableTag(channel, item, current);
+            if (current.tags[channel] === item.version) continue;
+          }
           await run("npm", [
             "dist-tag",
             "add",
             `${item.name}@${item.version}`,
-            "next",
+            channel,
             "--registry",
             registry,
           ]);
+        }
       }
       const pending = new Map(plans.map((plan) => [plan.item.name, plan]));
       const deadline = Date.now() + 600_000;
@@ -273,7 +302,11 @@ async function publishUnlocked(options, operations = {}) {
             );
             continue;
           }
-          if (matchingPackage(item, local, result.value) && result.value.tags.next === item.version)
+          checkStableTag(channel, item, result.value);
+          if (
+            matchingPackage(item, local, result.value) &&
+            result.value.tags[channel] === item.version
+          )
             pending.delete(item.name);
         }
         if (pending.size === 0 || attempt === 60 || Date.now() >= deadline) break;
@@ -286,7 +319,7 @@ async function publishUnlocked(options, operations = {}) {
       }
       if (pending.size > 0)
         throw new Error(
-          `npm publication verification failed: ${[...pending.keys()].join(", ")}; not visible with tag next after 10 minutes of polling. Submission was saved; rerun the same command to continue waiting without republishing`,
+          `npm publication verification failed: ${[...pending.keys()].join(", ")}; not visible with tag ${channel} after 10 minutes of polling. Submission was saved; rerun the same command to continue waiting without republishing`,
         );
     }
   } else {

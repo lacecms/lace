@@ -2,7 +2,7 @@
 title: Import content
 description: Load pages, posts and images from another site with lace import.
 kind: guide
-verifiedAgainst: 0.1.0-rc6
+verifiedAgainst: 1.0.0
 ---
 
 `lace import` loads a portable **import package** into a running Lace installation: a directory with `lace-import.json` and the image files it names. Use it to move an existing site, or to load content that a script produced. The command talks to your installation's admin API, so it works the same against the Node runtime and a Cloudflare Worker, and every write goes through the same validation as the admin.

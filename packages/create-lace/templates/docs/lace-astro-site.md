@@ -1,7 +1,7 @@
 # Connect an existing Astro site
 
 Use this guide when your Astro site already exists and the Lace CMS lives in a
-subdirectory generated with `pnpm create lace@0.1.0-rc6 cms`. The CMS never
+subdirectory generated with `pnpm create lace@1.0.0 cms`. The CMS never
 modifies your site; every file below is yours. For build-site selection,
 mounts and the Compose builder, see
 [Selecting the build site](lace-operations.md#selecting-the-build-site).
@@ -22,7 +22,7 @@ my-site/                 your Astro project (lockfile root)
 Astro `^7.3.1` must already be a dependency. In the site root:
 
 ```sh
-pnpm add @lacecms/astro@0.1.0-rc6 @lacecms/render@0.1.0-rc6 @lacecms/sdk@0.1.0-rc6 @lacecms/content@0.1.0-rc6 sharp@0.35.5
+pnpm add @lacecms/astro@1.0.0 @lacecms/render@1.0.0 @lacecms/sdk@1.0.0 @lacecms/content@1.0.0 sharp@0.35.5
 ```
 
 `@lacecms/sdk` loads published content, `@lacecms/render` validates blocks and
@@ -190,15 +190,6 @@ add at least one item before publishing:
   and no-JavaScript behavior as the Video embed block. Published items include
   only the fields of their kind, so a customized copy checks `item.kind` and
   that `item.media` is present before describing an image.
-- Upgrading from rc2 (template 0.47.0): raise the version of every model that
-  allows `gallery` and run `pnpm content:sync`. Migration 6 rewrites the
-  removed `featured-first` preset to `columns-2` with a `full` first item and
-  writes `playback: "player"` to video items that relied on the old default,
-  so stored galleries render as before. Before the next build, update the
-  component with `pnpm exec lace add block gallery --site site` or merge the
-  `.new` proposals (a revision 7 component fails with `block_version_mismatch`
-  after sync), and adopt the natural-size theme rules below; until then your
-  theme crops natural images.
 - `navigation` has an optional `name` (the `aria-label` of its `<nav>`; name
   every navigation when a page has several) and up to 20 `links`, each with a
   `label`, an optional `url` and up to 20 `children` (one submenu level). A
@@ -827,22 +818,8 @@ image crop. Set `--lace-list-gap` (default 0) and `--lace-list-item-min` (14rem)
 Unlayered site rules override it; order theme layers after `lace-layout` otherwise.
 Vertical wrap needs an explicit site-defined height. Grid thresholds are container
 widths of 32/48/64rem; all six preset names are in the content-modeling guide.
-The `featured-first` preset was removed in template 0.49.0: a custom block that
-stored it declares a migration that sets `layoutPreset` to `columns-2` and its
-first item's `placement` to `full`, as Gallery's migration 6 does.
 Schematics explain composition, not site appearance. Default grid/auto preserves
 Gallery sizes; other modes use conservative `100vw`, tunable in your component.
-
-For a v3 upgrade, back up content and site first, upgrade compatible engine/admin/
-CLI/site packages, install the v4 renderer and companion with conflict review,
-remove old unlayered Gallery display/columns rules, keep 1rem spacing through
-`--lace-list-gap`, and preserve your image/theme rules. Increment model versions
-that structurally include Gallery; deploy matching definitions/renderer, then run
-normal `lace content sync`. Migration 4 preserves data, links, order, envelopes
-and lightbox and fills absent layout defaults (`grid`, true, `auto`); migrations
-2/3 remain. Interrupted sync resumes by rerunning. No new SQL migration is needed.
-After sync, rollback requires the pre-upgrade backup with matching older code;
-there is no automatic down-migration of v4 blocks.
 
 Layout visibility shows Wrap items only for flex and Grid preset only for grid.
 Inactive values remain stored and validated; a relevant validation error reveals
@@ -914,7 +891,7 @@ reviewing the new renderer.
 ### Adopt the shared player in an existing site
 
 For definitions already at `videoEmbed` version 2 or `gallery` version 6, use
-the matching CLI and site packages from `0.1.0-rc6`. Review the update, apply it
+the matching CLI and site packages from `1.0.0`. Review the update, apply it
 and rebuild from the same published export:
 
 ```sh

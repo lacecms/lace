@@ -386,7 +386,7 @@ test("remote D1 is bounded SELECT-only and preserves missing-ledger/auth distinc
     [
       Response.json({
         success: true,
-        result: [{ success: true, results: [{ name: "0000_exotic_tarantula.sql" }] }],
+        result: [{ success: true, results: [{ name: "unknown_fixture.sql" }] }],
       }),
       "fail",
     ],

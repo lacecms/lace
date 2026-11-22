@@ -58,6 +58,7 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
   }
 
   public async saveCompleteDraft(input: SaveCompleteDraftInput): Promise<ContentCommandResult> {
+    assertDraftPersistenceBounds(input.mutation.blocks, input.mutation.mediaReferences);
     const existing = await this.entryRow(input.entryId);
     if (existing === undefined || existing.draft_snapshot_id === null)
       failure("Content entry does not have a mutable draft.");
@@ -68,6 +69,7 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
   }
 
   public async saveDetachedDraft(input: SaveDetachedDraftInput): Promise<boolean> {
+    assertDraftPersistenceBounds(input.mutation.blocks, input.mutation.mediaReferences);
     return this.writeDraft(input, input.draftId, input.mediaId);
   }
 
@@ -76,7 +78,6 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
     draftId: string,
     detachMediaId?: string,
   ): Promise<boolean> {
-    assertDraftPersistenceBounds(input.mutation.blocks, input.mutation.mediaReferences);
     let result: Awaited<
       ReturnType<
         typeof executeWritePlan<ReturnType<ReturnType<typeof createDraftWritePlan>["diagnose"]>>

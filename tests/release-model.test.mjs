@@ -9,7 +9,10 @@ const repositoryRoot = new URL("..", import.meta.url).pathname;
 
 async function coherentModel(version) {
   const model = await readReleaseModel(repositoryRoot);
-  if (version) model.definition.version = model.definition.generatorVersion = version;
+  if (version) {
+    model.definition.version = model.definition.generatorVersion = version;
+    model.definition.channel = version.includes("-") ? "next" : "latest";
+  }
   // The repository can sit between a recorded publication and the next
   // candidate selection; graph checks treat its coordinates as a candidate.
   model.definition.publishedVersions = model.definition.publishedVersions.filter(
@@ -20,7 +23,7 @@ async function coherentModel(version) {
     Object.assign(model.manifests[name].manifest, {
       version: model.definition.version,
       private: false,
-      publishConfig: { access: "public" },
+      publishConfig: { access: "public", tag: model.definition.channel },
       engines: { node: ">=24.12.0" },
     });
   }
@@ -100,6 +103,7 @@ test("published versions are recorded and cannot be prepared again", async () =>
     const model = await coherentModel();
     model.definition.publishedVersions = definition.publishedVersions;
     model.definition.version = model.definition.generatorVersion = version;
+    model.definition.channel = version.includes("-") ? "next" : "latest";
     expect(() => validateReleaseModel(model)).toThrow(`${version} is already published`);
   }
 });
@@ -181,12 +185,19 @@ test("scenario guides are registered release guides with candidate coordinates",
 
 test("packed metadata rejects workspace/catalog/local/private dependencies", async () => {
   const { definition } = await coherentModel();
+  expect(() =>
+    validatePackedManifest(
+      { name: "create-lace", version: definition.version, publishConfig: { tag: "invalid" } },
+      definition,
+    ),
+  ).toThrow("packed channel");
   for (const reference of ["workspace:*", "catalog:", "file:x.tgz", "link:../src", "0.0.0"]) {
     expect(() =>
       validatePackedManifest(
         {
           name: "@lacecms/config",
           version: definition.version,
+          publishConfig: { tag: definition.channel },
           dependencies: { "@lacecms/content": reference },
         },
         definition,
@@ -198,6 +209,7 @@ test("packed metadata rejects workspace/catalog/local/private dependencies", asy
       {
         name: "@lacecms/config",
         version: definition.version,
+        publishConfig: { tag: definition.channel },
         dependencies: { "@lacecms/content": definition.version },
       },
       definition,
@@ -208,6 +220,7 @@ test("packed metadata rejects workspace/catalog/local/private dependencies", asy
 test("published alpha.3 is immutable after the Cross-runtime candidate refresh", async () => {
   const model = await coherentModel();
   model.definition.version = model.definition.generatorVersion = "0.1.0-alpha.3";
+  model.definition.channel = "next";
   expect(() => validateReleaseModel(model)).toThrow(/already published/u);
 });
 
@@ -226,7 +239,7 @@ test.each(["0.1.0-alpha.8", "0.1.0-rc1", "0.1.0-rc12"])(
 );
 
 test.each([
-  "0.1.0",
+  "01.1.0",
   "0.1.0-rc.1",
   "0.1.0-rc0",
   "0.1.0-rc01",
@@ -235,8 +248,17 @@ test.each([
   "rc1",
 ])("rejects invalid candidate and history version %s", async (version) => {
   const candidate = await coherentModel(version);
-  expect(() => validateReleaseModel(candidate)).toThrow("Invalid prerelease");
+  expect(() => validateReleaseModel(candidate)).toThrow("Invalid release");
   const history = await coherentModel();
   history.definition.publishedVersions.push(version);
   expect(() => validateReleaseModel(history)).toThrow("Invalid published version");
+});
+
+test("stable and prerelease versions require their selected distribution channel", async () => {
+  for (const version of ["1.0.0", "1.1.0-rc1"]) {
+    const model = await coherentModel(version);
+    expect(validateReleaseModel(model)).toHaveLength(16);
+    model.definition.channel = model.definition.channel === "latest" ? "next" : "latest";
+    expect(() => validateReleaseModel(model)).toThrow("Invalid release coordinates");
+  }
 });

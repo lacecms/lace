@@ -27,7 +27,15 @@ export function supportedPnpmVersion(version) {
   );
 }
 export const RELEASE_DOCKERFILES = ["apps/api/Dockerfile", "apps/builder/Dockerfile"];
-const RELEASE_VERSION = /^\d+\.\d+\.\d+-(?:alpha\.[1-9]\d*|rc[1-9]\d*)$/u;
+const RELEASE_VERSION =
+  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:alpha\.[1-9]\d*|rc[1-9]\d*))?$/u;
+
+export function releaseChannel(version) {
+  if (typeof version !== "string" || !RELEASE_VERSION.test(version))
+    throw new Error("Invalid release version");
+  return version.includes("-") ? "next" : "latest";
+}
+
 const COORDINATE =
   /(?:create[ -]lace@|@lacecms\/[a-z-]+@|ghcr\.io\/lacecms\/(?:api|builder):)(\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?)/gu;
 
@@ -111,13 +119,13 @@ export function validateReleaseModel(model, { templates = true } = {}) {
     release.schemaVersion !== 1 ||
     !RELEASE_VERSION.test(release.version) ||
     release.generatorVersion !== release.version ||
-    release.channel !== "next" ||
+    release.channel !== releaseChannel(release.version) ||
     !/^\d+\.\d+\.\d+$/u.test(release.templateVersion) ||
     release.images.api !== "ghcr.io/lacecms/api" ||
     release.images.builder !== "ghcr.io/lacecms/builder" ||
     JSON.stringify(release.platforms) !== JSON.stringify(["linux/amd64", "linux/arm64"])
   )
-    throw new Error("Invalid prerelease coordinates/version/platforms");
+    throw new Error("Invalid release coordinates/version/platforms");
   if (
     !Array.isArray(release.publishedVersions) ||
     release.publishedVersions.some((version) => !RELEASE_VERSION.test(version))
@@ -125,7 +133,7 @@ export function validateReleaseModel(model, { templates = true } = {}) {
     throw new Error("Invalid published version record");
   if (release.publishedVersions.includes(release.version))
     throw new Error(
-      `Release version ${release.version} is already published; select a new prerelease version`,
+      `Release version ${release.version} is already published; select a new release version`,
     );
   const publicNames = new Set(release.packages.map(packageName));
   if (publicNames.size !== 16 || publicNames.has("@lacecms/test-utils"))
@@ -155,7 +163,11 @@ export function validateReleaseModel(model, { templates = true } = {}) {
     const manifest = manifests[name]?.manifest;
     if (!manifest || manifest.private || !publicNames.has(name))
       throw new Error(`Missing/private release dependency: ${name}`);
-    if (manifest.version !== release.version || manifest.publishConfig?.access !== "public")
+    if (
+      manifest.version !== release.version ||
+      manifest.publishConfig?.access !== "public" ||
+      manifest.publishConfig.tag !== release.channel
+    )
       throw new Error(`Release version/access mismatch: ${name}`);
     if (
       manifest.engines?.node !== ENGINE_MINIMUMS.node ||
@@ -233,6 +245,8 @@ export function validateReleaseModel(model, { templates = true } = {}) {
 export function validatePackedManifest(manifest, release) {
   if (manifest.private || manifest.version !== release.version)
     throw new Error(`Invalid packed version/access: ${manifest.name}`);
+  if (release.channel && manifest.publishConfig?.tag !== release.channel)
+    throw new Error(`Invalid packed channel: ${manifest.name}`);
   if (manifest.devDependencies)
     throw new Error(`Development metadata in archive: ${manifest.name}`);
   for (const section of ["dependencies", "optionalDependencies", "peerDependencies"]) {

@@ -3,6 +3,13 @@
 Important changes and required upgrade actions; preparation alone does not
 announce publication. See [release status and evidence](docs/alpha-release.md).
 
+## 1.0.0
+
+- Upgrade directly from RC5. Back up the database and media together, adopt matching packages, images and template 0.52.0, apply five forward migrations, synchronize and rebuild. [Upgrade procedure](docs/compatibility.md#upgrading-from-rc5)
+- VPS Compose uses SILO for object storage. Preserve the stopped MinIO volume and verify existing media after the switch.
+- Protected saved-draft previews are opt-in on both deployment targets. Entry reference fields can link content by stable ID.
+- Custom REST clients can use revision ETags for conditional writes and cursors for protected lists, including build history.
+
 ## 0.1.0-rc5
 
 - Production Compose removes the API host port and binds Nginx to loopback by default; update your TLS proxy and host clients before restarting ([upgrade guide](docs/compatibility.md#upgrading-from-rc2)).

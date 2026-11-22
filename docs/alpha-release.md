@@ -1,17 +1,10 @@
-# Preparing and publishing a Lace prerelease
+# Preparing and publishing Lace 1.0.0
 
-The selected candidate and its coordinates are defined in `release/alpha.json`;
-the npm channel is `next`. The current candidate is `0.1.0-rc6` (ownership
-template `0.51.0`). The oldest supported release is `0.1.0-rc2`
-(template `0.47.0`); earlier prereleases, including `0.1.0-rc1`, remain
-published and immutable but are not supported (see
-[compatibility](./compatibility.md#upgrading-from-rc2)). Preparation and
-acceptance never publish, and each candidate needs its own fresh evidence.
-Record the date of every read-only registry check: an unused version is
-availability evidence, not a reservation or publishing right.
-
-On 2026-11-17, public registry checks returned all sixteen rc5 npm versions
-and both rc5 image tags. All corresponding rc6 coordinates returned 404.
+The selected release is `1.0.0` on npm `latest`, ownership template `0.52.0`.
+The supported upgrade origin is RC5. The 2026-11-22 registry check found
+all RC5 packages and image indexes and the 1.0.0 coordinates available.
+The owner approves the exact qualified artifacts before publication.
+See [compatibility](compatibility.md#upgrading-from-rc5).
 
 ## Coordinates and ownership
 
@@ -19,10 +12,10 @@ The owner confirmed the npm organization `lacecms` and GitHub organization `lace
 
 | Artifact | Coordinate | Contents |
 | --- | --- | --- |
-| Generator | `create-lace@0.1.0-rc6` | Executable, declarations, templates, ownership inventory, MIT license |
-| Runtime graph | `@lacecms/*@0.1.0-rc6` | Compiled ESM/declarations and complete registry dependency metadata; `platform-cloudflare` also ships the packaged admin |
-| API/admin | `ghcr.io/lacecms/api:0.1.0-rc6` | Compiled API/admin, dispatcher, explicit migrations, bucket initializer and native runtime |
-| Builder | `ghcr.io/lacecms/builder:0.1.0-rc6` | Fixed-command service, non-root work/output mounts and Node 24.22.3 with pnpm 12.21.0 |
+| Generator | `create-lace@1.0.0` | Executable, declarations, templates, ownership inventory, MIT license |
+| Runtime graph | `@lacecms/*@1.0.0` | Compiled ESM/declarations and complete registry dependency metadata; `platform-cloudflare` also ships the packaged admin |
+| API/admin | `ghcr.io/lacecms/api:1.0.0` | Compiled API/admin, dispatcher, explicit migrations, bucket initializer and native runtime |
+| Builder | `ghcr.io/lacecms/builder:1.0.0` | Fixed-command service, non-root work/output mounts and Node 24.22.3 with pnpm 12.21.0 |
 
 Recheck npm and GHCR publishing rights with authenticated accounts before live
 publication. Local artifact preparation does not need publishing credentials.
@@ -30,7 +23,7 @@ publication. Local artifact preparation does not need publishing credentials.
 
 ### Selecting the next version
 
-Choose a prerelease that is not in `publishedVersions` and is unused in the registries. Update `release/alpha.json`, every public manifest, generated dependencies and image defaults, the Dockerfile `LACE_VERSION` defaults, versioned guide commands, and the block registry's package requirements together. Advance the ownership template version with upgrade instructions. Match the documentation catalog's `latest` target in `apps/docs/src/catalog.json` to the new release. Run `pnpm release:check` and `pnpm docs:check` to detect stale coordinates. After the owner publishes a version, append it to `publishedVersions`.
+Choose a release version that is not in `publishedVersions` and is unused in the registries. Update `release/alpha.json`, every public manifest, generated dependencies and image defaults, the Dockerfile `LACE_VERSION` defaults, versioned guide commands, and the block registry's package requirements together. Advance the ownership template version with upgrade instructions. Match the documentation catalog's `latest` target in `apps/docs/src/catalog.json` to the new release. Run `pnpm release:check` and `pnpm docs:check` to detect stale coordinates. After the owner publishes a version, append it to `publishedVersions`.
 
 The scoped packages are `content`, `config`, `domain`, `application`, `auth`, `db`, `contracts`, `server`, `platform-cloudflare`, `platform-node`, `cli`, `sdk`, `render`, `astro`, and `mcp`. The inventory lists their dependency-safe publication order, followed by the generator. Root, applications and test-utils remain private. The admin is shipped inside the API image; generated projects have no editable admin source.
 
@@ -52,8 +45,8 @@ The checked-in `release/alpha.json` is the version/coordinate definition. The va
 pnpm install --frozen-lockfile
 pnpm release:check
 pnpm release:plan
-pnpm release:prepare --output .release-artifacts/rc6
-pnpm release:verify --output .release-artifacts/rc6
+pnpm release:prepare --output .release-artifacts/1.0.0
+pnpm release:verify --output .release-artifacts/1.0.0
 ```
 
 `release:plan` is the mutation-free dry-run plan; it does not build or need Docker. `release:prepare` builds the public graph in an isolated source snapshot, packs inspected archives in a disposable workspace, tests an isolated package consumer with test-only overrides, builds/loads both image platforms locally, exercises migrations/configuration/admin/native runtime and builder health, and saves the tested image archives. It does not build the reference Astro site against a live CMS during package compilation.
@@ -75,7 +68,7 @@ pnpm release:prepare --preview --output .release-artifacts/full-preview
 Run exact-artifact acceptance against the clean prepared inventory before publication:
 
 ```sh
-pnpm acceptance:release --artifacts .release-artifacts/rc6
+pnpm acceptance:release --artifacts .release-artifacts/1.0.0
 pnpm --filter @lacecms/platform-node test
 pnpm --filter @lacecms/platform-cloudflare test
 pnpm --dir apps/api test
@@ -111,30 +104,30 @@ An E404 means currently unpublished, not reserved. If it exists and you lack pub
 Publish from the repository root using the clean, acceptance-verified artifact directory:
 
 ```sh
-pnpm release:publish:npm --artifacts .release-artifacts/rc6
+pnpm release:publish:npm --artifacts .release-artifacts/1.0.0
 ```
 
-This is a **live publication**. The script verifies the complete inventory and all archive checksums, checks every selected registry version before publishing anything, and publishes the exact saved tarballs in inventory order with `--access public --tag next`. It never repacks source directories and never moves `latest`. Authentication uses your local npm configuration (`npm login`).
+This is a **live publication**. The script verifies the complete inventory and all archive checksums, checks every selected registry version before publishing anything, and publishes the exact saved tarballs in inventory order with `--access public --tag latest`. It never repacks source directories. Authentication uses your local npm configuration (`npm login`).
 
 To inspect the npm publication without publishing, explicitly add `--dry-run`:
 
 ```sh
-pnpm release:publish:npm --artifacts .release-artifacts/rc6 --dry-run
+pnpm release:publish:npm --artifacts .release-artifacts/1.0.0 --dry-run
 ```
 
 Omit `--packages` to publish all sixteen packages. To select packages, pass a comma-separated list of full names or short scoped names; inventory order is preserved:
 
 ```sh
-pnpm release:publish:npm --artifacts .release-artifacts/rc6 --packages cli,sdk,create-lace
+pnpm release:publish:npm --artifacts .release-artifacts/1.0.0 --packages cli,sdk,create-lace
 ```
 
-Matching published archives are skipped after comparing registry integrity with the saved tarball; a different archive stops the entire selected preflight. Re-running the same command resumes missing packages and ensures `next` points to the selected version. All missing packages are submitted consecutively in inventory order, without waiting for registry processing between uploads. Only after the entire batch has been sent does the script verify each version and its `next` tag against npm. npm may process an accepted upload for several minutes. This final batch verification polls pending versions concurrently for up to ten minutes, tolerates transient metadata errors, and saves each successful submission immediately in `publication-npm-submitted.json`. On timeout, rerun the same command: submitted versions are verified without uploading them again. Keep this journal with the artifact directory. A successful live run writes `publication-npm.json` beside the inventory; dry-runs write no receipt. The preparation inventory stays unchanged. A selected subset's receipt covers only that subset.
+Matching published archives are skipped after comparing registry integrity with the saved tarball; a different archive stops the entire selected preflight. Re-running the same command resumes missing packages and ensures the selected channel points to the selected version. All missing packages are submitted consecutively in inventory order, without waiting for registry processing between uploads. Only after the entire batch has been sent does the script verify each version and its selected tag against npm. npm may process an accepted upload for several minutes. This final batch verification polls pending versions concurrently for up to ten minutes, tolerates transient metadata errors, and saves each successful submission immediately in `publication-npm-submitted.json`. On timeout, rerun the same command: submitted versions are verified without uploading them again. Keep this journal with the artifact directory. A successful live run writes `publication-npm.json` beside the inventory; dry-runs write no receipt. The preparation inventory stays unchanged. A selected subset's receipt covers only that subset.
 
-Published npm versions are immutable. If a run stops midway, compare existing versions' registry integrity with the saved artifacts, record already-published items and resume only the missing ones. A different archive requires a new prerelease version and a new prepared/verified set. Do not overwrite versions or announce a partially published set.
+Published npm versions are immutable. If a run stops midway, compare existing versions' registry integrity with the saved artifacts, record already-published items and resume only the missing ones. A different archive requires a new version and a new prepared/verified set. Do not overwrite versions or announce a partially published set.
 
 ## Source repository
 
-The source repository is `https://github.com/lacecms/lace`. Package repository metadata, the release definition and both OCI source labels use this address. Artifact sets prepared before the repository moved retain the old address in their embedded metadata; keep their inventories and evidence unchanged and never edit an inventory or retag an image to change provenance. A version that is already published is never replaced: changed artifacts require a new prerelease version, a new prepared set and a new acceptance run.
+The source repository is `https://github.com/lacecms/lace`. Package repository metadata, the release definition and both OCI source labels use this address. Artifact sets prepared before the repository moved retain the old address in their embedded metadata; keep their inventories and evidence unchanged and never edit an inventory or retag an image to change provenance. A version that is already published is never replaced: changed artifacts require a new version, a new prepared set and a new acceptance run.
 
 ## Owner-operated GHCR publication
 
@@ -143,7 +136,7 @@ Use your GitHub account with publishing rights in organization `lacecms`. For ma
 Publish the saved API and builder archives for all prepared platforms, then assemble their versioned manifest lists:
 
 ```sh
-pnpm release:publish:images --artifacts .release-artifacts/rc6
+pnpm release:publish:images --artifacts .release-artifacts/1.0.0
 ```
 
 This is a **live publication**. The script verifies the complete inventory/checksums and checks existing remote platform tags and versioned manifest lists before any local load or remote push. It loads the exact archives, verifies their image IDs and platforms, tags/pushes only missing platform images, and uses `docker buildx imagetools create` with verified remote digests to publish each multi-platform version tag. It never rebuilds images and never changes `latest`.
@@ -151,13 +144,13 @@ This is a **live publication**. The script verifies the complete inventory/check
 To review the plan without loading, tagging or pushing images, add `--dry-run`. This performs read-only registry checks and needs Docker CLI/Buildx and registry access:
 
 ```sh
-pnpm release:publish:images --artifacts .release-artifacts/rc6 --dry-run
+pnpm release:publish:images --artifacts .release-artifacts/1.0.0 --dry-run
 ```
 
 Omit `--images` for both images, or select `api`, `builder`, or `api,builder`. Each selected image always includes all inventory platforms:
 
 ```sh
-pnpm release:publish:images --artifacts .release-artifacts/rc6 --images api
+pnpm release:publish:images --artifacts .release-artifacts/1.0.0 --images api
 ```
 
 Re-running resumes missing platform tags and manifests. Existing artifacts must match the recorded config/image identities and expected platforms; conflicts stop publication. Registry authentication/network errors stop the run rather than being treated as missing images. A successful live run writes `publication-images.json` beside the inventory with remote platform/manifest digests and source identity. A selected subset's receipt covers only that subset. Neither publication command proves real deployment success or replaces exact-artifact acceptance.
@@ -189,7 +182,7 @@ belongs in four small JSON assets: inventory, acceptance, npm publication and
 image publication. Packages stay in npm and images in GHCR.
 
 The lifecycle is prepare → exact-artifact acceptance → npm/GHCR publication →
-verified GitHub prerelease → explicit local cleanup. Preparation and dry runs
+verified GitHub release → explicit local cleanup. Preparation and dry runs
 never publish. Finalization and cleanup default to preview, and neither replaces
 real VPS/Cloudflare deployment verification. A partial publication retains the
 saved bytes/journals for recovery. Cleanup never edits tracked documentation,
@@ -220,7 +213,7 @@ Before finalizing, confirm the inventory source revision exists on GitHub:
 
 ```sh
 git status -sb
-gh api repos/lacecms/lace/commits/$(jq -r .source.revision .release-artifacts/rc6/inventory.json) --jq .sha
+gh api repos/lacecms/lace/commits/$(jq -r .source.revision .release-artifacts/1.0.0/inventory.json) --jq .sha
 ```
 
 The first must not report `ahead`; the second must print the same SHA. If GitHub
@@ -230,14 +223,14 @@ misleading `gh failed (1); check authentication and remote access` even when
 `gh auth status` is fine.
 
 ```sh
-pnpm release:github --artifacts .release-artifacts/rc6
-pnpm release:github --artifacts .release-artifacts/rc6 --apply
+pnpm release:github --artifacts .release-artifacts/1.0.0
+pnpm release:github --artifacts .release-artifacts/1.0.0 --apply
 ```
 
 The commands without `--apply` are previews. The final command is a live GitHub
 operation: it verifies every public npm version and both images/platforms,
 creates/resumes a matching draft, verifies four JSON assets and publishes the
-prerelease without changing latest. It does not publish packages, push images,
+stable release as latest. It does not publish packages, push images,
 repack files, push source commits or move existing tags. The notes body comes
 from the corresponding changelog entry; links point to the reviewed notes
 revision rather than a moving branch. Matching reruns are idempotent; conflicting
@@ -253,7 +246,7 @@ publication journals and private diagnostics are never uploaded. Import keeps
 historical acceptance bytes unchanged and does not claim a fresh test execution.
 A successful finalization writes publication-github.json locally with the URL,
 source, notes revision and remote asset hashes. Missing/blocked prerequisites
-produce a nonzero exit and never cause publication or deletion. Current next may
+produce a nonzero exit and never cause publication or deletion. The current dist-tag may
 have advanced; identity checks use immutable version coordinates.
 
 ### Preview and clean local release files
@@ -261,8 +254,8 @@ have advanced; identity checks use immutable version coordinates.
 After registry publication and verified GitHub finalization:
 
 ```sh
-pnpm release:clean --artifacts .release-artifacts/rc6
-pnpm release:clean --artifacts .release-artifacts/rc6 --evidence .release-artifacts/rc6-evidence --apply
+pnpm release:clean --artifacts .release-artifacts/1.0.0
+pnpm release:clean --artifacts .release-artifacts/1.0.0 --evidence .release-artifacts/1.0.0-evidence --apply
 ```
 
 The second command removes those explicitly selected local directories, including
@@ -290,4 +283,15 @@ and remove remaining files. Changed scope or remaining artifact bytes cause
 refusal. A successful retry removes its journal.
 
 Public release notes live in [CHANGELOG.md](../CHANGELOG.md); detailed upgrade
-instructions live in [compatibility](compatibility.md#upgrading-from-rc2).
+instructions live in [compatibility](compatibility.md#upgrading-from-rc5).
+
+## Stable approval
+
+Before publishing any 1.0.0 package to npm `latest`, the owner records the
+inventory digest, matching acceptance receipt, real VPS and Cloudflare
+deployment and restore results, residual risks and explicit approval in the
+[verification record](verification.md#owner-checks-on-real-infrastructure).
+Publish the exact versioned images and packages in dependency order. Rerun
+with the same inventory after partial publication. A stable finalization
+publishes a regular GitHub release and selects it as latest. Verify immutable
+versions independently of mutable dist-tags before cleanup.

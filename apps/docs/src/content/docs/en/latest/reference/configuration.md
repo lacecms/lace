@@ -2,7 +2,7 @@
 title: Configuration options
 description: Every option of defineConfig, definePage, defineCollection, defineGlobal and defineBlock, and every field builder with its options.
 kind: reference
-verifiedAgainst: 0.1.0-rc6
+verifiedAgainst: 1.0.0
 ---
 
 `lace.config.ts` exports the result of `defineConfig`. Import `defineConfig`, `definePage`, `defineCollection` and `defineGlobal` from `@lacecms/config`, and `defineBlock`, `field` and `builtInBlocks` from `@lacecms/content`. Every definition is checked when the configuration loads; an invalid option fails with a message that names the model, block or field. For worked examples see [Define your content](../../content-modeling/).

@@ -104,7 +104,7 @@ test("Node migration refuses to report success over a foreign-key violation", as
   }
 });
 
-test("a database migrated by an engine older than the baseline is refused unchanged", async () => {
+test("an unknown ledger entry is refused without changing the database", async () => {
   const { UnsupportedDatabaseError } = await import("./index.js");
   const root = await mkdtemp(join(tmpdir(), "lace-pre-baseline-"));
   const path = join(root, "lace.sqlite");
@@ -112,7 +112,7 @@ test("a database migrated by an engine older than the baseline is refused unchan
     const database = openNodeDatabase(path);
     try {
       database.connection.exec(
-        "create table __drizzle_migrations (id integer primary key autoincrement, hash text not null, created_at numeric); insert into __drizzle_migrations (hash, created_at) values ('old', 1789240330790); create table content_models (key text primary key); insert into content_models values ('posts');",
+        "create table __drizzle_migrations (id integer primary key autoincrement, hash text not null, created_at numeric); insert into __drizzle_migrations (hash, created_at) values ('old', 123456789); create table content_models (key text primary key); insert into content_models values ('posts');",
       );
     } finally {
       database.connection.close();
