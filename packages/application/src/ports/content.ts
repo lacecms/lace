@@ -19,6 +19,7 @@ import type {
   JsonObject,
   ListQueryLimits,
   ListQueryableFieldType,
+  SnapshotEntryReference,
 } from "@lacecms/content";
 import type {
   OpaqueCursor,
@@ -160,6 +161,7 @@ export interface ContentEntryReadPort {
 
 export interface CreateContentEntryInput {
   readonly internalLinks?: readonly InternalLinkReference[];
+  readonly entryReferences?: EntryReferenceCandidate;
   /** Commits the new entry only while the duplicated source draft is still at this revision. */
   readonly duplicateOf?: DuplicateSourceGuard;
   readonly entry: ContentEntry;
@@ -174,11 +176,13 @@ export interface DuplicateSourceGuard {
 
 export interface SaveCompleteDraftInput {
   readonly internalLinks?: readonly InternalLinkReference[];
+  readonly entryReferences?: EntryReferenceCandidate;
   readonly entryId: ContentEntryId;
   readonly mutation: CompleteDraftMutation;
 }
 
 export interface PublishContentEntryCommand {
+  readonly entryReferences?: EntryReferenceCandidate;
   readonly events: readonly OutboxEventRequest[];
   readonly entryId: ContentEntryId;
   readonly expectedRevision: number;
@@ -231,11 +235,19 @@ export interface UnpublishContentEntryCommand {
 }
 
 export interface RevertContentDraftCommand {
+  readonly entryReferences?: EntryReferenceCandidate;
   readonly entryId: ContentEntryId;
   readonly expectedPublishedSnapshotId: ContentSnapshotId;
   readonly expectedRevision: number;
   readonly revertedAt: UnixMilliseconds;
   readonly revertedBy: Actor;
+}
+
+/** Typed occurrences derived from one active model's descriptors. */
+export interface EntryReferenceCandidate {
+  readonly structureHash: string;
+  readonly modelKey: ContentModelKey;
+  readonly references: readonly Extract<SnapshotEntryReference, { purpose: "reference" }>[];
 }
 
 export type ContentCommandStatus = "created" | "deleted" | "published" | "reverted" | "saved";

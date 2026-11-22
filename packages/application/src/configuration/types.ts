@@ -5,6 +5,7 @@ import type {
   FieldVisibilityRule,
   JsonObject,
   InternalLinkReference,
+  SnapshotEntryReference,
 } from "@lacecms/content";
 import type {
   ContentEntry,
@@ -119,7 +120,7 @@ export interface ConfigurationSyncSnapshotFindings {
 
 /** One current draft or published snapshot read for a data-dependent sync decision. */
 export interface ConfigurationSyncSnapshot {
-  readonly internalLinks?: readonly import("@lacecms/content").InternalLinkReference[];
+  readonly internalLinks?: readonly ConfigurationSyncEntryUsage[];
   readonly blocks: readonly {
     readonly data?: JsonObject;
     readonly settings?: JsonObject;
@@ -226,7 +227,7 @@ export interface ConfigurationSyncMigrationBlock {
 
 /** One current snapshot of an entry read by the migration scan. */
 export interface ConfigurationSyncMigrationSnapshot {
-  readonly internalLinks?: readonly import("@lacecms/content").InternalLinkReference[];
+  readonly internalLinks?: readonly ConfigurationSyncEntryUsage[];
   readonly blocks: readonly ConfigurationSyncMigrationBlock[];
   readonly fields: JsonObject;
   readonly references: readonly ConfigurationSyncMediaReference[];
@@ -262,7 +263,8 @@ export interface ConfigurationSyncMigratedBlock {
 
 /** The guarded rewrite of one snapshot of a migration unit. */
 export interface ConfigurationSyncSnapshotMigration {
-  readonly internalLinks?: readonly import("@lacecms/content").InternalLinkReference[];
+  readonly referenceCheck?: ConfigurationSyncReferenceCheck;
+  readonly internalLinks?: readonly ConfigurationSyncEntryUsage[];
   readonly blocks: readonly ConfigurationSyncMigratedBlock[];
   /** Present when a published snapshot takes the draft's new revision. */
   readonly draftGuard?: { readonly revision: number; readonly snapshotId: string };
@@ -468,6 +470,8 @@ export type ConfigurationSyncDiagnosticCode =
   | "FIELD_TYPE_CHANGED"
   | "MEDIA_DEFAULT_BACKFILL_UNSUPPORTED"
   | "MODEL_KIND_CHANGED"
+  | "REFERENCE_SYNC_INVALID"
+  | "REFERENCE_SYNC_STAGES_REQUIRED"
   | "RENAME_KIND_CHANGED"
   | "RENAME_SOURCE_MISSING"
   | "RENAME_SOURCE_STILL_CONFIGURED"
@@ -532,6 +536,10 @@ export interface ConfigurationSyncMigrationScanInput {
 
 /** Read-only persistence boundary used by dry-run and guarded apply coordination. */
 export interface ConfigurationSyncStateReadPort {
+  readConfigurationSyncReferenceRevision?(): Promise<number>;
+  inspectConfigurationSyncReferences?(
+    input: ConfigurationSyncReferenceInspection,
+  ): Promise<readonly ConfigurationSyncReferenceIssue[]>;
   readConfigurationSyncMigrationEntries(
     input: ConfigurationSyncMigrationScanInput,
   ): Promise<ConfigurationSyncMigrationPage>;
@@ -550,6 +558,7 @@ export interface ConfigurationSyncSingletonEntry {
 /** Complete guarded input for one atomic synchronization mutation. */
 export interface ApplyConfigurationSynchronizationInput {
   readonly events: readonly import("../ports/outbox.js").OutboxEventRequest[];
+  readonly expectedReferenceRevision?: number;
   readonly linkRewrites?: readonly ConfigurationSyncLinkRewrite[];
   readonly appliedAt: UnixMilliseconds;
   /** The scan evidence the plan was derived from; repositories re-plan with it. */
@@ -581,6 +590,8 @@ export interface ApplyConfigurationSyncBlockMigrationsInput {
   readonly migratedAt: UnixMilliseconds;
   readonly modelKey: ContentModelKey;
   readonly units: readonly ConfigurationSyncEntryMigration[];
+  readonly referenceRenames?: ConfigurationSyncReferenceRenames;
+  readonly expectedStructureHash?: string;
 }
 
 /** Specialized mutation boundary; it intentionally does not expose a transaction callback. */
@@ -599,13 +610,51 @@ export interface ConfigurationSyncApplyPort {
 
 /** A dry-run result that preserves the exact persisted snapshot later guarded by apply. */
 export interface PreparedConfigurationSynchronization {
+  readonly referenceRevision?: number;
   readonly evidence: ConfigurationSyncEvidence;
   readonly plan: ConfigurationSyncPlan;
   readonly report: ConfigurationSyncReport;
   readonly storedModels: readonly StoredContentModelState[];
 }
 
+export type ConfigurationSyncEntryUsage = InternalLinkReference & {
+  readonly purpose?: SnapshotEntryReference["purpose"];
+};
+
 export interface ConfigurationSyncLinkRewrite {
   readonly snapshotId: string;
-  readonly references: readonly InternalLinkReference[];
+  readonly references: readonly ConfigurationSyncEntryUsage[];
+  readonly referenceCheck?: ConfigurationSyncReferenceCheck;
+  /** A narrowing can need admission without changing stored usages. */
+  readonly checkOnly?: boolean;
+}
+
+export type ConfigurationSyncReferenceRenames = readonly (readonly [string, string])[];
+
+export interface ConfigurationSyncReferenceCheck {
+  readonly modelKey: ContentModelKey;
+  readonly entryId: string;
+  readonly snapshotId: string;
+  readonly state: "draft" | "published";
+  readonly title: string;
+  readonly references: readonly ConfigurationSyncEntryUsage[];
+  readonly selections: readonly {
+    readonly reference: Extract<SnapshotEntryReference, { purpose: "reference" }>;
+    readonly allowMissing: boolean;
+  }[];
+}
+
+export interface ConfigurationSyncReferenceInspection {
+  readonly checks: readonly ConfigurationSyncReferenceCheck[];
+  readonly renames: ConfigurationSyncReferenceRenames;
+  /** Checks in execution order. Drafts and publications use separate overlays. */
+  readonly sequence?: boolean;
+}
+
+export interface ConfigurationSyncReferenceIssue {
+  readonly index: number;
+  readonly targetId: string;
+  readonly code: string;
+  readonly pointer?: string;
+  readonly sourceKey?: string;
 }

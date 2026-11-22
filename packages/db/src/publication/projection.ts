@@ -1,4 +1,4 @@
-import type { PublishedProjection } from "@lacecms/application";
+import type { EntryReferenceCandidate, PublishedProjection } from "@lacecms/application";
 import { publishedProjectionBlockData } from "@lacecms/application";
 import { DomainError } from "@lacecms/domain";
 import { INTERNAL_LINK_ROWS_SQL, internalLinkRowsJson } from "../links/statements.js";
@@ -22,6 +22,7 @@ export interface ProjectedPublicationRows {
 export function projectedPublicationRows(
   draftBlockKeys: readonly string[],
   projection: PublishedProjection,
+  references: EntryReferenceCandidate["references"] = [],
 ): ProjectedPublicationRows {
   const data = publishedProjectionBlockData(
     draftBlockKeys as Parameters<typeof publishedProjectionBlockData>[0],
@@ -42,7 +43,7 @@ export function projectedPublicationRows(
       [...data].map(([key, value]) => ({ key, data: JSON.stringify(value) })),
     ),
     fieldsJson: JSON.stringify(projection.fields),
-    internalLinksJson: internalLinkRowsJson(projection.internalLinks),
+    internalLinksJson: internalLinkRowsJson([...projection.internalLinks, ...references]),
     mediaReferencesJson: JSON.stringify(
       projection.mediaReferences.map((reference) => [
         reference.sourceKey,
@@ -79,8 +80,8 @@ export function projectedMediaReferencesSql(condition = "1 = 1"): string {
  * `internalLinksJson`, then `condition`'s.
  */
 export function projectedInternalLinksSql(condition = "1 = 1"): string {
-  return `insert into content_entry_link_references (snapshot_id, source_key, area, field_path, target_entry_id, delivered)
-  select ?, i.source_key, i.area, i.field_path, i.target_entry_id, i.delivered
+  return `insert into content_entry_link_references (snapshot_id, source_key, area, field_path, target_entry_id, delivered, purpose)
+  select ?, i.source_key, i.area, i.field_path, i.target_entry_id, i.delivered, i.purpose
     from (${INTERNAL_LINK_ROWS_SQL}) i where ${condition}`;
 }
 
@@ -93,4 +94,4 @@ export const INVALID_PROJECTED_LINK_TARGETS_SQL = `select r.source_key, r.area, 
   from (${INTERNAL_LINK_ROWS_SQL}) r
   left join content_entries target on target.id=r.target_entry_id
   left join published_routes route on route.entry_id=target.id and route.snapshot_id=target.published_snapshot_id
-  where r.delivered=1 and not (r.target_entry_id=? and ? is not null) and route.path is null`;
+  where r.purpose='url' and r.delivered=1 and not (r.target_entry_id=? and ? is not null) and route.path is null`;

@@ -651,3 +651,32 @@ test("block envelopes travel through admin, public and export contracts", async 
     key: "b2",
   });
 });
+
+test("authorized REST writes reject a cycle at the typed selection", async () => {
+  const { app } = await fixture({
+    models: [
+      defineCollection({
+        key: "posts",
+        version: 1,
+        fields: { related: field.reference({ models: ["posts"] }) },
+      }),
+    ],
+  });
+  const request = (path: string, method: string, body: unknown) =>
+    json(app, path, {
+      method,
+      headers: { "content-type": "application/json", "if-match": '"1"' },
+      body: JSON.stringify(body),
+    });
+  const payload = { blocks: [], fields: {}, title: "Post" };
+  const created = await request("/api/v1/admin/models/posts/entries", "POST", payload);
+  expect(created.response.status).toBe(201);
+  const rejected = await request(`/api/v1/admin/entries/${created.body.id}/draft`, "PUT", {
+    ...payload,
+    fields: { related: created.body.id },
+  });
+  expect(rejected.response.status).toBe(422);
+  expect(v.parse(issueEnvelope, rejected.body).error.details.issues).toEqual([
+    { path: "/fields/related", code: "reference_cycle" },
+  ]);
+});

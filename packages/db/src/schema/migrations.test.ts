@@ -20,7 +20,8 @@ test("checked-in migration inventory matches the Drizzle journal", async () => {
 test("baseline creates the seeded schema with carried indexes and link cascades", async () => {
   const database = new DatabaseSync(":memory:");
   try {
-    for (const migration of checkedInMigrations)
+    const purpose = checkedInMigrations.at(-1)!;
+    for (const migration of checkedInMigrations.slice(0, -1))
       database.exec(
         await readFile(new URL(`../../drizzle/${migration.name}`, import.meta.url), "utf8"),
       );
@@ -55,8 +56,34 @@ test("baseline creates the seeded schema with carried indexes and link cascades"
         .run(`${id}-draft`, id, id);
     }
     database.exec(
-      "insert into content_entry_link_references values ('source-draft','$fields','fields','/url','target',1)",
+      "insert into content_entry_link_references (snapshot_id,source_key,area,field_path,target_entry_id,delivered) values ('source-draft','$fields','fields','/url','target',1)",
     );
+    database.exec(`
+      insert into published_state (singleton_key,version,updated_at) values (1,7,1);
+      insert into outbox_events (id,type,payload_json,available_at,created_at) values ('event','site.build.requested','{}',1,1);
+    `);
+    const row = () => database.prepare("select rowid, * from content_entry_link_references").get();
+    const before = row();
+    const publicState = database.prepare("select * from published_state").all();
+    const outbox = database.prepare("select * from outbox_events").all();
+    database.exec(await migrationSql(purpose.name));
+    expect(row()).toEqual({ ...before, purpose: "url" });
+    expect(database.prepare("select * from published_state").all()).toEqual(publicState);
+    expect(database.prepare("select * from outbox_events").all()).toEqual(outbox);
+    expect(() => database.exec("update content_entry_link_references set purpose='other'")).toThrow(
+      /check/iu,
+    );
+    for (const [filter, index] of [
+      ["snapshot_id='source-draft' and purpose='reference'", "outgoing_idx"],
+      ["target_entry_id='target' and purpose='url'", "target_idx"],
+    ]) {
+      const plan = database
+        .prepare(
+          `explain query plan select target_entry_id from content_entry_link_references where ${filter}`,
+        )
+        .all();
+      expect(JSON.stringify(plan)).toContain(`content_entry_link_references_${index}`);
+    }
     database.exec("delete from content_entries where id='target'");
     expect(
       database.prepare("select target_entry_id from content_entry_link_references").all(),

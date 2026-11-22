@@ -6,6 +6,7 @@ import { cases as run4 } from "./entries/listing.js";
 import { cases as run5 } from "./builds/diagnostics.js";
 import { cases as run6 } from "./entries/publication-failures.js";
 import { cases as run7 } from "./media/bulk-reads.js";
+import { cases as referenceSync } from "./sync/entry-references.js";
 import { cases as run8 } from "./sync/evolution.js";
 import { cases as run9 } from "./sync/block-migrations.js";
 import { cases as run10 } from "./entries/envelope.js";
@@ -14,6 +15,7 @@ import { cases as run12 } from "./sync/projection-only.js";
 import { cases as run13 } from "./delivery/build-export.js";
 import { cases as run14 } from "./sync/list-migrations.js";
 import { cases as run15 } from "./links/projections.js";
+import { cases as entryReferences } from "./links/entry-references.js";
 import { cases as run16 } from "./links/removal.js";
 import { cases as run17 } from "./delivery/queries.js";
 import { cases as run18 } from "./media/tags.js";
@@ -48,6 +50,7 @@ export const contentRepositoryContractCases: readonly RepositoryContractCase[] =
   ...run7,
   ...run8,
   ...run9,
+  ...referenceSync,
   ...mediaCatalog,
   ...globalsSeo,
   ...run10,
@@ -56,6 +59,7 @@ export const contentRepositoryContractCases: readonly RepositoryContractCase[] =
   ...run13,
   ...run14,
   ...run15,
+  ...entryReferences,
   ...run16,
   ...run17,
   ...run18,

@@ -112,7 +112,7 @@ export const LINK_IMPACT_EVIDENCE_SQL = `select g.revision as graph_revision, d.
   exists(select 1 from content_entry_link_references r
     join content_snapshots s on s.id=r.snapshot_id
     join content_entries e on e.id=s.entry_id and e.published_snapshot_id=s.id
-    where r.target_entry_id=? and r.delivered=1 and ${EXTERNAL}) as has_published_usages
+    where r.target_entry_id=? and r.purpose='url' and r.delivered=1 and ${EXTERNAL}) as has_published_usages
   from content_link_state g left join content_entries t on t.id=?
   left join content_snapshots d on d.id=t.draft_snapshot_id where g.singleton_key=1`;
 export interface ImpactEvidenceRow {
@@ -285,7 +285,7 @@ export class SqlContentLinkReader implements ContentLinkReadPort {
           : (
               await this.db.all<LocationRow>(
                 `select ${LOCATION_COLUMNS} from content_entry_link_references r
-         where r.target_entry_id=? and r.snapshot_id=? and r.rowid=cast(? as integer)`,
+         where r.target_entry_id=? and r.purpose='url' and r.snapshot_id=? and r.rowid=cast(? as integer)`,
                 input.targetId,
                 input.snapshotId,
                 after.last[0],
@@ -299,7 +299,7 @@ export class SqlContentLinkReader implements ContentLinkReadPort {
       const rows = await this.db.all<LocationRow>(
         `select ${LOCATION_COLUMNS} from content_entry_link_references r
         join content_snapshots s on s.id=r.snapshot_id join content_entries e on e.id=s.entry_id
-        where r.target_entry_id=? and s.id=? and e.id=? and (e.draft_snapshot_id=s.id or e.published_snapshot_id=s.id)
+        where r.target_entry_id=? and r.purpose='url' and s.id=? and e.id=? and (e.draft_snapshot_id=s.id or e.published_snapshot_id=s.id)
         and ${EXTERNAL} and (r.source_key,r.area,r.field_path) > (?,?,?)
         order by ${LOCATION_ORDER} limit ?`,
         input.targetId,
@@ -338,10 +338,10 @@ export class SqlContentLinkReader implements ContentLinkReadPort {
         case when e.published_snapshot_id=s.id then 'published' else 'draft' end as phase,
         (select json_group_array(json_object('location_id',loc.location_id,'source_key',loc.source_key,'area',loc.area,'field_path',loc.field_path,'delivered',loc.delivered))
           from (select ${LOCATION_COLUMNS} from content_entry_link_references r
-            where r.target_entry_id=? and r.snapshot_id=s.id order by ${LOCATION_ORDER} limit 11) loc) as locations_json
+            where r.target_entry_id=? and r.purpose='url' and r.snapshot_id=s.id order by ${LOCATION_ORDER} limit 11) loc) as locations_json
         from (select distinct r.snapshot_id from content_entry_link_references r
           join content_snapshots s on s.id=r.snapshot_id join content_entries e on e.id=s.entry_id
-          where r.target_entry_id=? and r.snapshot_id > ?
+          where r.target_entry_id=? and r.purpose='url' and r.snapshot_id > ?
             and (e.draft_snapshot_id=s.id or e.published_snapshot_id=s.id) and ${EXTERNAL}
           order by r.snapshot_id limit ?) candidates
         join content_snapshots s on s.id=candidates.snapshot_id join content_entries e on e.id=s.entry_id
@@ -444,7 +444,7 @@ export function linkRemovalCondition(
   return {
     sql: `not exists(select 1 from content_entry_link_references r
       join content_snapshots s on s.id=r.snapshot_id join content_entries e on e.id=s.entry_id and e.published_snapshot_id=s.id
-      where r.target_entry_id=? and r.delivered=1 and ${EXTERNAL})`,
+      where r.target_entry_id=? and r.purpose='url' and r.delivered=1 and ${EXTERNAL})`,
     params: [targetId, targetId, action],
   };
 }

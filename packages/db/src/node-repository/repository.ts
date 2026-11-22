@@ -149,6 +149,16 @@ export class NodeContentRepository
     return this.reader.readLinkImpact(input);
   }
 
+  public readConfigurationSyncReferenceRevision(): Promise<number> {
+    return this.configurationSync.readConfigurationSyncReferenceRevision();
+  }
+
+  public inspectConfigurationSyncReferences(
+    input: import("@lacecms/application").ConfigurationSyncReferenceInspection,
+  ) {
+    return this.configurationSync.inspectConfigurationSyncReferences(input);
+  }
+
   public async readConfigurationSyncState(): Promise<readonly StoredContentModelState[]> {
     return this.configurationSync.readConfigurationSyncState();
   }

@@ -62,7 +62,7 @@ function impactGuard(input: RemovalInput): { sql: string; params: readonly unkno
     };
   }
   return {
-    sql: `not exists(select 1 from content_entry_link_references r join content_snapshots s on s.id=r.snapshot_id join content_entries e on e.id=s.entry_id and e.published_snapshot_id=s.id where r.target_entry_id=? and r.delivered=1 and not (e.id=? and (?='delete' or e.published_snapshot_id=s.id)))`,
+    sql: `not exists(select 1 from content_entry_link_references r join content_snapshots s on s.id=r.snapshot_id join content_entries e on e.id=s.entry_id and e.published_snapshot_id=s.id where r.target_entry_id=? and r.purpose='url' and r.delivered=1 and not (e.id=? and (?='delete' or e.published_snapshot_id=s.id)))`,
     params: [input.entryId, input.entryId, input.action],
   };
 }

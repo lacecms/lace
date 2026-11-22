@@ -2,6 +2,53 @@ import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { expect, test } from "vitest";
 import { migrationStatements, openLocalCloudflare } from "./test-support/d1-test-harness.js";
 
+test("entry-reference migration preserves populated D1 URL rows and public work", async () => {
+  const { database, dispose } = await openLocalCloudflare({ migrate: false });
+  try {
+    const batch = (statements: string[]) =>
+      database.batch(statements.map((sql) => database.prepare(sql)));
+    const rows = async (sql: string) => (await database.prepare(sql).all()).results;
+    await batch(await migrationStatements((name) => name < "0006_"));
+    await batch([
+      "insert into content_models (key,kind,label,config_version,structure_hash,projection_hash,created_at,updated_at) values ('posts','collection','Posts',1,'s','p',1,1)",
+      "insert into content_entries (id,model_key,created_by,created_at,updated_at) values ('post','posts','admin',1,1)",
+      "insert into content_snapshots (id,entry_id,revision,title,fields_json,schema_version,created_at,updated_at,updated_by) values ('draft','post',1,'Post','{}',1,1,1,'admin')",
+      "update content_entries set draft_snapshot_id='draft' where id='post'",
+      "insert into content_entry_link_references values ('draft','$fields','fields','/url','old-id',0)",
+      "insert into published_state (singleton_key,version,updated_at) values (1,7,1)",
+      "insert into outbox_events (id,type,payload_json,available_at,created_at) values ('event','site.build.requested','{}',1,1)",
+    ]);
+    const usages = "select rowid, * from content_entry_link_references";
+    const [before] = await rows(usages);
+    const publicState = await rows("select * from published_state");
+    const outbox = await rows("select * from outbox_events");
+    await batch(await migrationStatements((name) => name.startsWith("0006_")));
+    expect(await rows(usages)).toEqual([{ ...before, purpose: "url" }]);
+    expect(await rows("select * from published_state")).toEqual(publicState);
+    expect(await rows("select * from outbox_events")).toEqual(outbox);
+    await expect(
+      batch(["update content_entry_link_references set purpose='other'"]),
+    ).rejects.toThrow(/check/iu);
+    expect(
+      JSON.stringify(
+        await rows(
+          "explain query plan select target_entry_id from content_entry_link_references where snapshot_id='draft' and purpose='reference'",
+        ),
+      ),
+    ).toContain("content_entry_link_references_outgoing_idx");
+    expect(
+      JSON.stringify(
+        await rows(
+          "explain query plan select snapshot_id from content_entry_link_references where target_entry_id='old-id' and purpose='url'",
+        ),
+      ),
+    ).toContain("content_entry_link_references_target_idx");
+    expect(await rows("pragma foreign_key_check")).toEqual([]);
+  } finally {
+    await dispose();
+  }
+});
+
 test("the baseline migration creates the seeded, constrained schema in one D1 batch", async () => {
   const miniflare = new Miniflare(
     convertV4MiniflareOptions({

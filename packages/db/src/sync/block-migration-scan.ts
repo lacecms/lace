@@ -194,7 +194,7 @@ export function syncMigrationPage(
         : {
             internalLinks: JSON.parse(
               row.internal_links_json,
-            ) as readonly import("@lacecms/content").InternalLinkReference[],
+            ) as readonly import("@lacecms/application").ConfigurationSyncEntryUsage[],
           }),
       references: Object.freeze(references.get(row.id) ?? []),
       revision: row.revision,

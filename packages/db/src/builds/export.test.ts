@@ -66,7 +66,7 @@ test("build-export SQL measures stored bytes and reads a page by path range", ()
       width integer, height integer, alt text, caption text, focal_x real, focal_y real, status text,
       created_by text, created_at integer, updated_at integer);
     create table content_media_references (snapshot_id text, source_key text, field_path text, media_id text);
-    create table content_entry_link_references (snapshot_id text, source_key text, area text, field_path text, target_entry_id text, delivered integer);
+    create table content_entry_link_references (snapshot_id text, source_key text, area text, field_path text, target_entry_id text, delivered integer, purpose text not null default 'url');
     insert into published_state values (1, 4);
     insert into content_models values ('posts', 'collection'), ('settings', 'global');
     insert into content_entries values
@@ -107,7 +107,7 @@ test("build-export SQL measures stored bytes and reads a page by path range", ()
 
   const manifest = [{ sourceKey: "$fields", area: "fields", pointer: "/url", targetId: "b" }];
   database.exec(
-    "insert into content_entry_link_references values ('a-p','$fields','fields','/url','b',1),('a-p','k2','data','/url','b',0)",
+    "insert into content_entry_link_references (snapshot_id,source_key,area,field_path,target_entry_id,delivered) values ('a-p','$fields','fields','/url','b',1),('a-p','k2','data','/url','b',0)",
   );
   const linkedFields = '{"t":"é","url":"entry:b"}';
   database.prepare("update content_snapshots set fields_json=? where id='a-p'").run(linkedFields);

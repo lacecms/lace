@@ -1,7 +1,7 @@
 import type { NormalizedContentModel } from "@lacecms/config";
 import {
   collectFieldMedia,
-  collectSnapshotInternalLinks,
+  collectSnapshotEntryReferences,
   declaresFieldVisibility,
   encodeFieldPath,
   publishedBlockData,
@@ -12,36 +12,59 @@ import type {
   FieldVisibility,
   FieldDefinition,
   JsonObject,
+  SnapshotEntryReference,
 } from "@lacecms/content";
-import { blockKey, mediaId } from "@lacecms/domain";
+import { blockKey, contentModelKey, mediaId } from "@lacecms/domain";
 import type { ContentBlock, DraftMediaReference } from "@lacecms/domain";
-import type { PublishedProjection } from "../ports/content.js";
+import type { EntryReferenceCandidate, PublishedProjection } from "../ports/content.js";
 import type { ContentUseCaseDependencies } from "./use-case-inputs.js";
 import { detached } from "./draft-normalization.js";
 import type { NormalizedDraft } from "./draft-normalization.js";
 type ModelFieldMap = Readonly<Record<string, FieldDefinition>>;
 
-export function internalLinks(
+export function snapshotEntryReferences(
   dependencies: Pick<ContentUseCaseDependencies, "config">,
   model: NormalizedContentModel,
   fields: JsonObject,
   blocks: readonly Pick<ContentBlock, "data" | "hidden" | "key" | "type">[],
-): readonly InternalLinkReference[] {
-  return collectSnapshotInternalLinks(
+): readonly SnapshotEntryReference[] {
+  return collectSnapshotEntryReferences(
     model.fields,
     fields,
     blocks.map((block) => {
       const definition = dependencies.config.blocks.get(block.type)!;
       return {
         ...block,
-        fields: definition.fields,
-        ...(definition.visibility === undefined
+        fields: definition?.fields ?? {},
+        ...(definition?.visibility === undefined
           ? {}
           : { visibility: definition.visibility as FieldVisibility }),
       };
     }),
     model.visibility as FieldVisibility | undefined,
   );
+}
+
+export function snapshotUrlLinks(
+  references: readonly SnapshotEntryReference[],
+): readonly InternalLinkReference[] {
+  return references
+    .filter((row) => row.purpose === "url")
+    .map(({ purpose: _purpose, ...row }) => row);
+}
+
+export function entryReferenceCandidate(
+  model: NormalizedContentModel,
+  references: readonly SnapshotEntryReference[],
+  guardEmpty = false,
+): EntryReferenceCandidate | undefined {
+  const selections = references.filter((row) => row.purpose === "reference");
+  if (selections.length || guardEmpty)
+    return {
+      modelKey: contentModelKey(model.key),
+      structureHash: model.structureHash,
+      references: selections,
+    };
 }
 
 /** Whether a model or block type declares conditional-field rules anywhere. */
@@ -69,7 +92,9 @@ export function publishedProjection(
   visibilityOwners: Map<string, boolean>,
   model: NormalizedContentModel,
   draft: NormalizedDraft,
-): PublishedProjection | undefined {
+):
+  | (PublishedProjection & { readonly entryReferences: readonly SnapshotEntryReference[] })
+  | undefined {
   const registry = dependencies.config.blocks;
   if (
     !declaresVisibility(visibilityOwners, `model:${model.key}`, model.fields, model.visibility) &&
@@ -102,10 +127,12 @@ export function publishedProjection(
     });
   for (const block of blocks)
     mediaReferences.push(...collectMedia(block.data, registry.get(block.type)!.fields, block.key));
+  const entryReferences = snapshotEntryReferences(dependencies, model, fields, blocks);
   return detached({
     blocks: blocks.map(({ data, key }) => ({ data, key })),
     fields,
-    internalLinks: internalLinks(dependencies, model, fields, blocks),
+    internalLinks: snapshotUrlLinks(entryReferences),
+    entryReferences,
     mediaReferences,
   });
 }

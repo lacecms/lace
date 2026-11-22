@@ -751,12 +751,12 @@ test("high fan-out evidence keeps impact and picker indexed with bounded row wor
       .bind(ids),
     database
       .prepare(
-        "insert into content_entry_link_references select value||'-published','$fields','fields','/url','target',1 from json_each(?)",
+        "insert into content_entry_link_references (snapshot_id,source_key,area,field_path,target_entry_id,delivered) select value||'-published','$fields','fields','/url','target',1 from json_each(?)",
       )
       .bind(ids),
     database
       .prepare(
-        "insert into content_entry_link_references select 'source-0000-published','dense','data','/url/'||value,'target',1 from json_each(?)",
+        "insert into content_entry_link_references (snapshot_id,source_key,area,field_path,target_entry_id,delivered) select 'source-0000-published','dense','data','/url/'||value,'target',1 from json_each(?)",
       )
       .bind(JSON.stringify(Array.from({ length: 199 }, (_, i) => i))),
   ]);

@@ -40,7 +40,7 @@ test("encodes and checks a conditional-field publication projection", () => {
     ["$fields", "/media", "m1"],
     ["b2", "media", "m2"],
   ]);
-  expect(JSON.parse(rows.internalLinksJson)).toEqual([["b1", "data", "/url", "t1", 1]]);
+  expect(JSON.parse(rows.internalLinksJson)).toEqual([["b1", "data", "/url", "t1", 1, "url"]]);
   for (const keys of [["b1"], ["b1", "b2", "b3"], ["b1", "other"]])
     expect(() => projectedPublicationRows(keys, projection)).toThrow(/every draft block/u);
   expect(() =>
@@ -102,9 +102,9 @@ test("encodes and checks a conditional-field publication projection", () => {
       .map((row) => row.target_entry_id);
   expect(
     invalid([
-      ["b1", "data", "/url", "t1", 1],
-      ["b1", "data", "/hidden", "t1", 0],
-      ["b2", "data", "/url", "t2", 1],
+      ["b1", "data", "/url", "t1", 1, "url"],
+      ["b1", "data", "/hidden", "t1", 0, "url"],
+      ["b2", "data", "/url", "t2", 1, "url"],
     ]),
   ).toEqual(["t1"]);
 });

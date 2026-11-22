@@ -123,6 +123,13 @@ change SHALL be visible to subsequent impact reads and invalidate stale
 acknowledgments. Graph-only concurrent changes SHALL be detected even when
 the source's revision is unchanged.
 
+Check mode SHALL verify that the scheduled sequence of whole-entry block
+migration units preserves acyclicity in both phases at each step, even if D1
+can commit multiple units together. If a final acyclic overlay requires an
+unsafe intermediate write, the plan SHALL report the obstructing entry,
+phase and reference location and instruct the operator to split the
+migration into safe stages. This refusal SHALL occur before any write.
+
 Reference defaults SHALL follow existing scalar and composite backfill and
 container-presence rules. Wherever a default is materialized, the target
 SHALL exist and belong to an allowed model. A delivered published reference
@@ -144,6 +151,10 @@ A retry SHALL use current graph and snapshot evidence.
 #### Scenario: Two individually valid migrations form one cycle
 - **WHEN** a single plan proposes `A → B` and `B → A` through separate rewrites in the same graph
 - **THEN** check mode rejects the prospective graph before applying either rewrite
+
+#### Scenario: Both possible first entries would introduce a cycle
+- **WHEN** drafts contain A → B, publications contain B → A, and a block migration would reverse each graph by rewriting A and B
+- **THEN** check mode refuses both runtime plans before any writes and recommends separate stages that remove the old edges before adding the new ones
 
 #### Scenario: An editor changes another source after planning
 - **WHEN** a cycle check succeeded at planning and another saved edge would make the prepared write cyclic

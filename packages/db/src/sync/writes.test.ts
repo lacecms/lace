@@ -10,7 +10,7 @@ function syncWriteDatabase() {
     create table content_snapshots (id text primary key, entry_id text not null, fields_json text not null);
     create table content_blocks (snapshot_id text, block_key text, block_type text, position integer);
     create table content_media_references (snapshot_id text, source_key text, field_path text, media_id text);
-    create table content_entry_link_references (snapshot_id text, source_key text, area text, field_path text, target_entry_id text, delivered integer);
+    create table content_entry_link_references (snapshot_id text, source_key text, area text, field_path text, target_entry_id text, delivered integer, purpose text not null default 'url');
     insert into content_entries values ('e1', 'posts'), ('e2', 'pages');
     insert into content_snapshots values
       ('s1', 'e1', '{"a":true,"b":"str","c":null,"d":{"x":[1,2]},"e":1.5,"m":"media-1","keep":"k"}'),
@@ -116,7 +116,7 @@ test("the SEO removal write clears groups and SEO references of one model only",
     create table content_entries (id text primary key, model_key text not null);
     create table content_snapshots (id text primary key, entry_id text not null, seo_json text);
     create table content_media_references (snapshot_id text, source_key text, field_path text, media_id text);
-    create table content_entry_link_references (snapshot_id text, source_key text, area text, field_path text, target_entry_id text, delivered integer);
+    create table content_entry_link_references (snapshot_id text, source_key text, area text, field_path text, target_entry_id text, delivered integer, purpose text not null default 'url');
     insert into content_entries values ('e1', 'posts'), ('e2', 'pages');
     insert into content_snapshots values
       ('s1', 'e1', '{"image":"media-1","title":"A"}'), ('s2', 'e1', null),

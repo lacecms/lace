@@ -21,16 +21,11 @@ import {
   createDraftWritePlan,
   saveDraftWritePlan,
   rejectDraftWrite,
-  copyInternalLinkDiffStatements,
   assertDraftPersistenceBounds,
+  revertDraftWritePlan,
+  rejectRevertWrite,
   failure,
-  copySnapshotBlocksSql,
-  copySnapshotReferencesSql,
-  notPublished,
-  revertDraftSnapshotSql,
-  revisionConflict,
 } from "@lacecms/db";
-import { GUARD_SQL } from "./batch.js";
 import { D1RepositoryBase } from "./base.js";
 import { executeWritePlan } from "./write-plan.js";
 
@@ -39,7 +34,11 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
   public async create(input: CreateContentEntryInput): Promise<ContentCommandResult> {
     const { draft, id, model } = input.entry;
     assertDraftPersistenceBounds(draft.blocks, input.mediaReferences);
-    let result: Awaited<ReturnType<typeof executeWritePlan<import("@lacecms/db").DraftGuardMiss>>>;
+    let result: Awaited<
+      ReturnType<
+        typeof executeWritePlan<ReturnType<ReturnType<typeof createDraftWritePlan>["diagnose"]>>
+      >
+    >;
     try {
       result = await executeWritePlan(
         this.database,
@@ -62,7 +61,11 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
     const existing = await this.entryRow(input.entryId);
     if (existing === undefined || existing.draft_snapshot_id === null)
       failure("Content entry does not have a mutable draft.");
-    let result: Awaited<ReturnType<typeof executeWritePlan<import("@lacecms/db").DraftGuardMiss>>>;
+    let result: Awaited<
+      ReturnType<
+        typeof executeWritePlan<ReturnType<ReturnType<typeof createDraftWritePlan>["diagnose"]>>
+      >
+    >;
     try {
       result = await executeWritePlan(
         this.database,
@@ -173,66 +176,22 @@ export class D1EntryCommands extends D1RepositoryBase implements ContentEntryCom
   }
 
   public async revertDraft(input: RevertContentDraftCommand): Promise<ContentCommandResult> {
-    const entry = await this.entryRow(input.entryId);
-    if (entry === undefined || entry.draft_snapshot_id === null) {
-      failure("Content entry does not exist.");
-    }
-    if (entry.published_snapshot_id === null) notPublished();
-    if (entry.published_snapshot_id !== input.expectedPublishedSnapshotId) {
-      revisionConflict("The published snapshot no longer matches the expected publication.");
-    }
-    const draftId = entry.draft_snapshot_id;
-    const publishedId = entry.published_snapshot_id;
-    const batch = this.batch();
-    const token = this.guard(batch, input.revertedAt, {
-      params: [input.entryId, publishedId, input.expectedRevision],
-      sql: "exists (select 1 from content_entries e join content_snapshots d on d.id = e.draft_snapshot_id where e.id = ? and e.published_snapshot_id = ? and d.revision = ?)",
+    const entry = await this.reader.loadEntry(input.entryId);
+    if (entry === null) failure("Content entry does not exist.");
+    const result = await executeWritePlan(
+      this.database,
+      revertDraftWritePlan(
+        input,
+        entry.draft.id,
+        entry.published?.blocks.map((block) => block.key) ?? [],
+      ),
+      input.revertedAt,
+      this.options.beforeMutation,
+    ).catch((error) => {
+      if (error instanceof LaceError) throw error;
+      failure("D1 content write failed.");
     });
-    batch.checkpoint("revert.draft");
-    batch.add(
-      revertDraftSnapshotSql(GUARD_SQL),
-      input.revertedAt,
-      input.revertedBy.id,
-      publishedId,
-      draftId,
-      token,
-    );
-    batch.add(`delete from content_blocks where snapshot_id = ? and ${GUARD_SQL}`, draftId, token);
-    batch.add(
-      `delete from content_media_references where snapshot_id = ? and ${GUARD_SQL}`,
-      draftId,
-      token,
-    );
-    batch.checkpoint("revert.blocks");
-    batch.add(copySnapshotBlocksSql(GUARD_SQL), draftId, publishedId, token);
-    batch.add(copySnapshotReferencesSql(GUARD_SQL), draftId, publishedId, token);
-    batch.checkpoint("revert.internal-links");
-    for (const statement of copyInternalLinkDiffStatements(draftId, publishedId, GUARD_SQL))
-      batch.add(statement.sql, ...statement.params, token);
-    batch.checkpoint("revert.published");
-    batch.add(
-      `update content_snapshots set revision = ? where id = ? and ${GUARD_SQL}`,
-      input.expectedRevision + 1,
-      publishedId,
-      token,
-    );
-    batch.add(
-      `update content_entries set updated_at = ? where id = ? and ${GUARD_SQL}`,
-      input.revertedAt,
-      input.entryId,
-      token,
-    );
-    this.releaseGuard(batch, token);
-    const results = await this.execute(batch, false);
-    if (results[0]!.meta.changes !== 1) {
-      const current = await this.entryRow(input.entryId);
-      if (current === undefined) failure("Content entry does not exist.");
-      if (current.published_snapshot_id === null) notPublished();
-      if (current.published_snapshot_id !== publishedId) {
-        revisionConflict("The published snapshot no longer matches the expected publication.");
-      }
-      revisionConflict("The draft revision no longer matches the expected revision.");
-    }
+    if (result.kind === "rejected") rejectRevertWrite(result.reason);
     const reverted = await this.reader.loadEntry(input.entryId);
     if (reverted === null) failure("Reverted content entry could not be reloaded.");
     return { entry: reverted, status: "reverted" };

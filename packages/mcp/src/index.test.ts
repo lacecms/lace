@@ -31,14 +31,17 @@ const actor = (id: string, role: Role, write = false) =>
       operations: ["discoverModels", "list", "load", ...(write ? ["create", "save"] : [])],
     },
   );
-async function fixture() {
+async function fixture(typedReferences = false) {
   const config = await defineConfig({
     content: [
       defineCollection({
         key: "posts",
         route: "/blog/:slug",
         version: 1,
-        fields: { author: field.text({ defaultValue: "Unknown" }) },
+        fields: {
+          author: field.text({ defaultValue: "Unknown" }),
+          ...(typedReferences ? { related: field.reference({ models: ["posts"] }) } : {}),
+        },
       }),
       definePage({ icon: "house", key: "home", path: "/", version: 1 }),
       defineGlobal({ icon: "⚙️", key: "settings", version: 1 }),
@@ -423,4 +426,33 @@ test("MCP error matrix shares the classifier body without transport headers", as
     expect(payload(result), c.name).toEqual(classifyError(c.create()).body);
     expect(JSON.stringify(result), c.name).not.toContain("retry-after");
   }
+});
+
+test("authorized MCP writes share field-addressed typed cycle admission", async () => {
+  const { connect } = await fixture(true);
+  const client = await connect(actor("reference-editor", "editor", true));
+  const created = v.parse(
+    adminContentEntrySchema,
+    payload(
+      await client.callTool({
+        name: "create_entry",
+        arguments: draft,
+      }),
+    ),
+  );
+  const rejected = await client.callTool({
+    name: "save_draft",
+    arguments: {
+      entryId: created.id,
+      expectedRevision: 1,
+      title: draft.title,
+      blocks: [],
+      fields: { related: created.id },
+    },
+  });
+  expect(rejected.isError).toBe(true);
+  expect(v.parse(errorEnvelopeSchema, payload(rejected)).error).toMatchObject({
+    code: "VALIDATION_FAILED",
+    details: { issues: [{ code: "reference_cycle", path: "/fields/related" }] },
+  });
 });

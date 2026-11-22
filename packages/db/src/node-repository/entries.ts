@@ -25,14 +25,9 @@ import {
   saveDraftWritePlan,
   rejectDraftWrite,
 } from "../content/draft-write-plan.js";
-import { copyInternalLinkDiffStatements } from "../links/statements.js";
-import {
-  assertDraftPersistenceBounds,
-  copySnapshotReferencesSql,
-  revertDraftSnapshotSql,
-} from "../content/snapshots.js";
-import { failure, notPublished, revisionConflict } from "../shared/failures.js";
-import { copySnapshotBlocksSql } from "../content/blocks.js";
+import { revertDraftWritePlan, rejectRevertWrite } from "../content/revert-write-plan.js";
+import { assertDraftPersistenceBounds } from "../content/snapshots.js";
+import { failure } from "../shared/failures.js";
 import type { ContentEntry } from "@lacecms/domain";
 import { NodeRepositoryBase } from "./base.js";
 import { executeWritePlan } from "./write-plan.js";
@@ -43,7 +38,7 @@ export class NodeEntryCommands extends NodeRepositoryBase implements ContentEntr
     const { draft, id, model } = input.entry;
     assertDraftPersistenceBounds(draft.blocks, input.mediaReferences);
     let result: ReturnType<
-      typeof executeWritePlan<import("../content/draft-write-plan.js").DraftGuardMiss>
+      typeof executeWritePlan<ReturnType<ReturnType<typeof createDraftWritePlan>["diagnose"]>>
     >;
     try {
       result = executeWritePlan(
@@ -67,7 +62,7 @@ export class NodeEntryCommands extends NodeRepositoryBase implements ContentEntr
     if (existing === undefined || existing.draft_snapshot_id === null)
       failure("Content entry does not have a mutable draft.");
     let result: ReturnType<
-      typeof executeWritePlan<import("../content/draft-write-plan.js").DraftGuardMiss>
+      typeof executeWritePlan<ReturnType<ReturnType<typeof createDraftWritePlan>["diagnose"]>>
     >;
     try {
       result = executeWritePlan(
@@ -183,42 +178,20 @@ export class NodeEntryCommands extends NodeRepositoryBase implements ContentEntr
 
   public async revertDraft(input: RevertContentDraftCommand): Promise<ContentCommandResult> {
     try {
-      this.connection.transaction(() => {
-        const entry = this.entryRow(input.entryId);
-        if (entry === undefined || entry.draft_snapshot_id === null) {
-          failure("Content entry does not exist.");
-        }
-        if (entry.published_snapshot_id === null) notPublished();
-        if (entry.published_snapshot_id !== input.expectedPublishedSnapshotId) {
-          revisionConflict("The published snapshot no longer matches the expected publication.");
-        }
-        const draftId = entry.draft_snapshot_id;
-        const publishedId = entry.published_snapshot_id;
-        this.checkpoint("revert.draft");
-        const changed = this.connection
-          .prepare(revertDraftSnapshotSql("content_snapshots.revision = ?"))
-          .run(input.revertedAt, input.revertedBy.id, publishedId, draftId, input.expectedRevision);
-        if (changed.changes !== 1) {
-          revisionConflict("The draft revision no longer matches the expected revision.");
-        }
-        this.connection.prepare("delete from content_blocks where snapshot_id = ?").run(draftId);
-        this.connection
-          .prepare("delete from content_media_references where snapshot_id = ?")
-          .run(draftId);
-        this.checkpoint("revert.blocks");
-        this.connection.prepare(copySnapshotBlocksSql()).run(draftId, publishedId);
-        this.connection.prepare(copySnapshotReferencesSql()).run(draftId, publishedId);
-        this.checkpoint("revert.internal-links");
-        for (const statement of copyInternalLinkDiffStatements(draftId, publishedId))
-          this.connection.prepare(statement.sql).run(...statement.params);
-        this.checkpoint("revert.published");
-        this.connection
-          .prepare("update content_snapshots set revision = ? where id = ?")
-          .run(input.expectedRevision + 1, publishedId);
-        this.connection
-          .prepare("update content_entries set updated_at = ? where id = ?")
-          .run(input.revertedAt, input.entryId);
-      })();
+      const result = executeWritePlan(
+        this.connection,
+        () => {
+          const entry = this.loadEntry(input.entryId);
+          if (entry === null) failure("Content entry does not exist.");
+          return revertDraftWritePlan(
+            input,
+            entry.draft.id,
+            entry.published?.blocks.map((block) => block.key) ?? [],
+          );
+        },
+        this.options.beforeMutation,
+      );
+      if (result.kind === "rejected") rejectRevertWrite(result.reason);
     } catch (error) {
       this.throwWriteError(error, false);
     }

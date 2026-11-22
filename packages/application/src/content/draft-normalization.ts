@@ -1,6 +1,6 @@
 import type { NormalizedContentModel, RuntimeConfigProjection } from "@lacecms/config";
 import { MAX_TITLE_LENGTH, validateEntryAggregate } from "@lacecms/content";
-import type { InternalLinkReference, JsonObject } from "@lacecms/content";
+import type { InternalLinkReference, JsonObject, SnapshotEntryReference } from "@lacecms/content";
 
 import {
   assertOrderedBlockPositions,
@@ -32,6 +32,7 @@ export function duplicateTitle(title: string): string {
 }
 
 export interface NormalizedDraft extends Omit<CompleteDraftInput, "seo"> {
+  readonly entryReferences: readonly SnapshotEntryReference[];
   readonly internalLinks: readonly InternalLinkReference[];
   readonly blocks: readonly ContentBlock[];
   readonly fields: JsonObject;

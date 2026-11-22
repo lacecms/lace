@@ -10,10 +10,13 @@ import type {
   ConfigurationSyncSnapshotPage,
   ConfigurationSyncSnapshotScanInput,
   ConfigurationSyncStateReadPort,
+  ConfigurationSyncReferenceInspection,
+  ConfigurationSyncReferenceIssue,
   StoredContentModelState,
 } from "@lacecms/application";
 import { configurationSyncApplyResult, configurationSyncWritePlan } from "../sync/write-plan.js";
 import { configurationSyncRecursiveScans } from "../sync/recursive-scans.js";
+import { inspectSyncReferences } from "../sync/reference-checks.js";
 import { prepareConfigurationSync } from "../sync/preflight.js";
 import { COMMIT_SYNC_LINK_GRAPH_SQL } from "../links/statements.js";
 import { STORED_MODEL_STATE_SQL, storedModelStates } from "../sync/model-state.js";
@@ -25,6 +28,7 @@ import {
   SYNC_MIGRATION_SNAPSHOTS_SQL,
   assertMigrationPageSize,
   staleBlockMigration,
+  staleSynchronizationPlan,
   syncMigrationPage,
   syncMigrationSnapshotIds,
   syncMigrationTargetsJson,
@@ -55,6 +59,21 @@ export class NodeConfigurationSync
   extends NodeRepositoryBase
   implements ConfigurationSyncStateReadPort, ConfigurationSyncApplyPort
 {
+  public async readConfigurationSyncReferenceRevision(): Promise<number> {
+    const row = this.connection
+      .prepare("select revision from content_link_state where singleton_key=1")
+      .get() as { revision: number };
+    return row.revision;
+  }
+
+  public inspectConfigurationSyncReferences(input: ConfigurationSyncReferenceInspection) {
+    return inspectSyncReferences(
+      async (sql, ...params) =>
+        this.connection.prepare(sql).all(...params) as readonly ConfigurationSyncReferenceIssue[],
+      input,
+    );
+  }
+
   public async readConfigurationSyncState(): Promise<readonly StoredContentModelState[]> {
     return this.readConfigurationSyncStateNow();
   }
@@ -128,28 +147,33 @@ export class NodeConfigurationSync
     let published = 0;
     for (const unit of input.units) {
       try {
-        this.connection.transaction(() => {
-          const linkDirtyToken = randomUUID();
-          for (const migration of unit.snapshots) {
-            this.checkpoint(`sync.migration.${migration.state}`);
-            const statements = configurationSyncMigrationStatements(
-              migration,
-              input.migratedAt,
-              SQLITE_MIGRATION_PARAMETERS,
-              linkDirtyToken,
-            );
-            const guard = this.connection
-              .prepare(`select ${statements.guard.sql} as ok`)
-              .get(...statements.guard.params) as { readonly ok: number };
-            if (guard.ok !== 1) staleBlockMigration();
-            for (const write of statements.writes) {
-              this.connection.prepare(write.sql).run(...write.params);
+        this.connection
+          .transaction(() => {
+            const linkDirtyToken = randomUUID();
+            for (const migration of unit.snapshots) {
+              this.checkpoint(`sync.migration.${migration.state}`);
+              const statements = configurationSyncMigrationStatements(
+                migration,
+                input.migratedAt,
+                SQLITE_MIGRATION_PARAMETERS,
+                linkDirtyToken,
+                input,
+              );
+              const guard = this.connection
+                .prepare(`select ${statements.guard.sql} as ok`)
+                .get(...statements.guard.params) as { readonly ok: number };
+              if (guard.ok !== 1) staleBlockMigration();
+              for (const write of statements.writes) {
+                this.connection.prepare(write.sql).run(...write.params);
+              }
             }
-          }
-          this.connection.prepare(COMMIT_SYNC_LINK_GRAPH_SQL).run(linkDirtyToken);
-          // In-transaction dirty token of the shared sync link statements (§16 runtime deltas).
-          this.connection.prepare("delete from mutation_guards where token=?").run(linkDirtyToken);
-        })();
+            this.connection.prepare(COMMIT_SYNC_LINK_GRAPH_SQL).run(linkDirtyToken);
+            // In-transaction dirty token of the shared sync link statements (§16 runtime deltas).
+            this.connection
+              .prepare("delete from mutation_guards where token=?")
+              .run(linkDirtyToken);
+          })
+          .immediate();
       } catch (error) {
         this.throwWriteError(error, false);
       }
@@ -167,6 +191,7 @@ export class NodeConfigurationSync
   ): Promise<ApplyConfigurationSynchronizationResult> {
     try {
       let report = input.plan;
+      let linkChecks: ReturnType<typeof configurationSyncWritePlan>["linkChecks"] = [];
       const receipt = executeWritePlan(
         this.connection,
         () => {
@@ -184,16 +209,28 @@ export class NodeConfigurationSync
             }
             rewrites.set(scan.writeKey, replacements);
           }
-          return configurationSyncWritePlan(input, report, {
+          const plan = configurationSyncWritePlan(input, report, {
             rewrites,
             linkDirtyToken: randomUUID(),
             nextEventId: () => this.nextId(),
           });
+          linkChecks = plan.linkChecks;
+          return plan;
         },
         (name) => this.checkpoint(name),
       );
-      if (receipt.kind === "rejected")
-        failure("Schema synchronization would introduce an unavailable internal link.");
+      if (receipt.kind === "rejected") {
+        for (const check of linkChecks)
+          if (
+            !(
+              this.connection.prepare(`select ${check.sql} as ok`).get(...check.params) as {
+                ok: number;
+              }
+            ).ok
+          )
+            failure("Schema synchronization would introduce an unavailable internal link.");
+        staleSynchronizationPlan();
+      }
       return configurationSyncApplyResult(report, receipt);
     } catch (error) {
       this.throwWriteError(error, true);

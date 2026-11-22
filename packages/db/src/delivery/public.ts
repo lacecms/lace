@@ -23,7 +23,7 @@ export interface PublicGlobalRow extends EntryRow {
 export const PUBLIC_INTERNAL_LINKS_JSON_SQL = `(select coalesce(json_group_array(json_object(
   'sourceKey', source_key, 'area', area, 'pointer', field_path, 'targetId', target_entry_id)), '[]')
   from (select source_key,area,field_path,target_entry_id from content_entry_link_references
-    where snapshot_id=s.id and delivered=1 order by source_key,area,field_path))`;
+    where snapshot_id=s.id and purpose='url' and delivered=1 order by source_key,area,field_path))`;
 
 export const PUBLIC_ROUTE_SQL = `select e.id, e.model_key, e.draft_snapshot_id, e.published_snapshot_id,
         r.path, s.created_at as published_created_at, ${PUBLIC_INTERNAL_LINKS_JSON_SQL} as internal_links_json

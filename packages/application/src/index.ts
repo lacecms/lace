@@ -87,7 +87,7 @@ export * from "./configuration/structure-diff.js";
 export * from "./configuration/structure-hints.js";
 export * from "./configuration/evidence.js";
 export * from "./configuration/migration.js";
-export * from "./configuration/links.js";
+export { configurationSyncLinkRewrites } from "./configuration/links.js";
 export { contentSyncActor } from "./configuration/model-state.js";
 export * from "./configuration/plan.js";
 export * from "./configuration/report.js";

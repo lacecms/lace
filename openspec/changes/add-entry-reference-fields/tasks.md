@@ -11,11 +11,11 @@ session builds on the preceding ones. The feature ships after REL1F.
 
 ## 2. REL1B — Persistence and acyclic writes
 
-- [ ] 2.1 Add the forward migration, Drizzle schema/metadata and indexes for usage purpose. Verify fresh and populated supported SQLite/local D1 databases, legacy URL row identity, indexed lookups, and unchanged public version/outbox after migration.
-- [ ] 2.2 Compile purpose-aware row diffs and phase-specific graph checks in the shared DB plans. Exercise self, mutual, long, diamond and hidden-field cycles, repeated IDs, unknown/wrong-model targets, a staged reversal, and the exact graph-work boundary on both runtimes. Show that a budget-limited proof never admits a write.
-- [ ] 2.3 Wire create/save/publish/revert/duplicate through the guarded plans, including authorized REST/MCP callers and the in-memory contract store. Verify retained orphan handling, expected-revision and replay precedence, exact block/list remapping and zero reference writes on a title-only save.
-- [ ] 2.4 Guard configuration backfills, pruning, renames and resumable block migrations using the same per-phase evidence. Verify check-only failure, atomic multi-source overlays, intervening edits, safe intermediate commits and restart. Demonstrate that only URL usages can add a reference-based guard to route removal.
-- [ ] 2.5 Run shared repository races and injected rollbacks on SQLite and D1. Capture query plans and complete Worker statement/bind counts for maximum mixed-reference input, deep/wide DAGs and rejected writes. Verify that two valid-looking concurrent additions cannot commit a cycle, and record REL1B evidence.
+- [x] 2.1 Add the forward migration, Drizzle schema/metadata and indexes for usage purpose. Verify fresh and populated supported SQLite/local D1 databases, legacy URL row identity, indexed lookups, and unchanged public version/outbox after migration.
+- [x] 2.2 Compile purpose-aware row diffs and phase-specific graph checks in the shared DB plans. Exercise self, mutual, long, diamond and hidden-field cycles, repeated IDs, unknown/wrong-model targets, a staged reversal, and the exact graph-work boundary on both runtimes. Show that a budget-limited proof never admits a write.
+- [x] 2.3 Wire create/save/publish/revert/duplicate through the guarded plans, including authorized REST/MCP callers and the in-memory contract store. Verify retained orphan handling, expected-revision and replay precedence, exact block/list remapping and zero reference writes on a title-only save.
+- [x] 2.4 Guard configuration backfills, pruning, renames and resumable block migrations using the same per-phase evidence. Verify check-only failure for cyclic final overlays and acyclic final overlays with unsafe intermediate units, staged-migration guidance, atomic multi-source overlays, intervening edits, safe intermediate commits and restart. Demonstrate that only URL usages can add a reference-based guard to route removal.
+- [x] 2.5 Run shared repository races and injected rollbacks on SQLite and D1. Capture query plans and complete Worker statement/bind counts for maximum mixed-reference input, deep/wide DAGs and rejected writes. Verify that two valid-looking concurrent additions cannot commit a cycle, and record REL1B evidence.
 
 ## 3. REL1C — Removal, direct impact and admin API
 

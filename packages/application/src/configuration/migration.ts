@@ -11,6 +11,9 @@ import type {
   BlockMigrationFinding,
   EntryMigrationPlan,
   BlockMigrationEvidence,
+  ConfigurationSyncEntryUsage,
+  ConfigurationSyncReferenceCheck,
+  ConfigurationSyncReferenceRenames,
 } from "./types.js";
 import {
   CONFIGURATION_SYNC_NAMED_SNAPSHOT_LIMIT,
@@ -19,7 +22,7 @@ import {
 import {
   BlockMigrationError,
   collectFieldMedia,
-  collectSnapshotInternalLinks,
+  collectSnapshotEntryReferences,
   MAX_INTERNAL_LINK_REFERENCES,
   encodeFieldPath,
   validateSnapshotListBudget,
@@ -38,6 +41,10 @@ import type {
   JsonValue,
   ModelFieldDefinitions,
 } from "@lacecms/content";
+
+import { referenceSelections } from "./reference-occurrences.js";
+import type { ReferenceBlockDescriptor } from "./reference-occurrences.js";
+import type { ContentModelKey } from "@lacecms/domain";
 
 function reason(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
@@ -58,10 +65,16 @@ function mediaReferences(
 export interface MigrationBudgetContext {
   readonly fields: ModelFieldDefinitions;
   readonly blocks: ReadonlyMap<string, BlockDefinition>;
+  readonly referenceModel?: {
+    readonly key: ContentModelKey;
+    readonly blocks: ReadonlyMap<string, ReferenceBlockDescriptor>;
+    readonly renames: ConfigurationSyncReferenceRenames;
+  };
 }
 
 interface SnapshotOutcome {
-  internalLinks?: readonly import("@lacecms/content").InternalLinkReference[];
+  internalLinks?: readonly ConfigurationSyncEntryUsage[];
+  referenceCheck?: ConfigurationSyncReferenceCheck;
   readonly blocks: ConfigurationSyncMigratedBlock[];
   readonly migrated: { fromVersion: number; type: string }[];
   readonly references: ConfigurationSyncMediaReference[];
@@ -175,16 +188,18 @@ function migrateSnapshot(
   if (firstMigrated !== undefined) {
     try {
       const migratedKeys = new Set(outcome.blocks.map((block) => block.key));
-      const newLinks = collectSnapshotInternalLinks(
+      const newLinks = collectSnapshotEntryReferences(
         {},
         {},
         outcome.blocks.map((block) => {
           const original = snapshot.blocks.find((item) => item.key === block.key)!;
+          const definition = definitions.get(original.type)!;
           return {
             key: block.key,
-            fields: definitions.get(original.type)!.fields,
+            fields: definition.fields,
             data: block.data,
             hidden: original.hidden,
+            ...(definition.visibility === undefined ? {} : { visibility: definition.visibility }),
           };
         }),
       );
@@ -199,8 +214,35 @@ function migrateSnapshot(
             path: ["blocks", snapshot.blocks.indexOf(firstMigrated), "data"],
           },
         ]);
-      if (newLinks.length || (snapshot.internalLinks?.length ?? 0))
-        outcome.internalLinks = [...keptLinks, ...newLinks];
+      const links = [...keptLinks, ...newLinks];
+      if (newLinks.length || (snapshot.internalLinks?.length ?? 0)) outcome.internalLinks = links;
+      const referenceModel = budgetContext?.referenceModel;
+      if (
+        referenceModel &&
+        (links.some((row) => row.purpose === "reference") ||
+          snapshot.internalLinks?.some((row) => row.purpose === "reference"))
+      ) {
+        outcome.referenceCheck = {
+          entryId,
+          modelKey: referenceModel.key,
+          snapshotId: snapshot.snapshotId,
+          state: snapshot.state,
+          title: snapshot.title,
+          references: links,
+          selections: referenceSelections({
+            references: newLinks,
+            prior: snapshot.internalLinks ?? [],
+            priorFields: {},
+            priorBlockFields: new Map(
+              snapshot.blocks.map((block) => [
+                block.key,
+                referenceModel.blocks.get(block.type)?.fields ?? {},
+              ]),
+            ),
+            renames: referenceModel.renames,
+          }),
+        };
+      }
       const migratedData = new Map(outcome.blocks.map((block) => [block.key, block.data]));
       validateSnapshotListBudget(
         budgetContext?.fields ?? {},
@@ -276,6 +318,9 @@ export function planEntryMigration(
           : {}),
         expectedRevision: entry.published.revision,
         references: Object.freeze(published.references),
+        ...(published.referenceCheck === undefined
+          ? {}
+          : { referenceCheck: published.referenceCheck }),
         ...(published.internalLinks === undefined
           ? {}
           : { internalLinks: published.internalLinks }),
@@ -291,6 +336,7 @@ export function planEntryMigration(
         blocks: Object.freeze(draft.blocks),
         expectedRevision: entry.draft!.revision,
         references: Object.freeze(draft.references),
+        ...(draft.referenceCheck === undefined ? {} : { referenceCheck: draft.referenceCheck }),
         ...(draft.internalLinks === undefined ? {} : { internalLinks: draft.internalLinks }),
         revision: draftRevision!,
         snapshotId: entry.draft!.snapshotId,

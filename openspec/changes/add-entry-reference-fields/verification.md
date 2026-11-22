@@ -57,3 +57,75 @@ breaking type change.
 - `pnpm typecheck`, `pnpm lint`, `pnpm format:check` and
   `pnpm exec openspec validate add-entry-reference-fields --type change --strict`
   passed.
+
+## REL1B — Persistence and acyclic writes
+
+Verified on 2026-11-22 on file-backed and in-memory Node SQLite and on
+local D1 with Miniflare.
+
+Migration `0006_entry_reference_purpose.sql` preserved legacy URL row IDs,
+source cascades, public version and queued work on populated databases.
+Fresh databases have indexed outgoing lookups by snapshot and purpose, and
+indexed incoming lookups by target and purpose. Both SQLite and D1 plans
+use the outgoing covering index for recursive reachability. D1 uses
+`snapshot_id=? AND purpose=?` in draft proofs and adds `delivered=?` in
+published proofs. The existing-edge lookup can also constrain the target ID.
+
+The shared repository fixtures exercised draft and published cycles, hidden
+locations, repeated targets, repairable orphans, list/block remapping, stale
+revisions and replay. A title-only save performed zero writes to usages or
+the graph revision. Two callers prepared their changes through independent
+repositories before either committed. In both commit orders, the first
+draft save or publication succeeded and the closing edge was refused.
+Injected failures after usage writes or during build enqueue preserved
+snapshots, usages, graph revision, public version, outbox, idempotency and
+preview capture state.
+
+Synchronization checks the final graph overlay and each whole-entry unit
+in the existing migration order. In the opposite-phase reversal fixture,
+either first entry would create a cycle in one phase. The check reported
+the entry, phase and block location, advised separate stages, and left the
+database unchanged. The removal stage survived an injected interruption
+and resumed with the remaining entry. The following stage introduced the
+reversed edges. Other fixtures covered atomic model-field backfill and
+pruning, graph-only changes after planning, target model renames and
+narrowing, missing and unpublished targets, the combined occurrence limit,
+and route removal with typed versus URL usages.
+
+### Local Worker invocation counts
+
+The [Worker budget case](../../../packages/platform-cloudflare/src/reference-worker-budget.test.ts)
+counted every D1 statement including authentication, response reads and
+deferred dispatch. Mixed requests used 200 blocks, 200 distinct media
+references, 100 URL links and 100 typed references. The wide DAG shared a
+descendant across branches. The deep and wide proofs accepted exactly
+2,048 reachable IDs, and the 2,049th distinct ID caused a rejected write.
+
+| Invocation | Statements | Largest batch | Most binds |
+| --- | ---: | ---: | ---: |
+| Mixed create | 44 | 35 | 100 |
+| Mixed save | 48 | 35 | 100 |
+| Mixed stale save | 44 | 35 | 100 |
+| Mixed save with a missing target | 44 | 35 | 100 |
+| Mixed publication with idempotency key | 42 | 27 | 100 |
+| Mixed publication replay | 40 | 27 | 100 |
+| Mixed duplicate | 47 | 35 | 100 |
+| Mixed revert | 28 | 16 | 15 |
+| Deep or wide DAG with 2,048 IDs | 21 | 15 | 18 |
+| Rejected overflow or cycle | 21 | 15 | 14 |
+
+All measured invocations stayed within 50 statements, 40 statements per
+guarded batch and 100 binds per statement. Set the
+`LACE_REL1B_EVIDENCE` environment variable to a file path when running the Worker
+budget case to capture its statement counts and query plans as JSON.
+
+### Checks
+
+- Node repository contracts passed 313 tests. The local D1 repository,
+  migration, graph and Worker suites passed 186 tests.
+- Application and DB suites passed 179 and 70 tests respectively.
+  Focused REST and MCP suites passed 8 and 7 tests, and both packaged
+  export checks passed.
+- `pnpm typecheck`, `pnpm lint`, `pnpm format:check` and
+  `pnpm exec openspec validate add-entry-reference-fields --type change --strict`
+  passed.

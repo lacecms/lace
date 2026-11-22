@@ -10,6 +10,8 @@ import type {
   ConfigurationSyncSnapshotPage,
   ConfigurationSyncSnapshotScanInput,
   ConfigurationSyncStateReadPort,
+  ConfigurationSyncReferenceInspection,
+  ConfigurationSyncReferenceIssue,
   StoredContentModelState,
 } from "@lacecms/application";
 import {
@@ -18,6 +20,7 @@ import {
   configurationSyncWritePlan,
   validateConfigurationSyncEvents,
   prepareConfigurationSync,
+  inspectSyncReferences,
   COMMIT_SYNC_LINK_GRAPH_SQL,
   STORED_MODEL_BASELINES_SQL,
   STORED_MODEL_STATE_JSON_SQL,
@@ -63,6 +66,21 @@ export class D1ConfigurationSync
   extends D1RepositoryBase
   implements ConfigurationSyncStateReadPort, ConfigurationSyncApplyPort
 {
+  public async readConfigurationSyncReferenceRevision(): Promise<number> {
+    const row = await this.first<{ revision: number }>(
+      "select revision from content_link_state where singleton_key=1",
+    );
+    if (row === undefined) failure("Entry reference graph revision is unavailable.");
+    return row.revision;
+  }
+
+  public inspectConfigurationSyncReferences(input: ConfigurationSyncReferenceInspection) {
+    return inspectSyncReferences(
+      async (sql, ...params) => this.all<ConfigurationSyncReferenceIssue>(sql, ...params),
+      input,
+    );
+  }
+
   public async readConfigurationSyncState(): Promise<readonly StoredContentModelState[]> {
     return (await this.readSyncState()).state;
   }
@@ -172,13 +190,19 @@ export class D1ConfigurationSync
           input.migratedAt,
           D1_MAX_BOUND_PARAMETERS - 1,
           linkDirtyToken,
+          input,
         ),
       }));
       const unitCost = parts.reduce((sum, part) => sum + cost(part), 0);
+      const checksReferences = unit.snapshots.some(
+        (snapshot) => snapshot.referenceCheck !== undefined,
+      );
+      if (checksReferences) flush();
       if (unitCost <= statementBudget) {
         if (size + unitCost > statementBudget) flush();
         current.push(...parts);
         size += unitCost;
+        if (checksReferences) flush();
         continue;
       }
       flush();

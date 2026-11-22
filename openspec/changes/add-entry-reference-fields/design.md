@@ -182,6 +182,17 @@ same guarded units as snapshot data. Keep legacy URL checks when dropping a
 route. Projects migrating an existing text author can introduce a new field,
 explicitly map authors to entries and retire the old field through sync.
 
+Check both the final overlay and the sequence of whole-entry block migration
+units before any write. Each unit must be admissible in both phases against
+the state left by its predecessors. D1 packing follows the same proof as
+SQLite. For example, if drafts contain A → B and publications contain B → A,
+a migration that reverses both graphs can leave an acyclic final overlay
+while either first entry creates a cycle in one phase. Refuse that plan in
+`sync --check` with the offending entry, phase and location. Ask the
+operator to split the migration into stages that remove the blocking
+dependencies before adding their reverses. Apply rechecks the scheduled
+units and the final overlay against current data, including on restart.
+
 For `lace import`, use the descriptor to convert a package `$entry` key to
 either a raw target ID or a canonical URL token. Validate package-known
 cycles even in draft-only import. Simulate draft saves and publications

@@ -220,14 +220,15 @@ exercise those same guarantees.
 | Session | Verification checkpoint |
 | --- | --- |
 | REL1A | Declare the scalar and its model allowlist, compose it with existing lists and verify configuration and schema evolution rules. |
-| REL1B | Migrate the direct usage index and verify atomic draft and published cycle checks on SQLite and D1, including concurrent writes and staged reversal. |
+| REL1B | Migrate the direct usage index and verify atomic draft and published cycle checks on SQLite and D1, including concurrent writes, staged reversal and check-only refusal when a block migration needs separate sync stages. |
 | REL1C | Enforce lifecycle guards and expose permission-checked target search, direct impact and reviewed deletion through the admin API. |
 | REL1D | Resolve ID selections from the complete published export and the frozen preview context, including route-less records and targets on later export pages. |
 | REL1E | Exercise field selection, ordering, exact-field navigation, deleted selections and actionable publication-order errors in the editor. |
 | REL1F | Verify import and retry ordering, public documentation, generated-site journeys, upgrade/rollback and final cross-runtime checks. |
 
-REL1A implementation and verification are recorded in the
-[change checkpoint](../openspec/changes/add-entry-reference-fields/verification.md#rel1a--field-descriptors-and-configuration).
+REL1A and REL1B are implemented. The change records verification for
+[field descriptors and configuration](../openspec/changes/add-entry-reference-fields/verification.md#rel1a--field-descriptors-and-configuration)
+and [persistence and acyclic writes](../openspec/changes/add-entry-reference-fields/verification.md#rel1b--persistence-and-acyclic-writes).
 
 [ADR 0034](adr/0034-acyclic-entry-reference-fields.md) records the scope and
 rationale. Direct published references block withdrawal and deletion.

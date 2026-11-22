@@ -22,6 +22,8 @@ import type { InvalidPublishedLinkTargetRow } from "../links/statements.js";
 import { storedRole } from "../shared/values.js";
 import { PUBLICATION_IDEMPOTENCY_TTL_MS } from "../shared/limits.js";
 import type { WritePlan, WritePlanStatement } from "../write-plan/plan.js";
+import { guardEntryReferences, rejectReferenceWrite } from "../links/reference-admission.js";
+import type { ReferenceMiss } from "../links/reference-admission.js";
 import {
   LIVE_IDEMPOTENCY_RECORD_SQL,
   NO_LIVE_IDEMPOTENCY_RECORD_SQL,
@@ -35,11 +37,12 @@ import {
   projectedPublicationRows,
 } from "./projection.js";
 
-export type PublicationGuardMiss =
+type OriginalPublicationMiss =
   | { readonly kind: "replay"; readonly requestHash: string; readonly responseJson: string }
   | { readonly kind: "revision" }
   | { readonly kind: "links"; readonly rows: readonly InvalidPublishedLinkTargetRow[] }
   | { readonly kind: "route" };
+export type PublicationGuardMiss = OriginalPublicationMiss | ReferenceMiss;
 
 /** Predict the response whose JSON is stored atomically with publication. */
 export function publicationResultEntry(
@@ -67,7 +70,7 @@ export function publicationResultEntry(
     model: entry.model,
     published: snapshotValue(snapshot, "published"),
   });
-  return input.projection === undefined
+  return input.projection === undefined || draft.revision !== input.expectedRevision
     ? result
     : withPublishedProjection(result, input.projection);
 }
@@ -79,13 +82,16 @@ export function publishWritePlan(
   committed: ContentEntry,
   eventIds: readonly string[],
 ): WritePlan<PublicationGuardMiss> {
-  const path = contentPublicPath(entry.model, entry.draft.slug);
+  const observed = entry.draft.revision === input.expectedRevision;
+  const path = observed ? contentPublicPath(entry.model, entry.draft.slug) : undefined;
+  const candidate = input.entryReferences;
   const projected =
-    input.projection === undefined
+    !observed || input.projection === undefined
       ? undefined
       : projectedPublicationRows(
           entry.draft.blocks.map((block) => block.key),
           input.projection,
+          candidate?.references,
         );
   const link =
     projected === undefined
@@ -99,10 +105,12 @@ export function publishWritePlan(
         };
   const idem = input.idempotency;
   const scope = idem === undefined ? undefined : publicationScope(entry.id, idem.actorId);
-  const revision = {
-    sql: "exists(select 1 from content_entries e join content_snapshots s on s.id=e.draft_snapshot_id where e.id=? and s.id=? and s.revision=?)",
-    params: [entry.id, entry.draft.id, input.expectedRevision],
-  };
+  const revision = observed
+    ? {
+        sql: "exists(select 1 from content_entries e join content_snapshots s on s.id=e.draft_snapshot_id where e.id=? and s.id=? and s.revision=?)",
+        params: [entry.id, entry.draft.id, input.expectedRevision],
+      }
+    : { sql: "0", params: [] };
   const route =
     path === undefined
       ? { sql: "1", params: [] }
@@ -127,7 +135,7 @@ export function publishWritePlan(
           },
         }),
   };
-  return {
+  const plan: WritePlan<OriginalPublicationMiss> = {
     admission: {
       sql: `(${noReplay.sql}) and (${revision.sql}) and not exists (${link.sql}) and (${route.sql})`,
       params: [...noReplay.params, ...revision.params, ...link.params, ...route.params],
@@ -279,6 +287,16 @@ export function publishWritePlan(
       return s;
     },
   };
+  return !observed || (candidate === undefined && projected !== undefined)
+    ? plan
+    : guardEntryReferences(plan, {
+        entryId: entry.id,
+        phase: "published",
+        references: candidate?.references ?? [],
+        ...(candidate === undefined ? {} : { config: candidate }),
+        ...(projected === undefined ? { copyFromSnapshotId: entry.draft.id } : {}),
+        blockKeys: entry.draft.blocks.map((block) => block.key),
+      });
 }
 
 /** Applies stable precedence and portable errors to same-unit admission evidence. */
@@ -312,5 +330,8 @@ export function publicationGuardResult(
       throw new DomainError("CONTENT_INVALID_STATE", "Publication guard failed.");
     case "route":
       throw new DomainError("CONTENT_ROUTE_CONFLICT", "The public path belongs to another entry.");
+    case "reference-config":
+    case "reference-issues":
+      return rejectReferenceWrite(miss);
   }
 }

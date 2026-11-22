@@ -241,10 +241,19 @@ test("text-author migration adds an independent selection and retires text with 
   );
   const prepared = await prepareConfigurationSynchronization({
     models: retired.content,
-    state: port(
-      expanded.content.map((model) => storedFrom(model)),
-      [draft, published],
-    ),
+    state: {
+      ...port(
+        expanded.content.map((model) => storedFrom(model)),
+        [draft, published],
+      ),
+      inspectConfigurationSyncReferences: async ({ checks }) => {
+        expect(checks.map(({ state, selections }) => [state, selections[0]?.reference])).toEqual([
+          ["draft", expect.objectContaining({ targetId: "people/Ada", models: ["authors"] })],
+          ["published", expect.objectContaining({ targetId: "people/Ada", models: ["authors"] })],
+        ]);
+        return [];
+      },
+    },
   });
   expect(prepared.plan).toMatchObject({
     isValid: true,
