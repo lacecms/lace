@@ -1,3 +1,4 @@
+import type { MediaMetadataDto } from "@lacecms/contracts";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
@@ -167,14 +168,18 @@ test("dropping files onto the library shows the target and uploads them", async 
 test("deleting from the details panel shows pending deletion and Escape returns focus", async () => {
   const user = userEvent.setup();
   const unused = { ...mediaItem, usageCount: 0 };
-  const deleteMedia = vi.fn(async () => ({ ...unused, status: "deleting" as const }));
+  let current: MediaMetadataDto = unused;
+  const deleteMedia = vi.fn(async () => {
+    current = { ...unused, status: "deleting" };
+    return current;
+  });
   renderRoute(
     "/media",
     editor(),
     client({
       deleteMedia,
-      getMedia: async () => ({ ...unused, usage: [] }),
-      listMedia: async () => ({ items: [unused] }),
+      getMedia: async () => ({ ...current, usage: [] }),
+      listMedia: async () => ({ items: [current] }),
     }),
   );
   const tile = await screen.findByRole("button", { name: "cover.png" });

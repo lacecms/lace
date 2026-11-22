@@ -40,7 +40,16 @@ export function vitestPhase(output, name, runs, extraArgs = []) {
       const reporting = ["--reporter=default", "--reporter=json", `--outputFile=${testReport}`];
       const args =
         run.member === undefined
-          ? ["exec", "vitest", "run", ...run.args, ...vitestExclusions, ...extraArgs, ...reporting]
+          ? [
+              "exec",
+              "vitest",
+              "run",
+              ...(run.args.includes("--config") ? [] : ["--dir", "tests"]),
+              ...run.args,
+              ...vitestExclusions,
+              ...extraArgs,
+              ...reporting,
+            ]
           : [
               "--filter",
               `./${run.member}`,

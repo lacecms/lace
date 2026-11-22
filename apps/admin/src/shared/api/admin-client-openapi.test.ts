@@ -50,6 +50,9 @@ describe("admin client OpenAPI drift", () => {
     expect(names("listEntries")).toEqual(
       new Set(["after", "q", "status", "sort", "limit", "filters"]),
     );
+    expect(names("detachMedia")).toEqual(
+      new Set(["detach", "step", "entryId", "expectedRevision"]),
+    );
     expect(names("listMedia")).toEqual(new Set(["after", "q", "tag", "type", "sort", "limit"]));
     expect(names("listLinkTargets")).toEqual(new Set(["search", "status", "after", "limit"]));
     expect(names("linkImpact")).toEqual(

@@ -46,3 +46,27 @@ check the same bounds before database access. The MCP compatibility run passed
 456 tests. The operations runner completed all phases, including its rollback
 and restore exercises. The dependency audit covered 981 locked license records
 and one tooling advisory with an existing policy disposition.
+
+The separate local Node run completed the same five-step cutover using the
+digest-pinned published RC5 API and builder, the original generated MinIO
+Dockerfile, stopped SQLite and independently copied object volumes. The stable
+installation read the original bytes, retained a second upload across restart,
+rebuilt the public gallery and matched the fresh schema. The isolated restored
+RC5 installation served the original static output and accepted the original
+sign-in. The exact-inventory harness repeats both journeys and checks that the
+stable-only media is absent after restore. It records the release origin,
+data/output checksums and both media digests.
+
+The stable package/image set was prepared from clean shipping commit
+`357ebbbc8d2eb73acf164ae62db40647dce2a046`. Its [reviewed inventory](inventory.json)
+has SHA-256 `8be5e95234a622cac36e65a6050665505c686b7fa16fe01930b3b30762510341`.
+Independent reads of the 16 package archives and four Docker archives matched
+every digest. All four image smoke checks passed, including linux/amd64 on
+the arm64 host. The reviewed source fingerprint is
+`f63bd2fa2e5d7578f9eedcd43b73caa22b5628131c643b4b0f0a50b98aec9914`.
+
+Follow-up verification changes teach the Admin/OpenAPI test to inspect the
+detach request's transport and query parameters, let the deletion test's
+simulated server return its committed state, give the synthetic tampered
+inventory its prerequisite channel, and restrict root verification discovery
+to this checkout's tests. These changes concern the verification harness.
