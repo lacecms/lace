@@ -221,3 +221,48 @@ Verified locally on 2026-11-22.
 - `pnpm typecheck`, `pnpm lint`, `pnpm format:check` and
   `pnpm exec openspec validate add-entry-reference-fields --type change --strict`
   passed.
+
+## REL1E — Editor and repair workflows
+
+Verified in Chromium on 2026-11-22 with the built admin, the real Node REST
+application and a disposable migrated SQLite database. The fixture supplied
+editor, administrator and viewer sessions. Publication was observed through
+its saved snapshot and queued build state.
+
+- The editor selected three route-less reviews, including a draft-only review.
+  Space, ArrowUp and Space moved the third choice into second position. The
+  live region announced the move and focus followed the item. After saving,
+  the viewer saw Review B, Review A and the draft-only review in that order
+  with read-only controls.
+- Anna's unpublication dialog identified Review A's published Byline and kept
+  Unpublish disabled. Following the blocker opened the block and focused its
+  nested Author control. The administrator selected Bea and saved the draft.
+  Returning through Where used showed the pending republication and offered
+  the normal publish confirmation. Republishing Review A cleared Anna's
+  blocker and updated the author in the published block.
+- The editor opened deletion from the draft-only review's collection row,
+  reviewed the service's third selection and acknowledged the warning.
+  Reopening the service showed the deleted ID in its original slot. Replacing
+  it with Review B produced the dense order [Review B, Review A, Review B].
+  The REST reads confirmed the repeated IDs, the new published author and
+  the deleted review's 404.
+- The WCAG 2.x A/AA axe checks reported zero violations in the multi-picker,
+  viewer form, hard-block dialog and dark-theme deletion dialog at 375 px.
+
+The focused editor tests cover obsolete search cancellation, later result
+pages, bounded status batches, cancellation and snapshot limits, missing
+selections on unrelated saves, staged-reversal guidance, both levels of
+impact pagination, hidden field navigation, stale indices and the dirty-form
+prompt. The lifecycle tests also cover separate URL and draft-reference
+receipts and the transition from a warning to a hard blocker during review.
+
+### Checks
+
+- The scoped admin suites passed 429 tests. A targeted rerun passed 30 tests,
+  including the component tests and the client OpenAPI guard.
+- The content suite passed 275 tests and the packaged exports check passed.
+  The existing internal-link, lifecycle and route-less browser suites passed
+  all 11 tests.
+- `pnpm typecheck`, `pnpm lint`, `pnpm format:check` and
+  `pnpm exec openspec validate add-entry-reference-fields --type change --strict`
+  passed.

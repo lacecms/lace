@@ -19,6 +19,8 @@ export interface FieldRendererProps {
   readonly label: string;
   readonly onBlur: () => void;
   readonly onChange: (value: unknown) => void;
+  readonly selectionProblem?: string | undefined;
+  readonly item?: boolean | undefined;
   /** Text shown while the field is empty, such as an inherited value; text controls apply it. */
   readonly placeholder?: string | undefined;
   /** Whether the editor is view only; native controls are also disabled by a fieldset. */
@@ -51,5 +53,15 @@ export interface MediaListPickerProps {
   readonly existingIds: ReadonlySet<string>;
   readonly onConfirm: (ids: readonly string[]) => void;
   /** Receives the dialog's close focus event; prevent it to focus elsewhere. */
+  readonly onCloseAutoFocus: (event: Event) => void;
+}
+
+export interface ReferenceListPickerProps {
+  readonly models: readonly string[];
+  readonly label: string;
+  readonly capacity: number;
+  readonly limitMessage: string;
+  readonly onConfirm: (ids: readonly string[]) => void;
+  readonly onCancel: () => void;
   readonly onCloseAutoFocus: (event: Event) => void;
 }

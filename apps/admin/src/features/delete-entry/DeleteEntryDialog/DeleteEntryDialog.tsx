@@ -2,6 +2,9 @@ import {
   useLinkImpactReview,
   LinkImpactReview,
   isLinkImpactChanged,
+  isReferenceImpactChanged,
+  ReferenceImpactReview,
+  useReferenceImpactReview,
 } from "../../../entities/content/index.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type RefObject, useRef, useState } from "react";
@@ -56,23 +59,34 @@ export function DeleteEntryDialog({
   const client = useAdminClient();
   const queryClient = useQueryClient();
   const impact = useLinkImpactReview(entryId, "delete", open);
+  const references = useReferenceImpactReview(entryId, "delete", open);
   const [typed, setTyped] = useState("");
   const deleted = useRef(false);
   const remove = useMutation({
-    mutationFn: () => client.deleteEntry(entryId, expectedRevision, impact.acknowledgment),
+    mutationFn: () =>
+      references.acknowledgment
+        ? client.deleteEntry(
+            entryId,
+            expectedRevision,
+            impact.acknowledgment,
+            references.acknowledgment,
+          )
+        : client.deleteEntry(entryId, expectedRevision, impact.acknowledgment),
     onError: (error) => {
       if (isLinkImpactChanged(error)) impact.refresh();
+      if (isReferenceImpactChanged(error)) references.refresh();
     },
     onSuccess: async () => {
       deleted.current = true;
       setTyped("");
       onOpenChange(false);
       toast.success(`Deleted “${title}”.`);
+      void queryClient.invalidateQueries({ queryKey: adminQueryKeys.references });
       await queryClient.invalidateQueries({ queryKey: adminQueryKeys.modelEntries(modelKey) });
       await queryClient.invalidateQueries({ queryKey: adminQueryKeys.models });
     },
   });
-  const confirmed = impact.ready && (!published || typed.trim() === title);
+  const confirmed = impact.ready && references.ready && (!published || typed.trim() === title);
   return (
     <Dialog
       onOpenChange={(next) => {
@@ -85,6 +99,7 @@ export function DeleteEntryDialog({
       open={open}
     >
       <DialogContent
+        className="max-h-[calc(100dvh-2rem)] overflow-y-auto"
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           if (deleted.current) {
@@ -104,6 +119,7 @@ export function DeleteEntryDialog({
           </DialogDescription>
         </DialogHeader>
         <LinkImpactReview review={impact} />
+        <ReferenceImpactReview review={references} onNavigate={() => onOpenChange(false)} />
         <form
           className="grid gap-4"
           onSubmit={(event) => {

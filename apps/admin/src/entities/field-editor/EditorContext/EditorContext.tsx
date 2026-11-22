@@ -10,6 +10,7 @@ import type {
   FieldPreviewRegistry,
   FieldRendererRegistry,
   MediaListPickerProps,
+  ReferenceListPickerProps,
 } from "../field-types.js";
 
 type Form = UseFormReturn<DraftEditorValues, unknown, DraftEditorValues>;
@@ -21,11 +22,14 @@ interface ContextValue {
   readonly previews?: FieldPreviewRegistry | undefined;
   /** Adds several items to eligible media lists at once; without it they use the ordinary Add. */
   readonly mediaListPicker?: ComponentType<MediaListPickerProps> | undefined;
+  readonly referenceListPicker?: ComponentType<ReferenceListPickerProps> | undefined;
+  readonly revealedFieldPath?: string | undefined;
   readonly epoch?: number;
   readonly form?: Form | undefined;
   readonly model?: ContentModelDto | undefined;
 }
 const Context = createContext<ContextValue | undefined>(undefined);
+export const useRevealedFieldPath = () => useContext(Context)?.revealedFieldPath;
 export function useEditorContext(): ContextValue {
   const context = useContext(Context);
   if (!context) throw new Error("FieldRendererProvider is required");
@@ -39,6 +43,8 @@ export function FieldRendererProvider({
   renderers,
   previews,
   mediaListPicker,
+  referenceListPicker,
+  revealedFieldPath,
   editor,
 }: Omit<ContextValue, "readOnly" | "busy" | "form" | "model" | "epoch"> & {
   readonly editor?:
@@ -63,11 +69,25 @@ export function FieldRendererProvider({
       renderers,
       previews,
       mediaListPicker,
+      referenceListPicker,
+      revealedFieldPath,
       form,
       model,
       epoch,
     }),
-    [services, readOnly, busy, renderers, previews, mediaListPicker, form, model, epoch],
+    [
+      services,
+      readOnly,
+      busy,
+      renderers,
+      previews,
+      mediaListPicker,
+      referenceListPicker,
+      revealedFieldPath,
+      form,
+      model,
+      epoch,
+    ],
   );
   return form ? (
     <BoundContext value={value} form={form}>

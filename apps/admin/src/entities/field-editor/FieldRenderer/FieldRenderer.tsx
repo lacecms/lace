@@ -6,6 +6,7 @@ import { inSentence } from "../create-label.js";
 import { cn } from "../../../shared/lib/index.js";
 import { fieldErrorClass } from "../../../shared/ui/layout/index.js";
 import type { DraftEditorValues, DraftFieldPath } from "../../../shared/editor-contract/index.js";
+import { revealedChildKey } from "../../../shared/editor-contract/index.js";
 import { FieldLayout } from "../FieldLayout/index.js";
 import type { FieldDefinition } from "../field-types.js";
 import { builtInRenderers } from "../FieldControls/index.js";
@@ -35,7 +36,8 @@ function ValueNode(props: NodeProps) {
     notice,
     placeholder,
   } = props;
-  const { readOnly, busy, renderers, growthProblem, epoch, form } = useCompositeEditing();
+  const { readOnly, busy, renderers, growthProblem, epoch, form, revealedFieldPath } =
+    useCompositeEditing();
   const services = useEditorContext().services;
   const id = services.fieldControlId(name as `fields.${string}`);
   const label = item ? fieldKey : services.fieldLabel(fieldKey, definition.label);
@@ -77,8 +79,15 @@ function ValueNode(props: NodeProps) {
     const shownKeys = present
       ? services.shownFieldKeys(definition.fields, definition.visibility, value)
       : undefined;
+    const revealedKey = revealedChildKey(name, revealedFieldPath);
     const renderedKeys = present
-      ? services.renderedFieldKeys(definition.fields, definition.visibility, value, shownErrors)
+      ? services.renderedFieldKeys(
+          definition.fields,
+          definition.visibility,
+          value,
+          shownErrors,
+          revealedKey,
+        )
       : undefined;
     const candidate = services.fieldStartingValue(definition, {});
     const createProblem = growthProblem(name, candidate);
@@ -116,7 +125,12 @@ function ValueNode(props: NodeProps) {
                 <ValueNode
                   annotation={
                     shownKeys?.has(key) === false && renderedKeys?.has(key) === true
-                      ? services.hiddenFieldNote(definition.fields, definition.visibility, key)
+                      ? services.hiddenFieldNote(
+                          definition.fields,
+                          definition.visibility,
+                          key,
+                          key === revealedKey,
+                        )
                       : undefined
                   }
                   definition={child}
@@ -232,7 +246,10 @@ function ValueNode(props: NodeProps) {
       .filter(Boolean)
       .join(" ") || undefined;
   return (
-    <fieldset className="grid min-w-0 gap-1.5 border-0 p-0" disabled={readOnly || busy}>
+    <fieldset
+      className="grid min-w-0 gap-1.5 border-0 p-0"
+      disabled={busy || (readOnly && definition.type !== "reference")}
+    >
       {services.fieldTypeSupport[definition.type].groupedControl ? (
         <span className="text-sm font-medium">
           {label}
@@ -281,6 +298,7 @@ function ValueNode(props: NodeProps) {
         fieldKey={fieldKey}
         id={id}
         invalid={!!message}
+        item={item}
         label={label}
         onBlur={onBlur}
         onChange={(next) => {
@@ -304,6 +322,11 @@ function ValueNode(props: NodeProps) {
         }}
         placeholder={effectivePlaceholder}
         readOnly={readOnly || busy}
+        selectionProblem={
+          definition.type === "reference" && value === undefined
+            ? growthProblem(name, "reference-capacity")
+            : undefined
+        }
         value={clearedItem ? undefined : value}
       />
       {placeholder ? (

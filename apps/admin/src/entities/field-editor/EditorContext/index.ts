@@ -3,4 +3,5 @@ export {
   FieldRendererProvider,
   useCompositeEditing,
   useEditorContext,
+  useRevealedFieldPath,
 } from "./EditorContext.js";

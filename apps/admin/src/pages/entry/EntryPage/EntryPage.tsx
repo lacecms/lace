@@ -1,7 +1,13 @@
+import type { ComponentProps } from "react";
 import { RichTextEditor } from "../../../entities/rich-text/index.js";
 import { LINK_URL_MESSAGE, fieldEditorServices } from "../../../entities/content/index.js";
 import type { FieldRendererProps } from "../../../entities/field-editor/index.js";
 import { LinkAuthoringProvider, OrdinaryUrlField } from "../../../features/select-link/index.js";
+import {
+  ReferenceAuthoringProvider,
+  ReferenceField,
+  ReferencePicker,
+} from "../../../features/select-reference/index.js";
 import type { AdminContentEntryDto, UnpublishContentEntryResultDto } from "@lacecms/contracts";
 import { useIsMutating, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useBlocker } from "@tanstack/react-router";
@@ -25,6 +31,7 @@ import {
   suggestSlug,
   useSeoDefaults,
   validationProblems,
+  WhereUsedButton,
 } from "../../../entities/content/index.js";
 import {
   useDraftEditor,
@@ -65,6 +72,10 @@ import { EntrySeoCard } from "../EntrySeoCard.js";
 import { EntryEditorActions, type SaveState } from "../EntryEditorActions.js";
 import { EntryPreviewActions } from "../EntryPreviewActions.js";
 import { EntryValidationSummary } from "../EntryValidationSummary.js";
+import { ReferenceCycleGuidance } from "../ReferenceCycleGuidance.js";
+import { ReferenceOccurrenceNotice } from "../ReferenceOccurrenceNotice.js";
+import { useReferenceOccurrence } from "../use-reference-occurrence.js";
+import { revealedChildKey } from "../../../shared/editor-contract/index.js";
 import { useEntryMutations } from "../use-entry-mutations.js";
 import { EntryPublicationDetails } from "../EntryPublicationDetails/index.js";
 
@@ -100,8 +111,16 @@ const mediaRenderers: FieldRendererRegistry = {
   media: MediaPicker,
   url: OrdinaryUrlField,
   richText: RichTextField,
+  reference: ReferenceField,
 };
 const fieldPreviews: FieldPreviewRegistry = { media: MediaItemPreview, url: EmbedUrlPreview };
+function EntryAuthoringProvider(props: ComponentProps<typeof LinkAuthoringProvider>) {
+  return (
+    <LinkAuthoringProvider form={props.form} model={props.model}>
+      <ReferenceAuthoringProvider {...props} />
+    </LinkAuthoringProvider>
+  );
+}
 const formId = "entry-draft-form";
 const draftEditorServices = {
   createDraftResolver,
@@ -115,6 +134,7 @@ const draftEditorServices = {
 
 export function EntryPage() {
   const { entryId, modelKey } = entryRoute.useParams();
+  const { referenceUse } = entryRoute.useSearch();
   const navigate = entryRoute.useNavigate();
   const client = useAdminClient();
   const session = useSession();
@@ -140,6 +160,16 @@ export function EntryPage() {
     queryKey: adminQueryKeys.buildSite,
   });
   const editor = useDraftEditor(model, currentEntry, draftEditorServices);
+  const occurrence = useReferenceOccurrence({
+    editor,
+    entry: currentEntry,
+    entryId,
+    fetching: entry.isFetching,
+    model,
+    referenceUse,
+  });
+  const revealedPath = occurrence.resolved?.path;
+  const revealedKey = revealedChildKey("fields", revealedPath);
   const {
     modelRef,
     setEditorEpoch,
@@ -148,6 +178,7 @@ export function EntryPage() {
     fieldValues,
     summaryShown,
     unmappedIssues,
+    referenceCycle,
     setUnmappedIssues,
     summaryRef,
     showSummary,
@@ -222,6 +253,7 @@ export function EntryPage() {
     model.visibility,
     fieldValues,
     errors,
+    revealedKey,
   );
   const blockErrors = form.formState.errors.blocks as
     | Record<string, Record<string, unknown>>
@@ -359,7 +391,7 @@ export function EntryPage() {
               annotation={
                 shownModelFields.has(key) || renderedModelFields?.has(key) !== true
                   ? seoDefaultsAnnotation(model, key)
-                  : hiddenFieldNote(model.fields, model.visibility, key)
+                  : hiddenFieldNote(model.fields, model.visibility, key, key === revealedKey)
               }
               control={form.control}
               definition={definition}
@@ -400,6 +432,14 @@ export function EntryPage() {
           saveDisabled={busy || !dirty}
           state={saveState}
         />
+        {model.kind !== "global" && can(session, "content:read") && (
+          <WhereUsedButton
+            key={entryId}
+            disabled={busy}
+            entryId={entryId}
+            title={currentEntry.draft.title}
+          />
+        )}
         <EntryActionsMenu
           busy={busy}
           canPublish={canPublish}
@@ -428,12 +468,14 @@ export function EntryPage() {
           unsavedChanges={dirty}
         />
       </ShellHeaderActions>
-      <LinkAuthoringProvider form={form} model={model}>
+      <EntryAuthoringProvider form={form} model={model}>
         <FieldRendererProvider
           services={fieldEditorServices}
           editor={editor}
           busy={busy || reloadServerDraft.isPending}
           mediaListPicker={MediaListPicker}
+          referenceListPicker={ReferencePicker}
+          revealedFieldPath={revealedPath}
           previews={fieldPreviews}
           readOnly={readOnly}
           renderers={mediaRenderers}
@@ -457,8 +499,24 @@ export function EntryPage() {
                 <h1 className="sr-only" id="entry-title">
                   Edit {model.label ?? model.key}
                 </h1>
+                {occurrence.resolved && (
+                  <ReferenceOccurrenceNotice
+                    occurrence={occurrence.resolved}
+                    banner={occurrence.banner}
+                    busy={busy}
+                    onDismiss={occurrence.dismiss}
+                    onPublish={canPublish ? () => setPublishDialogOpen(true) : undefined}
+                  />
+                )}
                 {problems.length === 0 ? undefined : (
-                  <EntryValidationSummary problems={problems} ref={summaryRef} />
+                  <EntryValidationSummary problems={problems} ref={summaryRef}>
+                    {referenceCycle &&
+                      problems.some(
+                        (problem) =>
+                          form.getFieldState(problem.id as Parameters<typeof form.getFieldState>[0])
+                            .error?.type === "reference_cycle",
+                      ) && <ReferenceCycleGuidance cycle={referenceCycle} />}
+                  </EntryValidationSummary>
                 )}
                 {conflict === undefined ? (
                   save.error === null || validationRejected(save.error) ? undefined : (
@@ -601,7 +659,7 @@ export function EntryPage() {
             </div>
           </form>
         </FieldRendererProvider>
-      </LinkAuthoringProvider>
+      </EntryAuthoringProvider>
       <DiscardChangesDialog
         onLeave={() => {
           if (blocker.status === "blocked") blocker.proceed();

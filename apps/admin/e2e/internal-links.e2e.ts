@@ -142,6 +142,13 @@ async function mock(page: Page, role: "admin" | "viewer" = "admin") {
           },
           422,
         );
+      if (path.endsWith("/reference-impact"))
+        return send({
+          mode: "sources",
+          sources: [],
+          hasPublishedBlockers: false,
+          hasDraftUsages: false,
+        });
       if (path.endsWith("/link-impact")) {
         state.impacts += 1;
         const common = { hasPublishedUsages: true, receipt: state.stale ? "old" : "fresh" };

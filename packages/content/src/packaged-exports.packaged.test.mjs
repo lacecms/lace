@@ -51,6 +51,7 @@ test("packaged entry point keeps its public exports", async () => {
     "builtInBlocks",
     "canonicalJsonByteLength",
     "canonicalizeJson",
+    "collectFieldEntryReferences",
     "collectFieldInternalLinks",
     "collectFieldMedia",
     "collectSnapshotEntryReferences",

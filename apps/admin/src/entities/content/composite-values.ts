@@ -1,7 +1,10 @@
 import { fieldTypeSupport } from "./field-types.js";
 import {
   ContentValidationError,
+  decodeEntryLink,
   isRecord,
+  isInternalLinkTargetId,
+  MAX_INTERNAL_LINK_REFERENCES,
   MAX_LIST_ITEMS,
   MAX_SNAPSHOT_LIST_ITEMS,
   validateFieldValue,
@@ -118,9 +121,17 @@ export interface Budget {
 /** Count all normalized descriptor lists even when unrelated scalar values are invalid. */
 export function snapshotBudget(model: ContentModelDto, values: DraftEditorValues): Budget {
   let count = 0;
+  let references = 0;
   let problem: string | undefined;
   function walk(definition: FieldDefinition, input: unknown) {
     const value = input === undefined || input === null ? definition.defaultValue : input;
+    if (
+      (definition.type === "reference" && isInternalLinkTargetId(value)) ||
+      (definition.type === "url" &&
+        definition.embedProviders === undefined &&
+        decodeEntryLink(value) !== undefined)
+    )
+      references++;
     if (definition.type === "group" && record(value)) map(definition.fields, value);
     if (definition.type === "list" && Array.isArray(value)) {
       count += value.length;
@@ -139,6 +150,8 @@ export function snapshotBudget(model: ContentModelDto, values: DraftEditorValues
   }
   if (count > MAX_SNAPSHOT_LIST_ITEMS)
     problem ??= `An entry allows at most ${MAX_SNAPSHOT_LIST_ITEMS} list items, including nested lists and hidden blocks.`;
+  if (references > MAX_INTERNAL_LINK_REFERENCES)
+    problem ??= `An entry allows at most ${MAX_INTERNAL_LINK_REFERENCES} internal links and entry references combined.`;
   return { count, problem };
 }
 export function draftItemValue(definition: FieldDefinition): unknown {

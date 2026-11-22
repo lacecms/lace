@@ -54,6 +54,8 @@ export function useDraftEditor(
   const fieldValues = useWatch({ control: form.control, name: "fields" });
   const [summaryShown, setSummaryShown] = useState(false);
   const [unmappedIssues, setUnmappedIssues] = useState<readonly string[]>([]);
+  const [referenceCycle, setReferenceCycle] =
+    useState<Extract<ContractValidationIssue, { details: unknown }>["details"]>();
   const summaryRef = useRef<HTMLElement>(null);
   const [summaryFocus, setSummaryFocus] = useState(0);
   const summaryFocused = useRef(0);
@@ -71,6 +73,7 @@ export function useDraftEditor(
   const hideSummary = () => {
     setSummaryShown(false);
     setUnmappedIssues([]);
+    setReferenceCycle(undefined);
   };
   /** Shows server validation issues at their locations and in the summary. */
   const applyServerIssues = (issues: readonly ContractValidationIssue[]) => {
@@ -104,10 +107,13 @@ export function useDraftEditor(
         type:
           issue.code === "missing_required_field" || issue.code === "list_too_short"
             ? services.publicationIssueType
-            : "server",
+            : issue.code === "reference_cycle"
+              ? issue.code
+              : "server",
       });
     }
     setUnmappedIssues(unmapped);
+    setReferenceCycle(issues.find((issue) => "details" in issue)?.details);
     showSummary();
   };
   const loaded = useRef<string | undefined>(undefined);
@@ -145,6 +151,7 @@ export function useDraftEditor(
     fieldValues,
     summaryShown,
     unmappedIssues,
+    referenceCycle,
     setUnmappedIssues,
     summaryRef,
     showSummary,

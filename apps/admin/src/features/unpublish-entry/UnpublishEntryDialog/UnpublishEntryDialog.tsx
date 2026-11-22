@@ -2,14 +2,18 @@ import {
   useLinkImpactReview,
   LinkImpactReview,
   isLinkImpactChanged,
+  isReferenceImpactChanged,
+  ReferenceImpactReview,
+  useReferenceImpactReview,
 } from "../../../entities/content/index.js";
 import type { LinkImpactAcknowledgmentDto } from "@lacecms/contracts";
 import type { ContentModelDto, UnpublishContentEntryResultDto } from "@lacecms/contracts";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type RefObject, useRef } from "react";
 import { ulid } from "ulid";
 import {
   AdminClientError,
+  adminQueryKeys,
   errorDescription,
   technicalDetails,
   useAdminClient,
@@ -76,7 +80,9 @@ export function UnpublishEntryDialog({
   readonly routeLess?: boolean;
 }) {
   const client = useAdminClient();
+  const queryClient = useQueryClient();
   const impact = useLinkImpactReview(entryId, "unpublish", open);
+  const references = useReferenceImpactReview(entryId, "unpublish", open);
   const attemptKey = useRef<string | undefined>(undefined);
   const attemptImpact = useRef<LinkImpactAcknowledgmentDto | undefined>(undefined);
   const unpublish = useMutation({
@@ -88,12 +94,14 @@ export function UnpublishEntryDialog({
       }),
     onError: (error) => {
       if (isLinkImpactChanged(error)) impact.refresh();
+      if (isReferenceImpactChanged(error)) references.refresh();
       if (error instanceof AdminClientError && error.status !== undefined)
         attemptKey.current = undefined;
     },
     onSuccess: (result) => {
       attemptKey.current = undefined;
       onOpenChange(false);
+      void queryClient.invalidateQueries({ queryKey: adminQueryKeys.references });
       onUnpublished(result);
     },
   });
@@ -110,6 +118,7 @@ export function UnpublishEntryDialog({
       open={open}
     >
       <DialogContent
+        className="max-h-[calc(100dvh-2rem)] overflow-y-auto"
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           returnFocus?.current?.focus();
@@ -134,6 +143,7 @@ export function UnpublishEntryDialog({
           />
         )}
         <LinkImpactReview review={impact} />
+        <ReferenceImpactReview review={references} onNavigate={() => onOpenChange(false)} />
         <DialogFooter>
           {stale ? (
             <Button
@@ -152,7 +162,7 @@ export function UnpublishEntryDialog({
             </DialogClose>
           )}
           <Button
-            disabled={unpublish.isPending || stale || !impact.ready}
+            disabled={unpublish.isPending || stale || !impact.ready || !references.ready}
             onClick={() => {
               if (attemptKey.current === undefined) {
                 attemptKey.current = ulid();

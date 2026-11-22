@@ -138,6 +138,7 @@ export type {
   SnapshotEntryReference,
 } from "./references/entry-references.js";
 export {
+  collectFieldEntryReferences,
   collectFieldInternalLinks,
   collectSnapshotInternalLinks,
   collectSnapshotEntryReferences,

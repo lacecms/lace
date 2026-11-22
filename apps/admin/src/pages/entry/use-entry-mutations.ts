@@ -97,6 +97,7 @@ export function useEntryMutations({
       setSuggestingSlug(false);
       setSlugManuallyEdited(false);
       setConflict(undefined);
+      void queryClient.invalidateQueries({ queryKey: adminQueryKeys.references });
       await queryClient.invalidateQueries({ queryKey: adminQueryKeys.modelEntries(modelKey) });
     },
   });
@@ -136,6 +137,7 @@ export function useEntryMutations({
       setPublishAttempt(undefined);
       setLatestBuild({ build: result.build, change: "published" });
       void queryClient.invalidateQueries({ queryKey: adminQueryKeys.previewStatus(entryId) });
+      void queryClient.invalidateQueries({ queryKey: adminQueryKeys.references });
       await queryClient.invalidateQueries({ queryKey: adminQueryKeys.modelEntries(modelKey) });
     },
   });

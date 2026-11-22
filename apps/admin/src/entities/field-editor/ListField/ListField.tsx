@@ -265,6 +265,7 @@ export function ListField(
     growthProblem,
     epoch,
     mediaListPicker: MediaListPicker,
+    referenceListPicker: ReferenceListPicker,
   } = useCompositeEditing();
   const list = Array.isArray(value) ? value : [];
   const [ids, setIds] = useState(() => list.map(services.newItemIdentity));
@@ -311,10 +312,20 @@ export function ListField(
   const collapsible = definition.item.type === "group";
   const maximum = definition.maxItems ?? MAX_LIST_ITEMS;
   const initial = services.draftItemValue(definition.item);
+  const referenceModels = definition.item.type === "reference" ? definition.item.models : undefined;
+  const referenceCandidate = (count: number) => [
+    ...list,
+    ...Array<string>(count).fill("reference-capacity"),
+  ];
   const addProblem =
     list.length >= maximum
       ? `This list allows at most ${maximum} items.`
-      : growthProblem(name, [...list, initial ?? services.fieldStartingValue(definition.item, {})]);
+      : growthProblem(
+          name,
+          referenceModels
+            ? referenceCandidate(1)
+            : [...list, initial ?? services.fieldStartingValue(definition.item, {})],
+        );
   const createProblem = growthProblem(name, []);
   // Eligible media lists add from the picker in multiple mode instead of one starting item.
   const mediaTarget = MediaListPicker ? services.mediaListTarget(definition.item) : undefined;
@@ -327,6 +338,10 @@ export function ListField(
     readonly limitMessage: string;
   }>();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [referencePicking, setReferencePicking] = useState<{
+    capacity: number;
+    limitMessage: string;
+  }>();
   const pickedFocus = useRef<string | undefined>(undefined);
   const clearProblem = growthProblem(name, null);
   const toggle = (token: string, next?: boolean) =>
@@ -378,9 +393,26 @@ export function ListField(
     });
     setPickerOpen(true);
   };
-  const insertMany = (mediaIds: readonly string[]) => {
-    if (!mediaTarget || mediaIds.length === 0) return;
-    const values = services.mediaListItems(definition.item, mediaTarget, mediaIds);
+  const openReferencePicker = () => {
+    let capacity = 0;
+    let upper = maximum - list.length;
+    while (capacity < upper) {
+      const trial = Math.ceil((capacity + upper) / 2);
+      if (growthProblem(name, referenceCandidate(trial))) upper = trial - 1;
+      else capacity = trial;
+    }
+    if (capacity > 0) {
+      setReferencePicking({
+        capacity,
+        limitMessage:
+          capacity === maximum - list.length
+            ? `This list allows at most ${maximum} items.`
+            : (growthProblem(name, referenceCandidate(capacity + 1)) ?? ""),
+      });
+    }
+  };
+  const insertMany = (values: readonly unknown[]) => {
+    if (values.length === 0) return;
     const next = [...list, ...values];
     if (next.length > maximum || growthProblem(name, next)) return;
     const added = values.map(() => services.newItemIdentity());
@@ -393,6 +425,13 @@ export function ListField(
         ? `Added ${label} item ${list.length + 1}.`
         : `Added ${values.length} ${label} items.`,
     );
+  };
+  const focusAfterPicker = (event: Event) => {
+    event.preventDefault();
+    const token = pickedFocus.current;
+    pickedFocus.current = undefined;
+    if (token === undefined) addRef.current?.focus();
+    else setFocusToken(token);
   };
   const insert = (nextValue: unknown) => {
     if (addProblem || growthProblem(name, [...list, nextValue])) return;
@@ -463,10 +502,13 @@ export function ListField(
             <Button
               aria-describedby={addProblem ? `${id}:limit` : undefined}
               aria-label={`Add ${label} item`}
-              {...(mediaTarget ? { "aria-haspopup": "dialog" as const } : {})}
+              aria-haspopup={
+                mediaTarget || (ReferenceListPicker && referenceModels) ? "dialog" : undefined
+              }
               disabled={busy || !!addProblem}
               onClick={() => {
                 if (mediaTarget) openPicker();
+                else if (ReferenceListPicker && referenceModels) openReferencePicker();
                 else if (initial !== undefined) insert(initial);
                 else {
                   setPending(true);
@@ -763,19 +805,26 @@ export function ListField(
               existingIds={picking?.existingIds ?? new Set()}
               label={label}
               limitMessage={picking?.limitMessage ?? ""}
-              onCloseAutoFocus={(event) => {
-                event.preventDefault();
-                const token = pickedFocus.current;
-                pickedFocus.current = undefined;
-                if (token === undefined) addRef.current?.focus();
-                else setFocusToken(token);
-              }}
+              onCloseAutoFocus={focusAfterPicker}
               onConfirm={(mediaIds) => {
-                insertMany(mediaIds);
+                insertMany(services.mediaListItems(definition.item, mediaTarget, mediaIds));
                 setPickerOpen(false);
               }}
               onOpenChange={setPickerOpen}
               open={pickerOpen}
+            />
+          ) : null}
+          {ReferenceListPicker && referenceModels && referencePicking && !readOnly && !busy ? (
+            <ReferenceListPicker
+              {...referencePicking}
+              label={label}
+              models={referenceModels}
+              onCancel={() => setReferencePicking(undefined)}
+              onCloseAutoFocus={focusAfterPicker}
+              onConfirm={(referenceIds) => {
+                insertMany(referenceIds);
+                setReferencePicking(undefined);
+              }}
             />
           ) : null}
           {pending ? (

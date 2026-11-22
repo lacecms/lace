@@ -54,6 +54,9 @@ export const adminQueryKeys = Object.freeze({
   /** The signed-in user's own sessions on the account screen. */
   accountSessions: ["admin", "account", "sessions"] as const,
   entry: (entryId: string) => ["admin", "entry", entryId] as const,
+  references: ["admin", "references"] as const,
+  referenceStatuses: ["admin", "references", "statuses"] as const,
+  referenceTargets: ["admin", "references", "targets"] as const,
   /** One searched, filtered, and sorted collection list; pages are held by the infinite query. */
   entryList: (
     modelKey: string,

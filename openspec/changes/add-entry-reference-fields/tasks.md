@@ -33,10 +33,10 @@ session builds on the preceding ones. The feature ships after REL1F.
 
 ## 5. REL1E — Editor and repair workflows
 
-- [ ] 5.1 Add single selection and ordered multi-selection to model, global and block forms using recursive list/group controls. Test debouncing/cancellation, later pages, batched status resolution, viewer access, draft badges, cancellation, order, repeated IDs, keyboard movement and list limits.
-- [ ] 5.2 Render field-addressed errors and missing selections in saved drafts. Verify that unrelated edits and reordering survive, a deleted selection can be repaired, and a blocked reversal identifies the source to publish first while preserving form state.
-- [ ] 5.3 Integrate direct “Where used” and draft-only confirmation into editor and collection-row lifecycle actions. Test paging, focus on the exact nested field, stale/moved list indices, pending source republication, conditional/hidden locations, unsaved-change protection, mixed acknowledgments and inaccessible override actions.
-- [ ] 5.4 Run a browser journey as editor, publisher and viewer where appropriate: select and reorder route-less reviews, follow the author blocker, fix and republish its source, acknowledge a draft-only deletion, and repair the resulting missing selection. Record observations and accessibility checks for REL1E.
+- [x] 5.1 Add single selection and ordered multi-selection to model, global and block forms using recursive list/group controls. Test debouncing/cancellation, later pages, batched status resolution, viewer access, draft badges, cancellation, order, repeated IDs, keyboard movement and list limits.
+- [x] 5.2 Render field-addressed errors and missing selections in saved drafts. Verify that unrelated edits and reordering survive, a deleted selection can be repaired, and a blocked reversal identifies the source to publish first while preserving form state.
+- [x] 5.3 Integrate direct “Where used” and draft-only confirmation into editor and collection-row lifecycle actions. Test paging, focus on the exact nested field, stale/moved list indices, pending source republication, conditional/hidden locations, unsaved-change protection, mixed acknowledgments and inaccessible override actions.
+- [x] 5.4 Run a browser journey as editor, publisher and viewer where appropriate: select and reorder route-less reviews, follow the author blocker, fix and republish its source, acknowledge a draft-only deletion, and repair the resulting missing selection. Record observations and accessibility checks for REL1E.
 
 ## 6. REL1F — Import, adoption and end-to-end verification
 

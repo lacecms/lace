@@ -29,7 +29,8 @@ type EntryReferenceTarget =
       readonly models: readonly string[];
     };
 
-function collectFieldReferences(
+/** Discover authored entry occurrences in a descriptor map, before snapshot-wide limits. */
+export function collectFieldEntryReferences(
   definitions: ModelFieldDefinitions,
   values: JsonObject,
 ): readonly (EntryReferenceTarget & { readonly path: readonly ValidationPathSegment[] })[] {
@@ -69,7 +70,7 @@ export function collectFieldInternalLinks(
   values: JsonObject,
 ): readonly FieldInternalLinkReference[] {
   return deepFreeze(
-    collectFieldReferences(definitions, values)
+    collectFieldEntryReferences(definitions, values)
       .filter((reference) => reference.purpose === "url")
       .map(({ targetId, path }) => ({ targetId, path })),
   );
@@ -120,12 +121,13 @@ export function collectSnapshotEntryReferences(
     const visible =
       delivered && declaresFieldVisibility(definitions, rules)
         ? new Set(
-            collectFieldReferences(definitions, publishedFieldValues(definitions, data, rules)).map(
-              (reference) => encodeFieldPointer(reference.path),
-            ),
+            collectFieldEntryReferences(
+              definitions,
+              publishedFieldValues(definitions, data, rules),
+            ).map((reference) => encodeFieldPointer(reference.path)),
           )
         : undefined;
-    for (const { path, ...reference } of collectFieldReferences(definitions, data)) {
+    for (const { path, ...reference } of collectFieldEntryReferences(definitions, data)) {
       includesTypedReference ||= reference.purpose === "reference";
       if (references.length === MAX_INTERNAL_LINK_REFERENCES)
         invalid(

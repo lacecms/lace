@@ -117,6 +117,12 @@ export function serverIssueMessage(
     }
     case "missing_required_field":
       return "This field is required to publish.";
+    case "reference_target_missing":
+      return "This entry is missing. Replace or remove the selection.";
+    case "reference_target_model":
+      return "Select an entry from one of this field’s allowed models.";
+    case "reference_target_unpublished":
+      return "Publish the selected entry first, or replace or remove the selection.";
     case "missing_slug":
       return "A slug is required to publish.";
     case "missing_title":

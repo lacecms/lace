@@ -1,16 +1,14 @@
-import type { LinkImpactAcknowledgmentDto, LinkUsageSourceDto } from "@lacecms/contracts";
+import type { LinkImpactAcknowledgmentDto } from "@lacecms/contracts";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
-import { AdminClientError, errorDescription, useAdminClient } from "../../../shared/api/index.js";
+import { errorDescription, useAdminClient } from "../../../shared/api/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
 
-export function isLinkImpactChanged(error: unknown): boolean {
-  return (
-    error instanceof AdminClientError &&
-    (error.code === "CONTENT_LINK_IMPACT_CHANGED" || error.code === "CONTENT_LINKS_IN_USE")
-  );
-}
+import { IncomingImpactSource } from "../IncomingImpactSource.js";
+import { isIncomingImpactChanged } from "../incoming-impact-error.js";
+
+export const isLinkImpactChanged = (error: unknown) => isIncomingImpactChanged(error, "url");
+
 export function useLinkImpactReview(
   entryId: string,
   action: "delete" | "unpublish",
@@ -18,7 +16,7 @@ export function useLinkImpactReview(
 ) {
   const client = useAdminClient();
   const [epoch, setEpoch] = useState(0);
-  const [acknowledged, setAcknowledged] = useState(false);
+  const [reviewedReceipt, setReviewedReceipt] = useState<string>();
   const [notice, setNotice] = useState(false);
   const [blockedLocations, setBlockedLocations] = useState<ReadonlySet<string>>(new Set());
   const reportLocations = useCallback(
@@ -34,13 +32,13 @@ export function useLinkImpactReview(
   );
   const refresh = useCallback(() => {
     setBlockedLocations(new Set());
-    setAcknowledged(false);
+    setReviewedReceipt(undefined);
     setNotice(true);
     setEpoch((value) => value + 1);
   }, []);
   useEffect(() => {
     if (open) {
-      setAcknowledged(false);
+      setReviewedReceipt(undefined);
       setNotice(false);
       setBlockedLocations(new Set());
     }
@@ -66,6 +64,9 @@ export function useLinkImpactReview(
     if (isLinkImpactChanged(query.error)) refresh();
   }, [query.error]);
   const first = query.data?.pages[0];
+  const acknowledged = reviewedReceipt !== undefined && reviewedReceipt === first?.receipt;
+  const setAcknowledged = (checked: boolean) =>
+    setReviewedReceipt(checked ? first?.receipt : undefined);
   const consistent = query.data?.pages.every((page) => page.receipt === first?.receipt) === true;
   useEffect(() => {
     if (query.isSuccess && !consistent) refresh();
@@ -129,7 +130,8 @@ export function LinkImpactReview({
                 {query.data.pages
                   .flatMap((page) => page.sources)
                   .map((source) => (
-                    <ImpactSource
+                    <IncomingImpactSource
+                      purpose="url"
                       key={`${epoch}:${source.snapshotId}`}
                       source={source}
                       entryId={entryId}
@@ -165,129 +167,5 @@ export function LinkImpactReview({
         </>
       )}
     </section>
-  );
-}
-function ImpactSource({
-  source,
-  entryId,
-  action,
-  onChanged,
-  reportLocations,
-}: {
-  readonly source: LinkUsageSourceDto;
-  readonly entryId: string;
-  readonly action: "delete" | "unpublish";
-  readonly onChanged: () => void;
-  readonly reportLocations: (id: string, blocked: boolean) => void;
-}) {
-  const client = useAdminClient();
-  const [expanded, setExpanded] = useState(false);
-  const locations = useInfiniteQuery({
-    queryKey: [
-      "admin",
-      "link-locations",
-      entryId,
-      action,
-      source.snapshotId,
-      source.nextLocationsCursor,
-    ],
-    enabled: expanded && source.nextLocationsCursor !== undefined,
-    initialPageParam: source.nextLocationsCursor,
-    retry: false,
-    queryFn: async ({ pageParam, signal }) => {
-      const page = await client.linkImpact(
-        entryId,
-        {
-          action,
-          sourceEntryId: source.entryId,
-          snapshotId: source.snapshotId,
-          ...(pageParam === undefined ? {} : { locationsAfter: pageParam }),
-          limit: 50,
-        },
-        signal,
-      );
-      if (page.mode !== "locations")
-        throw new Error("The impact response has the wrong pagination mode.");
-      return page;
-    },
-    getNextPageParam: (page) => page.nextCursor,
-  });
-  useEffect(() => {
-    if (isLinkImpactChanged(locations.error)) onChanged();
-  }, [locations.error, onChanged]);
-  useEffect(() => {
-    reportLocations(
-      source.snapshotId,
-      expanded && (locations.isPending || locations.isError || locations.isFetching),
-    );
-    return () => reportLocations(source.snapshotId, false);
-  }, [
-    expanded,
-    locations.isPending,
-    locations.isError,
-    locations.isFetching,
-    reportLocations,
-    source.snapshotId,
-  ]);
-  const rows = [
-    ...source.locations,
-    ...(locations.data?.pages.flatMap((page) => page.locations) ?? []),
-  ];
-  return (
-    <li>
-      <Link
-        to="/content/$modelKey/$entryId"
-        params={{ modelKey: source.modelKey, entryId: source.entryId }}
-      >
-        {source.title}
-      </Link>
-      <span>
-        {" "}
-        · {source.modelKey} · {source.phase === "draft" ? "Draft" : "Published"}
-      </span>
-      <ul>
-        {rows.map((location) => (
-          <li key={`${location.area}:${location.sourceKey}:${location.pointer}`}>
-            {location.sourceKey} · {location.area}
-            {location.pointer} ·{" "}
-            {source.phase === "draft"
-              ? "Draft (not public)"
-              : location.delivered
-                ? "Published and visible"
-                : "Hidden (not delivered)"}
-          </li>
-        ))}
-      </ul>
-      {source.nextLocationsCursor && !expanded && (
-        <Button onClick={() => setExpanded(true)} size="sm" variant="ghost">
-          More locations in {source.title}
-        </Button>
-      )}
-      {expanded && locations.isPending && <p role="status">Loading locations…</p>}
-      {locations.isError && (
-        <p role="alert">
-          {errorDescription(locations.error)}{" "}
-          <Button
-            onClick={() => {
-              void locations.refetch();
-            }}
-          >
-            Retry locations
-          </Button>
-        </p>
-      )}
-      {locations.hasNextPage && (
-        <Button
-          disabled={locations.isFetchingNextPage}
-          onClick={() => {
-            void locations.fetchNextPage();
-          }}
-          size="sm"
-          variant="ghost"
-        >
-          More locations in {source.title}
-        </Button>
-      )}
-    </li>
   );
 }

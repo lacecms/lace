@@ -143,6 +143,13 @@ async function mockApi(page: Page, role: Role) {
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
+    if (path.endsWith("/reference-impact"))
+      return json(route, {
+        mode: "sources",
+        sources: [],
+        hasPublishedBlockers: false,
+        hasDraftUsages: false,
+      });
     if (path.endsWith("/link-impact"))
       return json(route, {
         mode: "sources",
@@ -364,12 +371,13 @@ test("an editor duplicates from the row menu with the keyboard and cannot unpubl
   const actions = page.getByRole("button", { name: "Actions for Launch" });
   await actions.focus();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("menuitem")).toHaveText(["Open", "Duplicate"]);
+  await expect(page.getByRole("menuitem")).toHaveText(["Open", "Where used", "Duplicate"]);
   await page.keyboard.press("Escape");
   await expect(actions).toBeFocused();
 
   await page.keyboard.press("Enter");
-  await page.keyboard.press("ArrowDown");
+  await expect(page.getByRole("menuitem", { name: "Duplicate" })).toBeVisible();
+  await page.keyboard.press("End");
   await expect(page.getByRole("menuitem", { name: "Duplicate" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/admin\/content\/posts\/launch-copy$/u);

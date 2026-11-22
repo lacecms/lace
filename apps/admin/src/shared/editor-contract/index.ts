@@ -141,12 +141,14 @@ export interface FieldEditorServices {
     fields: Readonly<Record<string, FieldDefinition>>,
     visibility: import("@lacecms/content").FieldVisibility | undefined,
     key: string,
+    revealedForReference?: boolean,
   ) => string | undefined;
   readonly renderedFieldKeys: (
     fields: Readonly<Record<string, FieldDefinition>>,
     visibility: import("@lacecms/content").FieldVisibility | undefined,
     values: unknown,
     errors: unknown,
+    revealedKey?: string,
   ) => ReadonlySet<string> | undefined;
   readonly shownFieldKeys: (
     fields: Readonly<Record<string, FieldDefinition>>,
@@ -190,4 +192,9 @@ export interface FieldEditorServices {
     model: ContentModelDto,
     values: DraftEditorValues,
   ) => { readonly count: number; readonly problem: string | undefined };
+}
+
+/** The next field key along a verified editor path. */
+export function revealedChildKey(parent: string, path: string | undefined): string | undefined {
+  return path?.startsWith(`${parent}.`) ? path.slice(parent.length + 1).split(".")[0] : undefined;
 }
