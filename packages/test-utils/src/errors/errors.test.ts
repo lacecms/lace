@@ -18,6 +18,7 @@ const codes: Readonly<Record<string, string>> = {
   RateLimitExceededError: "RATE_LIMITED",
   StaleSynchronizationError: "CONFIGURATION_SYNC_STALE",
   ObjectStorageError: "STORAGE_UNAVAILABLE",
+  MediaThumbnailUnavailableError: "MEDIA_THUMBNAIL_UNAVAILABLE",
   RuntimeConfigurationError: "RUNTIME_CONFIGURATION_INVALID",
   InvariantError: "INTERNAL_INVARIANT",
   LaceError: "INTERNAL_PRIVATE",

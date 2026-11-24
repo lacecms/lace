@@ -7,6 +7,10 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
+import {
+  assertBuildThumbnailReads,
+  serveBuildThumbnail,
+} from "./support/build-thumbnail-fixture.mjs";
 
 // Verifies docs/lace-astro-site.md in generated projects: an independent Astro
 // site that is not the starter connects through the documented files only.
@@ -84,7 +88,9 @@ test("an existing Astro site builds Lace pages, collections and blocks from the 
       ]),
     ),
   );
-  let requests = 0;
+  let exportReads = 0;
+  const thumbnailRequests = [];
+  const thumbnailFixture = { token, thumbnails: new Map(), requests: thumbnailRequests };
   const server = createServer((request, response) => {
     const media = /^\/api\/v1\/public\/media\/([\w-]+)$/u.exec(request.url ?? "");
     if (media !== null && originals.has(media[1])) {
@@ -92,11 +98,15 @@ test("an existing Astro site builds Lace pages, collections and blocks from the 
       response.end(originals.get(media[1]));
       return;
     }
-    requests++;
-    if (request.headers.authorization !== `Bearer ${token}`) {
+    if (serveBuildThumbnail(request, response, thumbnailFixture)) return;
+    if (
+      request.url !== "/api/v1/public/build-export" ||
+      request.headers.authorization !== `Bearer ${token}`
+    ) {
       response.writeHead(403).end();
       return;
     }
+    exportReads++;
     response.writeHead(200, { "content-type": "application/json", etag: '"7"' });
     response.end(JSON.stringify(exported));
   });
@@ -115,7 +125,12 @@ test("an existing Astro site builds Lace pages, collections and blocks from the 
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
-  expect(requests).toBe(1);
+  expect(exportReads).toBe(1);
+  assertBuildThumbnailReads(thumbnailRequests, {
+    "hero-media": 404,
+    "note-media": 404,
+    "post-media": 404,
+  });
   const home = await readFile(join(site, "dist/index.html"), "utf8");
   const article = await readFile(join(site, "dist/articles/first-post/index.html"), "utf8");
   // Inline block scripts name their blocks in selectors, so markup is read without them.

@@ -5,7 +5,7 @@ kind: reference
 verifiedAgainst: 1.0.0
 ---
 
-The REST contract is versioned under `/api/v1`. Admin and account operations require a signed-in browser session with the listed permission; public reads are anonymous except the build export. Runtime validation, revisions and concurrency checks apply to direct requests too. The [MCP content server](../mcp/) is a separate OAuth endpoint.
+The REST contract is versioned under `/api/v1`. Admin and account operations require a signed-in browser session with the listed permission; public build export and build thumbnail reads require a build token. Runtime validation, revisions and concurrency checks apply to direct requests too. The [MCP content server](../mcp/) is a separate OAuth endpoint.
 
 [Download the OpenAPI JSON](/lace/reference/openapi.json). This is copied from the repository's committed API contract at docs build time. It can be read without a running CMS. A particular installation can be older than the latest docs; inspect its own contract before sending requests.
 
@@ -20,7 +20,7 @@ The reference loads `/api/v1/openapi.json` from the same origin; that JSON endpo
 | Credential                | Purpose                                                                                                                                                                  |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | None                      | Public reads of published content and published media.                                                                                                                   |
-| Build token               | `Authorization: Bearer <token>` for the build export; read-only, issued in Admin Settings.                                                                               |
+| Build token               | `Authorization: Bearer <token>` for the build export and published-media thumbnails. Admin Settings issues read-only build tokens.                                       |
 | Setup token               | One-time token from `lace auth bootstrap`, sent in the body of the first-administrator request.                                                                          |
 | Invitation or reset token | Token from an invitation or password reset link, sent in the request body.                                                                                               |
 | Session                   | Browser session cookie from sign-in. Cookie-authenticated changes must come from the installation's own origin.                                                          |
@@ -37,20 +37,21 @@ Session permissions come from the user's role:
 | `users:manage`    | admin                 | Manage users and invitations.                                  |
 | `settings:manage` | admin                 | Settings, build and import tokens, email test, build requests. |
 
-Failures use one JSON envelope: `error.code`, `error.message` and, for some codes, `error.details`. Missing or rejected credentials return `401 AUTHENTICATION_REQUIRED` with `Cache-Control: no-store` and a `WWW-Authenticate` challenge: `Session realm="lace"` for session routes, `Bearer realm="lace"` for build export, and both for import routes. An authenticated actor without permission, an unsupported credential kind, or a rejected origin or CSRF check returns `403 AUTHORIZATION_DENIED`. A request that breaks the contract returns `422 VALIDATION_FAILED` with value-free issues. The OpenAPI contract names the accepted credentials of each operation through the `session`, `buildToken` and `importToken` security schemes.
+Failures use one JSON envelope: `error.code`, `error.message` and, for some codes, `error.details`. Missing or rejected credentials return `401 AUTHENTICATION_REQUIRED` with `Cache-Control: no-store` and a `WWW-Authenticate` challenge: `Session realm="lace"` for session routes, `Bearer realm="lace"` for build export and build thumbnails, and both for import routes. An authenticated actor without permission, an unsupported credential kind, or a rejected origin or CSRF check returns `403 AUTHORIZATION_DENIED`. A request that breaks the contract returns `422 VALIDATION_FAILED` with value-free issues. The OpenAPI contract names the accepted credentials of each operation through the `session`, `buildToken` and `importToken` security schemes.
 
 ## Public endpoints
 
-| Method | Path                                           | Purpose                                                                                         | Credential  |
-| ------ | ---------------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------- |
-| GET    | `/api/v1/public/build-export`                  | Read one page of the published build export; follow `nextCursor` with `after`.                  | Build token |
-| GET    | `/api/v1/public/pages/{modelKey}`              | Read a published page.                                                                          | None        |
-| GET    | `/api/v1/public/globals/{modelKey}`            | Read a published global.                                                                        | None        |
-| GET    | `/api/v1/public/collections/{modelKey}`        | List published entries of a collection with a route.                                            | None        |
-| GET    | `/api/v1/public/collections/{modelKey}/{slug}` | Read a published collection entry by slug.                                                      | None        |
-| GET    | `/api/v1/public/records/{modelKey}`            | List published entries of a route-less collection.                                              | None        |
-| GET    | `/api/v1/public/content/by-path`               | Read the published page or collection entry at `?path=`.                                        | None        |
-| GET    | `/api/v1/public/media/{mediaId}`               | Stream media that a current publication uses, with a strong `ETag` and `If-None-Match` support. | None        |
+| Method | Path                                             | Purpose                                                                                         | Credential  |
+| ------ | ------------------------------------------------ | ----------------------------------------------------------------------------------------------- | ----------- |
+| GET    | `/api/v1/public/build-export`                    | Read one page of the published build export; follow `nextCursor` with `after`.                  | Build token |
+| GET    | `/api/v1/public/build-media/{mediaId}/thumbnail` | Read or revalidate the WebP thumbnail of media used by a current publication.                   | Build token |
+| GET    | `/api/v1/public/pages/{modelKey}`                | Read a published page.                                                                          | None        |
+| GET    | `/api/v1/public/globals/{modelKey}`              | Read a published global.                                                                        | None        |
+| GET    | `/api/v1/public/collections/{modelKey}`          | List published entries of a collection with a route.                                            | None        |
+| GET    | `/api/v1/public/collections/{modelKey}/{slug}`   | Read a published collection entry by slug.                                                      | None        |
+| GET    | `/api/v1/public/records/{modelKey}`              | List published entries of a route-less collection.                                              | None        |
+| GET    | `/api/v1/public/content/by-path`                 | Read the published page or collection entry at `?path=`.                                        | None        |
+| GET    | `/api/v1/public/media/{mediaId}`                 | Stream media that a current publication uses, with a strong `ETag` and `If-None-Match` support. | None        |
 
 Each page, global, collection item, by-path lookup and list response reflects
 one committed publication state. A concurrent republish at the same address
@@ -60,6 +61,10 @@ while it remains absent. For collections and records, the items, order, media an
 `nextCursor` agree within each response. Following `nextCursor` with
 `after` reads the next page from the state available to that request.
 Build export cursors pin a published-state version.
+
+The build thumbnail route checks current publication eligibility before serving
+bytes or returning a conditional response. Unpublished or unknown media returns
+`404`.
 
 ## Setup, invitation and password reset endpoints
 
@@ -162,7 +167,15 @@ source and phase. If that limit is reached, reduce dependencies and retry.
 | DELETE | `/api/v1/admin/media/{mediaId}`                | Queue an unused item or start, advance and finish draft detachment.                 | `media:write`; also `content:write` with `detach=drafts` |
 | POST   | `/api/v1/admin/media/{mediaId}/retry-deletion` | Retry a failed media deletion.                                                      | `media:write`                                            |
 | GET    | `/api/v1/admin/media/{mediaId}/preview`        | Stream the media file for Admin previews.                                           | `content:read`                                           |
+| GET    | `/api/v1/admin/media/{mediaId}/thumbnail`      | Read or revalidate the WebP thumbnail of active media, including unpublished items. | Browser session with `content:read`                      |
 | GET    | `/api/v1/admin/media/tags`                     | List media tags with item counts by prefix.                                         | `content:read`                                           |
+
+Both thumbnail routes return static WebP up to 320 pixels on the longest
+edge and 96 KiB. Responses carry a strong thumbnail `ETag` and
+`Cache-Control: private, no-cache`. Send `If-None-Match` to revalidate a cached
+thumbnail. A matching validator returns `304` after access and availability
+checks. An unavailable derivative returns `503 MEDIA_THUMBNAIL_UNAVAILABLE` with
+`Cache-Control: no-store`.
 
 #### Delete media used by drafts
 

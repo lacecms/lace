@@ -29,6 +29,7 @@ export class MediaThumbnailUnavailableError extends LaceError<"MEDIA_THUMBNAIL_U
     public readonly reason: "busy" | "timeout" | "source" | "storage" | "transform",
   ) {
     super("MEDIA_THUMBNAIL_UNAVAILABLE", "The media thumbnail is unavailable.");
+    this.name = "MediaThumbnailUnavailableError";
   }
 }
 

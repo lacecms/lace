@@ -20,6 +20,7 @@ import {
 import {
   AccountError,
   MediaCreateError,
+  MediaThumbnailUnavailableError,
   ObjectStorageError,
   RateLimitExceededError,
   RuntimeConfigurationError,
@@ -386,6 +387,21 @@ export const errorMatrixCases: readonly ErrorMatrixCase[] = [
     expected: {
       body: { error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred." } },
       status: 500,
+    },
+  },
+  {
+    name: "MediaThumbnailUnavailableError",
+    errorClass: MediaThumbnailUnavailableError,
+    create: () => new MediaThumbnailUnavailableError("storage"),
+    expected: {
+      body: {
+        error: {
+          code: "MEDIA_THUMBNAIL_UNAVAILABLE",
+          message: "The media thumbnail is unavailable.",
+        },
+      },
+      status: 503,
+      headers: { "cache-control": "no-store" },
     },
   },
   {
