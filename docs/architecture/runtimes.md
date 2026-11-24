@@ -15,6 +15,7 @@ narrow, and use cases depend only on the capabilities they call.
 | `links` | `ContentLinkReadPort` (URL link targets, usage and impact) |
 | `references` | `ContentReferenceReadPort` (route-independent target discovery and direct impact) |
 | `media` | `MediaReadPort`, `MediaListPort`, `MediaCatalogPort`, `MediaCommandPort`, `MediaDeletionDispatchPort`, `ImageInspector` |
+| Thumbnail ports | Bounded static WebP transformation and private derivative read, conditional create, prefix listing and delete |
 | `builds` | `SiteBuildTrigger`, `SiteBuildCommandPort`, `SiteBuildReadPort`, `SiteBuildDispatchPort`, `ProviderDeploymentReader` |
 | `outbox` | `DispatcherLeasePort` (claim, complete, retry leased events) |
 | `security` | `AccountSecurityPort`, `SessionSecurityPort`, `TokenSecurityPort`, `UserProfileReader`, `SensitiveRateLimiter` |
@@ -142,6 +143,15 @@ are synchronous with a bounded timeout; there is no email outbox or retry queue.
 Cloudflare uses the native R2 binding. Node uses the S3 client against a
 configured private bucket, typically served by the bundled SILO container.
 The Compose image selection stays outside the Node adapter.
+
+The application owns the thumbnail recipe, media eligibility, bounded admission
+and recovery. Server composition receives the runtime thumbnail adapters. Node
+resizes with Sharp and stores derivatives in private S3. Cloudflare uses the
+optional operator-configured Images binding and native R2. A missing binding or
+provider failure makes generation unavailable while the original remains
+readable. Both runtimes schedule post-commit generation and bounded
+reconciliation through their process or Worker lifecycle. Derivative operations
+remain separate from public media delivery.
 
 KV is a derived cache, never an authoritative source, and correctness must not
 depend on immediate KV consistency. The no-op cache is the default in both

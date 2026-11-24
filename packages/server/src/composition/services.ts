@@ -6,6 +6,7 @@ import {
   routeLessModelKeys,
   ContentUseCases,
   MediaUseCases,
+  MediaThumbnails,
   OAuthConnectionUseCases,
   SiteBuildUseCases,
 } from "@lacecms/application";
@@ -40,6 +41,7 @@ import { composeSettings } from "./settings.js";
 
 type ContentInput = ConstructorParameters<typeof ContentUseCases>[0];
 type MediaInput = ConstructorParameters<typeof MediaUseCases>[0];
+type ThumbnailInput = ConstructorParameters<typeof MediaThumbnails>[0];
 type BuildsInput = ConstructorParameters<typeof SiteBuildUseCases>[0];
 type LaceMcp = NonNullable<LaceAppInput["mcp"]>;
 
@@ -72,6 +74,7 @@ export interface LaceServicesInput {
   readonly security: SecurityService;
   readonly storage: ObjectStorage;
   readonly imageInspector: ImageInspector;
+  readonly thumbnails?: Pick<ThumbnailInput, "storage" | "generator">;
   readonly clock: Clock;
   readonly ids: IdGenerator;
   readonly listQueryLimits: NonNullable<ContentInput["listQueryLimits"]>;
@@ -113,6 +116,7 @@ export interface LaceServicesInput {
 export interface LaceServices {
   readonly content: ContentUseCases;
   readonly media: MediaUseCases;
+  readonly thumbnails?: MediaThumbnails;
   readonly links: ContentLinkUseCases;
   readonly builds: SiteBuildUseCases;
   readonly accounts: AccountUseCases;
@@ -151,6 +155,13 @@ export function composeLaceServices(input: LaceServicesInput): LaceServices {
     publicMedia: repository,
     storage: input.storage,
   });
+  const thumbnails =
+    input.thumbnails &&
+    new MediaThumbnails({
+      ...input.thumbnails,
+      media: repository,
+      originals: input.storage,
+    });
   const links = new ContentLinkUseCases(repository, routeLessModelKeys(input.config.content));
   const references = new ContentReferenceUseCases(repository);
   const builds = new SiteBuildUseCases({ builds: repository, clock });
@@ -214,6 +225,7 @@ export function composeLaceServices(input: LaceServicesInput): LaceServices {
     ...(mcp === undefined ? {} : { mcp }),
     mcpEnabled: flags.mcpEnabled,
     media,
+    ...(thumbnails && { thumbnails }),
     ...(oauthConnections === undefined ? {} : { oauthConnections }),
     publicBaseUrl,
     publicContent: repository,
@@ -233,6 +245,7 @@ export function composeLaceServices(input: LaceServicesInput): LaceServices {
     content,
     links,
     media,
+    ...(thumbnails && { thumbnails }),
     settings,
     ...(oauthConnections === undefined ? {} : { oauthConnections }),
   });

@@ -1,10 +1,10 @@
 import { ImageOff } from "lucide-react";
 import { useState } from "react";
 import { cn } from "../../../shared/lib/index.js";
-import { mediaPreviewPath } from "../media-limits.js";
+import { mediaThumbnailPath } from "../media-limits.js";
 
 /**
- * A decorative, lazily loaded thumbnail read through the admin preview
+ * A decorative, lazily loaded thumbnail read through the admin thumbnail
  * boundary. The surrounding control carries the filename, so a failed image
  * falls back to an icon without losing the item's name.
  */
@@ -15,7 +15,7 @@ export function MediaThumbnail({
   readonly className?: string;
   readonly mediaId: string;
 }) {
-  const [failed, setFailed] = useState(false);
+  const [failedId, setFailedId] = useState<string>();
   return (
     <span
       className={cn(
@@ -23,7 +23,7 @@ export function MediaThumbnail({
         className,
       )}
     >
-      {failed ? (
+      {failedId === mediaId ? (
         <ImageOff aria-hidden="true" className="size-6" data-testid="thumbnail-fallback" />
       ) : (
         <img
@@ -31,8 +31,8 @@ export function MediaThumbnail({
           className="size-full object-cover"
           decoding="async"
           loading="lazy"
-          onError={() => setFailed(true)}
-          src={mediaPreviewPath(mediaId)}
+          onError={() => setFailedId(mediaId)}
+          src={mediaThumbnailPath(mediaId)}
         />
       )}
     </span>

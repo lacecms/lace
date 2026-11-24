@@ -23,7 +23,13 @@ Credentials are separate: a builder credential authorizes private build requests
 
 ## Back up and restore
 
-Back up configuration, source and locks, the SQLite or D1 database and all corresponding S3 or R2 objects as one coordinated set. SQL alone cannot restore media. Choose a maintenance point, stop writers (on Compose `docker compose stop api dispatcher builder`) and record the installed version and migration state. Use SQLite's backup API (or the CLI `.backup` command) rather than copying the database file, and copy every object through the S3 API with its key and bytes. On Cloudflare, export D1 with `wrangler d1 export` and copy R2 objects through the account's S3-compatible endpoint. Protect backups as private data: they contain password hashes and sessions.
+Back up configuration, source and locks, the SQLite or D1 database and all corresponding original media objects as one coordinated set. SQL alone cannot restore media. Choose a maintenance point, stop writers (on Compose `docker compose stop api dispatcher builder`) and record the installed version and migration state. Use SQLite's backup API (or the CLI `.backup` command) rather than copying the database file, and copy original objects through the S3 API with their keys and bytes. On Cloudflare, export D1 with `wrangler d1 export` and copy R2 objects through the account's S3-compatible endpoint. Protect backups as private data: they contain password hashes and sessions.
+
+Admin thumbnails are reconstructible from the original objects and metadata.
+An original-only backup can omit the private `media-thumbnails/` prefix. After
+restoring, open Media to verify that existing images acquire thumbnails. An
+existing Worker can enable generation through its operator-owned Images binding.
+[Cloudflare thumbnail setup](../deployment/cloudflare/#enable-media-thumbnails)
 
 Restore into an isolated environment first: a new database, bucket, origin and build output, with external deploy hooks disabled and replacement credentials. Use matching packages and storage mappings, check migration state and media access, sign in, read, edit and publish content and complete a new site build. Never point a restored test installation at production storage or hooks. A successful archive command does not prove a usable restore.
 

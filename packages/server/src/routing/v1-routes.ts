@@ -49,6 +49,7 @@ export const v1Routes = {
     retryDeletion: defineRoute("POST", "/admin/media/:mediaId/retry-deletion", "session"),
     binary: defineRoute("GET", "/public/media/:mediaId", "public"),
     preview: defineRoute("GET", "/admin/media/:mediaId/preview", "session"),
+    thumbnail: defineRoute("GET", "/admin/media/:mediaId/thumbnail", "session"),
   },
   credentials: {
     listBuild: defineRoute("GET", "/admin/api-tokens", "session"),

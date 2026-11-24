@@ -121,8 +121,14 @@ async function mockEditor(page: Page, block: unknown, library: MediaItem[]) {
       snapshot = { ...snapshot, ...input, revision: snapshot.revision + 1 };
       return json(route, entry());
     }
-    if (url.pathname.endsWith("/preview"))
-      return route.fulfill({ body: png, contentType: "image/png" });
+    if (url.pathname.endsWith("/thumbnail"))
+      return route.fulfill({
+        body: Buffer.from(
+          "524946463e000000574542505650382032000000d001009d012a0100010001402625a00274ba01f80003b000feeeff9ffe9a478d23c691f316fff32f3e65e7ccbcff98980000",
+          "hex",
+        ),
+        contentType: "image/webp",
+      });
     if (url.pathname === "/api/v1/admin/media/tags") return json(route, { items: [] });
     if (url.pathname === "/api/v1/admin/media" && method === "GET") {
       const tags = url.searchParams.getAll("tag");
@@ -167,7 +173,7 @@ test("twenty tagged images join a gallery in one step", async ({ page }) => {
   const grid = dialog.getByRole("list", { name: "Media choices for Images and videos" });
   await expect(grid.getByRole("button")).toHaveCount(20);
   for (const item of tagged) await grid.getByRole("button", { name: item.filename }).click();
-  await expect(dialog.getByRole("status")).toHaveText(
+  await expect(dialog.getByRole("status", { name: "Selected media" })).toHaveText(
     "20 items selected. 30 more can be selected.",
   );
   await dialog.getByRole("button", { name: "Add 20 images" }).click();
@@ -205,7 +211,7 @@ test("a custom block list keeps selection order, capacity, uploads and defaults"
   const dialog = page.getByRole("dialog", { name: "Add media to Projects" });
   const grid = dialog.getByRole("list", { name: "Media choices for Projects" });
   const tile = (name: string) => grid.getByRole("button", { name: `${name}.png` });
-  const status = dialog.getByRole("status");
+  const status = dialog.getByRole("status", { name: "Selected media" });
 
   await expect(tile("hero")).toContainText("Already in Projects");
   await tile("c").click();

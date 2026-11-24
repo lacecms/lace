@@ -66,6 +66,30 @@ Preflight is read-only: it validates the selected credentials and runs one `SELE
 
 For transactional email, prefer the `resend` provider (it works on Workers Free): set `LACE_EMAIL_PROVIDER` and `LACE_EMAIL_FROM` in the Worker vars and store the key with `wrangler secret put LACE_RESEND_API_KEY`. The `cloudflare` provider needs Workers Paid, an onboarded sending domain and the `send_email` binding. Redeploy, then send a test from **Settings → Email delivery**.
 
+## Enable media thumbnails
+
+For a new or existing project, add this top-level entry to your
+`worker/wrangler.jsonc` and redeploy the Worker.
+
+```jsonc
+"images": { "binding": "IMAGES" },
+```
+
+You own the Wrangler configuration. A Lace package or template upgrade leaves
+that file under your control. The binding reads from the existing private
+`MEDIA` bucket. An upload can generate its thumbnail in the background, and the
+first admin request generates a missing thumbnail for existing media. Each
+stored thumbnail is a small static WebP reused by the library, picker and editor.
+The minute cron also reconciles orphaned thumbnails left by interrupted writes.
+
+The Images plan limits unique transformations. Source format, image dimensions
+and animated-image limits can affect generation, including AVIF input
+availability. Check the limits for your account. When generation is
+unavailable, including with the binding omitted, Admin shows a fallback for a
+missing thumbnail. Opening a media item still loads its original, including
+animated GIFs. [Images pricing](https://developers.cloudflare.com/images/pricing/)
+· [Image limits and formats](https://developers.cloudflare.com/images/get-started/limits/)
+
 ## Deploy the site separately
 
 The Worker and the static site have separate deployments; deploying one never deploys the other. Give the remote site build the Worker origin as `LACE_API_BASE_URL` and `LACE_PUBLIC_BASE_URL`, and a read-only build token created in the remote Admin. Choose one:

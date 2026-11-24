@@ -305,7 +305,13 @@ Settings → Site status → **CMS version** identifies the running API platform
 
 Schedule downtime, prevent editor writes, stop API/dispatcher and any builder, hook receiver or scheduled process, and wait for in-flight work to settle. Keep the previous static release available separately. `docker compose stop api dispatcher builder` applies to a configured site; omit `builder` in no-site mode. Never use `down -v` for backup or rotation.
 
-Create a private directory outside the application and repository, restrict permissions and record the consistency point, release inventory, tool versions, object count/checksums and capture time. Use SQLite's backup API (or the SQLite CLI `.backup` operation) against the stopped database. A raw main-file copy can omit committed WAL data. If archiving filesystem state instead, preserve the entire stopped `.lace/data` directory including SQLite journals. Copy **all media objects through the storage server’s S3 API** with an operator S3 client and the configured bucket; preserve object keys, bytes and metadata. Do not assume a database backup includes media. Record checksums for each referenced object and detect missing or altered bytes.
+Create a private directory outside the application and repository, restrict permissions and record the consistency point, release inventory, tool versions, object count/checksums and capture time. Use SQLite's backup API (or the SQLite CLI `.backup` operation) against the stopped database. A raw main-file copy can omit committed WAL data. If archiving filesystem state instead, preserve the entire stopped `.lace/data` directory including SQLite journals. Copy **all original media objects through the storage server’s S3 API** with an operator S3 client and the configured bucket. Preserve object keys, bytes and metadata. Record checksums for each referenced object and detect missing or altered bytes.
+
+Admin thumbnail WebPs are derived from the original objects and metadata.
+Original-only S3 or R2 backups can omit `media-thumbnails/`. On the restored
+installation, open Media to regenerate missing derivatives. On Cloudflare,
+enable the optional `IMAGES` binding in `worker/wrangler.jsonc` to generate
+new derivatives.
 
 Capture `lace.config.ts`, `package.json`, `pnpm-lock.yaml`, `.lace/manifest.json`, the user-owned site source and deployment configuration at the same point. Store `.env`, auth credentials and backups separately in private storage; SQL backups contain password/token hashes and sessions. Encrypt and restrict access according to your operating policy. Resume the original services only after the coordinated capture completes; verify sign-in, readiness, media and the served release.
 

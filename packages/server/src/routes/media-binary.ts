@@ -1,6 +1,6 @@
 import { bodyResponse } from "../shared/http.js";
 import { binaryStream, isNotModified } from "../shared/binary.js";
-import type { MediaUseCases, MediaBinary } from "@lacecms/application";
+import type { MediaUseCases, MediaBinary, MediaThumbnail } from "@lacecms/application";
 
 type EligibleMedia = Exclude<Awaited<ReturnType<MediaUseCases["resolvePublic"]>>, null>;
 
@@ -37,5 +37,22 @@ function binaryResponse(value: MediaBinary, headers: Readonly<Record<string, str
     ...headers,
     "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(value.filename)}`,
     "content-type": value.mimeType,
+  });
+}
+
+export function conditionalThumbnailResponse(request: Request, thumbnail: MediaThumbnail) {
+  const headers = { "cache-control": PREVIEW_MEDIA_CACHE_CONTROL, etag: `"t-${thumbnail.sha256}"` };
+  if (isNotModified(request.headers.get("if-none-match"), headers.etag))
+    return bodyResponse(null, 304, headers);
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(thumbnail.bytes);
+      controller.close();
+    },
+  });
+  return bodyResponse(body, 200, {
+    ...headers,
+    "content-length": String(thumbnail.bytes.byteLength),
+    "content-type": thumbnail.mimeType,
   });
 }

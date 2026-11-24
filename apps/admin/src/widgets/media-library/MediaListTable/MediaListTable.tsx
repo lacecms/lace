@@ -58,6 +58,7 @@ export function MediaListTable({
                 <button
                   aria-haspopup="dialog"
                   className="cursor-pointer truncate text-left font-medium underline-offset-4 hover:underline focus-visible:underline"
+                  data-media-result={item.id}
                   onClick={(event) => onOpen(item, event.currentTarget)}
                   title={item.filename}
                   type="button"

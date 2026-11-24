@@ -104,6 +104,14 @@ with pinned SILO across repository and generated Node Compose deployments,
 and verifies the template and media volume transitions together. The Node S3
 and native R2 boundaries and the release preparation sequence stay in place.
 
+**MP1 — Admin media performance:** the owner selected
+[`add-admin-media-thumbnails`](../openspec/changes/archive/2026-11-24-add-admin-media-thumbnails/)
+as one maintenance session outside EX1–EX7. It covers durable private CMS
+thumbnails and explicit 24-item continuation in the media library and picker.
+The session verifies both together against the same populated browser fixture
+and measures cold generation and stored reads on Node and Cloudflare. Public
+delivery and Astro image processing are outside MP1.
+
 Dependencies:
 
 | Session | Depends on | May run in parallel with |
@@ -506,6 +514,7 @@ recorded event.
 
 | Date | Session | Change | Status |
 | --- | --- | --- | --- |
+| 2026-11-24 | MP1 | [Admin media performance](../openspec/changes/archive/2026-11-24-add-admin-media-thumbnails/verification.md) | done. Chromium verified five 24-item batches on Node and local Worker. The first batch transferred 0.54 MiB, and a fresh runtime read persisted derivatives without reopening originals. The isolated real Images binding produced static WebP for all seven representative inputs. |
 | 2026-11-22 | CMS 1.0.0 | [RC5 upgrade and release qualification](../openspec/changes/prepare-cms-1-0-0/verification.md) | Locally verified, awaiting owner staging and publication |
 | 2026-11-22 | EX7A | [pnpm release toolchain](../openspec/changes/archive/2026-11-22-ex07a-upgrade-pnpm-toolchain/verification.md) | done. Verified the frozen install, native SQLite, packed starter and local Worker with pnpm 12.21.0. Both Linux platforms passed API and builder smoke checks. Full acceptance on linux/arm64 matched the 16 tarballs and host images from revision `0f8f8be0`. |
 | 2026-11-22 | EX5A | [Model kind descriptors](../openspec/changes/archive/2026-11-22-ex05a-model-kind-descriptors/) | done. Synchronized both specs after verification on both Node SQLite modes and local D1. The [comparison inventory and verification](#ex5a-model-kind-comparisons) record the results. |

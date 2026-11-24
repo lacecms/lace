@@ -46,6 +46,10 @@ export function mediaPreviewPath(mediaId: string): string {
   return `/api/v1/admin/media/${encodeURIComponent(mediaId)}/preview`;
 }
 
+export function mediaThumbnailPath(mediaId: string): string {
+  return `/api/v1/admin/media/${encodeURIComponent(mediaId)}/thumbnail`;
+}
+
 /** Formats stored display dimensions, or marks them unknown when the item has none. */
 export function formatMediaDimensions(item: {
   readonly height?: number | undefined;

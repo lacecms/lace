@@ -58,6 +58,8 @@ export default defineConfig({
             "tests/content-import.acceptance.mjs",
             "tests/conditional-fields.acceptance.mjs",
             "tests/media-detachment.acceptance.mjs",
+            "tests/media-thumbnail-storage.acceptance.mjs",
+            "tests/media-thumbnail-generators.acceptance.mjs",
           ],
           fileParallelism: false,
           maxWorkers: 1,

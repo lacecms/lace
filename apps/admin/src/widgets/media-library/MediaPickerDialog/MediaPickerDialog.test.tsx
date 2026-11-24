@@ -62,7 +62,7 @@ test("empty and no-match states are distinguished and filters can be cleared", a
   await user.click(within(dialog).getByRole("button", { name: "JPEG" }));
   expect(await within(dialog).findByText("No matching media")).toBeInTheDocument();
   await user.click(within(dialog).getAllByRole("button", { name: "Clear filters" })[0]!);
-  await waitFor(() => expect(listMedia).toHaveBeenLastCalledWith(undefined, {}));
+  await waitFor(() => expect(listMedia).toHaveBeenLastCalledWith(undefined, { limit: 24 }));
   expect(await within(dialog).findByText("No media yet")).toBeInTheDocument();
 });
 
@@ -103,7 +103,7 @@ test("the picker filters by tag from the first page", async () => {
     "project-2026{Enter}",
   );
   await waitFor(() =>
-    expect(listMedia).toHaveBeenLastCalledWith(undefined, { tags: ["project-2026"] }),
+    expect(listMedia).toHaveBeenLastCalledWith(undefined, { limit: 24, tags: ["project-2026"] }),
   );
   expect(
     within(dialog).getByRole("button", { name: "Remove tag project-2026" }),
@@ -245,11 +245,42 @@ test("multiple mode builds an ordered selection and confirms it", async () => {
     "aria-pressed",
     "false",
   );
-  expect(within(dialog).getByRole("status")).toHaveTextContent(
+  expect(within(dialog).getByRole("status", { name: "Selected media" })).toHaveTextContent(
     "2 items selected. 8 more can be selected.",
   );
   await user.click(within(dialog).getByRole("button", { name: "Add 2 images" }));
   expect(onConfirm).toHaveBeenCalledWith([items[2], items[1]]);
+});
+
+test("a cursor remains available across an unselectable page and preserves picker selection and outside focus", async () => {
+  const user = userEvent.setup();
+  const final = Promise.withResolvers<{ items: MediaMetadataDto[] }>();
+  const listMedia = vi.fn(async (cursor?: string) => {
+    if (cursor === undefined) return { items: [named("a")], nextCursor: "inactive" };
+    if (cursor === "inactive")
+      return {
+        items: [{ ...named("inactive"), status: "delete_failed" as const }],
+        nextCursor: "final",
+      };
+    return final.promise;
+  });
+  const { dialog, onConfirm } = await mountSelection({ listMedia });
+  const picker = within(dialog);
+  await user.click(await picker.findByRole("button", { name: "a.jpg" }));
+  await user.click(picker.getByRole("button", { name: "Load more media" }));
+  await waitFor(() => expect(listMedia).toHaveBeenLastCalledWith("inactive", { limit: 24 }));
+  expect(await picker.findByRole("button", { name: "Load more media" })).toHaveFocus();
+  expect(picker.getByRole("button", { name: "a.jpg" })).toHaveAttribute("aria-pressed", "true");
+  expect(picker.queryByRole("button", { name: "inactive.jpg" })).toBeNull();
+  await user.click(picker.getByRole("button", { name: "Load more media" }));
+  const search = picker.getByRole("searchbox", { name: "Search media" });
+  await user.click(search);
+  await act(async () => final.resolve({ items: [named("b")] }));
+  await picker.findByRole("button", { name: "b.jpg" });
+  await waitFor(() => expect(picker.queryByRole("button", { name: "Load more media" })).toBeNull());
+  expect(search).toHaveFocus();
+  await user.click(picker.getByRole("button", { name: "Add 1 image" }));
+  expect(onConfirm).toHaveBeenCalledWith([named("a")]);
 });
 
 test("a keyboard user selects with Space and Enter without closing the picker", async () => {
@@ -284,7 +315,9 @@ test("the selection survives tag filtering and includes hidden items", async () 
   );
   for (const name of ["t1.jpg", "t2.jpg", "t3.jpg"])
     await user.click(await within(dialog).findByRole("button", { name }));
-  expect(within(dialog).getByRole("status")).toHaveTextContent("5 items selected.");
+  expect(within(dialog).getByRole("status", { name: "Selected media" })).toHaveTextContent(
+    "5 items selected.",
+  );
   await user.click(within(dialog).getByRole("button", { name: "Add 5 images" }));
   expect(onConfirm).toHaveBeenCalledWith([named("a"), named("b"), ...tagged]);
 });
@@ -295,7 +328,7 @@ test("the capacity stops further selection until an item is deselected", async (
   const { dialog } = await mountSelection({ listMedia: async () => ({ items }) }, { capacity: 3 });
   for (const name of ["a.jpg", "b.jpg", "c.jpg"])
     await user.click(await within(dialog).findByRole("button", { name }));
-  expect(within(dialog).getByRole("status")).toHaveTextContent(
+  expect(within(dialog).getByRole("status", { name: "Selected media" })).toHaveTextContent(
     "3 items selected. Limit reached: Images allows at most 50 items.",
   );
   const d = within(dialog).getByRole("button", { name: "d.jpg" });
@@ -387,7 +420,7 @@ test("Cancel closes without confirming, and confirming needs a selection", async
     listMedia: async () => ({ items: [named("a")] }),
   });
   await within(dialog).findByRole("button", { name: "a.jpg" });
-  expect(within(dialog).getByRole("status")).toHaveTextContent(
+  expect(within(dialog).getByRole("status", { name: "Selected media" })).toHaveTextContent(
     "No items selected. You can select up to 10 items.",
   );
   expect(within(dialog).getByRole("button", { name: "Add 0 images" })).toBeDisabled();

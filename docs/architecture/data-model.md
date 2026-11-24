@@ -194,6 +194,16 @@ An unresolved write leaves the object in place because a matching row may
 already exist or the write may still commit. Diagnostics identify the unresolved
 outcome using the opaque key. [Media creation contract](../../openspec/specs/media-use-cases/spec.md#requirement-object-and-metadata-creation-preserve-a-recoverable-boundary)
 
+Once the original and active metadata are committed, the CMS schedules a
+background thumbnail attempt independently of the upload response. An authorized
+read can create a missing derivative from the original, including for legacy
+items without a hash. The private bucket holds one static WebP per media ID and
+recipe version. Its longest edge is at most 320 pixels and its body at most
+96 KiB. The recipe preserves display orientation, aspect ratio and transparency
+and avoids cropping and upscaling. GIF thumbnails use the first display frame.
+Stored bytes, format and dimensions are reusable by CMS callers across sessions
+and views. This adds no SQL field or change to publication.
+
 The projection is the only source of media usage: an entry uses an item when
 its current draft or current published snapshot references it in an entry
 field, a block field or its SEO image. Only current snapshots keep references,
@@ -215,9 +225,12 @@ Deletion is asynchronous and recoverable
 ([ADR 0003](../adr/0003-media-reference-projection-and-deletion.md)). The
 delete use case refuses a referenced item with `MEDIA_IN_USE` (HTTP `409`); for
 an unreferenced item it sets `deleting` and writes a `media.delete.requested`
-outbox event atomically. The dispatcher deletes the object, then the metadata
-row; failures set `delete_failed` and stay retryable. Neither a dangling
-published reference nor an SQL/object-storage half-delete can remain.
+outbox event atomically. The dispatcher deletes the thumbnail first, then the
+original, and finalizes the metadata row after both deletes succeed or confirm
+absence. Terminal failures set `delete_failed` and stay retryable. Thumbnail
+generation rechecks active status around persistence. A bounded scan that
+persists its progress reconciles late derivative writes for confirmed absent or
+inactive owners and defers cleanup when ownership is uncertain.
 
 Draft detachment admits up to 50 distinct entry IDs and revisions from the
 current reference projection. Any published use blocks admission. Each
@@ -234,8 +247,8 @@ active XML is out of scope. The server verifies the binary format, never the
 multipart content type or filename, and stores a generated object key, never a
 user path. Every format is verified by walking its complete container without
 decoding pixels. A GIF's recorded dimensions are its logical screen, to which
-the dimension and pixel limits apply; GIFs are stored and delivered as
-uploaded, never transcoded
+the dimension and pixel limits apply. Admin detail previews and public binary
+reads deliver the original GIF bytes, preserving animation
 ([cloudflare-media-storage](../../openspec/specs/cloudflare-media-storage/spec.md)).
 
 ### 9.8 Outbox and site builds

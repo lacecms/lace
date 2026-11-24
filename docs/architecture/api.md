@@ -128,7 +128,7 @@ The public media route serves an object only when a currently published
 snapshot references it; admin media endpoints provide draft previews. Knowing
 an unreferenced media ID does not publish it.
 
-Stored media bytes never change, so binary responses carry a strong ETag
+Stored originals never change, so original binary responses carry a strong ETag
 derived from the media ID alone (`"m-<mediaId>"`), separate from the metadata
 ETag used for `If-Match`. Authorization, eligibility and not-found are decided
 before conditional evaluation, so unpublished or deleted media never receives
@@ -143,6 +143,14 @@ Admin resources are content models, entries and their lifecycle commands,
 media and media tags, site builds, the session summary, users, invitations,
 settings status, build tokens, import tokens and the import-credential
 description.
+
+`GET /api/v1/admin/media/:mediaId/thumbnail` requires a browser session,
+`content:read` and an active media item. It can serve unpublished media. A
+successful response delivers the private WebP with `Cache-Control: private,
+no-cache` and a strong validator derived from the derivative bytes. Conditional
+requests are evaluated after authorization, eligibility and availability. An
+unavailable derivative returns `503 MEDIA_THUMBNAIL_UNAVAILABLE` with
+`Cache-Control: no-store`. The existing preview endpoint serves the original.
 
 - Entry detail returns the quoted draft revision in `ETag` with
   `Cache-Control: no-store`. Save, publish, revert, delete and duplicate

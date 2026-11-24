@@ -28,6 +28,10 @@ test("rows show media facts without raw user IDs and open details from the filen
   const [header, first, second] = within(table).getAllByRole("row");
   expect(header).toHaveTextContent("FilenameTypeDimensionsSizeUploaded byUploadedUsed in");
   expect(first).toHaveTextContent("cover.png");
+  expect(first?.querySelector("img")).toHaveAttribute(
+    "src",
+    "/api/v1/admin/media/media-1/thumbnail",
+  );
   expect(first).toHaveTextContent("PNG");
   expect(first).toHaveTextContent("800 × 600 px");
   expect(first).toHaveTextContent("2 KB");

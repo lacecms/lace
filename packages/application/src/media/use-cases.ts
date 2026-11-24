@@ -106,11 +106,22 @@ export class MediaUseCases {
           code: "MEDIA_METADATA_CREATE_OUTCOME_UNRESOLVED",
           storageKey,
         });
+      } else {
+        this.notifyCommitted(input, id);
       }
       throw creationError === undefined ? error : creationError.operationError;
     }
     // Metadata is committed: a reload failure must not trigger object cleanup.
+    this.notifyCommitted(input, id);
     return this.catalogView(id, "Created media could not be reloaded.");
+  }
+
+  private notifyCommitted(input: CreateMediaUseCaseInput, id: MediaId): void {
+    try {
+      input.onCommitted?.(id);
+    } catch {
+      // Background scheduling is best effort after the upload commits.
+    }
   }
 
   public async get(input: GetMediaUseCaseInput): Promise<MediaDetailView | null> {

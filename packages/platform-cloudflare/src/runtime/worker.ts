@@ -9,6 +9,7 @@ import {
   SiteBuildTracker,
   PreviewPackages,
   maintainPreviewDelivery,
+  reconcileMediaThumbnails,
 } from "@lacecms/application";
 import type {
   BuildTriggerResult,
@@ -20,6 +21,8 @@ import type {
   SiteBuildTrigger,
   EmailSender,
   PreviewRunner,
+  MediaThumbnails,
+  ThumbnailGenerator,
 } from "@lacecms/application";
 import { createCloudflareEmailSender, type SendEmailBinding } from "./email.js";
 import {
@@ -57,6 +60,8 @@ import { WorkerImageInspector } from "../media/image-inspector.js";
 import { CloudflareR2ObjectStorage } from "../media/r2-storage.js";
 import { composeCloudflarePreview } from "./preview.js";
 import { CloudflarePreviewBlobStorage } from "../media/preview-r2.js";
+import { CloudflareImagesThumbnailGenerator } from "../media/thumbnail-images.js";
+import { CloudflareThumbnailStorage } from "../media/thumbnail-r2.js";
 import {
   CloudflareEnvironmentError,
   parseCloudflareSettings,
@@ -96,6 +101,7 @@ export interface CreateCloudflareWorkerInput {
   /** Overrides the sender composed from the Worker's email settings. */
   readonly email?: (settings: CloudflareSettings) => EmailSender;
   readonly imageInspector?: ImageInspector;
+  readonly thumbnailGenerator?: ThumbnailGenerator;
   readonly logger?: ServerLogger;
   readonly operationalLogger?: WorkerOperationalLogger;
   readonly postCommitBuildDelayMs?: number;
@@ -110,12 +116,14 @@ export interface CloudflareRuntime {
   readonly maintainOAuth: () => Promise<void>;
   /** Purges one bounded batch of expired idempotency records, on OAuth phase-2 minutes only. */
   readonly maintainOperations: () => Promise<void>;
+  readonly maintainThumbnails: () => Promise<void>;
   readonly app: ReturnType<typeof createLaceApp>;
   readonly buildDispatcher: SiteBuildDispatcher;
   readonly buildTracker: SiteBuildTracker;
   readonly cache: Cache;
   readonly deletionDispatcher: MediaDeletionDispatcher;
   readonly repository: D1ContentRepository;
+  readonly thumbnails?: MediaThumbnails;
   readonly security: D1SecurityService;
   readonly settings: CloudflareSettings;
 }
@@ -230,11 +238,19 @@ export function createCloudflareRuntime(
     publicBaseUrl: settings.publicBaseUrl,
     timeoutMs: settings.storageTimeoutMs,
   });
+  const thumbnailStorage = new CloudflareThumbnailStorage(
+    settings.media,
+    settings.storageTimeoutMs,
+  );
+  const thumbnailGenerator =
+    input.thumbnailGenerator ??
+    (settings.images && new CloudflareImagesThumbnailGenerator(settings.images));
   const dispatchers = createOutboxDispatchers({
     mediaDeletion: {
       clock,
       logger: { error: (entry) => logger.error({ component: "media-deletion", ...entry }) },
       storage,
+      thumbnails: thumbnailStorage,
       work: repository,
     },
     siteBuild: {
@@ -310,6 +326,10 @@ export function createCloudflareRuntime(
     repository,
     security,
     storage,
+    thumbnails: {
+      storage: thumbnailStorage,
+      ...(thumbnailGenerator && { generator: thumbnailGenerator }),
+    },
   });
   const previewOrigin = settings.preview?.origin ?? input.previewOrigin;
   const previewBlobs =
@@ -392,12 +412,21 @@ export function createCloudflareRuntime(
       if (maintenancePhase(now) !== 2) return;
       await repository.purgeExpiredIdempotencyRecords(now, IDEMPOTENCY_PURGE_LIMIT);
     },
+    maintainThumbnails: async () => {
+      const failures = await reconcileMediaThumbnails({
+        media: repository,
+        objects: storage,
+        storage: thumbnailStorage,
+      });
+      if (failures > 0) logger.error({ component: "media-thumbnails", reason: "cleanup_failed" });
+    },
     app,
     buildDispatcher: dispatchers[SITE_BUILD_REQUESTED],
     buildTracker,
     cache,
     deletionDispatcher: dispatchers[MEDIA_DELETE_REQUESTED],
     repository,
+    ...(services.thumbnails && { thumbnails: services.thumbnails }),
     security,
     settings,
   });
@@ -453,6 +482,7 @@ export function createCloudflareWorker(input: CreateCloudflareWorkerInput): Clou
       | "site-build-tracking"
       | "oauth-cleanup"
       | "operations-cleanup"
+      | "thumbnail-cleanup"
       | "preview-cleanup",
     run: () => Promise<void>,
   ): Promise<void> {
@@ -521,6 +551,7 @@ export function createCloudflareWorker(input: CreateCloudflareWorkerInput): Clou
       await dispatch("media-deletion", () =>
         runtime.deletionDispatcher.runOnce(SCHEDULED_MEDIA_DELETION_CLAIMS),
       );
+      await dispatch("thumbnail-cleanup", () => runtime.maintainThumbnails());
     },
   });
 }

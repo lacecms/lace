@@ -210,7 +210,7 @@ function parseJpeg(bytes: Bytes): ParsedImage {
   return { height, orientation, width };
 }
 
-function parseWebp(bytes: Bytes): ParsedImage {
+function parseWebp(bytes: Bytes, staticOnly = false): ParsedImage {
   need(bytes.ascii(0, 4) === "RIFF" && bytes.ascii(8, 4) === "WEBP");
   need(bytes.u32(4, true) + 8 === bytes.length);
   let offset = 12;
@@ -226,19 +226,31 @@ function parseWebp(bytes: Bytes): ParsedImage {
     const data = bytes.slice(offset + 8, length);
     const padded = length + (length % 2);
     need(offset + 8 + padded <= bytes.length);
+    if (staticOnly) {
+      need(type !== "ANIM" && type !== "ANMF");
+      if (type === "VP8X") need((data.u8(0) & 0x02) === 0);
+    }
     if (type === "VP8 ") {
       need(data.u8(3) === 0x9d && data.u8(4) === 0x01 && data.u8(5) === 0x2a);
+      const frameWidth = data.u16(6, true) & 0x3fff;
+      const frameHeight = data.u16(8, true) & 0x3fff;
+      if (staticOnly)
+        need(!sawImage && (!extended || (width === frameWidth && height === frameHeight)));
       if (!extended) {
-        width = data.u16(6, true) & 0x3fff;
-        height = data.u16(8, true) & 0x3fff;
+        width = frameWidth;
+        height = frameHeight;
       }
       sawImage = true;
     } else if (type === "VP8L") {
       need(data.u8(0) === 0x2f);
       const bits = data.u32(1, true);
+      const frameWidth = (bits & 0x3fff) + 1;
+      const frameHeight = ((bits >>> 14) & 0x3fff) + 1;
+      if (staticOnly)
+        need(!sawImage && (!extended || (width === frameWidth && height === frameHeight)));
       if (!extended) {
-        width = (bits & 0x3fff) + 1;
-        height = ((bits >>> 14) & 0x3fff) + 1;
+        width = frameWidth;
+        height = frameHeight;
       }
       sawImage = true;
     } else if (type === "VP8X") {
@@ -259,6 +271,13 @@ function parseWebp(bytes: Bytes): ParsedImage {
   }
   need(offset === bytes.length && sawImage);
   return { height, orientation, width };
+}
+
+/** Reads one complete static WebP with its orientation already applied to the pixels. */
+export function inspectStaticWebp(data: Uint8Array): ImageDimensions {
+  const { width, height, orientation } = parseWebp(new Bytes(data), true);
+  need(width > 0 && height > 0 && orientation === 1);
+  return { width, height };
 }
 
 /** Skips GIF data sub-blocks up to and including the zero-length terminator. */

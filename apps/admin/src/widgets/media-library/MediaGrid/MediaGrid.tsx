@@ -72,6 +72,7 @@ export function MediaGrid({
                 marked && "border-primary ring-2 ring-primary",
                 unavailable && "cursor-not-allowed opacity-60 hover:border-border",
               )}
+              data-media-result={item.id}
               onClick={(event) => {
                 if (!unavailable) onOpen(item, event.currentTarget);
               }}

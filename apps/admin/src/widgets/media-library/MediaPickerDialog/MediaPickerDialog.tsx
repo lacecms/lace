@@ -1,9 +1,8 @@
-import type { MediaListDto, MediaMetadataDto } from "@lacecms/contracts";
-import { type InfiniteData, keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
+import type { MediaMetadataDto } from "@lacecms/contracts";
 import { Upload } from "lucide-react";
 import { type ComponentProps, useEffect, useMemo, useRef, useState } from "react";
 import { isOpenTagCombobox, mediaConstraintsText } from "../../../entities/media/index.js";
-import { can, useSession, useSessionRecovery } from "../../../entities/session/index.js";
+import { can, useSession } from "../../../entities/session/index.js";
 import {
   DropOverlay,
   UploadQueue,
@@ -11,11 +10,9 @@ import {
   useMediaUploads,
 } from "../../../features/upload-media/index.js";
 import {
-  adminQueryKeys,
   DEFAULT_MEDIA_SORT,
   errorDescription,
   technicalDetails,
-  useAdminClient,
 } from "../../../shared/api/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
 import {
@@ -35,7 +32,9 @@ import {
   normalizedMediaQuery,
 } from "../library-query.js";
 import { MediaGrid } from "../MediaGrid/index.js";
+import { MediaResults } from "../MediaResults/index.js";
 import { MediaToolbar } from "../MediaToolbar/index.js";
+import { useMediaBrowser } from "../media-browser.js";
 
 /** Multiple mode: an ordered selection confirmed once, for adding list items. */
 export interface MediaPickerSelection {
@@ -118,7 +117,6 @@ function PickerBody({
   onChoose,
   selection,
 }: PickerMode & { readonly label: string; readonly onCancel: () => void }) {
-  const client = useAdminClient();
   const session = useSession();
   const canWrite = can(session, "media:write");
   const [query, setQuery] = useState<CanonicalMediaQuery>({});
@@ -127,26 +125,7 @@ function PickerBody({
     disabled: !canWrite,
     onFiles: (files) => uploads.add(files, { tags: query.tag }),
   });
-  const listQuery = {
-    ...(query.q === undefined ? {} : { q: query.q }),
-    ...(query.sort === undefined ? {} : { sort: query.sort }),
-    ...(query.tag === undefined ? {} : { tags: query.tag }),
-    ...(query.type === undefined ? {} : { type: query.type }),
-  };
-  const media = useInfiniteQuery<
-    MediaListDto,
-    Error,
-    InfiniteData<MediaListDto>,
-    ReturnType<typeof adminQueryKeys.mediaList>,
-    string | undefined
-  >({
-    getNextPageParam: (page) => page.nextCursor,
-    initialPageParam: undefined as string | undefined,
-    placeholderData: keepPreviousData,
-    queryFn: ({ pageParam }) => client.listMedia(pageParam, listQuery),
-    queryKey: adminQueryKeys.mediaList(listQuery),
-  });
-  useSessionRecovery(media.error);
+  const { media, scope } = useMediaBrowser(query);
   const change = (next: MediaLibraryQuery) =>
     setQuery((current) => normalizedMediaQuery({ ...current, ...next }));
   const items = (media.data?.pages.flatMap((page) => page.items) ?? []).filter(
@@ -154,7 +133,11 @@ function PickerBody({
   );
   const filtered = query.q !== undefined || query.type !== undefined || query.tag !== undefined;
   // A page may hold only items pending deletion; stay quiet while more pages exist.
-  const empty = media.data !== undefined && items.length === 0 && !media.hasNextPage;
+  const empty =
+    media.data !== undefined &&
+    !media.isPlaceholderData &&
+    items.length === 0 &&
+    !media.hasNextPage;
   const clear = () => change({ q: undefined, tag: undefined, type: undefined });
 
   const [selected, setSelected] = useState<readonly MediaMetadataDto[]>([]);
@@ -271,47 +254,29 @@ function PickerBody({
             title="No matching media"
           />
         ) : undefined}
-        {items.length === 0 ? undefined : (
-          <MediaGrid
-            blocked={blocked}
-            busy={media.isPlaceholderData}
-            currentId={currentId}
-            items={items}
-            label={`Media choices for ${label}`}
-            mode={selection === undefined ? "choose" : "select"}
-            onOpen={(item) => (selection === undefined ? onChoose(item) : toggle(item))}
-            selection={positions}
-            usedIds={selection?.existingIds}
-            usedNote={`Already in ${label}`}
-          />
-        )}
-        {media.isFetchNextPageError ? (
-          <ErrorState
-            description={errorDescription(media.error)}
-            technicalDetails={technicalDetails(media.error)}
-          />
-        ) : undefined}
         {media.data === undefined ? undefined : (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p aria-live="polite" className="m-0 text-sm text-muted-foreground">
-              {`Showing ${items.length} ${items.length === 1 ? "item" : "items"}`}
-            </p>
-            {media.hasNextPage ? (
-              <Button
-                disabled={media.isFetchingNextPage}
-                onClick={() => media.fetchNextPage()}
-                variant="outline"
-              >
-                {media.isFetchingNextPage ? "Loading more…" : "Load more media"}
-              </Button>
-            ) : undefined}
-          </div>
+          <MediaResults items={items} media={media} scope={scope}>
+            {items.length === 0 ? undefined : (
+              <MediaGrid
+                blocked={blocked}
+                busy={media.isPlaceholderData}
+                currentId={currentId}
+                items={items}
+                label={`Media choices for ${label}`}
+                mode={selection === undefined ? "choose" : "select"}
+                onOpen={(item) => (selection === undefined ? onChoose(item) : toggle(item))}
+                selection={positions}
+                usedIds={selection?.existingIds}
+                usedNote={`Already in ${label}`}
+              />
+            )}
+          </MediaResults>
         )}
       </div>
       {selection === undefined ? undefined : (
         <DialogFooter className="items-center sm:justify-between">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <p aria-live="polite" className="m-0 text-sm" role="status">
+            <p aria-label="Selected media" aria-live="polite" className="m-0 text-sm" role="status">
               {selected.length === 0
                 ? `No items selected. You can select up to ${countText(capacity)}.`
                 : blocked === undefined

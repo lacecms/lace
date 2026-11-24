@@ -134,6 +134,26 @@ Shown for split credentials:
 
 Expected result: the remote admin at your Worker origin with its own administrator and empty remote content. Full details and options: [deploy the Worker to your account](lace-operations.md#deploy-the-worker-to-your-account).
 
+## Enable media thumbnails
+
+Add `"images": { "binding": "IMAGES" },` at the top level of
+`worker/wrangler.jsonc` and deploy with the project's pinned Wrangler.
+This also applies to existing Cloudflare projects after they install the
+matching CMS release. Upgrades preserve your Wrangler configuration.
+
+The Worker creates static WebP thumbnails in the existing private `MEDIA`
+bucket after upload and when Admin first requests absent derivatives. Media
+deletion and the minute cron clean up derivatives. Existing media adopt
+thumbnails when browsed. An absent binding or an unsupported source leaves
+a fallback for items without a stored thumbnail. Open the item in Media to
+see its original, including GIF animation.
+
+Review your account's transformation allowance and source constraints.
+Cloudflare counts unique transformations and documents separate limits for
+dimensions, animations and AVIF availability.
+[Images pricing](https://developers.cloudflare.com/images/pricing/) ·
+[Image limits and formats](https://developers.cloudflare.com/images/get-started/limits/)
+
 <!-- lace-site: starter existing -->
 
 ## Configure email (optional)

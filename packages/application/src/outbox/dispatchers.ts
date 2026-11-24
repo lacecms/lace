@@ -14,6 +14,8 @@ import {
   type SiteBuildWorkLease,
 } from "../ports/builds.js";
 import { DISPATCHER_LEASE_DURATION_MS } from "../shared/limits.js";
+import type { ThumbnailStorage } from "../ports/media-thumbnails.js";
+import { mediaThumbnailKey } from "../shared/media-thumbnail-key.js";
 
 type TimerHandle = unknown;
 
@@ -171,6 +173,7 @@ export interface MediaDeletionDispatcherOptions {
   readonly policy?: DispatcherRetryPolicy;
   readonly random?: () => number;
   readonly storage: ObjectStorage;
+  readonly thumbnails?: Pick<ThumbnailStorage, "delete">;
   readonly work: DispatcherLeasePort & MediaDeletionDispatchPort;
 }
 
@@ -226,6 +229,7 @@ export class MediaDeletionDispatcher {
       return;
     }
     try {
+      await this.options.thumbnails?.delete(mediaThumbnailKey(id));
       await this.options.storage.delete(media.storageKey);
       await this.options.work.completeMediaDeletion({
         completedAt: this.options.clock.now(),

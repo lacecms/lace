@@ -23,6 +23,8 @@
   ],
   // Create with `pnpm exec wrangler r2 bucket create {{PROJECT_NAME}}-media`.
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "{{PROJECT_NAME}}-media" }],
+  // Optional private Admin thumbnails. See docs/lace-cloudflare.md.
+  // "images": { "binding": "IMAGES" },
   // lace-site: starter existing
   // See docs/lace-cloudflare.md for protected draft preview. Add a separate private
   // bucket to r2_buckets: { "binding": "PREVIEW", "bucket_name": "{{PROJECT_NAME}}-preview" }.
@@ -47,7 +49,7 @@
   // "send_email": [{ "name": "EMAIL" }],
   // Resend works on Workers Free instead: LACE_EMAIL_PROVIDER "resend" plus the
   // LACE_RESEND_API_KEY secret.
-  // Scheduled outbox recovery; post-commit dispatch only reduces latency.
+  // Scheduled outbox recovery and thumbnail cleanup.
   "triggers": { "crons": ["* * * * *"] },
   // Optional public API reference: add "LACE_API_DOCS_ENABLED": "true" to vars.
   "vars": {

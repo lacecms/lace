@@ -330,6 +330,7 @@
                   "CONTENT_ROUTE_CONFLICT",
                   "LAST_ADMIN_PROTECTED",
                   "MEDIA_IN_USE",
+                  "MEDIA_THUMBNAIL_UNAVAILABLE",
                   "MEDIA_UPDATE_CONFLICT",
                   "INTERNAL_ERROR",
                   "INVALID_CREDENTIALS",
@@ -9939,6 +9940,140 @@
           }
         ],
         "summary": "Retry media deletion",
+        "tags": ["admin"]
+      }
+    },
+    "/api/v1/admin/media/{mediaId}/thumbnail": {
+      "get": {
+        "description": "Returns the stored or freshly generated static WebP thumbnail of an active media item to a browser session with content:read, including for unpublished media. A matching strong, weak or wildcard If-None-Match returns 304 only for an available thumbnail. Malformed validators are ignored.",
+        "operationId": "getApiV1AdminMediaByMediaIdThumbnail",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "mediaId",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/webp": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Static WebP thumbnail up to 320 pixels and 96 KiB",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "enum": ["private, no-cache"],
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "description": "Strong validator of the returned WebP bytes",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The cached thumbnail is still valid",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "enum": ["private, no-cache"],
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "description": "Strong validator of the returned WebP bytes",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Permission denied (AUTHORIZATION_DENIED)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Media is not active or does not exist"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The request did not satisfy the API contract (VALIDATION_FAILED)"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thumbnail unavailable (MEDIA_THUMBNAIL_UNAVAILABLE)",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "enum": ["no-store"],
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Read a media thumbnail",
         "tags": ["admin"]
       }
     },

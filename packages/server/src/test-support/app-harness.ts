@@ -6,6 +6,7 @@ import {
   ContentLinkUseCases,
   ContentReferenceUseCases,
   MediaUseCases,
+  MediaThumbnails,
   opaqueTokenSecret,
   unconfiguredEmailSender,
 } from "@lacecms/application";
@@ -32,6 +33,7 @@ import type {
   ContentEntryReadPort,
   PublicContentReadPort,
   SecurityService,
+  ThumbnailStorage,
 } from "@lacecms/application";
 
 type App = ReturnType<typeof createLaceApp>;
@@ -64,6 +66,7 @@ type FixtureOptions = Partial<
   models?: ConfigInput["content"];
   blocks?: ConfigInput["blocks"];
   security?: Partial<SecurityService>;
+  thumbnailStorage?: ThumbnailStorage;
   sessionId?: string;
   linkReads?: ConstructorParameters<typeof ContentLinkUseCases>[0];
   listQueryLimits?: ConstructorParameters<typeof ContentUseCases>[0]["listQueryLimits"];
@@ -104,6 +107,7 @@ export async function fixture({
   contentReads,
   exportBuildContentPage,
   importActors,
+  thumbnailStorage,
 }: FixtureOptions = {}) {
   const config = await defineConfig({
     blocks: [
@@ -216,6 +220,13 @@ export async function fixture({
     logger: { log: (entry) => logs.push(entry) },
     maxBodyBytes,
     media,
+    ...(thumbnailStorage && {
+      thumbnails: new MediaThumbnails({
+        media: store,
+        originals: storage,
+        storage: thumbnailStorage,
+      }),
+    }),
     publicBaseUrl,
     publicContent: {
       exportBuildContentPage: async (input) => {

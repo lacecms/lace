@@ -10,6 +10,7 @@ import type { ByteStream, PreviewBlobStorage, PreviewByteRange } from "@lacecms/
 import { Readable } from "node:stream";
 import {
   isMissingObject,
+  isPreconditionFailure,
   nodeS3ClientConfig,
   NodeObjectStorageError,
   streamFromNode,
@@ -17,13 +18,6 @@ import {
 import type { NodeMinioSettings } from "./minio-storage.js";
 
 type PreviewS3Client = Pick<S3Client, "send">;
-function isPreconditionFailure(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 412
-  );
-}
 
 async function* exactLength(body: ByteStream, expected: number) {
   let transmitted = 0;

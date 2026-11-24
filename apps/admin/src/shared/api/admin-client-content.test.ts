@@ -53,14 +53,15 @@ test("validates credentialed shared-contract responses and keeps cursors opaque"
     "admin",
     "media",
     "list",
-    { q: "hero", sort: null, tags: null, type: "image/png" },
+    { limit: null, q: "hero", sort: null, tags: null, type: "image/png" },
   ]);
   expect(adminQueryKeys.mediaList({ tags: ["travel", "cover"] })).toEqual([
     "admin",
     "media",
     "list",
-    { q: null, sort: null, tags: ["cover", "travel"], type: null },
+    { limit: null, q: null, sort: null, tags: ["cover", "travel"], type: null },
   ]);
+  expect(adminQueryKeys.mediaList({ limit: 24 })).not.toEqual(adminQueryKeys.mediaList({}));
   expect(adminQueryKeys.mediaTags("pro")).toEqual(["admin", "media", "tags", "pro"]);
   expect(adminQueryKeys.mediaTags(undefined).slice(0, 3)).toEqual(adminQueryKeys.mediaTagsPrefix);
   expect(adminQueryKeys.entryOverview("posts")).toEqual(["admin", "entries", "posts", "overview"]);

@@ -12,6 +12,7 @@ import type {
   SiteBuildUseCases,
   TokenSecurityPort,
   MediaUseCases,
+  MediaThumbnails,
   PublicContentReadPort,
   EmailSender,
   SensitiveRateLimiter,
@@ -142,6 +143,7 @@ export interface LaceAppInput {
   readonly logger: ServerLogger;
   readonly maxBodyBytes: number;
   readonly media?: MediaUseCases;
+  readonly thumbnails?: MediaThumbnails;
   readonly publicBaseUrl?: string;
   readonly publicContent: PublicContentReadPort;
   readonly rateLimiter: RequestRateLimiter;

@@ -16,6 +16,7 @@ export * from "./shared/limits.js";
 export * from "./shared/actors.js";
 export * from "./shared/text.js";
 export { contentModelRoute } from "./shared/model-route.js";
+export { MEDIA_THUMBNAIL_PREFIX, mediaThumbnailKey } from "./shared/media-thumbnail-key.js";
 export {
   actorPermissions,
   effectiveActorPermissions,
@@ -32,6 +33,7 @@ export * from "./ports/references.js";
 export * from "./content/reference-reads.js";
 export * from "./ports/content.js";
 export * from "./ports/media.js";
+export * from "./ports/media-thumbnails.js";
 export * from "./ports/builds.js";
 export * from "./ports/security.js";
 export * from "./ports/preview.js";
@@ -69,6 +71,8 @@ export * from "./content/use-cases.js";
 export * from "./media/use-cases.js";
 export * from "./media/types.js";
 export * from "./media/limits.js";
+export * from "./media/thumbnails.js";
+export { reconcileMediaThumbnails } from "./media/thumbnail-reconciliation.js";
 export { detectMediaMimeType, sanitizeMediaFilename, collectMediaBytes } from "./media/upload.js";
 export { normalizeMediaMetadataPatch } from "./media/metadata.js";
 export { CompleteImageContainerInspector } from "./media/image-container.js";

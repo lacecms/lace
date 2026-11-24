@@ -49,7 +49,7 @@ test("an image with alt text shows its thumbnail, filename and facts", async () 
   expect(await screen.findByText(/cover\.png \| PNG · 640 × 479 px$/u)).toBeInTheDocument();
   expect(document.querySelector("img")).toHaveAttribute(
     "src",
-    "/api/v1/admin/media/media-1/preview",
+    "/api/v1/admin/media/media-1/thumbnail",
   );
 });
 

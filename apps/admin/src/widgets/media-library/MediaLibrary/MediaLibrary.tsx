@@ -1,9 +1,8 @@
-import type { MediaListDto, MediaMetadataDto } from "@lacecms/contracts";
-import { type InfiniteData, keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
+import type { MediaMetadataDto } from "@lacecms/contracts";
 import { Upload } from "lucide-react";
 import { useRef, useState } from "react";
 import { mediaConstraintsText } from "../../../entities/media/index.js";
-import { can, useSession, useSessionRecovery } from "../../../entities/session/index.js";
+import { can, useSession } from "../../../entities/session/index.js";
 import {
   DropOverlay,
   UploadQueue,
@@ -11,11 +10,9 @@ import {
   useMediaUploads,
 } from "../../../features/upload-media/index.js";
 import {
-  adminQueryKeys,
   DEFAULT_MEDIA_SORT,
   errorDescription,
   technicalDetails,
-  useAdminClient,
 } from "../../../shared/api/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
 import { EmptyState } from "../../../shared/ui/EmptyState/index.js";
@@ -30,7 +27,9 @@ import {
 import { MediaDetailsPanel } from "../MediaDetailsPanel/index.js";
 import { MediaGrid } from "../MediaGrid/index.js";
 import { MediaListTable } from "../MediaListTable/index.js";
+import { MediaResults } from "../MediaResults/index.js";
 import { MediaToolbar } from "../MediaToolbar/index.js";
+import { useMediaBrowser } from "../media-browser.js";
 
 /**
  * The `/media` library: a searched, filtered, and sorted grid or list with
@@ -46,13 +45,6 @@ export function MediaLibrary({
   readonly query: MediaLibraryQuery;
 }) {
   const query = normalizedMediaQuery(rawQuery);
-  const listQuery = {
-    ...(query.q === undefined ? {} : { q: query.q }),
-    ...(query.sort === undefined ? {} : { sort: query.sort }),
-    ...(query.tag === undefined ? {} : { tags: query.tag }),
-    ...(query.type === undefined ? {} : { type: query.type }),
-  };
-  const client = useAdminClient();
   const session = useSession();
   const canWrite = can(session, "media:write");
   const [updates, setUpdates] = useState<Readonly<Record<string, MediaMetadataDto>>>({});
@@ -63,20 +55,7 @@ export function MediaLibrary({
     disabled: !canWrite,
     onFiles: (files) => uploads.add(files, { tags: query.tag }),
   });
-  const media = useInfiniteQuery<
-    MediaListDto,
-    Error,
-    InfiniteData<MediaListDto>,
-    ReturnType<typeof adminQueryKeys.mediaList>,
-    string | undefined
-  >({
-    getNextPageParam: (page) => page.nextCursor,
-    initialPageParam: undefined as string | undefined,
-    placeholderData: keepPreviousData,
-    queryFn: ({ pageParam }) => client.listMedia(pageParam, listQuery),
-    queryKey: adminQueryKeys.mediaList(listQuery),
-  });
-  useSessionRecovery(media.error);
+  const { media, scope } = useMediaBrowser(query);
   const change = (next: MediaLibraryQuery) =>
     onQueryChange(normalizedMediaQuery({ ...query, ...next }));
 
@@ -88,6 +67,11 @@ export function MediaLibrary({
       ? undefined
       : (items.find((item) => item.id === selectedId) ?? updates[selectedId]);
   const filtered = query.q !== undefined || query.type !== undefined || query.tag !== undefined;
+  const empty =
+    media.data !== undefined &&
+    !media.isPlaceholderData &&
+    items.length === 0 &&
+    !media.hasNextPage;
   const open = (item: MediaMetadataDto, element: HTMLElement) => {
     opener.current = element;
     setSelectedId(item.id);
@@ -156,7 +140,7 @@ export function MediaLibrary({
           technicalDetails={technicalDetails(media.error)}
         />
       ) : undefined}
-      {media.data !== undefined && items.length === 0 && !filtered ? (
+      {empty && !filtered ? (
         <EmptyState
           description={
             canWrite
@@ -166,7 +150,7 @@ export function MediaLibrary({
           title="No media yet"
         />
       ) : undefined}
-      {media.data !== undefined && items.length === 0 && filtered ? (
+      {empty && filtered ? (
         <EmptyState
           action={
             <Button
@@ -180,34 +164,14 @@ export function MediaLibrary({
           title="No matching media"
         />
       ) : undefined}
-      {items.length === 0 ? undefined : (
-        <div className="grid gap-3">
-          {view === "grid" ? (
+      {media.data === undefined || (empty && media.data.pages.length === 1) ? undefined : (
+        <MediaResults items={items} media={media} scope={scope}>
+          {items.length === 0 ? undefined : view === "grid" ? (
             <MediaGrid busy={busy} items={items} label="Media library" onOpen={open} />
           ) : (
             <MediaListTable busy={busy} items={items} label="Media library" onOpen={open} />
           )}
-          {media.isFetchNextPageError ? (
-            <ErrorState
-              description={errorDescription(media.error)}
-              technicalDetails={technicalDetails(media.error)}
-            />
-          ) : undefined}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p aria-live="polite" className="m-0 text-sm text-muted-foreground">
-              {`Showing ${items.length} ${items.length === 1 ? "item" : "items"}`}
-            </p>
-            {media.hasNextPage ? (
-              <Button
-                disabled={media.isFetchingNextPage}
-                onClick={() => media.fetchNextPage()}
-                variant="outline"
-              >
-                {media.isFetchingNextPage ? "Loading more…" : "Load more media"}
-              </Button>
-            ) : undefined}
-          </div>
-        </div>
+        </MediaResults>
       )}
       <MediaDetailsPanel
         canWrite={canWrite}

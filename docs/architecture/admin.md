@@ -64,7 +64,11 @@ The primary routes are `/login`; the public `/accept-invite`,
 
 The library keeps search, filters, sort and view in the URL. Its picker reuses
 the grid, offers active items only and resets its local query on opening.
-Thumbnails load lazily through the authenticated admin preview endpoint.
+The library and picker start with 24 items and append by explicit cursor
+activation. Grid and list share the loaded pages. Grid, list, picker and editor
+field summaries load the same static WebP lazily through the authenticated
+admin thumbnail endpoint and keep a visible fallback on failure. Opening the
+library detail panel loads the original preview, including animation for GIFs.
 Uploads validated for type and size in the browser use `XMLHttpRequest` for
 byte progress; other requests use `fetch`, with shared error mapping and response
 validation. A media field resolves its stored ID through the detail read, not

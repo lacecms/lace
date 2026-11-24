@@ -15,6 +15,7 @@ async function main(): Promise<void> {
       await runtime.maintainOAuth();
       await runtime.maintainOperations();
       await runtime.deletionDispatcher.runOnce();
+      await runtime.maintainThumbnails();
     },
     onError: () => console.error("Lace dispatch cycle failed."),
   });

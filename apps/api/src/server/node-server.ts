@@ -240,7 +240,10 @@ export async function startNodeServer(input: {
   let scheduled: ReturnType<typeof setTimeout> | undefined;
   let current = Promise.resolve();
   const dispatch = () => {
-    current = input.runtime.deletionDispatcher.runOnce().catch(() => undefined);
+    current = input.runtime.deletionDispatcher
+      .runOnce()
+      .catch(() => undefined)
+      .then(() => input.runtime.maintainThumbnails());
     void current.finally(() => {
       if (!stopped) scheduled = setTimeout(dispatch, 1_000);
     });

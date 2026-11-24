@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 import {
@@ -41,8 +41,13 @@ test("media route shows a paged grid and details to a viewer without write contr
   expect(await within(grid).findByRole("button", { name: /later\.png/ })).toHaveTextContent(
     "Deletion failed",
   );
-  expect(listMedia).toHaveBeenLastCalledWith("opaque+/=", {});
-  await user.click(within(grid).getByRole("button", { name: "cover.png" }));
+  expect(listMedia).toHaveBeenLastCalledWith("opaque+/=", { limit: 24 });
+  const tile = within(grid).getByRole("button", { name: "cover.png" });
+  const image = tile.querySelector("img")!;
+  expect(image).toHaveAttribute("src", "/api/v1/admin/media/media-1/thumbnail");
+  fireEvent.error(image);
+  expect(tile.querySelector("img")).toBeNull();
+  await user.click(tile);
   const panel = await screen.findByRole("dialog", { name: "cover.png" });
   expect(within(panel).getByRole("img", { name: "Preview of cover.png" })).toHaveAttribute(
     "src",

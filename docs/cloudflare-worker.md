@@ -67,6 +67,13 @@ verified by a runtime-neutral structural inspector for JPEG, PNG, GIF, WebP,
 and AVIF. The inspector rejects malformed or trailing data and reports displayed
 (orientation-applied) dimensions, matching the Node sharp inspector.
 
+The optional `IMAGES` binding generates the Admin WebP from private original
+bytes. See the [Cloudflare setup guide](../apps/docs/src/content/docs/en/latest/deployment/cloudflare.md#enable-media-thumbnails).
+Derivatives live under `media-thumbnails/v1/`; the minute cron checks at most
+eight keys per pass with a single authoritative D1 ownership query. The scan
+cursor lives in the same private bucket outside the recipe prefix. The original
+binary route and public site use the original media bytes.
+
 ## Outbox recovery
 
 A cron trigger (`* * * * *`) runs a scheduled invocation every minute. Each

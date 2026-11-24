@@ -38,6 +38,10 @@ test("choose mode marks the current tile and does not announce a details popup",
   );
   const current = screen.getByRole("button", { name: "later.png" });
   expect(current).toHaveAttribute("aria-current", "true");
+  expect(current.querySelector("img")).toHaveAttribute(
+    "src",
+    "/api/v1/admin/media/media-2/thumbnail",
+  );
   expect(current).not.toHaveAttribute("aria-haspopup");
   expect(screen.getByRole("button", { name: "cover.png" })).not.toHaveAttribute("aria-current");
   await user.click(screen.getByRole("button", { name: "cover.png" }));

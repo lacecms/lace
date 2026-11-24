@@ -179,6 +179,7 @@ export function createCapabilities(input: LaceAppInput) {
     mcpEnabled: input.mcpEnabled ?? false,
     media,
     mediaDto,
+    thumbnails: input.thumbnails,
     oauthConnections: input.oauthConnections,
     publicBaseUrl: input.publicBaseUrl,
     publicContent: input.publicContent,

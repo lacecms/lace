@@ -53,6 +53,8 @@ export interface CreateMediaUseCaseInput {
   readonly actor: Actor;
   readonly body: ByteStream;
   readonly filename: string;
+  /** Receives only the identity after the original and metadata are known committed. */
+  readonly onCommitted?: (id: MediaId) => void;
 }
 
 export interface ListMediaUseCaseInput {
