@@ -22,4 +22,4 @@ None.
 
 ## Impact
 
-Touches `.github/workflows/ci.yml`, shared CI setup, CI-facing test and build orchestration, and the contributor verification guide. The relevant architecture is [§4.8](../../../docs/architecture/README.md#48-spec-driven-delivery) and [§20](../../../docs/architecture/workspace.md#20-testing-strategy). The [packed consumer acceptance requirements](../../specs/generated-project-acceptance/spec.md) continue to apply.
+Touches `.github/workflows/ci.yml`, shared CI setup, CI-facing test and build orchestration, and the contributor verification guide. The relevant architecture is [§4.8](../../../../docs/architecture/README.md#48-spec-driven-delivery) and [§20](../../../../docs/architecture/workspace.md#20-testing-strategy). The [packed consumer acceptance requirements](../../../specs/generated-project-acceptance/spec.md) continue to apply.
