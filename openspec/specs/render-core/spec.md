@@ -117,6 +117,13 @@ The render core SHALL give block components an image describer that takes a medi
 - **WHEN** an entry without resolved media describes a media identifier
 - **THEN** the description has the media URL builder's URL and no dimensions, media type or build source URL
 
+### Requirement: Image descriptions carry optional thumbnail access
+When resolved media offers a build thumbnail reader, the image description SHALL carry that same opaque reader with the public image attributes. Computing the description SHALL never invoke it or access the network. Media without the reader SHALL yield a description without one.
+
+#### Scenario: A gallery image and a poster describe the same media
+- **WHEN** both describe a resolved item that offers thumbnail access
+- **THEN** their descriptions carry the same reader with their own usage alt text, and describing either image makes no thumbnail request
+
 ### Requirement: Block components receive the block envelope
 The render core SHALL give each prepared block's props the block's anchor and its normalized class name when the block has them, and SHALL leave both props out otherwise. It SHALL parse the block's settings against the definition's declared settings with every declared default applied, treating missing settings as an empty record, and SHALL type the parsed settings from the definition so that every declared setting key is present; a definition without settings SHALL yield an empty record. Preparation SHALL fail with `invalid_block_envelope` when an anchor is not a valid block anchor, when a class name does not normalize to a valid block class name, or when settings fail validation (including keys the definition does not declare); the failure SHALL name the model key, entry identifier, block key and the field path (`anchor`, `className`, or `settings` followed by the setting key), and SHALL keep a validation failure as its cause.
 

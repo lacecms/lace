@@ -35,12 +35,12 @@ The generated root `README.md` is a short index of requirements, layout and thes
 
 ## Prerequisites and generation
 
-Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. See [tested versions](https://github.com/lacecms/lace/blob/main/docs/compatibility.md#minimum-requirements-and-tested-versions) for verified toolchains. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.52.0` and Lace `1.0.0` packages and images. Follow the [RC5 upgrade procedure](#upgrading-from-rc5). The stable npm channel is `latest`. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
+Use Node `>=24.12.0`, pnpm `>=12` and Docker Compose. See [tested versions](https://github.com/lacecms/lace/blob/main/docs/compatibility.md#minimum-requirements-and-tested-versions) for verified toolchains. Obtain compatible Lace packages, generator and API/builder image tags from the same release. This project uses ownership template `0.53.0` and Lace `1.1.0` packages and images. Follow the [1.0.0 upgrade procedure](#upgrade-the-cms). The stable npm channel is `latest`. These coordinates become downloadable only after owner publication. Before publication, repository verification uses the exact locally prepared artifacts; ordinary consumers must wait for publication rather than patch dependency references.
 
 After the owner publishes the complete compatible release set, generate and install:
 
 ```bash
-pnpm create lace@1.0.0 my-site
+pnpm create lace@1.1.0 my-site
 cd my-site
 pnpm install
 pnpm env:prepare
@@ -305,7 +305,13 @@ Settings → Site status → **CMS version** identifies the running API platform
 
 Schedule downtime, prevent editor writes, stop API/dispatcher and any builder, hook receiver or scheduled process, and wait for in-flight work to settle. Keep the previous static release available separately. `docker compose stop api dispatcher builder` applies to a configured site; omit `builder` in no-site mode. Never use `down -v` for backup or rotation.
 
-Create a private directory outside the application and repository, restrict permissions and record the consistency point, release inventory, tool versions, object count/checksums and capture time. Use SQLite's backup API (or the SQLite CLI `.backup` operation) against the stopped database. A raw main-file copy can omit committed WAL data. If archiving filesystem state instead, preserve the entire stopped `.lace/data` directory including SQLite journals. Copy **all media objects through the storage server’s S3 API** with an operator S3 client and the configured bucket; preserve object keys, bytes and metadata. Do not assume a database backup includes media. Record checksums for each referenced object and detect missing or altered bytes.
+Create a private directory outside the application and repository, restrict permissions and record the consistency point, release inventory, tool versions, object count/checksums and capture time. Use SQLite's backup API (or the SQLite CLI `.backup` operation) against the stopped database. A raw main-file copy can omit committed WAL data. If archiving filesystem state instead, preserve the entire stopped `.lace/data` directory including SQLite journals. Copy **all original media objects through the storage server’s S3 API** with an operator S3 client and the configured bucket. Preserve object keys, bytes and metadata. Record checksums for each referenced object and detect missing or altered bytes.
+
+Admin thumbnail WebPs are derived from the original objects and metadata.
+Original-only S3 or R2 backups can omit `media-thumbnails/`. On the restored
+installation, open Media to regenerate missing derivatives. On Cloudflare,
+enable the optional `IMAGES` binding in `worker/wrangler.jsonc` to generate
+new derivatives.
 
 Capture `lace.config.ts`, `package.json`, `pnpm-lock.yaml`, `.lace/manifest.json`, the user-owned site source and deployment configuration at the same point. Store `.env`, auth credentials and backups separately in private storage; SQL backups contain password/token hashes and sessions. Encrypt and restrict access according to your operating policy. Resume the original services only after the coordinated capture completes; verify sign-in, readiness, media and the served release.
 
@@ -383,11 +389,13 @@ Keep SMTP passwords and API keys in the private `.env` or as Worker secrets (`pn
 
 ## Accounts and invitations
 
-After setup, add people from Admin → Users → Invite user with an email address and a role. Lace never asks an administrator for another person's password: the invitee opens a single-use link, valid for 72 hours, and chooses their own password. Pending invitations can be resent (which replaces the link) or revoked. When email is configured the link is emailed; otherwise, or when delivery fails, the invite dialog shows the link once so you can pass it on another way. Links carry their token after `#`, so it never reaches server logs.
+After setup, use **Admin → Users → Create user** with an email address and a role to create an active account immediately. Lace emails a single-use link to set the first password, valid for one hour. If email is disabled or sending fails, copy the link from the dialog and share it privately. **Send password reset** on the user's row issues a fresh link when needed.
+
+**Invite user** creates a pending invitation with an email address and role. The account is created when the invitee opens the single-use 72-hour link and chooses a password. Pending invitations can be resent with a new link or revoked. If the email was not sent, the dialog shows the link once for private handoff. First-password, invitation and reset tokens travel after `#` in these links.
 
 Anyone can request a password reset from the sign-in screen ("Forgot password?"); the answer is the same whether or not the address has an account, and the one-hour link signs the account out everywhere once used. Administrators can also send a reset or sign a user out everywhere from the Users list, and disabling an account ends its sessions. Every signed-in user can change their display name and password and review or end their sessions under Account in the user menu.
 
-Invitations and resets need no step beyond `pnpm db:migrate`; deploy the API and admin artifacts together.
+Deploy the API and admin artifacts together. Direct creation uses the existing account and password-reset tables.
 
 ## Configuration, routes, renderers and styling
 
@@ -745,35 +753,35 @@ redaction and disabling. Unpublication and deletion remain forbidden.
 Tags are admin-only ASCII letters, digits and hyphens, lowercased with surrounding
 spaces trimmed; tags-only edits request no build.
 
-## Upgrading from RC5
+## Upgrade the CMS
 
-Start with a synchronized `0.1.0-rc5` installation and ownership template
-`0.50.0`. Record its release, site mode and path, project/volume or D1/R2
-identities, original media checksums, a draft, its published version and
-the last served build. Keep preview disabled through the cutover.
+Start with a fully migrated and synchronized `1.0.0` installation on template
+`0.52.0`. RC5 operators first follow the
+[published 1.0.0 upgrade procedure](https://github.com/lacecms/lace/blob/v1.0.0/docs/compatibility.md#upgrading-from-rc5).
 
-1. Quiesce writers, builders and scheduled work. Take a coordinated backup of
-   the database, objects, configuration, source, lockfiles and managed manifest.
-   Restore and verify a private RC5 copy. On Node retain the old storage image
-   and entire stopped volume as described in [Switch the object storage image](#switch-the-object-storage-image).
-2. Generate a pristine 1.0.0 target of the same project name, site mode/path
-   and Cloudflare choice. Run the 1.0.0 CLI from the working project with
-   `pnpm dlx @lacecms/cli@1.0.0 upgrade --template <target>`. Resolve managed
-   conflicts, rerun the plan and apply with `--apply`. Keep the README, site,
-   ignored environment and operator configuration. Preserve the RC5 ingress.
-3. Install matching root and site packages and image overrides. Update SDK,
-   Astro/render and installed block components with conflict review. Refresh
-   and retain the site lockfile. On Node follow the SILO storage switch.
-4. With conflicting services stopped, run `pnpm db:migrate` and
-   `pnpm content:sync` for Node. For local D1 use the generated `cf:db:migrate`
-   and `cf:content:sync` commands. For remote D1 select the verified account,
-   binding and operator file with `lace db migrate --target cloudflare-remote
---operator-env .lace/cloudflare-operator.env` and the matching
-   `lace content sync` command. RC5 already has the first two schema steps.
-   Five forward migrations preserve content in place. Check the ledger and
-   readiness before restarting writers.
-5. Rebuild and verify original sign-in, roles, draft and published values,
-   gallery, links, old and new media bytes and served output. Repeating migration
-   and planning should report current state. On failure retain maintenance and
-   restore the matching RC5 runtime, database, object store, files and static
-   release. Verify the restored site before reopening traffic.
+1. Pause writers, builders and scheduled work. Back up the database, objects,
+   configuration, source, lockfiles, managed manifest and last served static
+   output together. Verify a private recovery copy.
+2. Generate a pristine 1.1.0 target with the same project name, mode and
+   Cloudflare choice. Run `pnpm dlx @lacecms/cli@1.1.0 upgrade --template <target>`,
+   review conflicts, then rerun with `--apply`. Preserve the existing storage
+   and operator configuration. Install the matching CMS packages and image
+   overrides.
+3. With conflicting services stopped, run `pnpm db:migrate` on Node and
+   `pnpm cf:db:migrate` for local D1. For remote D1 use
+   `pnpm exec lace db migrate --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`.
+   A fully migrated 1.0.0 database has zero pending migrations. Check the
+   existing configuration with the matching content sync command.
+4. Start or redeploy the CMS. Check original sign-in, roles, draft and published
+   values, gallery, links and media bytes. Existing images acquire thumbnails on
+   request.
+5. Update SDK and Astro packages together after the CMS is ready, rebuild the
+   site and verify the served output. On failure, restore the coordinated
+   1.0.0 runtime, database, media, configuration, project files and static
+   output. Verify the recovery before reopening traffic.
+
+<!-- lace-cloudflare: on -->
+
+[Enable media thumbnails](lace-cloudflare.md#enable-media-thumbnails) by
+adding the optional Images binding to your Worker configuration.
+<!-- lace-cloudflare: end -->

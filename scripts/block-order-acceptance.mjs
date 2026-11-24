@@ -1,7 +1,6 @@
 import { createRequire } from "node:module";
 import { loadBrowser, visible } from "./acceptance-browser.mjs";
 import { moveFirstHeroWithKeyboard } from "../apps/admin/e2e/helpers/block-order-keyboard.ts";
-import { readCompleteBuildExport } from "../packages/test-utils/dist/index.js";
 
 const { parseHTML } = createRequire(new URL("../apps/docs/package.json", import.meta.url))(
   "linkedom",
@@ -37,6 +36,7 @@ export function renderedBlockKeys(html, entryId) {
  * the published export.
  */
 export async function blockOrderJourney(context, session, operations) {
+  const { readCompleteBuildExport } = await import("../packages/test-utils/dist/index.js");
   const { request, secretValues, waitBuild, workspace } = operations;
   const { base, cookie } = session;
   const servedBase = `http://127.0.0.1:${context.httpPort}/`;

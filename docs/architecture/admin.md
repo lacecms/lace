@@ -46,9 +46,12 @@ The primary routes are `/login`; the public `/accept-invite`,
   from the address bar and keep it only in component state, never in the query
   string, router state, query cache or browser storage
   ([admin-account-screens](../../openspec/specs/admin-account-screens/spec.md)).
-- No admin screen collects another person's password. A link or token shown
-  once (an undelivered invitation or reset, a new build or import token) lives
-  only in its dialog's state
+- Users offers **Create user** and **Invite user** through `users:manage`.
+  Direct creation lists the account as Active immediately and sends a link
+  to set its first password. Without delivery, the dialog shows the link for
+  private handoff. Each user chooses their own password.
+- Links or tokens shown once (an undelivered invitation, first-password link
+  or reset, a new build or import token) live only in their dialog state
   ([admin-users-and-settings](../../openspec/specs/admin-users-and-settings/spec.md)).
 - Settings shows administrators a read-only MCP section in both states, read
   from the authenticated settings status; "enabled" describes configuration,
@@ -64,7 +67,11 @@ The primary routes are `/login`; the public `/accept-invite`,
 
 The library keeps search, filters, sort and view in the URL. Its picker reuses
 the grid, offers active items only and resets its local query on opening.
-Thumbnails load lazily through the authenticated admin preview endpoint.
+The library and picker start with 24 items and append by explicit cursor
+activation. Grid and list share the loaded pages. Grid, list, picker and editor
+field summaries load the same static WebP lazily through the authenticated
+admin thumbnail endpoint and keep a visible fallback on failure. Opening the
+library detail panel loads the original preview, including animation for GIFs.
 Uploads validated for type and size in the browser use `XMLHttpRequest` for
 byte progress; other requests use `fetch`, with shared error mapping and response
 validation. A media field resolves its stored ID through the detail read, not

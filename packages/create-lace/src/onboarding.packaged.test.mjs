@@ -7,6 +7,10 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
+import {
+  assertBuildThumbnailReads,
+  serveBuildThumbnail,
+} from "../../../tests/support/build-thumbnail-fixture.mjs";
 import { generateProject } from "../dist/index.js";
 
 const exec = promisify(execFile);
@@ -55,9 +59,11 @@ const originals = new Map(
   ),
 );
 
-/** Serves the build export and media originals like the Lace API, honoring entity tags. */
+/** Serves the conditional export and originals for a site without available thumbnails. */
 async function exportServer(token, current) {
-  const requests = [];
+  const exportValidators = [];
+  const thumbnailRequests = [];
+  const thumbnails = { token, thumbnails: new Map(), requests: thumbnailRequests };
   const server = createServer((request, response) => {
     const media = /^\/api\/v1\/public\/media\/([\w-]+)$/u.exec(request.url ?? "");
     if (media !== null && originals.has(media[1])) {
@@ -65,7 +71,7 @@ async function exportServer(token, current) {
       response.end(originals.get(media[1]));
       return;
     }
-    requests.push(request.headers["if-none-match"] ?? null);
+    if (serveBuildThumbnail(request, response, thumbnails)) return;
     if (
       request.url !== "/api/v1/public/build-export" ||
       request.headers.authorization !== `Bearer ${token}`
@@ -74,6 +80,7 @@ async function exportServer(token, current) {
       response.end(JSON.stringify({ error: { code: "AUTHORIZATION_DENIED", message: "Denied" } }));
       return;
     }
+    exportValidators.push(request.headers["if-none-match"] ?? null);
     const exported = current();
     const etag = `"${exported.version}"`;
     if (request.headers["if-none-match"] === etag) {
@@ -88,7 +95,8 @@ async function exportServer(token, current) {
     server.listen(0, "127.0.0.1", resolve);
   });
   return {
-    requests,
+    exportValidators,
+    thumbnailRequests,
     url: `http://127.0.0.1:${server.address().port}/`,
     close: () => new Promise((resolve) => server.close(resolve)),
   };
@@ -147,7 +155,12 @@ test("generated Astro builds every built-in block from one export and rejects un
     });
   try {
     await build();
-    expect(server.requests).toEqual([null]);
+    expect(server.exportValidators).toEqual([null]);
+    assertBuildThumbnailReads(server.thumbnailRequests, {
+      "hero-media": 404,
+      "note-media": 404,
+      "post-media": 404,
+    });
     const home = await readFile(join(generated.path, "site/dist/index.html"), "utf8");
     const post = await readFile(
       join(generated.path, "site/dist/blog/first-post/index.html"),
@@ -180,6 +193,7 @@ test("generated Astro builds every built-in block from one export and rejects un
     expect(post).toMatch(
       /<img [^>]*data-lace-part="media"[^>]*srcset="\/_astro\/[^"]+\.webp 800w"/u,
     );
+    expect(post).not.toContain("background-image:url");
     const output = await outputText(join(generated.path, "site/dist"));
     expect(output).not.toContain(token);
     expect(output).not.toContain("DRAFT ONLY");
@@ -261,10 +275,12 @@ test("generated Astro dev revalidates the export so publications appear on reloa
     served = structuredClone(exported);
     served.version = 8;
     served.entries[0].blocks[0].data.heading = "Published again";
-    expect((await page("/")).text, JSON.stringify(server.requests)).toContain("Published again");
+    expect((await page("/")).text, JSON.stringify(server.exportValidators)).toContain(
+      "Published again",
+    );
     expect((await page("/blog/first-post/")).text).toContain("Content belongs in the CMS");
-    expect(server.requests.slice(0, 3)).toEqual([null, '"7"', '"7"']);
-    expect(server.requests.at(-1)).toBe('"8"');
+    expect(server.exportValidators.slice(0, 3)).toEqual([null, '"7"', '"7"']);
+    expect(server.exportValidators.at(-1)).toBe('"8"');
   } finally {
     child.kill();
     await server.close();

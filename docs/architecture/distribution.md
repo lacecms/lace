@@ -124,10 +124,11 @@ Compatibility exists at three boundaries: the database schema version, the
 `lace.config.ts` API version, and the REST/build-export contract version.
 
 - Database changes use the shared baseline and ordered forward migrations.
-  Fully migrated and synchronized RC5 (template 0.50.0) is the supported
-  prerelease origin for 1.0 on Node and Cloudflare. Unknown ledger entries
+  Fully migrated and synchronized 1.0.0 (template 0.52.0) is the direct
+  upgrade origin for 1.1.0 on Node and Cloudflare. The 1.1.0 migration chain
+  is identical. RC5 is the prerelease origin for the published 1.0.0 step
+  ([ADR 0035](../adr/0035-stable-rc5-upgrade-origin.md)). Unknown ledger entries
   are refused. Recovery restores the matching database, objects and engine.
-  [ADR 0035](../adr/0035-stable-rc5-upgrade-origin.md)
 - Content blocks and field objects carry `schema_version`. Stored block data is
   migrated only by configuration synchronization through the block's declared
   migrations (§8, §11, [ADR 0007](../adr/0007-schema-evolution-during-sync.md)),
@@ -139,7 +140,8 @@ Compatibility exists at three boundaries: the database schema version, the
   a meaning consumers rely on needs a new `formatVersion` or `/api/v2`
   ([rest-contracts](../../openspec/specs/rest-contracts/spec.md)).
 - Within one major line the API must be the same or a newer minor than the
-  site's `@lacecms/sdk`.
+  site's `@lacecms/sdk`. Preserve the source compatibility of the published
+  `LaceClient` interface for custom implementations within the major line.
 - Rich-text grammar, block `schemaVersion` matching and block data validation
   stay strict by design: they are safety and rendering contracts, not transport
   shapes. [Compatibility](../compatibility.md#public-contract-evolution) details

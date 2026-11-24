@@ -2,7 +2,7 @@
 title: Groups, lists and form layout
 description: Model nested values with groups and lists, organize long editor forms, and add reusable list layouts and choice cards.
 kind: guide
-verifiedAgainst: 1.0.0
+verifiedAgainst: 1.1.0
 ---
 
 Groups store JSON objects and lists store JSON arrays of one item type. Use

@@ -99,6 +99,11 @@ test("the picker dialog reuses a later page and choosing returns focus to Replac
   expect(screen.getByRole("button", { name: "Replace media for Hero" })).toHaveFocus();
   expect(screen.queryByText("media-2")).not.toBeInTheDocument();
   expect(saveDraft).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Replace media for Hero" }));
+  const reopened = screen.getByRole("dialog", { name: "Choose media for Hero" });
+  await within(reopened).findByRole("button", { name: "Load more media" });
+  expect(within(reopened).queryByRole("button", { name: "later.png" })).toBeNull();
+  expect(listMedia).toHaveBeenLastCalledWith(undefined, { limit: 24 });
 });
 
 test("picker search, type, and tag filters stay local and reset when reopened", async () => {
@@ -117,6 +122,7 @@ test("picker search, type, and tag filters stay local and reset when reopened", 
   );
   await waitFor(() =>
     expect(listMedia).toHaveBeenLastCalledWith(undefined, {
+      limit: 24,
       q: "hero",
       tags: ["cover"],
       type: "image/png",
@@ -137,7 +143,7 @@ test("picker search, type, and tag filters stay local and reset when reopened", 
     "aria-pressed",
     "true",
   );
-  expect(listMedia).toHaveBeenLastCalledWith(undefined, {});
+  expect(listMedia).toHaveBeenLastCalledWith(undefined, { limit: 24 });
 });
 
 test("the current choice is marked and items pending deletion are not offered", async () => {

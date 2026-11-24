@@ -174,6 +174,7 @@ export async function openProductRuntime(kind, options = {}) {
         LACE_HOST: "127.0.0.1",
         LACE_PORT: "3000",
       };
+      options.observeNodeStorage?.(parseNodeRuntimeSettings(baseSettings).minio, client);
       const compose = (authSecret = baseSettings.LACE_AUTH_SECRET) => {
         baseSettings.LACE_AUTH_SECRET = authSecret;
         return createNodeRuntime({
@@ -304,6 +305,7 @@ export async function openProductRuntime(kind, options = {}) {
       const pending = new Set();
       const ctx = {
         waitUntil(promise) {
+          options.observeWorkerWaitUntil?.(promise);
           pending.add(promise);
           promise.finally(() => pending.delete(promise));
         },
@@ -321,6 +323,7 @@ export async function openProductRuntime(kind, options = {}) {
       let env = {
         DB: options.instrumentD1 ? options.instrumentD1(local.database) : local.database,
         MEDIA: local.bucket,
+        ...(options.workerImages && { IMAGES: options.workerImages }),
         LACE_ENVIRONMENT: "development",
         LACE_AUTH_SECRET: "cross-runtime-local-auth-secret-cross-runtime-long-enough",
         LACE_PUBLIC_BASE_URL: origin + "/",

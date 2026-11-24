@@ -10,7 +10,6 @@ export function upgradeMetadata(path) {
 }
 
 const userReadme = "# Operator site\n\nOur own deployment notes; Lace upgrades never touch them.\n";
-const legacyStorageDockerfile = "deploy/minio.Dockerfile";
 
 async function files(root, prefix = "") {
   const result = {};
@@ -70,7 +69,6 @@ export async function templateUpgradeJourney(temporary, operations) {
       name,
       version: directory.slice("template-".length),
       flags: name === "cloudflare" ? ["--cloudflare"] : [],
-      conflict: ".env.example",
     })),
   );
   for (const variant of variants) {
@@ -176,14 +174,7 @@ export async function templateUpgradeJourney(temporary, operations) {
 
     // Infrastructure and documentation candidates that the current template changes;
     // an unchanged managed file cannot conflict, and at least one must change.
-    const conflictPaths = [
-      variant.conflict,
-      "docs/lace-operations.md",
-      legacyStorageDockerfile,
-    ].filter((path) => targetManifest.files[path]?.sha256 !== baseline.files[path]?.sha256);
-    if (conflictPaths.length === 0)
-      throw new Error(`upgrade-${version}-${variant.name}: no conflict candidate changes`);
-    for (const conflictPath of conflictPaths) {
+    for (const conflictPath of [".env.example", "docs/lace-operations.md"]) {
       // Modified managed infrastructure is detected and blocks apply.
       await writeFile(
         join(project, conflictPath),
@@ -253,23 +244,12 @@ export async function templateUpgradeJourney(temporary, operations) {
       ["add", "replace", "remove"].includes(decision.action),
     );
     if (
-      baseline.files[legacyStorageDockerfile]?.owner === "managed" &&
-      (!changed.some(
-        ({ path, action }) => path === legacyStorageDockerfile && action === "remove",
-      ) ||
-        !changed.some(
-          ({ path, action }) => path === "docker-compose.yml" && action === "replace",
-        ) ||
-        legacyStorageDockerfile in manifest.files)
-    )
-      throw new Error(`upgrade-${version}-${variant.name}: legacy storage was not retired`);
-    if (
       !changed.some(
-        (decision) => decision.path === "docker-compose.dev.yml" && decision.action === "replace",
+        (decision) => decision.path === "docs/lace-operations.md" && decision.action === "replace",
       )
     )
       throw new Error(
-        `upgrade-${version}-${variant.name}: managed development Compose file was not updated`,
+        `upgrade-${version}-${variant.name}: managed operations guide was not updated`,
       );
     for (const decision of changed) {
       if (decision.action === "remove") {
@@ -297,6 +277,6 @@ export async function templateUpgradeJourney(temporary, operations) {
       throw new Error(`upgrade-${version}-${variant.name}-repeat: upgraded project is not current`);
   }
   console.info(
-    "Retained published-template projects: Compose replaced and legacy storage Dockerfile retired; edits and guide collisions refused; user files and state preserved; repeat plan current",
+    "Retained published-template projects: managed files updated, conflicts refused, user files and state preserved, and repeat plan current",
   );
 }

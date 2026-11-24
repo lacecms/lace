@@ -252,6 +252,20 @@ test("credentials are declared once and applied per boundary", async () => {
   expect(operationOf(doc, "GET", "/api/v1/public/build-export")?.security).toEqual([
     { buildToken: [] },
   ]);
+  const thumbnail = operationOf(doc, "GET", "/api/v1/public/build-media/:mediaId/thumbnail");
+  expect(thumbnail?.security).toEqual([{ buildToken: [] }]);
+  expect(Object.keys(thumbnail?.responses ?? {})).toEqual([
+    "200",
+    "304",
+    "401",
+    "404",
+    "422",
+    "503",
+  ]);
+  expect(thumbnail?.responses?.["200"]?.content?.["image/webp"]?.schema).toEqual({
+    type: "string",
+    format: "binary",
+  });
   expect(operationOf(doc, "PUT", "/api/v1/admin/entries/:entryId/draft")?.security).toEqual([
     { session: [] },
     { importToken: [] },

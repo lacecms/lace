@@ -1,0 +1,35 @@
+name: Set up Lace workspace
+description: Install the pinned Node and pnpm toolchain and frozen workspace dependencies
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v5
+      with:
+        node-version: 24.12.0
+        package-manager-cache: false
+
+    - name: Enable the pinned pnpm release
+      shell: bash
+      run: |
+        corepack enable
+        corepack prepare pnpm@12.21.0 --activate
+
+    - name: Find pnpm store
+      id: pnpm-store
+      shell: bash
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+    - name: Restore pnpm store
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.pnpm-store.outputs.path }}
+        key: ${{ runner.os }}-node-24.12.0-pnpm-12.21.0-${{ hashFiles('pnpm-lock.yaml') }}
+
+    - name: Install frozen dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
+
+    - name: Verify lockfile is unchanged
+      shell: bash
+      run: git diff --exit-code -- pnpm-lock.yaml

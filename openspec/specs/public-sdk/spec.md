@@ -64,11 +64,11 @@ caller-supplied abort signal without discarding either cancellation cause.
 - **THEN** the SDK stops the request and preserves that abort as the failure
   cause
 
-### Requirement: Build credentials are isolated to build exports
+### Requirement: Build credentials are isolated to authenticated build reads
 The SDK SHALL accept an optional build token and send it as a bearer credential
-only when reading the build-export resource. Page, collection, path, and public
-media requests SHALL be anonymous regardless of whether a build token is
-configured.
+only on build-export and build thumbnail requests to the configured API base.
+Page, collection, path, and public original media requests SHALL be anonymous
+regardless of whether a build token is configured.
 
 #### Scenario: A build reads its authenticated export
 - **WHEN** a client with a build token requests the build export
@@ -78,6 +78,17 @@ configured.
 - **WHEN** the same configured client subsequently reads a page, collection,
   path, or media URL
 - **THEN** that request contains no build-token Authorization header
+
+### Requirement: The SDK reads bounded build thumbnail responses
+The SDK SHALL provide a build thumbnail read with an optional prior strong validator. It SHALL build the URL from the configured API base and media identifier, preserve the path prefix, send credentials only as the Bearer header, and reject redirects. It SHALL distinguish a validated `image/webp` response with its derivative ETag from a bodyless 304. It SHALL reject a 304 without a prior validator, invalid media type, missing or invalid validator, empty or oversized responses, including streamed bodies exceeding 96 KiB without a usable length. The SDK SHALL apply its cancellation and timeout to the entire response, including body reads. Transport and response failures SHALL use the SDK's typed errors without exposing the token.
+
+#### Scenario: The API and public media have different origins
+- **WHEN** the SDK reads a thumbnail for an item whose public URL points at a different origin or the API responds with a redirect
+- **THEN** the initial request targets the configured API path and the SDK sends no request to the redirected or public media origin
+
+#### Scenario: An intermediary sends an invalid thumbnail
+- **WHEN** the thumbnail read receives HTML, a body that exceeds 96 KiB during streaming, or an unsolicited 304
+- **THEN** the SDK reports a typed failure and yields no image bytes
 
 ### Requirement: Public SDK validates responses and reports typed failures
 The SDK SHALL validate successful JSON responses with the tolerant variants of
@@ -344,3 +355,19 @@ export's `records` list, empty when the response omits it, with each record's
 #### Scenario: An export from an API without records
 - **WHEN** a format 2 export carries no `records` key
 - **THEN** the SDK returns the export with an empty `records` list
+
+### Requirement: LaceClient remains source-compatible with 1.0.0
+
+The SDK SHALL preserve the public `LaceClient` interface's 1.0.0 required members, signatures and assignability. A 1.0.0 consumer, custom implementation or test double SHALL compile unchanged against the published 1.1.0 SDK declaration entry. The inferred client returned by `createLaceClient()` SHALL be assignable to `LaceClient` and expose `getBuildThumbnail()` with its typed arguments and result. The built-in published-site loader SHALL retain lazy, build-token-bound thumbnail access when image optimization is enabled. Existing published reads SHALL retain their 1.0.0 transport behavior.
+
+#### Scenario: A consumer supplies a client with the released 1.0.0 shape
+- **WHEN** unchanged source declaring a custom client and a typed test double with the 1.0.0 member set is compiled against the 1.1.0 package entry
+- **THEN** both satisfy `LaceClient` without a thumbnail stub, cast or suppression
+
+#### Scenario: A consumer uses the 1.1.0 factory
+- **WHEN** it calls `createLaceClient()` through the public package entry
+- **THEN** it can pass the result where `LaceClient` is expected and can call `getBuildThumbnail()` directly with its declared result type
+
+#### Scenario: An existing site still uses the 1.0.0 SDK
+- **WHEN** the released 1.0.0 SDK reads published content and a format 2 export from the 1.1.0 API
+- **THEN** reads and conditional export validation succeed without a thumbnail request

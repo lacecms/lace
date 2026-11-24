@@ -1,0 +1,18 @@
+name: Restore Lace workspace build
+description: Restore the workspace outputs built for this revision and workflow run
+inputs:
+  artifact-id:
+    description: Artifact ID from the successful build job
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Download workspace build
+      uses: actions/download-artifact@v8
+      with:
+        artifact-ids: ${{ inputs.artifact-id }}
+        path: ${{ runner.temp }}/workspace-build
+
+    - name: Restore workspace outputs
+      shell: bash
+      run: node scripts/ci-workspace-build.mjs restore "$RUNNER_TEMP/workspace-build"

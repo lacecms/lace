@@ -15,6 +15,7 @@ import {
   setupAdminRequestSchema,
   managedUserListSchema,
   managedUserSchema,
+  userCreateResultSchema,
 } from "@lacecms/contracts";
 import * as v from "valibot";
 import {
@@ -74,6 +75,8 @@ export function accountsClient(fetcher: Fetcher) {
           `/api/v1/admin/users${after === undefined ? "" : `?after=${encodeURIComponent(after)}`}`,
         ),
       ),
+    createUser: async (input: Parameters<AdminClient["createUser"]>[0]) =>
+      parse(userCreateResultSchema, await postJson(fetcher, "/api/v1/admin/users", input)),
     signOutUser: async (userId: string) =>
       parse(
         sessionRevocationResultSchema,

@@ -26,7 +26,7 @@ Site mode: **none**. This project builds no site, so this guide ends with publis
 
 - Node `>=24.12.0` and pnpm `>=12` (see [tested versions](https://github.com/lacecms/lace/blob/main/docs/compatibility.md#minimum-requirements-and-tested-versions)).
 - Docker with Compose and a running daemon. A first SILO pull requires registry access or an existing local copy.
-- Lace `1.0.0` or a later compatible release of the packages in `package.json` and the API/builder images in `.env.example`.
+- Lace `1.1.0` or a later compatible release of the packages in `package.json` and the API/builder images in `.env.example`.
 
 ## Install and prepare the environment
 

@@ -5,6 +5,7 @@ import type {
   SeoValueDto,
 } from "@lacecms/contracts";
 import type { LinkDiagnostics, PublishedLinkLookup } from "./internal-links.js";
+import type { BuildThumbnailReader } from "../client/build-thumbnail.js";
 import type { ResolvedSeo } from "./seo.js";
 
 /**
@@ -20,6 +21,7 @@ export interface PublishedMedia extends Readonly<PublicMediaDto> {
    * always reach; absent when the loader's `optimizeImages` is `false`.
    */
   readonly sourceUrl?: string;
+  readonly thumbnail?: BuildThumbnailReader;
 }
 
 /** A resolved media item whose `alt` is the effective alt text of one usage. */

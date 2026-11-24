@@ -49,6 +49,7 @@ export const v1Routes = {
     retryDeletion: defineRoute("POST", "/admin/media/:mediaId/retry-deletion", "session"),
     binary: defineRoute("GET", "/public/media/:mediaId", "public"),
     preview: defineRoute("GET", "/admin/media/:mediaId/preview", "session"),
+    thumbnail: defineRoute("GET", "/admin/media/:mediaId/thumbnail", "session"),
   },
   credentials: {
     listBuild: defineRoute("GET", "/admin/api-tokens", "session"),
@@ -98,6 +99,9 @@ export const v1Routes = {
   },
   adminUsers: {
     users: defineRoute("GET", "/admin/users", "session"),
+    createUser: defineRoute("POST", "/admin/users", "session", {
+      rateLimit: { operation: "invite", scope: "actor" },
+    }),
     invitations: defineRoute("GET", "/admin/invitations", "session"),
     invite: defineRoute("POST", "/admin/invitations", "session", {
       rateLimit: { operation: "invite", scope: "actor" },
@@ -129,6 +133,7 @@ export const v1Routes = {
     collectionItem: defineRoute("GET", "/public/collections/:modelKey/:slug", "public"),
     byPath: defineRoute("GET", "/public/content/by-path", "public"),
     buildExport: defineRoute("GET", "/public/build-export", "build"),
+    buildThumbnail: defineRoute("GET", "/public/build-media/:mediaId/thumbnail", "build"),
   },
   setupSession: {
     setupState: defineRoute("GET", "/setup/state", "public"),

@@ -5,6 +5,7 @@ import {
   createOutboxDispatchers,
   PreviewPackages,
   maintainPreviewDelivery,
+  reconcileMediaThumbnails,
 } from "@lacecms/application";
 import { createNodeOAuthPersistence } from "../security/oauth.js";
 import { engineVersion } from "./release-version.js";
@@ -19,6 +20,9 @@ import type {
   PreviewBlobStorage,
   ImageInspector,
   SiteBuildTrigger,
+  MediaThumbnails,
+  ThumbnailGenerator,
+  ThumbnailStorage,
 } from "@lacecms/application";
 import { type ContentModelDefinition, type NormalizedConfig } from "@lacecms/config";
 import { resolveNodeClientAddress, trustedProxyPolicy } from "./client-address.js";
@@ -65,6 +69,8 @@ import { openNodeDatabase, type NodeDatabase } from "../database/connection.js";
 import { NodeSharpImageInspector } from "../media/image-inspector.js";
 import { NodeMinioObjectStorage, type NodeMinioSettings } from "../media/minio-storage.js";
 import { NodePreviewBlobStorage } from "../media/preview-s3.js";
+import { NodeSharpThumbnailGenerator } from "../media/thumbnail-sharp.js";
+import { NodeThumbnailStorage } from "../media/thumbnail-s3.js";
 import type { NodeMediaDeletionDispatcher } from "../media/media-deletion-dispatcher.js";
 import type { NodeSiteBuildDispatcher } from "../builds/site-build-dispatcher.js";
 import {
@@ -414,6 +420,8 @@ export interface CreateNodeRuntimeInput {
   readonly logger?: ServerLogger;
   readonly maxBodyBytes?: number;
   readonly imageInspector?: ImageInspector;
+  readonly thumbnailGenerator?: ThumbnailGenerator;
+  readonly thumbnailStorage?: ThumbnailStorage;
   readonly rateLimiter?: RequestRateLimiter;
   readonly requestIds?: RequestIdGenerator;
   readonly settings: NodeRuntimeSettings;
@@ -442,6 +450,7 @@ export interface NodeRuntime {
   readonly maintainOAuth: () => Promise<void>;
   /** Purges one bounded batch of expired idempotency records. */
   readonly maintainOperations: () => Promise<void>;
+  readonly maintainThumbnails: () => Promise<void>;
   readonly setRequestPeer: (request: Request, peer: string | undefined, target?: string) => void;
   readonly previewPackages?: PreviewPackages;
   /** Internal composition for the later admin preview surface and checkpoint acceptance. */
@@ -451,6 +460,7 @@ export interface NodeRuntime {
   readonly close: () => void;
   readonly content: ContentUseCases;
   readonly media: MediaUseCases;
+  readonly thumbnails?: MediaThumbnails;
   readonly database: NodeDatabase;
   readonly deletionDispatcher: NodeMediaDeletionDispatcher;
   readonly buildDispatcher: NodeSiteBuildDispatcher;
@@ -500,6 +510,9 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
   );
   const cache = new NoopNodeCache();
   const storage = input.storage ?? new NodeMinioObjectStorage(input.settings.minio);
+  const thumbnailStorage =
+    input.thumbnailStorage ??
+    (input.storage === undefined ? new NodeThumbnailStorage(input.settings.minio) : undefined);
   const buildTrigger =
     input.buildTrigger ??
     (input.settings.builder === undefined
@@ -512,6 +525,7 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
         error: (entry) => nodeOperationalLogger.error({ component: "media-deletion", ...entry }),
       },
       storage,
+      ...(thumbnailStorage && { thumbnails: thumbnailStorage }),
       work: repository,
     },
     siteBuild: {
@@ -578,6 +592,12 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     repository,
     security,
     storage,
+    ...(thumbnailStorage && {
+      thumbnails: {
+        storage: thumbnailStorage,
+        generator: input.thumbnailGenerator ?? new NodeSharpThumbnailGenerator(),
+      },
+    }),
   });
   const previewOrigin = input.previewOrigin ?? input.settings.preview?.origin;
   const previewBlobs =
@@ -631,6 +651,7 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
   });
   const { content, media } = services;
   let nextPreviewMaintenance = 0;
+  let nextThumbnailSweep = 0;
   return Object.freeze({
     setRequestPeer: (request: Request, peer: string | undefined, target?: string) => {
       clients.set(request, resolveNodeClientAddress(request, peer, trusted));
@@ -646,11 +667,28 @@ export function createNodeRuntime(input: CreateNodeRuntimeInput): NodeRuntime {
     deletionDispatcher: dispatchers[MEDIA_DELETE_REQUESTED],
     buildDispatcher: dispatchers[SITE_BUILD_REQUESTED],
     media,
+    ...(services.thumbnails && { thumbnails: services.thumbnails }),
     readiness,
     repository,
     security,
     storage,
     maintainOAuth: () => oauth.cleanup(Number(clock.now()), 20),
+    maintainThumbnails: async () => {
+      const now = clock.now();
+      if (!thumbnailStorage || now < nextThumbnailSweep) return;
+      nextThumbnailSweep = now + 60_000;
+      try {
+        const failures = await reconcileMediaThumbnails({
+          media: repository,
+          objects: storage,
+          storage: thumbnailStorage,
+        });
+        if (failures === 0) return;
+      } catch {
+        // Log only the sanitized operational failure.
+      }
+      nodeOperationalLogger.error({ component: "media-thumbnails", reason: "cleanup_failed" });
+    },
     maintainOperations: async () => {
       const now = clock.now();
       await repository.purgeExpiredIdempotencyRecords(now, IDEMPOTENCY_PURGE_LIMIT);

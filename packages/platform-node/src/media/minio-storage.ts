@@ -49,6 +49,14 @@ export function isMissingObject(error: unknown): boolean {
   );
 }
 
+export function isPreconditionFailure(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 412
+  );
+}
+
 export function streamFromNode(value: unknown): ByteStream {
   if (value === null || typeof value !== "object" || !(Symbol.asyncIterator in value)) {
     throw new NodeObjectStorageError();

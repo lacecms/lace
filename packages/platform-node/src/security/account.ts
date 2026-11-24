@@ -1,5 +1,6 @@
 import {
   ACTIVE_INVITATION_SQL,
+  HAS_SIGN_IN_PASSWORD_SQL,
   INVITATION_COLUMNS_SQL,
   importTokenUserInvalidationSql,
   invitationRecord,
@@ -145,6 +146,41 @@ export class NodeAccountSecurity implements UserProfileReader, AccountSecurityPo
     return readManagedUserPage(this.readRows, input);
   }
 
+  public async createUser(
+    input: Parameters<AccountSecurityPort["createUser"]>[0],
+  ): ReturnType<AccountSecurityPort["createUser"]> {
+    const email = normalizedEmail(input.email);
+    const role = securityRole(input.role);
+    const now = Number(input.now);
+    const id = randomBytes(16).toString("hex");
+    const token = tokenSecret();
+    return this.connection.transaction(() => {
+      const row = this.connection
+        .prepare(
+          `insert into user (id, name, email, role, created_at, updated_at)
+           select ?, ?, ?, ?, ?, ?
+           where not exists (select 1 from user where email = ?)
+             and not exists (select 1 from invitations where email = ? and ${ACTIVE_INVITATION_SQL} and expires_at > ?)
+           returning id, email, role, disabled`,
+        )
+        .get(id, email, email, role, now, now, email, email, now) as
+        | Record<string, unknown>
+        | undefined;
+      if (row === undefined) return { status: "conflict" } as const;
+      this.connection
+        .prepare(
+          "insert into account (id, account_id, provider_id, user_id, created_at, updated_at) values (?, ?, 'credential', ?, ?, ?)",
+        )
+        .run(`credential-${id}`, id, id, now, now);
+      this.connection
+        .prepare(
+          "insert into password_reset_tokens (token_hash, user_id, created_at, expires_at, requested_by) values (?, ?, ?, ?, ?)",
+        )
+        .run(digest(token), id, now, now + PASSWORD_RESET_TTL_MS, input.requestedBy);
+      return { status: "created", token, user: managedUser(row) } as const;
+    })();
+  }
+
   public async updateUser(input: {
     readonly role?: SecurityRole;
     readonly userId: string;
@@ -158,38 +194,45 @@ export class NodeAccountSecurity implements UserProfileReader, AccountSecurityPo
     return value;
   }
   private mutateUser(id: string, nextRole?: SecurityRole, disabled?: boolean): ManagedUser | null {
-    const result = this.connection.transaction(() => {
-      const current = this.connection
-        .prepare("select id, email, role, disabled from user where id = ?")
-        .get(id) as Record<string, unknown> | undefined;
-      if (current === undefined) return null;
-      const becomesInactiveAdmin =
-        current.role === "admin" &&
-        current.disabled === 0 &&
-        (disabled === true || (nextRole !== undefined && nextRole !== "admin"));
-      if (becomesInactiveAdmin) {
-        const count = this.connection
-          .prepare("select count(*) as count from user where role = 'admin' and disabled = 0")
-          .get() as { count: number };
-        if (count.count <= 1)
-          throw new DomainError("LAST_ADMIN_PROTECTED", "Last administrator cannot be changed.");
-      }
-      this.connection
-        .prepare(
-          "update user set role = coalesce(?, role), disabled = coalesce(?, disabled), updated_at = ? where id = ?",
-        )
-        .run(nextRole ?? null, disabled === undefined ? null : Number(disabled), Date.now(), id);
-      if (disabled === true) {
-        this.connection.prepare(oauthUserInvalidationSql()).run(Number(this.now()), id);
-        this.connection.prepare(importTokenUserInvalidationSql()).run(Number(this.now()), id);
-        this.connection.prepare("delete from session where user_id = ?").run(id);
-      }
-      return managedUser(
+    const result = this.connection
+      .transaction(() => {
+        const current = this.connection
+          .prepare(
+            `select role, disabled, ${HAS_SIGN_IN_PASSWORD_SQL} as has_password from user where id = ?`,
+          )
+          .get(id) as Record<string, unknown> | undefined;
+        if (current === undefined) return null;
+        const becomesInactiveAdmin =
+          current.role === "admin" &&
+          current.disabled === 0 &&
+          current.has_password === 1 &&
+          (disabled === true || (nextRole !== undefined && nextRole !== "admin"));
+        if (becomesInactiveAdmin) {
+          const count = this.connection
+            .prepare(
+              `select count(*) as count from user where role = 'admin' and disabled = 0 and ${HAS_SIGN_IN_PASSWORD_SQL}`,
+            )
+            .get() as { count: number };
+          if (count.count <= 1)
+            throw new DomainError("LAST_ADMIN_PROTECTED", "Last administrator cannot be changed.");
+        }
         this.connection
-          .prepare("select id, email, role, disabled from user where id = ?")
-          .get(id) as Record<string, unknown>,
-      );
-    })();
+          .prepare(
+            "update user set role = coalesce(?, role), disabled = coalesce(?, disabled), updated_at = ? where id = ?",
+          )
+          .run(nextRole ?? null, disabled === undefined ? null : Number(disabled), Date.now(), id);
+        if (disabled === true) {
+          this.connection.prepare(oauthUserInvalidationSql()).run(Number(this.now()), id);
+          this.connection.prepare(importTokenUserInvalidationSql()).run(Number(this.now()), id);
+          this.connection.prepare("delete from session where user_id = ?").run(id);
+        }
+        return managedUser(
+          this.connection
+            .prepare("select id, email, role, disabled from user where id = ?")
+            .get(id) as Record<string, unknown>,
+        );
+      })
+      .immediate();
     return result;
   }
 

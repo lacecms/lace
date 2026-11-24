@@ -7,13 +7,13 @@ Defines the coherent experimental Lace package and container artifacts that oper
 ## Requirements
 
 ### Requirement: Release coordinates form one compatible release set
-The release definition `release/alpha.json` SHALL identify an exact prerelease version, generator version, ownership template version, npm channel, public package names, API/builder image coordinates and platforms, source repository and the prerelease versions already published. Every version recorded as published SHALL remain recorded and immutable. The candidate SHALL include every public package, including `@lacecms/mcp`, with npm channel `next`, npm scope `@lacecms`, generator `create-lace`, and images `ghcr.io/lacecms/api` and `ghcr.io/lacecms/builder`. Preparation SHALL reject a candidate version that is recorded as published, inconsistent versions, missing runtime dependencies and runtime dependencies on private workspace packages. Generated package dependencies, image defaults, runtime image version defaults, block-registry package requirements and the versioned installation commands in delivered consumer guides SHALL match the candidate. The selected ownership template version SHALL match the generator and upgrade metadata. Advancing ownership guidance SHALL NOT implicitly select or publish a new package/image prerelease; a new candidate is selected only by an explicit release session. Applications, test-utils and the workspace root SHALL remain private. Selecting an unpublished version SHALL rely on registry metadata checked on a recorded date as availability evidence only, never as a reservation.
+The release definition `release/alpha.json` SHALL identify an exact release version, generator version, ownership template version, npm channel, public package names, API/builder image coordinates and platforms, source repository and the versions already published. Every version recorded as published SHALL remain recorded and immutable. The candidate SHALL include every public package, including `@lacecms/mcp`, with its matching npm channel, npm scope `@lacecms`, generator `create-lace`, and images `ghcr.io/lacecms/api` and `ghcr.io/lacecms/builder`. Preparation SHALL reject a candidate version that is recorded as published, inconsistent versions, missing runtime dependencies and runtime dependencies on private workspace packages. Generated package dependencies, image defaults, runtime image version defaults, block-registry package requirements and the versioned installation commands in delivered consumer guides SHALL match the candidate. The selected ownership template version SHALL match the generator and upgrade metadata. Advancing ownership guidance SHALL NOT implicitly select or publish a new package/image version; a new candidate is selected only by an explicit release session. Applications, test-utils and the workspace root SHALL remain private. Selecting an unpublished version SHALL rely on registry metadata checked on a recorded date as availability evidence only, never as a reservation.
 
-The release contract SHALL accept exact `alpha.N` and `rcN` prerelease spellings (for example `0.1.0-rc1`), reject malformed or conflicting coordinates, keep verifying saved inventories of published versions, and never silently rename the candidate or move `latest`.
+The release contract SHALL accept exact stable major.minor.patch versions on `latest` and exact `alpha.N` and `rcN` prerelease spellings on `next` (for example `0.1.0-rc1`), reject malformed or conflicting coordinates, keep verifying saved inventories of published versions, and refuse implicit changes to the selected version or channel. Only the owner’s stable publication operation SHALL move npm `latest`.
 
 #### Scenario: Matching release metadata
 - **WHEN** all selected package, template, guide and image settings agree with the release definition
-- **THEN** preparation identifies the complete compatible set with its source revision and next channel
+- **THEN** preparation identifies the complete compatible set with its source revision and selected channel
 
 #### Scenario: Incomplete or mismatched graph
 - **WHEN** a consumer runtime dependency has another Lace version or depends on a private workspace member
@@ -24,12 +24,22 @@ The release contract SHALL accept exact `alpha.N` and `rcN` prerelease spellings
 - **THEN** validation fails before any build or pack and the published artifacts are left unchanged
 
 #### Scenario: Stale delivered coordinates
-- **WHEN** a generated dependency, image default, runtime image version default, block-registry requirement or versioned guide command still names a different prerelease
+- **WHEN** a generated dependency, image default, runtime image version default, block-registry requirement or versioned guide command still names a different release version
 - **THEN** validation fails and identifies the stale coordinate instead of rewriting files
 
 #### Scenario: Requested release candidate spelling
-- **WHEN** coherent unpublished coordinates select a version such as `0.1.0-rc1`
-- **THEN** preparation accepts the version and finalization derives tag `v0.1.0-rc1` without changing npm channel `next`
+- **WHEN** coherent unpublished coordinates select a version such as `1.1.0-rc1`
+- **THEN** preparation accepts the version and finalization derives tag `v1.1.0-rc1` without changing npm channel `next`
+
+#### Scenario: Stable set selected
+
+- **WHEN** the definition selects an unpublished stable version on `latest` with the matching generator, independent template revision and all packages and images aligned
+- **THEN** preparation accepts the set and the plan shows the exact stable coordinates and the matching version tag
+
+#### Scenario: Channel disagrees with version
+
+- **WHEN** a stable version selects `next` or a prerelease selects `latest`
+- **THEN** preparation and any owner action using a mismatched inventory fail before writing or publishing artifacts
 
 ### Requirement: Packed artifacts are complete external packages
 Packed public packages SHALL contain resolvable compiled ESM exports and declarations, declared executable entry points where applicable, checked-in database migrations where required, the generator's complete classified templates, and, in the Cloudflare platform package, the compiled admin application of the same source revision in its packaged admin directory. All packed Lace dependency references SHALL resolve to the exact release version; packed third-party dependencies SHALL resolve to concrete registry-compatible versions. Packed dependency metadata SHALL NOT contain `workspace:`, `catalog:`, source-checkout paths or test-only tarball overrides. Packed export maps SHALL NOT contain the repository's `@lacecms/source` export condition or any export target outside compiled output and declared data files; release preparation SHALL remove the condition from the staged manifest so that each packed export map equals the repository export map without it. Archives SHALL exclude credentials, local runtime data, test fixtures, editable admin source and node_modules.
@@ -90,7 +100,7 @@ Local preparation SHALL run on Node whose major version is 24 or later, with pnp
 - **THEN** the inventory labels the set as a preview and publication-ineligible rather than claiming it represents the reviewed Git revision
 
 ### Requirement: Publication is a separate owner-operated action
-Build, pack, inspection and dry-run procedures SHALL NOT publish npm packages, push images, create remote releases or change registry visibility. The release guide SHALL list prerequisites, local verification commands, exact artifact inventory, package publication in dependency order with public access and `next`, matching image publication and public visibility, and incomplete-publication recovery. It SHALL require rechecking authorization and availability of unscoped `create-lace` before a publication and stop on a conflicting owner. Credentials SHALL be supplied through the operator's registry authentication outside artifacts and generated files. The guide SHALL distinguish artifact preparation, exact-artifact consumer and security acceptance, and an actual public release.
+Build, pack, inspection and dry-run procedures SHALL NOT publish npm packages, push images, create remote releases or change registry visibility. The release guide SHALL list prerequisites, local verification commands, exact artifact inventory, package publication in dependency order with public access and the validated inventory channel, matching image publication and public visibility, and incomplete-publication recovery. It SHALL require rechecking authorization and availability of unscoped `create-lace` before a publication and stop on a conflicting owner. Credentials SHALL be supplied through the operator's registry authentication outside artifacts and generated files. The guide SHALL distinguish artifact preparation, exact-artifact consumer and security acceptance, and an actual public release.
 
 #### Scenario: Preparation without authentication
 - **WHEN** a contributor runs preparation or its dry-run without npm/GHCR publishing credentials
@@ -104,16 +114,26 @@ Build, pack, inspection and dry-run procedures SHALL NOT publish npm packages, p
 - **WHEN** the owner successfully publishes only part of the reviewed set
 - **THEN** the guide directs them to verify existing immutable artifacts and resume missing items without overwriting versions or announcing the set as complete
 
+#### Scenario: Stable publication resumes
+
+- **WHEN** an authorized owner resumes partial stable publication from the same inventory
+- **THEN** matching immutable packages are reused, missing packages use the stable channel, conflicting bytes stop publication, and the receipt covers every package on that channel before completion
+
+#### Scenario: A newer stable version has taken the channel
+
+- **WHEN** a retry observes that a later stable version owns `latest`
+- **THEN** it reports the dist-tag conflict and leaves the later version selected
+
 ### Requirement: GitHub finalization preserves artifact identity and evidence
 A separate owner-operated GitHub release command SHALL default to a read-only plan and SHALL require explicit apply to create or publish a release. It SHALL derive repository, version and source revision from a verified complete publication-eligible inventory and accepted exact-artifact evidence. The release tag SHALL be `v<artifact-version>` and SHALL resolve to the artifact source commit already available in the remote source repository, not the operator's current HEAD. An existing different tag or conflicting release SHALL cause refusal without overwriting it.
 
-Finalization SHALL verify every immutable npm version in the selected inventory and both multi-platform images against the selected inventory, independently of local receipt existence and the current npm dist-tag. Partial publication, authentication failure or unavailable verification SHALL prevent final publication. It SHALL create or resume a matching draft, attach allowlisted inventory, acceptance and complete npm/image publication JSON reports, verify remote attachment bytes and then publish it as a prerelease without marking it latest. It SHALL never rebuild, repack, publish npm packages, push images or force-move tags. Matching reruns SHALL be idempotent; conflicting published bodies/assets SHALL be reported rather than silently replaced. Local reports SHALL record the remote release URL, tag/commit and verified attachment hashes.
+Finalization SHALL verify every immutable npm version in the selected inventory and both multi-platform images against the selected inventory, independently of local receipt existence and the current npm dist-tag. Partial publication, authentication failure or unavailable verification SHALL prevent final publication. It SHALL create or resume a matching draft, attach allowlisted inventory, acceptance and complete npm/image publication JSON reports, verify remote attachment bytes and then publish it with the inventory’s release kind. Stable versions SHALL be regular releases and become latest on first finalization. Prereleases SHALL be marked prerelease and excluded from latest. It SHALL never rebuild, repack, publish npm packages, push images or force-move tags. Matching reruns SHALL be idempotent; conflicting published bodies/assets SHALL be reported rather than silently replaced. Local reports SHALL record the remote release URL, tag/commit and verified attachment hashes.
 
 Attachments SHALL contain reviewed public evidence only, preserving source identity and original acceptance facts. Environment files, credentials, private logs and arbitrary files SHALL never be uploaded. Acceptance output SHALL have a durable machine-readable file under the selected artifact directory after successful acceptance and cleanup of the temporary test environment; failed runs SHALL NOT produce a success receipt.
 
 #### Scenario: Complete set finalized
 - **WHEN** explicit apply is requested and source, all registry artifacts, acceptance and attachment bytes match
-- **THEN** the versioned prerelease exposes the concise changelog entry and verified JSON attachments, with a local finalization receipt
+- **THEN** the versioned release exposes the concise changelog entry and verified JSON attachments, with a local finalization receipt
 
 #### Scenario: Some packages or one image are missing
 - **WHEN** publication receipts cover a subset or remote checks cannot establish the complete exact set
@@ -131,10 +151,15 @@ Attachments SHALL contain reviewed public evidence only, preserving source ident
 - **WHEN** the command runs without explicit apply
 - **THEN** it reports the intended release and verification results or missing prerequisites without creating tags, drafts, attachments or local publication receipts
 
+#### Scenario: Stable finalization finds an incompatible release
+
+- **WHEN** the selected stable tag already has a published GitHub release marked prerelease
+- **THEN** finalization reports the mismatch and preserves the existing release and evidence
+
 ### Requirement: Cleanup deletes only explicitly selected recoverable release state
 A cleanup command SHALL default to a non-mutating preview listing selected paths, estimated bytes and unmet prerequisites. Explicit apply SHALL be required for deletion. The artifact selection SHALL be an explicitly named child directory of this repository's `.release-artifacts`; the root itself, paths outside it, tracked source files, symlink escapes and wildcard/global selection SHALL be refused. Extra local evidence directories SHALL require explicit bounded selection. Other release versions and development data SHALL be untouched.
 
-Before deleting the selected release set, cleanup SHALL freshly verify complete exact npm/image publication and a published GitHub prerelease with the correct tag/source, notes and required byte-verified reports. Local receipts or `publishedVersions` alone SHALL NOT authorize deletion. Incomplete, mismatching, inaccessible or unauthenticated verification SHALL cause refusal without deletion. Active preparation, publication, acceptance or another cleanup SHALL prevent concurrent deletion. Interrupted deletion SHALL report its remaining scope and support safe retry without confusing missing local files with a different release; an already absent selected directory SHALL be a no-op.
+Before deleting the selected release set, cleanup SHALL freshly verify complete exact npm/image publication and a published GitHub release of the matching stable or prerelease kind with the correct tag/source, notes and required byte-verified reports. Local receipts or `publishedVersions` alone SHALL NOT authorize deletion. Incomplete, mismatching, inaccessible or unauthenticated verification SHALL cause refusal without deletion. Active preparation, publication, acceptance or another cleanup SHALL prevent concurrent deletion. Interrupted deletion SHALL report its remaining scope and support safe retry without confusing missing local files with a different release; an already absent selected directory SHALL be a no-op.
 
 The optional acceptance-stack cleanup SHALL require separate explicit selection. It SHALL validate the named stack state and stop/remove its containers and volumes through the existing acceptance-stop behavior before removing `.lace-acceptance`. Invalid state or stop failure SHALL leave the directory intact. Preview SHALL neither stop containers nor remove files. Cleanup SHALL NOT edit the changelog, tracked notes/receipts, OpenSpec history or arbitrary temporary directories, and SHALL NOT prune Docker/global package caches.
 
@@ -199,3 +224,29 @@ The repository SHALL maintain a root changelog with one uniquely identifiable en
 #### Scenario: Missing or ambiguous entry
 - **WHEN** the selected version has no changelog entry or has duplicate entries
 - **THEN** GitHub release finalization refuses before any remote mutation
+
+### Requirement: Stable publication requires candidate-specific owner approval
+
+Before stable publication the owner SHALL attest to the qualified inventory and its exact-artifact acceptance receipt, record the real VPS and Cloudflare deployment and coordinated restore outcomes under the existing verification checklist, disposition residual risks and approve that candidate explicitly. Local preparation SHALL produce a handoff identifying completed checks and outstanding owner steps. A rebuilt set SHALL require its own evidence.
+
+#### Scenario: Only local verification is complete
+
+- **WHEN** the candidate passes both local runtimes but the owner has not completed real deployment and restore verification or approved the inventory
+- **THEN** the handoff identifies the outstanding checks and stable publication remains pending
+
+#### Scenario: Owner approves the rehearsed candidate
+
+- **WHEN** both deployment paths and restores have been verified and the owner approves the matching source and inventory digest
+- **THEN** the owner may publish those saved bytes and finalize the regular GitHub release after independent registry verification
+
+### Requirement: CMS 1.1.0 selects one stable artifact set
+
+The CMS 1.1.0 release plan SHALL select all sixteen public npm packages at `1.1.0` on `latest`, API and builder images at `1.1.0` for `linux/amd64` and `linux/arm64`, and the regular GitHub release `v1.1.0`. The generator SHALL report ownership template `0.53.0`. Package manifests, generated dependency coordinates, runtime versions, image defaults, registry requirements and current documentation SHALL agree with that plan. The publication record SHALL preserve the verified 1.0.0 release identity. Qualification SHALL bind its results to a complete clean-source 1.1.0 inventory. The existing owner approval, publication and cleanup workflow applies.
+
+#### Scenario: The next stable release is planned
+- **WHEN** the release model validates the selected 1.1.0 candidate and renders a publication plan
+- **THEN** it reports the agreed package, image, template, channel and tag coordinates without registry writes
+
+#### Scenario: Evidence comes from a different artifact set
+- **WHEN** an operator presents a receipt for 1.0.0, a preview build or a different 1.1.0 inventory
+- **THEN** it cannot qualify the selected 1.1.0 inventory

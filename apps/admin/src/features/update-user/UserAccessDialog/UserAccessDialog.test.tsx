@@ -47,7 +47,7 @@ test("keeps the dialog open on rejection and returns focus on cancel", async () 
   const dialog = await screen.findByRole("dialog", { name: "Disable user?" });
   await user.click(within(dialog).getByRole("button", { name: "Disable user" }));
   expect(await within(dialog).findByRole("alert")).toHaveTextContent(
-    "The final active administrator cannot be disabled or demoted.",
+    "At least one active administrator with a password must remain.",
   );
   await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
   await waitFor(() => expect(trigger).toHaveFocus());

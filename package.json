@@ -47,6 +47,7 @@
     "release:publish:npm": "node scripts/release-publish.mjs npm",
     "release:publish:images": "node scripts/release-publish.mjs images",
     "release:verify": "node scripts/release.mjs verify",
+    "verify:admin-media-thumbnails": "node scripts/admin-media-thumbnail-acceptance.mjs",
     "verify:cross-runtime": "node scripts/cross-runtime-verification.mjs",
     "verify:security": "node scripts/security-resilience-verification.mjs",
     "verify:operations": "node scripts/operations-verification.mjs",

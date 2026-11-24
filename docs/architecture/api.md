@@ -26,6 +26,7 @@ current composition.
 | `/api/auth/*` | browser | Better Auth sign-in and session. |
 | `/api/v1/public/*` | anonymous | Published snapshots only; cacheable. |
 | `/api/v1/public/build-export` | build token | A build-token verifier is required for registration. |
+| `/api/v1/public/build-media/:mediaId/thumbnail` | build token | Published media eligibility and a build-token verifier are required. |
 | `/api/v1/admin/*` | session actor | Permissions are checked by the use cases. |
 | `/api/v1/admin/*` | import token | Only a fixed route allowlist accepts it. |
 | `/api/v1/account/*` | session actor | Each actor manages their own account. |
@@ -43,8 +44,8 @@ tokens reach only the allowlist in
 ### Public endpoints
 
 Public routes cover pages, globals, collection lists and items, lookup by
-path, media and the build export. They return published snapshots only, never
-a draft, revision, editor name or other editorial key; the shapes are in
+path, media, the build export and build thumbnails. Content reads return
+published snapshots only, never a draft, revision, editor name or other editorial key. The shapes are in
 [rest-contracts](../../openspec/specs/rest-contracts/spec.md) ("Public content
 responses return published entries").
 
@@ -128,7 +129,7 @@ The public media route serves an object only when a currently published
 snapshot references it; admin media endpoints provide draft previews. Knowing
 an unreferenced media ID does not publish it.
 
-Stored media bytes never change, so binary responses carry a strong ETag
+Stored originals never change, so original binary responses carry a strong ETag
 derived from the media ID alone (`"m-<mediaId>"`), separate from the metadata
 ETag used for `If-Match`. Authorization, eligibility and not-found are decided
 before conditional evaluation, so unpublished or deleted media never receives
@@ -137,12 +138,29 @@ before conditional evaluation, so unpublished or deleted media never receives
 one day, so a browser may keep media up to a day after it stops being
 published; unbounded or `immutable` caching is deliberately not used.
 
+The build thumbnail route verifies the build token before media or storage
+work. It uses the public original's current eligibility before and after
+reading the same bounded, private derivative used by the admin. It returns
+WebP or a conditional `304` with `Cache-Control: private, no-cache` and a
+derivative ETag. Ineligible media returns the public media `404`. Unavailable
+derivatives return `503 MEDIA_THUMBNAIL_UNAVAILABLE` with `Cache-Control:
+no-store`. Build thumbnails are served directly and their URLs stay out of
+the export and static site.
+
 ### Admin endpoints
 
 Admin resources are content models, entries and their lifecycle commands,
 media and media tags, site builds, the session summary, users, invitations,
 settings status, build tokens, import tokens and the import-credential
 description.
+
+`GET /api/v1/admin/media/:mediaId/thumbnail` requires a browser session,
+`content:read` and an active media item. It can serve unpublished media. A
+successful response delivers the private WebP with `Cache-Control: private,
+no-cache` and a strong validator derived from the derivative bytes. Conditional
+requests are evaluated after authorization, eligibility and availability. An
+unavailable derivative returns `503 MEDIA_THUMBNAIL_UNAVAILABLE` with
+`Cache-Control: no-store`. The existing preview endpoint serves the original.
 
 - Entry detail returns the quoted draft revision in `ETag` with
   `Cache-Control: no-store`. Save, publish, revert, delete and duplicate
@@ -197,6 +215,11 @@ application function, so a rerun writes nothing. Import never deletes or
 unpublishes.
 
 ### Account endpoints
+
+`POST /api/v1/admin/users` requires a browser session with `users:manage`.
+It creates an enabled account and reports the email outcome. On failed
+delivery the response also carries a single-use first-password link for
+private handoff.
 
 Invitation and reset tokens travel only in JSON bodies, never in paths or
 queries. An invalid token returns one `410` envelope without distinguishing

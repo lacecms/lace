@@ -6,6 +6,7 @@ import {
   ContentLinkUseCases,
   ContentReferenceUseCases,
   MediaUseCases,
+  MediaThumbnails,
   opaqueTokenSecret,
   unconfiguredEmailSender,
 } from "@lacecms/application";
@@ -32,6 +33,7 @@ import type {
   ContentEntryReadPort,
   PublicContentReadPort,
   SecurityService,
+  ThumbnailStorage,
 } from "@lacecms/application";
 
 type App = ReturnType<typeof createLaceApp>;
@@ -64,6 +66,7 @@ type FixtureOptions = Partial<
   models?: ConfigInput["content"];
   blocks?: ConfigInput["blocks"];
   security?: Partial<SecurityService>;
+  thumbnailStorage?: ThumbnailStorage;
   sessionId?: string;
   linkReads?: ConstructorParameters<typeof ContentLinkUseCases>[0];
   listQueryLimits?: ConstructorParameters<typeof ContentUseCases>[0]["listQueryLimits"];
@@ -104,6 +107,7 @@ export async function fixture({
   contentReads,
   exportBuildContentPage,
   importActors,
+  thumbnailStorage,
 }: FixtureOptions = {}) {
   const config = await defineConfig({
     blocks: [
@@ -216,6 +220,14 @@ export async function fixture({
     logger: { log: (entry) => logs.push(entry) },
     maxBodyBytes,
     media,
+    ...(thumbnailStorage && {
+      thumbnails: new MediaThumbnails({
+        media: store,
+        publishedMedia: media,
+        originals: storage,
+        storage: thumbnailStorage,
+      }),
+    }),
     publicBaseUrl,
     publicContent: {
       exportBuildContentPage: async (input) => {
@@ -352,6 +364,11 @@ export function accountSecurity(overrides: Partial<SecurityService> = {}) {
       acceptInvitation: record("acceptInvitation", { status: "invalid" }),
       changePassword: record("changePassword", { revoked: 1, status: "changed" }),
       confirmPasswordReset: record("confirmPasswordReset", { status: "invalid" }),
+      createUser: record("createUser", {
+        status: "created",
+        token: opaqueTokenSecret(TOKEN),
+        user: { disabled: false, email: "new@lace.test", id: "new-user", role: "editor" },
+      }),
       createInvitation: record("createInvitation", {
         invitation: {
           createdAt: unixMilliseconds(1_000),

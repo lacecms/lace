@@ -3,6 +3,7 @@ import { cursorPageInput, optionalJsonBody } from "../shared/request.js";
 import {
   authenticationFailure,
   authorizationFailure,
+  conflictFailure,
   describePolicy,
   validate,
   validationFailure,
@@ -14,6 +15,8 @@ import {
   operationalPageQuerySchema,
   errorEnvelopeSchema,
   identifierSchemaPublic,
+  userCreateRequestSchema,
+  userCreateResultSchema,
   userUpdateRequestSchema,
   adminPasswordResetRequestSchema,
   adminPasswordResetResultSchema,
@@ -60,6 +63,44 @@ export function createAdminUserRoutes(routeContext: RouteContext) {
           cursorPageInput(context.req.valid("query")),
         );
         return response(managedUserListSchema, page);
+      },
+    )
+    .on(
+      routes.createUser.method,
+      routes.createUser.path,
+      describePolicy(routes.createUser, {
+        summary: "Create an active user with an email address and role",
+        description:
+          "Requires users:manage and shares the invitation and administrator reset rate limit.",
+        tags: ["admin"],
+        responses: {
+          201: {
+            description:
+              "User created. The first-password link is present when email was not sent.",
+            content: { "application/json": { schema: resolver(userCreateResultSchema) } },
+            headers: { "Cache-Control": { schema: { type: "string", enum: ["no-store"] } } },
+          },
+          ...conflictFailure("The address has an account or an active invitation"),
+          429: {
+            description: "The shared per-administrator limit is exhausted (RATE_LIMITED)",
+            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+            headers: { "Retry-After": { schema: { type: "integer", minimum: 1 } } },
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          ...validationFailure(),
+        },
+      }),
+      authenticate,
+      validate("json", userCreateRequestSchema),
+      async (context) => {
+        const result = await accounts().createUser(await actor(context), context.req.valid("json"));
+        return response(
+          userCreateResultSchema,
+          { ...linkIssueDto(result), user: result.user },
+          201,
+          noStore,
+        );
       },
     )
     .on(

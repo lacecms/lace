@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@lacecms/astro": "1.0.0",
+    "@lacecms/astro": "1.1.0",
     "astro": "7.4.12",
     "sharp": "0.35.5"
   }

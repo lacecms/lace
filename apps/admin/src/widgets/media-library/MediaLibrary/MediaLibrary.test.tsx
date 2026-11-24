@@ -1,4 +1,4 @@
-import type { MediaMetadataDto } from "@lacecms/contracts";
+import type { MediaListDto, MediaMetadataDto } from "@lacecms/contracts";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
@@ -25,6 +25,7 @@ test("a filtered library URL restores its controls, view, and API query", async 
   );
   expect(await screen.findByRole("table", { name: "Media library" })).toBeInTheDocument();
   expect(listMedia).toHaveBeenCalledWith(undefined, {
+    limit: 24,
     q: "hero",
     sort: "filename",
     type: "image/png",
@@ -51,7 +52,7 @@ test("a GIF filter URL restores the filter and labels GIF items", async () => {
   const listMedia = vi.fn(async () => ({ items: [gif] }));
   renderRoute("/media?type=image%2Fgif&view=list", editor(), client({ listMedia }));
   const table = await screen.findByRole("table", { name: "Media library" });
-  expect(listMedia).toHaveBeenCalledWith(undefined, { type: "image/gif" });
+  expect(listMedia).toHaveBeenCalledWith(undefined, { limit: 24, type: "image/gif" });
   expect(screen.getByRole("button", { name: "GIF" })).toHaveAttribute("aria-pressed", "true");
   expect(within(table).getByText("loop.gif")).toBeInTheDocument();
   expect(within(table).getByText("GIF")).toBeInTheDocument();
@@ -70,12 +71,12 @@ test("unsupported parameters are ignored and filter changes restart pagination",
     client({ listMedia }),
   );
   expect(await screen.findByRole("list", { name: "Media library" })).toBeInTheDocument();
-  expect(listMedia).toHaveBeenCalledWith(undefined, {});
+  expect(listMedia).toHaveBeenCalledWith(undefined, { limit: 24 });
   await user.click(screen.getByRole("button", { name: "Load more media" }));
-  await waitFor(() => expect(listMedia).toHaveBeenCalledWith("next", {}));
+  await waitFor(() => expect(listMedia).toHaveBeenCalledWith("next", { limit: 24 }));
   await user.click(screen.getByRole("button", { name: "JPEG" }));
   await waitFor(() =>
-    expect(listMedia).toHaveBeenLastCalledWith(undefined, { type: "image/jpeg" }),
+    expect(listMedia).toHaveBeenLastCalledWith(undefined, { limit: 24, type: "image/jpeg" }),
   );
   expect(router.state.location.search).toEqual({ type: "image/jpeg" });
   await user.click(screen.getByRole("button", { name: "List view" }));
@@ -97,6 +98,85 @@ test("a search without results offers to clear the filters", async () => {
   await user.click(within(empty as HTMLElement).getByRole("button", { name: "Clear filters" }));
   await waitFor(() => expect(router.state.location.search).toEqual({}));
   expect(await screen.findByRole("button", { name: "cover.png" })).toBeInTheDocument();
+});
+
+test("continuation guards loading, retries the same cursor, and focuses appended items or the final count", async () => {
+  const user = userEvent.setup();
+  const failed = Promise.withResolvers<MediaListDto>();
+  const success = Promise.withResolvers<MediaListDto>();
+  const later = { ...mediaItem, filename: "later.png", id: "media-later" };
+  let attempts = 0;
+  const listMedia = vi.fn(async (cursor?: string): Promise<MediaListDto> => {
+    if (cursor === undefined) return { items: [mediaItem], nextCursor: "next" };
+    if (cursor === "end") return { items: [] };
+    return attempts++ === 0 ? failed.promise : success.promise;
+  });
+  const router = renderRoute("/media", editor(), client({ listMedia }));
+  const more = await screen.findByRole("button", { name: "Load more media" });
+  expect(listMedia.mock.calls).toEqual([[undefined, { limit: 24 }]]);
+  await user.click(more);
+  expect(more).toHaveAccessibleName("Loading more media…");
+  expect(more).toHaveAttribute("aria-disabled", "true");
+  expect(more).toHaveFocus();
+  fireEvent.click(more);
+  expect(attempts).toBe(1);
+  await act(async () => failed.reject(new AdminClientError({ message: "Retry this page" })));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Retry this page");
+  expect(screen.getByRole("button", { name: "cover.png" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Retry loading more media" }));
+  await act(async () => success.resolve({ items: [later], nextCursor: "end" }));
+  const appended = await screen.findByRole("button", { name: "later.png" });
+  await waitFor(() => expect(appended).toHaveFocus());
+  expect(screen.getByText("Showing 2 items").closest('[role="status"]')).toHaveTextContent(
+    "1 item added",
+  );
+  expect(listMedia.mock.calls.slice(1)).toEqual([
+    ["next", { limit: 24 }],
+    ["next", { limit: 24 }],
+  ]);
+
+  await user.click(screen.getByRole("button", { name: "List view" }));
+  const table = await screen.findByRole("table", { name: "Media library" });
+  expect(
+    within(table)
+      .getAllByRole("button")
+      .map((button) => button.textContent),
+  ).toEqual(["cover.png", "later.png"]);
+  expect(listMedia).toHaveBeenCalledTimes(3);
+  await user.click(screen.getByRole("button", { name: "Load more media" }));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Load more media" })).toBeNull());
+  await waitFor(() => expect(screen.getByText("Showing 2 items")).toHaveFocus());
+
+  await act(async () => router.navigate({ to: "/content" }));
+  await act(async () => router.navigate({ to: "/media" }));
+  await screen.findByRole("button", { name: "Load more media" });
+  expect(screen.queryByRole("button", { name: "later.png" })).toBeNull();
+  expect(listMedia).toHaveBeenLastCalledWith(undefined, { limit: 24 });
+});
+
+test("filter placeholders suppress continuation and a revisited filter starts with the first page", async () => {
+  const user = userEvent.setup();
+  const filtered = Promise.withResolvers<MediaListDto>();
+  const later = { ...mediaItem, filename: "later.png", id: "media-later" };
+  const listMedia = vi.fn(async (cursor, query): Promise<MediaListDto> =>
+    query.type === "image/jpeg"
+      ? filtered.promise
+      : cursor === undefined
+        ? { items: [mediaItem], nextCursor: "next" }
+        : { items: [later] },
+  );
+  renderRoute("/media", editor(), client({ listMedia }));
+  await user.click(await screen.findByRole("button", { name: "Load more media" }));
+  await screen.findByRole("button", { name: "later.png" });
+  await user.click(screen.getByRole("button", { name: "JPEG" }));
+  expect(screen.getByRole("list", { name: "Media library" })).toHaveAttribute("aria-busy", "true");
+  expect(screen.queryByRole("button", { name: "Load more media" })).toBeNull();
+  await act(async () => filtered.resolve({ items: [] }));
+  await screen.findByRole("heading", { name: "No matching media" });
+  await user.click(screen.getByRole("button", { name: "All" }));
+  await screen.findByRole("button", { name: "Load more media" });
+  expect(screen.queryByRole("button", { name: "later.png" })).toBeNull();
+  expect(listMedia).toHaveBeenLastCalledWith(undefined, { limit: 24 });
 });
 
 test("several chosen files report their own local, server, and success results", async () => {
@@ -238,7 +318,7 @@ test("a tag-filtered library URL restores its chips and API query", async () => 
   const listMedia = vi.fn(async () => ({ items: [mediaItem] }));
   const router = renderRoute(tagUrl(["cover", "project-2026"]), editor(), client({ listMedia }));
   expect(await screen.findByRole("button", { name: "cover.png" })).toBeInTheDocument();
-  expect(listMedia).toHaveBeenCalledWith(undefined, { tags: ["cover", "project-2026"] });
+  expect(listMedia).toHaveBeenCalledWith(undefined, { limit: 24, tags: ["cover", "project-2026"] });
   expect(screen.getByRole("button", { name: "Remove tag cover" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Remove tag project-2026" })).toBeInTheDocument();
   expect(router.state.location.search).toEqual({ tag: ["cover", "project-2026"] });
@@ -252,7 +332,10 @@ test("invalid and excess URL tags are ignored and the URL is rewritten", async (
     client({ listMedia }),
   );
   expect(await screen.findByRole("button", { name: "cover.png" })).toBeInTheDocument();
-  expect(listMedia).toHaveBeenCalledWith(undefined, { tags: ["a", "b", "c", "cover", "d"] });
+  expect(listMedia).toHaveBeenCalledWith(undefined, {
+    limit: 24,
+    tags: ["a", "b", "c", "cover", "d"],
+  });
   await waitFor(() =>
     expect(router.state.location.search).toEqual({ tag: ["a", "b", "c", "cover", "d"] }),
   );
@@ -263,7 +346,7 @@ test("a single tag parameter is accepted and canonicalized", async () => {
   const listMedia = vi.fn(async () => ({ items: [mediaItem] }));
   const router = renderRoute("/media?tag=Cover", editor(), client({ listMedia }));
   expect(await screen.findByRole("button", { name: "cover.png" })).toBeInTheDocument();
-  expect(listMedia).toHaveBeenCalledWith(undefined, { tags: ["cover"] });
+  expect(listMedia).toHaveBeenCalledWith(undefined, { limit: 24, tags: ["cover"] });
   await waitFor(() => expect(router.state.location.search).toEqual({ tag: ["cover"] }));
 });
 
@@ -276,13 +359,13 @@ test("adding a filter tag restarts pagination and writes the URL", async () => {
   );
   const router = renderRoute("/media", editor(), client({ listMedia }));
   await user.click(await screen.findByRole("button", { name: "Load more media" }));
-  await waitFor(() => expect(listMedia).toHaveBeenCalledWith("next", {}));
+  await waitFor(() => expect(listMedia).toHaveBeenCalledWith("next", { limit: 24 }));
   await user.type(
     screen.getByRole("combobox", { name: "Filter by tags (all must match)" }),
     "project-2026{Enter}",
   );
   await waitFor(() =>
-    expect(listMedia).toHaveBeenLastCalledWith(undefined, { tags: ["project-2026"] }),
+    expect(listMedia).toHaveBeenLastCalledWith(undefined, { limit: 24, tags: ["project-2026"] }),
   );
   expect(router.state.location.search).toEqual({ tag: ["project-2026"] });
 });

@@ -2,7 +2,7 @@
 title: Connect an Astro site
 description: Install source-owned block components, read published content at build time and keep installed components up to date.
 kind: guide
-verifiedAgainst: 1.0.0
+verifiedAgainst: 1.1.0
 ---
 
 Lace does not render your website. Your Astro site reads published content from the CMS at build time through the Lace SDK and renders it with block components that are installed into the site as editable source. This guide connects a site, reads pages, collections and globals, renders blocks, rich text, images and video, and updates installed components safely.
@@ -21,7 +21,7 @@ Starter mode includes an editable Astro site in `site/`. Existing-site mode crea
 Starter projects are already connected; skip to [Read published content](#read-published-content). For an existing site, install the matching packages in the Astro project and commit its lockfile:
 
 ```sh
-pnpm add @lacecms/astro@1.0.0 @lacecms/render@1.0.0 @lacecms/sdk@1.0.0 @lacecms/content@1.0.0 sharp
+pnpm add @lacecms/astro@1.1.0 @lacecms/render@1.1.0 @lacecms/sdk@1.1.0 @lacecms/content@1.1.0 sharp
 ```
 
 Upgrade these four Lace packages together. Then install the block components from the CMS root, using your site's actual relative path:
@@ -134,7 +134,11 @@ export default defineConfig({
 
 The Astro configuration process needs `LACE_API_BASE_URL` too; if you use an environment file, load it explicitly as shown in the generated `docs/lace-astro-site.md`. The helper allows only that API's public media path. Originals must be reachable from the build environment.
 
-`LaceImage.astro` builds WebP variants at 960 and 1920 pixels, each capped at the original width, with `srcset`, `sizes`, dimensions, alt text and focal point. GIF variants keep their animation. Eligible opaque images get a blurred placeholder; GIFs, transparent images and image services without local transforms omit it. Images load lazily, except Hero, which loads eagerly. A failed fetch or transform fails the build. Pass `optimizeImages: false` to the loader to use the original public media URLs instead.
+`LaceImage.astro` builds WebP variants at 960 and 1920 pixels, each capped at the original width, with `srcset`, `sizes`, dimensions, alt text and focal point. GIF variants keep their animation. Images load lazily, except Hero, which loads eagerly. A failed original fetch or variant transform fails the build. Pass `optimizeImages: false` to the loader to use the original public media URLs.
+
+In an optimized published build, `LaceImage.astro` uses the build token to read the CMS thumbnail of an opaque still image with known dimensions. This also covers Hero, Image, Gallery images and video posters. Astro fits the thumbnail within 64 pixels on its longest edge without enlarging it, then embeds the blur in the initial HTML if the WebP is at most 4 KiB. The browser paints it without another request or JavaScript.
+
+GIFs, thumbnails with transparency and image services without local transforms omit the blur. The responsive image still builds if the thumbnail is missing, the API is older, or thumbnail processing fails. Each new build checks cached blur with the API before embedding it again. Protected draft previews and standalone descriptions with a build source URL use their existing original-based placeholders.
 
 Variants are written into the static output, but lightbox originals and URLs from `mediaUrl()` point at the CMS's public media path, so that path must stay reachable from readers' browsers.
 
@@ -170,7 +174,7 @@ Unedited files are updated. An edited component, stylesheet or block map is repo
 ### Adopt the shared video player
 
 For a site already using `videoEmbed` version 2 or `gallery` version 6, use the
-matching CLI and site packages from `1.0.0`. Review the renderer update
+matching CLI and site packages from `1.1.0`. Review the renderer update
 from the CMS directory, then apply it using your site path:
 
 ```sh

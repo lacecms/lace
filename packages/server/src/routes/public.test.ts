@@ -468,7 +468,7 @@ test("serves the build export in version-bound keyset pages", async () => {
   expect(operation.responses).toHaveProperty("409");
 });
 
-test("omits build export and its documentation without a verifier", async () => {
+test("omits build routes and their documentation without a verifier", async () => {
   const { app, exportLoads, exportVersionReads } = await fixture();
   const path = "/api/v1/public/build-export";
   expect(await json(app, path)).toMatchObject({
@@ -479,6 +479,13 @@ test("omits build export and its documentation without a verifier", async () => 
   expect(head.status).toBe(404);
   expect(head.body).toBeNull();
   expect((await json(app, "/api/v1/openapi.json")).body.paths).not.toHaveProperty(path);
+  const thumbnailPath = "/api/v1/public/build-media/media-1/thumbnail";
+  for (const method of ["GET", "HEAD"]) {
+    expect((await app.request(thumbnailPath, { method })).status).toBe(404);
+  }
+  expect((await json(app, "/api/v1/openapi.json")).body.paths).not.toHaveProperty(
+    "/api/v1/public/build-media/{mediaId}/thumbnail",
+  );
   expect((await json(app, "/api/v1/public/collections/posts")).response.status).toBe(200);
   expect(exportLoads()).toBe(0);
   expect(exportVersionReads()).toBe(0);

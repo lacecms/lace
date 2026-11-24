@@ -19,6 +19,7 @@ import { DEFAULT_DEPLOY_HOOK_TIMEOUT_MS } from "../deploy/deploy-hook.js";
 import type { D1Database } from "../d1/database.js";
 import { DEFAULT_PAGES_API_BASE_URL } from "../deploy/pages-deployments.js";
 import { DEFAULT_R2_TIMEOUT_MS, type R2Bucket } from "../media/r2-storage.js";
+import type { ImagesBinding } from "../media/thumbnail-images.js";
 
 /** Structural subset of the Workers static-assets binding. */
 export interface AssetsFetcher {
@@ -36,6 +37,7 @@ export interface CloudflareWorkerEnv extends CloudflarePreviewEnv {
   readonly CACHE?: unknown;
   readonly DB?: unknown;
   readonly EMAIL?: unknown;
+  readonly IMAGES?: unknown;
   readonly LACE_AUTH_SECRET?: unknown;
   readonly LACE_DEPLOY_HOOK_TIMEOUT_MS?: unknown;
   readonly LACE_DEPLOY_HOOK_URL?: unknown;
@@ -91,6 +93,7 @@ export interface CloudflareSettings {
   readonly email?: EmailSettings;
   /** Present exactly when the email provider is `cloudflare`. */
   readonly emailBinding?: SendEmailBinding;
+  readonly images?: ImagesBinding;
   readonly media: R2Bucket;
   readonly pagesTracking?: PagesTrackingSettings;
   readonly production: boolean;
@@ -356,6 +359,7 @@ export function parseCloudflareSettings(env: CloudflareWorkerEnv): CloudflareSet
     email.settings?.provider === "cloudflare"
       ? binding<SendEmailBinding>(env.EMAIL, "EMAIL", ["send"], issues)
       : undefined;
+  const images = hasMethods(env.IMAGES, ["input"]) ? (env.IMAGES as ImagesBinding) : undefined;
   const storageTimeoutMs = timeout(
     env.LACE_R2_TIMEOUT_MS,
     "LACE_R2_TIMEOUT_MS",
@@ -399,6 +403,7 @@ export function parseCloudflareSettings(env: CloudflareWorkerEnv): CloudflareSet
     ...(deployHookUrl === undefined ? {} : { deployHookUrl }),
     email: email.settings,
     ...(emailBinding === undefined ? {} : { emailBinding }),
+    ...(images === undefined ? {} : { images }),
     media,
     ...(tracking === undefined ? {} : { pagesTracking: tracking }),
     production: mode !== "development",

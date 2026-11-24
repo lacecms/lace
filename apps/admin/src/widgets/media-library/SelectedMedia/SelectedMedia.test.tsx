@@ -30,7 +30,7 @@ test("an active selection shows its thumbnail, filename, and facts with Replace 
   expect(screen.getByRole("status")).toHaveTextContent("PNG · 800 × 600 px");
   expect(document.querySelector("img")).toHaveAttribute(
     "src",
-    "/api/v1/admin/media/media-1/preview",
+    "/api/v1/admin/media/media-1/thumbnail",
   );
   await user.click(screen.getByRole("button", { name: "Replace media for Hero" }));
   await removeMedia(user, "Hero");

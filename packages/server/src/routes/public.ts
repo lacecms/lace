@@ -1,5 +1,7 @@
 import { mountOptionalRoutes } from "../routing/optional-routes.js";
-import { buildTokenVerification, configuredModelKey } from "../shared/application-input.js";
+import { configuredModelKey } from "../shared/application-input.js";
+import { requireBuildToken } from "./build-auth.js";
+import { createBuildThumbnailRoutes } from "./build-thumbnail.js";
 import { readBuildExportPage, readBuildExportQuery } from "./build-export.js";
 import {
   bodyResponse,
@@ -20,7 +22,6 @@ import {
   validationFailure,
 } from "../shared/openapi.js";
 import {
-  AuthenticationRequiredError,
   buildExportContinuationPageSchema,
   buildExportFirstPageSchema,
   DEFAULT_PAGE_SIZE,
@@ -49,7 +50,6 @@ import { resolver } from "hono-openapi";
 import * as v from "valibot";
 import type { RouteContext } from "../composition/route-context.js";
 import { v1Routes } from "../routing/v1-routes.js";
-import { authenticationChallenge } from "../routing/route-policy.js";
 
 /** Documents what `pagination()` parses by hand; parsing stays there. */
 const paginationParameters = [
@@ -288,9 +288,14 @@ export function createPublicRoutes(routeContext: RouteContext) {
       },
     );
 
-  const { buildTokenVerifier } = capabilities;
+  const { buildTokenVerifier, publishedMedia, thumbnails } = capabilities;
   return mountOptionalRoutes(
-    publicRoutes,
+    mountOptionalRoutes(
+      publicRoutes,
+      typeof buildTokenVerifier === "function" && publishedMedia !== undefined
+        ? createBuildThumbnailRoutes(publishedMedia, thumbnails, buildTokenVerifier)
+        : undefined,
+    ),
     typeof buildTokenVerifier === "function"
       ? createBuildExportRoutes(capabilities, buildTokenVerifier)
       : undefined,
@@ -352,13 +357,7 @@ function createBuildExportRoutes(
       tags: ["public"],
     }),
     async (context): Promise<JsonResponse<BuildExportPageDto, 200> | BodyResponse<null, 304>> => {
-      const authorization = context.req.header("authorization");
-      if (
-        authorization === undefined ||
-        !authorization.startsWith("Bearer ") ||
-        !(await buildTokenVerifier(buildTokenVerification(authorization.slice("Bearer ".length))))
-      )
-        throw new AuthenticationRequiredError(authenticationChallenge(routes.buildExport.auth));
+      await requireBuildToken(context.req.header("authorization"), buildTokenVerifier);
       const query = readBuildExportQuery(new URL(context.req.url));
       const suppliedTag = context.req.header("if-none-match") ?? undefined;
       if (suppliedTag !== undefined) parse(entityTagSchema, suppliedTag);

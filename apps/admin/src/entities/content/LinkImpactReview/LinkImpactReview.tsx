@@ -15,36 +15,48 @@ export function useLinkImpactReview(
   open: boolean,
 ) {
   const client = useAdminClient();
-  const [epoch, setEpoch] = useState(0);
-  const [reviewedReceipt, setReviewedReceipt] = useState<string>();
-  const [notice, setNotice] = useState(false);
-  const [blockedLocations, setBlockedLocations] = useState<ReadonlySet<string>>(new Set());
+  const [review, setReview] = useState(() => ({
+    entryId,
+    action,
+    open,
+    sourceEpoch: 0,
+    locationEpoch: 0,
+    receipt: undefined as string | undefined,
+    acknowledged: false,
+    notice: false,
+    blockedLocations: new Set<string>(),
+  }));
+  const { sourceEpoch, locationEpoch } = review;
   const reportLocations = useCallback(
     (id: string, blocked: boolean) =>
-      setBlockedLocations((current) => {
-        if (current.has(id) === blocked) return current;
-        const next = new Set(current);
-        if (blocked) next.add(id);
-        else next.delete(id);
-        return next;
+      setReview((current) => {
+        if (current.locationEpoch !== locationEpoch || current.blockedLocations.has(id) === blocked)
+          return current;
+        const blockedLocations = new Set(current.blockedLocations);
+        if (blocked) blockedLocations.add(id);
+        else blockedLocations.delete(id);
+        return { ...current, blockedLocations };
       }),
-    [],
+    [locationEpoch],
   );
-  const refresh = useCallback(() => {
-    setBlockedLocations(new Set());
-    setReviewedReceipt(undefined);
-    setNotice(true);
-    setEpoch((value) => value + 1);
+  const refresh = useCallback((fromLocationEpoch?: number) => {
+    setReview((current) => {
+      if (fromLocationEpoch !== undefined && fromLocationEpoch !== current.locationEpoch)
+        return current;
+      return {
+        ...current,
+        sourceEpoch: current.sourceEpoch + 1,
+        locationEpoch: current.locationEpoch + 1,
+        receipt: undefined,
+        acknowledged: false,
+        notice: true,
+        blockedLocations: new Set<string>(),
+      };
+    });
   }, []);
-  useEffect(() => {
-    if (open) {
-      setReviewedReceipt(undefined);
-      setNotice(false);
-      setBlockedLocations(new Set());
-    }
-  }, [open, entryId, action]);
+  const onLocationsChanged = useCallback(() => refresh(locationEpoch), [refresh, locationEpoch]);
   const query = useInfiniteQuery({
-    queryKey: ["admin", "link-impact", entryId, action, epoch],
+    queryKey: ["admin", "link-impact", entryId, action, sourceEpoch],
     enabled: open,
     initialPageParam: undefined as string | undefined,
     retry: false,
@@ -60,37 +72,60 @@ export function useLinkImpactReview(
     },
     getNextPageParam: (page) => page.nextCursor,
   });
-  useEffect(() => {
-    if (isLinkImpactChanged(query.error)) refresh();
-  }, [query.error]);
   const first = query.data?.pages[0];
-  const acknowledged = reviewedReceipt !== undefined && reviewedReceipt === first?.receipt;
-  const setAcknowledged = (checked: boolean) =>
-    setReviewedReceipt(checked ? first?.receipt : undefined);
-  const consistent = query.data?.pages.every((page) => page.receipt === first?.receipt) === true;
+  const consistent =
+    query.data?.pages.every(
+      (page) =>
+        page.receipt === first?.receipt && page.hasPublishedUsages === first.hasPublishedUsages,
+    ) === true;
+  const receipt = open && query.isSuccess && consistent ? first?.receipt : undefined;
+  const sameScope = review.open === open && review.entryId === entryId && review.action === action;
+  if (!sameScope || (receipt !== undefined && receipt !== review.receipt)) {
+    setReview({
+      ...review,
+      entryId,
+      action,
+      open,
+      locationEpoch: locationEpoch + 1,
+      receipt,
+      acknowledged: false,
+      notice: sameScope && (review.notice || review.receipt !== undefined),
+      blockedLocations: new Set<string>(),
+    });
+  }
+  const acknowledged =
+    sameScope && receipt !== undefined && receipt === review.receipt && review.acknowledged;
   useEffect(() => {
-    if (query.isSuccess && !consistent) refresh();
-  }, [query.isSuccess, consistent, refresh]);
-  const ready =
-    blockedLocations.size === 0 &&
-    open &&
-    query.isSuccess &&
-    consistent &&
-    !query.isFetching &&
-    (!first?.hasPublishedUsages || acknowledged);
-  const acknowledgment: LinkImpactAcknowledgmentDto | undefined =
-    ready && first ? { receipt: first.receipt, acknowledgePublishedLinks: true } : undefined;
+    if (open && (isLinkImpactChanged(query.error) || (query.isSuccess && !consistent))) refresh();
+  }, [open, query.error, query.isSuccess, consistent, refresh]);
+  const settled =
+    sameScope && receipt !== undefined && !query.isFetching && review.blockedLocations.size === 0;
+  const setAcknowledged = (checked: boolean) => {
+    if (!settled) return;
+    setReview((current) =>
+      current.locationEpoch === locationEpoch
+        ? { ...current, acknowledged: checked, notice: !checked && current.notice }
+        : current,
+    );
+  };
+  const ready = settled && (!first?.hasPublishedUsages || acknowledged);
+  const acknowledgment: LinkImpactAcknowledgmentDto | undefined = ready
+    ? { receipt, acknowledgePublishedLinks: true }
+    : undefined;
   return {
     query,
     entryId,
     action,
-    epoch,
+    locationEpoch,
+    receipt,
+    settled,
     acknowledged,
     setAcknowledged,
     refresh,
     ready,
     acknowledgment,
-    notice,
+    notice: sameScope && review.notice,
+    onLocationsChanged,
     reportLocations,
   };
 }
@@ -99,7 +134,7 @@ export function LinkImpactReview({
 }: {
   readonly review: ReturnType<typeof useLinkImpactReview>;
 }) {
-  const { query, entryId, action, epoch } = review;
+  const { query, entryId, action, locationEpoch, receipt } = review;
   const first = query.data?.pages[0];
   return (
     <section aria-label="Incoming links" className="grid gap-2 text-sm">
@@ -107,16 +142,18 @@ export function LinkImpactReview({
       {review.notice && (
         <p role="status">Incoming links changed. Review the current impact again.</p>
       )}
-      {query.isPending && <p role="status">Loading incoming links…</p>}
+      {(query.isPending || (query.isSuccess && receipt === undefined)) && (
+        <p role="status">Loading incoming links…</p>
+      )}
       {query.isError && (
         <p role="alert">
           {errorDescription(query.error)}{" "}
-          <Button onClick={review.refresh} variant="outline">
+          <Button onClick={() => void query.refetch()} variant="outline">
             Retry impact
           </Button>
         </p>
       )}
-      {query.isSuccess && (
+      {query.isSuccess && receipt !== undefined && (
         <>
           {query.data.pages.every((page) => page.sources.length === 0) ? (
             <p>No incoming links.</p>
@@ -132,11 +169,12 @@ export function LinkImpactReview({
                   .map((source) => (
                     <IncomingImpactSource
                       purpose="url"
-                      key={`${epoch}:${source.snapshotId}`}
+                      key={`${locationEpoch}:${source.snapshotId}`}
+                      urlReview={{ receipt, locationEpoch }}
                       source={source}
                       entryId={entryId}
                       action={action}
-                      onChanged={review.refresh}
+                      onChanged={review.onLocationsChanged}
                       reportLocations={review.reportLocations}
                     />
                   ))}
@@ -159,6 +197,7 @@ export function LinkImpactReview({
               <input
                 type="checkbox"
                 checked={review.acknowledged}
+                disabled={!review.settled}
                 onChange={(event) => review.setAcknowledged(event.currentTarget.checked)}
               />
               I understand that published links will stop navigating after the next site build.

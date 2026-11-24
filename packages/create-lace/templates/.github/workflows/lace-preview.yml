@@ -85,4 +85,4 @@ jobs:
         if: steps.claim.outputs.granted == 'true'
         run: node .github/scripts/lace-preview.mjs
         env:
-          LACE_PREVIEW_IMAGE: ghcr.io/lacecms/builder:1.0.0
+          LACE_PREVIEW_IMAGE: ghcr.io/lacecms/builder:1.1.0

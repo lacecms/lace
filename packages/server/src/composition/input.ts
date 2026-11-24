@@ -12,6 +12,7 @@ import type {
   SiteBuildUseCases,
   TokenSecurityPort,
   MediaUseCases,
+  MediaThumbnails,
   PublicContentReadPort,
   EmailSender,
   SensitiveRateLimiter,
@@ -102,7 +103,7 @@ export interface LaceAppInput {
   /** Opt-in browser reference; machine-readable OpenAPI remains available. */
   readonly apiDocsEnabled?: boolean;
   readonly buildSite?: BuildSiteIdentityDto | null;
-  /** When callable, enables build-export authentication and route registration. */
+  /** When callable, enables authentication and route registration for build reads. */
   readonly buildTokenVerifier?: TokenSecurityPort["verifyBuildToken"];
   readonly auth?: AuthRouteHandler;
   readonly oauthConnections?: OAuthConnectionUseCases;
@@ -142,6 +143,7 @@ export interface LaceAppInput {
   readonly logger: ServerLogger;
   readonly maxBodyBytes: number;
   readonly media?: MediaUseCases;
+  readonly thumbnails?: MediaThumbnails;
   readonly publicBaseUrl?: string;
   readonly publicContent: PublicContentReadPort;
   readonly rateLimiter: RequestRateLimiter;

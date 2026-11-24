@@ -11,7 +11,8 @@ import {
 export type UserChange = { readonly disabled?: boolean; readonly role?: AdminRole };
 
 /** The final-administrator rule, explained in the words the Users screen uses. */
-export const lastAdminExplanation = "The final active administrator cannot be disabled or demoted.";
+export const lastAdminExplanation =
+  "At least one active administrator with a password must remain.";
 
 /** Maps an update failure to its user-facing sentence. */
 export function userUpdateErrorDescription(error: unknown): string {

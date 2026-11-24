@@ -139,6 +139,16 @@ export type ChangePasswordResult =
  * port only as plaintext inputs or once-returned outputs; adapters store digests.
  */
 export interface AccountSecurityPort {
+  /** Atomically creates an enabled user, a credential and its first reset token. */
+  createUser(input: {
+    readonly email: string;
+    readonly now: UnixMilliseconds;
+    readonly requestedBy: string;
+    readonly role: SecurityRole;
+  }): Promise<
+    | { readonly status: "created"; readonly user: ManagedUser; readonly token: OpaqueTokenSecret }
+    | { readonly status: "conflict" }
+  >;
   /** Conflicts when the email has an account or an unexpired active invitation. */
   createInvitation(input: {
     readonly email: string;

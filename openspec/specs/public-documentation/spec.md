@@ -20,13 +20,13 @@ The documentation SHALL be a separately runnable and buildable static applicatio
 
 ### Requirement: Documentation identities include language and version
 
-Published documentation URLs SHALL carry explicit language and version segments. The initial English latest section SHALL be `/en/latest/` relative to the deployment base. The site root SHALL direct readers to that section. The supported language/version pair SHALL remain exactly `en`/`latest`, with target CMS version `0.1.0-rc2`. Pages SHALL identify the current documentation target and that latest follows `main`, without inferring publication or deployment verification from that label.
+Published documentation URLs SHALL carry explicit language and version segments. The initial English latest section SHALL be `/en/latest/` relative to the deployment base. The site root SHALL direct readers to that section. The supported language/version pair SHALL remain exactly `en`/`latest`, with its target CMS version set from the selected release definition. Pages SHALL identify the current documentation target and that latest follows `main`, without inferring publication or deployment verification from that label.
 
 Locale/version definitions SHALL be explicit and validated independently of page prose. The structure SHALL allow another locale or version section to be registered and built without renaming existing English/latest routes or rewriting shared page templates. Unsupported pairs SHALL NOT appear in navigation, selectors or search as available documentation. A missing requested page SHALL NOT silently display a different version or language as if it matched.
 
 #### Scenario: Initial entry and identity
 - **WHEN** a reader opens the documentation root
-- **THEN** the reader reaches the English latest landing page and can identify `0.1.0-rc2` as the target of documentation following `main`
+- **THEN** the reader reaches the English latest landing page and can identify the selected CMS version as the target of documentation following `main`
 
 #### Scenario: Additional variant fixture
 - **WHEN** verification registers fixture content for an additional locale and a fixed version
@@ -214,19 +214,24 @@ The public block reference SHALL describe the gallery block: item kinds, the fie
   checks `media`
 
 ### Requirement: Upgrade guidance covers only the oldest supported release onward
-English/latest, the delivered consumer guidance and the permanent compatibility guide SHALL describe upgrades from rc2 (`0.1.0-rc2`) and later releases only. The English/latest operations guidance and the delivered consumer guidance SHALL explain that an rc2 database already starts from the baseline migration and is upgraded by explicit forward migrations, without recreation, together with backup, coordinated package, image and source adoption, configuration synchronization and a site rebuild for Node and Cloudflare, and backup-based rollback without promising a package-only downgrade. The permanent compatibility guide SHALL state the supported upgrade origin, that an rc2 database is upgraded in place by forward migrations, and the rollback boundary, and SHALL link to the English/latest upgrade procedure instead of repeating its steps. All of them SHALL state that installations older than rc2 are not supported and that their pre-baseline databases are refused. Sections that describe upgrades from rc1 or between older releases, or the adoption of features already present in rc2, SHALL NOT remain. Documentation SHALL preserve English/latest routes and SHALL NOT claim publication or real-deployment readiness from preparation alone. The reviewed changelog SHALL provide concise release notes linked to the permanent upgrade guide.
+
+English/latest, delivered guides and the permanent compatibility guide SHALL identify 1.0.0 as the supported direct upgrade origin for 1.1.0, with the published RC5 to 1.0.0 procedure available as release-specific history. The current operator guidance SHALL cover coordinated backups, matching artifacts, managed-file adoption, explicit forward migration verification with zero pending migrations on fully migrated SQLite and D1, configuration checks, original-media verification, a site rebuild and backup-based recovery. It SHALL describe lazy thumbnail generation, the optional operator-managed Images binding and the SDK/Astro adoption order. The permanent compatibility guide SHALL state the public contract boundaries and link to the detailed operations procedure. English/latest routes SHALL remain available and the reviewed changelog SHALL link to the permanent guidance. Claims of publication and real-deployment readiness SHALL refer to evidence for the stated candidate.
 
 #### Scenario: Operator on the oldest supported release upgrades
-- **WHEN** an operator on rc2, the oldest supported release, follows the upgrade guidance
-- **THEN** they can identify the backup, coordinated package and image update, forward database migration without recreation, configuration synchronization, site rebuild and rollback boundary
+- **WHEN** the operator follows the 1.1.0 changelog to the compatibility and operations guidance
+- **THEN** they can identify the template revision, backups, runtime commands, source ownership, the zero-migration expectation on both runtimes, the optional Cloudflare configuration, the rebuild and the coordinated recovery steps
 
 #### Scenario: Reader looks for unsupported upgrade steps
-- **WHEN** a reader searches the public operations, deployment, reference and Astro integration pages or the compatibility guide
-- **THEN** no rc1 database recreation, alpha-by-alpha upgrade or pre-rc2 feature-adoption section remains, and the guidance names rc2 as the oldest supported release
+- **WHEN** a reader reviews the 1.1.0 upgrade prerequisites and delivered instructions
+- **THEN** direct instructions start at 1.0.0 and a historical reference points RC5 users to the published 1.0.0 procedure where the five SQL migrations belong
 
 #### Scenario: Reader opens the compatibility guide to upgrade
-- **WHEN** a reader follows the changelog link to the permanent compatibility guide
-- **THEN** it states the supported origin, in-place forward migration, refusal of older databases and the rollback boundary, and links to the English/latest upgrade steps rather than repeating them
+- **WHEN** a reader opens the permanent compatibility guide from the changelog
+- **THEN** the guide identifies the direct upgrade origin, expected migration result and coordinated recovery boundary, and links to the English/latest procedure
+
+#### Scenario: A stable installation is selected
+- **WHEN** the 1.1.0 stable release is published and a new operator uses the documented default generator installation
+- **THEN** the guide selects the stable distribution and the generated project resolves the matching stable dependencies and images
 
 ### Requirement: Reference pages list every public interface item
 

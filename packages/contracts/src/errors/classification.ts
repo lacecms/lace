@@ -119,6 +119,11 @@ const errorMappings = {
     message: "The final active administrator cannot be disabled or demoted.",
   },
   MEDIA_IN_USE: { status: 409, message: "The media is still used by content." },
+  MEDIA_THUMBNAIL_UNAVAILABLE: {
+    status: 503,
+    message: "The media thumbnail is unavailable.",
+    expose: () => ({ headers: { "cache-control": "no-store" } }),
+  },
   MEDIA_UPDATE_CONFLICT: { status: 409, message: "The media was modified by another request." },
   CONFLICT: {
     status: 409,

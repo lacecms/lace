@@ -20,8 +20,24 @@ export interface R2Bucket {
   put(
     key: string,
     value: Uint8Array,
-    options?: { readonly httpMetadata?: { readonly contentType?: string } },
+    options?: {
+      readonly httpMetadata?: {
+        readonly contentType?: string;
+        readonly cacheControl?: string;
+      };
+      readonly onlyIf?: { readonly etagDoesNotMatch: "*" };
+      readonly sha256?: string;
+    },
   ): Promise<unknown>;
+  list?(options: {
+    readonly prefix: string;
+    readonly limit: number;
+    readonly cursor?: string;
+  }): Promise<{
+    readonly objects: readonly { readonly key: string }[];
+    readonly truncated: boolean;
+    readonly cursor?: string;
+  }>;
 }
 
 export interface CloudflareR2Settings {

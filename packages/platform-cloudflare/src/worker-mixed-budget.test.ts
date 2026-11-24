@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { MEDIA_THUMBNAIL_PREFIX } from "@lacecms/application";
 import { createCloudflareWorker } from "./index.js";
 import { countingD1 } from "./test-support/d1-test-harness.js";
 import { createWorkerFixture } from "./test-support/worker-harness.js";
@@ -94,10 +95,13 @@ test.each([false, true])(
       )
       .run();
     const counted = countingD1(db);
+    const orphan = `${MEDIA_THUMBNAIL_PREFIX}orphan.webp`;
+    await fixture.local.bucket.put(orphan, Uint8Array.of(42));
     await fixture.worker.scheduled({}, { ...fixture.env, DB: counted.binding }, fixture.ctx);
     expect(counted.stats.queries).toBeLessThanOrEqual(50);
     expect(counted.stats.maxParameters).toBeLessThanOrEqual(100);
     expect(counted.stats.maxBatchStatements).toBeLessThanOrEqual(40);
+    expect(await fixture.local.bucket.head(orphan)).toBeNull();
     expect(
       await db.prepare("select count(*) as n from media where id like 'budget-media-%'").first(),
     ).toEqual({ n: hasInvalidMedia ? 1 : 0 });

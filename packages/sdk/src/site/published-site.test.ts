@@ -259,7 +259,7 @@ test("resolved media carry a token-free build source under the API base URL", as
   expect(required(site.media("hero-media")).sourceUrl).not.toContain(token);
 });
 
-test("optimizeImages false leaves out build sources and nothing else", async () => {
+test("optimizeImages false leaves out build sources and thumbnail readers", async () => {
   const optimized = await createPublishedSiteLoader({
     environment,
     fetch: scriptedFetch([exportResponse(homeExport)]).fetch,
@@ -271,9 +271,47 @@ test("optimizeImages false leaves out build sources and nothing else", async () 
   })();
   expect(site.media("hero-media")).not.toHaveProperty("sourceUrl");
   expect(site.image("hero-media", "Team")).not.toHaveProperty("sourceUrl");
-  const { sourceUrl: _sourceUrl, ...rest } = required(optimized.media("hero-media"));
+  const {
+    sourceUrl: _sourceUrl,
+    thumbnail: _thumbnail,
+    ...rest
+  } = required(optimized.media("hero-media"));
   expect(site.media("hero-media")).toEqual(rest);
   expect(site.mediaUrl("hero-media")).toBe(optimized.mediaUrl("hero-media"));
+});
+
+test("optimized media reads thumbnails lazily through the same client as the export", async () => {
+  const etag = '"thumbnail"';
+  const bytes = Uint8Array.of(1, 2, 3);
+  const transport = scriptedFetch([
+    exportResponse(homeExport),
+    new Response(bytes, { headers: { etag, "content-type": "image/webp" } }),
+    notModified(etag),
+  ]);
+  const site = await createPublishedSiteLoader({
+    environment: { ...environment, LACE_PUBLIC_BASE_URL: "https://media.example.test/base" },
+    fetch: transport.fetch,
+  })();
+  const home = required(site.byPath("/"));
+  const item = required(site.media("hero-media"));
+  const thumbnail = required(item.thumbnail);
+  const image = required(home.image("hero-media", "One use"));
+  expect(image.alt).toBe("One use");
+  expect(image.thumbnail).toBe(thumbnail);
+  expect(home.media("hero-media")?.thumbnail).toBe(thumbnail);
+  expect(site.media("unknown")).toBeUndefined();
+  expect(image.url).toBe("https://media.example.test/base/api/v1/public/media/hero-media");
+  expect(JSON.stringify(image)).not.toContain(token);
+  site.seo(home);
+  expect(transport.requests).toHaveLength(1);
+  await expect(thumbnail.read()).resolves.toEqual({ changed: true, etag, bytes });
+  await expect(thumbnail.read({ etag })).resolves.toEqual({ changed: false, etag });
+  for (const request of transport.requests.slice(1)) {
+    expect(request.url).toBe(
+      "https://api.example.test/lace/api/v1/public/build-media/hero-media/thumbnail",
+    );
+    expect(request.headers.get("authorization")).toBe(`Bearer ${token}`);
+  }
 });
 
 test("image lookups resolve the effective alt text and keep the media description", async () => {
@@ -290,6 +328,7 @@ test("image lookups resolve the effective alt text and keep the media descriptio
     id: "hero-media",
     mimeType: "image/png",
     sourceUrl: "https://api.example.test/lace/api/v1/public/media/hero-media",
+    thumbnail: required(site.media("hero-media")).thumbnail,
     url: "https://public.example.test/lace/api/v1/public/media/hero-media",
     width: 1600,
   });

@@ -92,7 +92,7 @@ export function tourSteps(
             id: "users",
             title: item.label,
             paragraphs: [
-              "Invite people by email with a role; each invitee chooses their own password. Change roles, send password resets, and disable or enable users through confirmation dialogs. Admins manage and publish, editors work on drafts and media, and viewers inspect without making changes. The final active administrator is protected.",
+              "Create or invite people with an email address and role. Each person chooses their own password. From Users you can change roles, send password resets, and disable or enable accounts. At least one active administrator with a password must remain.",
             ],
           });
           break;

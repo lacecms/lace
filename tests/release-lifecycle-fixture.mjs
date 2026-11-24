@@ -8,12 +8,17 @@ import { hashBytes, persistAcceptance } from "../scripts/release-evidence.mjs";
 import { releaseBody } from "../scripts/release-github.mjs";
 import { indexedImages } from "./release-image-fixture.mjs";
 
-export async function lifecycleFixture({ indexed = false } = {}) {
+export async function lifecycleFixture({ indexed = false, historical = false } = {}) {
   const root = await mkdtemp(join(tmpdir(), "lace-lifecycle-test-"));
   const directory = join(root, ".release-artifacts", "candidate");
   await mkdir(join(directory, "packages"), { recursive: true });
   await mkdir(join(directory, "images"));
   const release = JSON.parse(await readFile(new URL("../release/alpha.json", import.meta.url)));
+  if (historical) {
+    release.version = release.generatorVersion = "1.0.0";
+    release.templateVersion = "0.52.0";
+    release.publishedVersions = release.publishedVersions.filter((version) => version !== "1.0.0");
+  }
   const source = { revision: "a".repeat(40), preview: false, fingerprint: "b".repeat(64) };
   const packages = [];
   for (const name of release.packages) {
@@ -74,6 +79,38 @@ export async function lifecycleFixture({ indexed = false } = {}) {
       migrationsApplied: 5,
     };
     result.rc5Cutovers = { node: proof, cloudflareLocal: { ...proof } };
+  }
+  if (release.version === "1.1.0") {
+    const origin = JSON.parse(
+      await readFile(new URL("../release/published-1.0.0.json", import.meta.url)),
+    );
+    const proof = {
+      sourceRevision: origin.sourceRevision,
+      generatorSha256: origin.generatorSha256,
+      originImages: origin.images,
+      beforeFingerprint: "a".repeat(64),
+      upgradedFingerprint: "a".repeat(64),
+      restoredFingerprint: "a".repeat(64),
+      originalOutput: "b".repeat(64),
+      restoredOutput: "b".repeat(64),
+      stableOutput: "c".repeat(64),
+      originalMediaSha256: "d".repeat(64),
+      newMediaSha256: "e".repeat(64),
+      migrationsApplied: 0,
+      ledgerFingerprint: "f".repeat(64),
+      upgradedLedgerFingerprint: "f".repeat(64),
+      restoredLedgerFingerprint: "f".repeat(64),
+      schemaFingerprint: "1".repeat(64),
+      upgradedSchemaFingerprint: "1".repeat(64),
+      restoredSchemaFingerprint: "1".repeat(64),
+      oldSdkReads: true,
+      thumbnailChecks: true,
+    };
+    result.journeys.push(
+      "stable-upgrade-and-restore-node",
+      "stable-upgrade-and-restore-cloudflareLocal",
+    );
+    result.stableUpgrades = { node: proof, cloudflareLocal: { ...proof } };
   }
   await persistAcceptance(directory, inventory, result, "c".repeat(40));
   const changelog = `# Changelog\n\n## ${release.version}\n\n- Important change; [upgrade](docs/compatibility.md).\n`;

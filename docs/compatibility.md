@@ -1,8 +1,8 @@
 # Compatibility baseline
 
-Lace 1.0 supports a direct upgrade from fully migrated and synchronized
-`0.1.0-rc5` (ownership template `0.50.0`). Earlier prereleases fall outside
-the supported upgrade window. [Release floor decision](adr/0035-stable-rc5-upgrade-origin.md).
+Lace 1.1 supports a direct upgrade from fully migrated and synchronized
+`1.0.0` (ownership template `0.52.0`). RC5 operators first follow the
+[published 1.0.0 upgrade](https://github.com/lacecms/lace/blob/v1.0.0/docs/compatibility.md#upgrading-from-rc5).
 
 ## Exact versions selected and smoke-tested
 
@@ -97,8 +97,9 @@ mixing artifacts from different versions is unsupported.
 
 | Release | Template | Status |
 | --- | --- | --- |
-| `1.0.0` | `0.52.0` | Selected candidate; publication pending |
-| `0.1.0-rc5` | `0.50.0` | Published upgrade origin |
+| `1.1.0` | `0.53.0` | Selected candidate |
+| `1.0.0` | `0.52.0` | Published direct upgrade origin for 1.1.0 |
+| `0.1.0-rc5` | `0.50.0` | Published direct upgrade origin for 1.0.0 |
 | `0.1.0-rc4` | `0.49.0` | Published release |
 | `0.1.0-rc3` | `0.48.0` | Published release |
 | `0.1.0-rc2` | `0.47.0` | Historical release |
@@ -177,6 +178,8 @@ export) evolves under one policy.
 - **Version pairing:** within one major line, the API must be the same or a
   newer minor than the site's `@lacecms/sdk`. A newer SDK may rely on keys an
   older API does not send.
+- **Custom SDK clients:** `LaceClient` retains its 1.0.0 member set. The
+  `createLaceClient()` factory also exposes the typed build-thumbnail read.
 - **Strict by design:** rich-text grammar, block `schemaVersion` matching and
   block data validation do not tolerate unknown values; they are safety and
   rendering contracts. Upgrading block definitions or the rich-text format
@@ -206,10 +209,15 @@ plan's 128 MB memory and 50 D1 queries per invocation; staying within its
 10 ms CPU limit is best effort, because one maximal entry can exceed it on
 its own page.
 
+## Upgrading from 1.0.0
+
+The normal forward migration check applies zero steps to a fully migrated
+SQLite or D1 store. Upgrade matching packages and images, adopt template
+`0.53.0`, verify data, and rebuild the site. Recovery restores the coordinated
+1.0.0 database, object storage, configuration, runtime and output. Follow the
+[operator procedure](../apps/docs/src/content/docs/en/latest/operations/index.md#upgrade-and-roll-back).
+
 ## Upgrading from RC5
 
-RC5 already has the baseline and persistence indexes. Apply pending forward
-migrations in place, coordinate all packages and images with the site and
-review managed-file conflicts. Restore a coordinated RC5 database, object
-store, site, configuration and engine backup for rollback. Follow the
-[operator procedure](../apps/docs/src/content/docs/en/latest/operations/index.md#upgrade-and-roll-back).
+Follow the [published RC5-to-1.0.0 procedure](https://github.com/lacecms/lace/blob/v1.0.0/docs/compatibility.md#upgrading-from-rc5)
+before proceeding to 1.1.0.

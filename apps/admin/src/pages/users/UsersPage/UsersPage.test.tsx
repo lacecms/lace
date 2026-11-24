@@ -113,7 +113,7 @@ test("admin user screen lists accounts, invites users, and keeps confirmed state
   await user.click(await screen.findByRole("option", { name: "Editor" }));
   await user.click(within(roleDialog).getByRole("button", { name: "Save role" }));
   expect(await within(roleDialog).findByRole("alert")).toHaveTextContent(
-    "The final active administrator cannot be disabled or demoted.",
+    "At least one active administrator with a password must remain.",
   );
   await user.keyboard("{Escape}");
   expect(within(table).getByRole("row", { name: /admin@lace\.test/u })).toHaveTextContent("Admin");
@@ -184,6 +184,61 @@ test("expired user request returns to login without stale management content", a
   expect(screen.queryByRole("heading", { name: "Users" })).not.toBeInTheDocument();
 });
 
+test("new active accounts refresh the list and totals while the handoff stays open", async () => {
+  const user = userEvent.setup();
+  const created = { disabled: false, email: "new@lace.test", id: "new", role: "viewer" } as const;
+  const link = `https://lace.test/admin/reset-password#token=${"B".repeat(43)}`;
+  let hasAccount = false;
+  renderRoute(
+    "/users",
+    staticSessionSource({ id: "admin-1", role: "admin" }),
+    client({
+      createUser: async () => {
+        hasAccount = true;
+        return { delivery: { status: "failed", reason: "not_configured" }, link, user: created };
+      },
+      listUsers: async () => ({
+        items: hasAccount ? [created] : [],
+        total: Number(hasAccount),
+        disabledCount: 0,
+      }),
+    }),
+  );
+  expect(await screen.findByRole("button", { name: "Invite user" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Create user" }));
+  const form = screen.getByRole("dialog", { name: "Create user" });
+  await user.type(within(form).getByLabelText("Email"), created.email);
+  await user.click(within(form).getByRole("button", { name: "Create user" }));
+  const handoff = await screen.findByRole("dialog", { name: "Share the first-password link" });
+  expect(await screen.findByText("1 account")).toBeInTheDocument();
+  expect(screen.getByText(created.email, { exact: true })).toBeInTheDocument();
+  expect(handoff).toHaveTextContent(link);
+  await user.click(within(handoff).getByRole("button", { name: "Done" }));
+  const row = screen.getByRole("row", { name: /new@lace\.test/u });
+  expect(row).toHaveTextContent("Active");
+  expect(within(row).getByRole("button", { name: /Send password reset/u })).toBeInTheDocument();
+});
+
+test("an expired session while submitting direct creation returns to sign-in", async () => {
+  const user = userEvent.setup();
+  let current: AdminSession | null = sessionFor({ id: "admin-1", role: "admin" });
+  renderRoute(
+    "/users",
+    { get: async () => current, invalidate: () => undefined },
+    client({
+      createUser: async () => {
+        current = null;
+        throw new AdminClientError({ message: "Session expired", status: 401 });
+      },
+    }),
+  );
+  await user.click(await screen.findByRole("button", { name: "Create user" }));
+  const form = screen.getByRole("dialog", { name: "Create user" });
+  await user.type(within(form).getByLabelText("Email"), "new@lace.test");
+  await user.click(within(form).getByRole("button", { name: "Create user" }));
+  expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+});
+
 test("non-admin management routes issue no protected requests", async () => {
   const listUsers = vi.fn(async () => ({ items: [], total: 0, disabledCount: 0 }));
   const listInvitations = vi.fn(async () => ({ items: [] }));
@@ -194,6 +249,8 @@ test("non-admin management routes issue no protected requests", async () => {
     client({ listInvitations, listUsers }),
   );
   await screen.findByRole("heading", { name: "Access denied" });
+  expect(screen.queryByRole("button", { name: "Create user" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Invite user" })).not.toBeInTheDocument();
   expect(listUsers).not.toHaveBeenCalled();
   expect(listInvitations).not.toHaveBeenCalled();
   document.body.replaceChildren();

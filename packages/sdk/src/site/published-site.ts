@@ -1,5 +1,6 @@
 import { createLaceClient } from "../client/client.js";
-import type { LaceClient, LaceFetch } from "../client/client.js";
+import type { LaceClient, LaceClientWithBuildThumbnails, LaceFetch } from "../client/client.js";
+import type { BuildThumbnailOptions } from "../client/build-thumbnail.js";
 import {
   LaceHttpError,
   LaceLinkManifestError,
@@ -68,12 +69,11 @@ export class LacePublishedSiteError extends LaceSdkError {
 }
 
 interface ResolvedConfiguration {
-  readonly client: LaceClient;
+  readonly client: LaceClientWithBuildThumbnails;
   readonly expectedVersion?: number;
   readonly indexing: boolean;
   readonly mediaClient: LaceClient;
-  /** Builds build source URLs; absent when image optimization is off. */
-  readonly sourceClient?: LaceClient;
+  readonly optimizeImages: boolean;
   /** True when the site configures its own public media origin. */
   readonly publicMediaOrigin: boolean;
   readonly siteUrl?: string;
@@ -105,7 +105,7 @@ export function createPublishedSiteLoader(
     );
   }
 
-  function client(baseUrl: string, setting: string, token?: string): LaceClient {
+  function client(baseUrl: string, setting: string, token?: string): LaceClientWithBuildThumbnails {
     try {
       return createLaceClient({
         baseUrl,
@@ -176,9 +176,7 @@ export function createPublishedSiteLoader(
           : client(publicBaseUrl, "LACE_PUBLIC_BASE_URL"),
       publicMediaOrigin: publicBaseUrl !== undefined,
       ...(siteUrl === undefined ? {} : { siteUrl }),
-      ...(options.optimizeImages === false
-        ? {}
-        : { sourceClient: client(baseUrl, "LACE_API_BASE_URL") }),
+      optimizeImages: options.optimizeImages !== false,
     };
   }
 
@@ -247,18 +245,35 @@ export function createPublishedSiteLoader(
     if (!result.changed) return { changed: false, etag: result.etag };
     const version = result.export.version;
     if (expected !== undefined && version !== expected) mismatch(expected, version);
-    const { indexing, mediaClient, publicMediaOrigin, siteUrl, sourceClient } = configuration;
+    const {
+      client: buildClient,
+      indexing,
+      mediaClient,
+      publicMediaOrigin,
+      siteUrl,
+      optimizeImages,
+    } = configuration;
     const site: PublishedSite = assembleSiteView({
       exported: result.export,
       indexing,
       siteUrl,
-      media: Object.values(result.export.media).map((item) => ({
-        ...item,
-        url: publicMediaOrigin ? mediaClient.getPublicMediaUrl(item.id) : item.url,
-        ...(sourceClient === undefined
-          ? {}
-          : { sourceUrl: sourceClient.getPublicMediaUrl(item.id) }),
-      })),
+      media: Object.values(result.export.media).map((item) => {
+        const resolved = {
+          ...item,
+          url: publicMediaOrigin ? mediaClient.getPublicMediaUrl(item.id) : item.url,
+        };
+        if (!optimizeImages) return resolved;
+        const sourceUrl = buildClient.getPublicMediaUrl(item.id);
+        return {
+          ...resolved,
+          sourceUrl,
+          thumbnail: {
+            cacheKey: sourceUrl,
+            read: (options?: BuildThumbnailOptions) =>
+              buildClient.getBuildThumbnail(item.id, options),
+          },
+        };
+      }),
       missingMediaUrl: mediaClient.getPublicMediaUrl,
       failure: (message, cause) => failure("invalid_export", message, cause),
     });

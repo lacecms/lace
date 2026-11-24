@@ -22,6 +22,11 @@ import type {
 } from "@lacecms/contracts";
 import * as v from "valibot";
 import {
+  requestBuildThumbnail,
+  type BuildThumbnailOptions,
+  type BuildThumbnailResult,
+} from "./build-thumbnail.js";
+import {
   LaceContractError,
   LaceHttpError,
   LaceLinkManifestError,
@@ -127,6 +132,14 @@ export interface LaceClient {
   listRecords(modelKey: string, options?: CollectionOptions): Promise<PublicRecordListDto>;
   getPage(modelKey: string, options?: LaceRequestOptions): Promise<PublicContentEntryDto>;
   getPublicMediaUrl(mediaId: string): string;
+}
+
+export interface LaceClientWithBuildThumbnails extends LaceClient {
+  /** Reads bounded thumbnail bytes over the authenticated build API. */
+  getBuildThumbnail(
+    mediaId: string,
+    options?: BuildThumbnailOptions,
+  ): Promise<BuildThumbnailResult>;
 }
 
 interface RequestContext {
@@ -321,7 +334,7 @@ async function parseFailure(response: Response): Promise<never> {
   throw new LaceHttpError(response.status, envelope.output.error);
 }
 
-export function createLaceClient(options: LaceClientOptions): LaceClient {
+export function createLaceClient(options: LaceClientOptions): LaceClientWithBuildThumbnails {
   const baseUrl = normalizeBaseUrl(options.baseUrl);
   const fetchImplementation = resolveFetch(options.fetch);
   const timeoutMs = options.timeoutMs;
@@ -566,6 +579,18 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
 
     getBuildExportPage(requestOptions = {}) {
       return readBuildExportPage(requestOptions);
+    },
+
+    getBuildThumbnail(mediaId, requestOptions = {}) {
+      const id = assertIdentifier(mediaId, "mediaId");
+      if (id === "." || id === "..") throw new TypeError("mediaId must be a media identifier.");
+      const url = publicUrl(baseUrl, ["build-media", id, "thumbnail"]);
+      return requestBuildThumbnail(
+        (init) => fetchImplementation(url, init),
+        token,
+        requestOptions,
+        timeoutMs,
+      );
     },
 
     getByPath(path, requestOptions = {}) {

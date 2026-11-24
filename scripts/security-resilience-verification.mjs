@@ -156,7 +156,8 @@ export async function main() {
           "packages/platform-node/src/security-contract.test.ts",
         ),
         packageRun(
-          "packages/platform-cloudflare/src/repository-contract.test.ts",
+          "packages/platform-cloudflare/src/repository/repository-contract-1.test.ts",
+          "packages/platform-cloudflare/src/repository/repository-contract-2.test.ts",
           "packages/platform-cloudflare/src/security-contract.test.ts",
         ),
         rootRun("tests/durable-restart.test.mjs"),

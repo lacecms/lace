@@ -119,14 +119,45 @@ test("acceptance persists only on complete success and legacy import preserves b
     ).rejects.toThrow("Acceptance");
     await expect(readFile(join(f.directory, "acceptance.json"))).rejects.toThrow();
     report.acceptance.source = f.inventory.source;
-    if (f.inventory.release.version === "1.0.0") {
-      const bad = structuredClone(report);
-      bad.acceptance.rc5Cutovers.cloudflareLocal.restoredFingerprint = "0".repeat(64);
-      expect(() => validateAcceptance(bad, f.inventory, report.inventorySha256)).toThrow("RC5");
-    }
     report.password = "private";
     expect(() => validateAcceptance(report, f.inventory, report.inventorySha256)).toThrow();
   }));
+
+test("stable evidence requires both exact 1.0.0 upgrades and matching restores", () =>
+  use(async (f) => {
+    const original = JSON.parse(await readFile(join(f.directory, "acceptance.json")));
+    const invalid = [
+      (report) => delete report.acceptance.stableUpgrades.cloudflareLocal,
+      (report) => (report.acceptance.stableUpgrades.node.sourceRevision = "0".repeat(40)),
+      (report) => (report.acceptance.stableUpgrades.node.migrationsApplied = 1),
+      (report) =>
+        (report.acceptance.stableUpgrades.node.upgradedLedgerFingerprint = "0".repeat(64)),
+      (report) =>
+        (report.acceptance.stableUpgrades.node.restoredSchemaFingerprint = "0".repeat(64)),
+      (report) =>
+        (report.acceptance.stableUpgrades.cloudflareLocal.restoredOutput = "0".repeat(64)),
+      (report) => (report.acceptance.stableUpgrades.node.originalMediaSha256 = "e".repeat(64)),
+    ];
+    for (const mutate of invalid) {
+      const report = structuredClone(original);
+      mutate(report);
+      expect(() => validateAcceptance(report, f.inventory, original.inventorySha256)).toThrow(
+        "Incomplete 1.0.0 upgrade and restore evidence",
+      );
+    }
+  }));
+
+test("the historical 1.0.0 receipt still requires both RC5 restores", async () => {
+  const f = await lifecycleFixture({ historical: true });
+  try {
+    const report = JSON.parse(await readFile(join(f.directory, "acceptance.json")));
+    expect(validateAcceptance(report, f.inventory, report.inventorySha256)).toEqual(report);
+    report.acceptance.rc5Cutovers.cloudflareLocal.restoredFingerprint = "0".repeat(64);
+    expect(() => validateAcceptance(report, f.inventory, report.inventorySha256)).toThrow("RC5");
+  } finally {
+    await f.cleanup();
+  }
+});
 
 test("notes select one entry, normalize links and command arguments default to preview", () => {
   const text = "## 1.0.0-alpha.1\n\n- Change [guide](docs/guide.md).\n\n## 0.9.0\n\n- Old.\n";

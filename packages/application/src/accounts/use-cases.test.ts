@@ -71,6 +71,11 @@ function memorySecurity() {
     confirmPasswordReset: vi.fn<AccountUseCasesInput["security"]["confirmPasswordReset"]>(
       async () => ({ status: "invalid" }),
     ),
+    createUser: vi.fn<AccountUseCasesInput["security"]["createUser"]>(async ({ email, role }) => ({
+      status: "created",
+      token: opaqueTokenSecret(TOKEN),
+      user: { disabled: false, email, id: "new-user", role },
+    })),
     createInvitation: vi.fn<AccountUseCasesInput["security"]["createInvitation"]>(async (input) =>
       input.email === "taken@example.com"
         ? { status: "conflict" }
@@ -182,6 +187,77 @@ test("user administration checks session permission before delegating to the gua
   });
   await expect(accounts.updateUser(admin, update)).resolves.toBeNull();
   expect(security.updateUser).toHaveBeenCalledWith(update);
+});
+
+describe("direct user creation", () => {
+  const input = { email: "  New@Example.com ", role: "editor" } as const;
+  const link = `${BASE}admin/reset-password#token=${TOKEN}`;
+  const user = { disabled: false, email: "new@example.com", id: "new-user", role: "editor" };
+
+  test("commits before delivering and returns only user and delivery metadata on acceptance", async () => {
+    const { accounts, email, security } = useCases();
+    await expect(accounts.createUser(admin, input)).resolves.toEqual({
+      delivery: { status: "sent" },
+      user,
+    });
+    expect(security.createUser).toHaveBeenCalledWith({
+      email: user.email,
+      now: NOW,
+      requestedBy: admin.id,
+      role: user.role,
+    });
+    expect(security.createUser.mock.invocationCallOrder[0]).toBeLessThan(
+      email.send.mock.invocationCallOrder[0]!,
+    );
+    expect(email.send.mock.calls[0]?.[0]).toMatchObject({
+      subject: "You have access to Lace CMS",
+      to: user.email,
+      text: expect.stringContaining(link),
+    });
+    expect(email.send.mock.calls[0]?.[0].text).toContain("Editor access");
+    expect(email.send.mock.calls[0]?.[0].text).toContain("expires in 1 hour");
+  });
+
+  test("returns a first-password link when mail is disabled or a provider fails", async () => {
+    const disabled = useCases({ email: unconfiguredEmailSender });
+    const unavailable = useCases({
+      email: {
+        from: "cms@example.com",
+        provider: "smtp",
+        send: async () => emailFailed("unavailable"),
+      },
+    });
+    await expect(disabled.accounts.createUser(admin, input)).resolves.toEqual({
+      delivery: { reason: "not_configured", status: "failed" },
+      link,
+      user,
+    });
+    await expect(unavailable.accounts.createUser(admin, input)).resolves.toEqual({
+      delivery: { reason: "unavailable", status: "failed" },
+      link,
+      user,
+    });
+  });
+
+  test("denies unsupported actors and never sends on a failed write or duplicate retry", async () => {
+    const { accounts, email, security } = useCases();
+    const delegated = attenuateActor(admin, { permissions: ["users:manage"], operations: [] });
+    for (const actor of [editor, delegated]) {
+      await expect(accounts.createUser(actor, input)).rejects.toMatchObject({
+        code: "AUTHORIZATION_DENIED",
+      });
+    }
+    expect(security.createUser).not.toHaveBeenCalled();
+    expect(security.readUserProfile).not.toHaveBeenCalled();
+    expect(email.send).not.toHaveBeenCalled();
+    security.createUser.mockRejectedValueOnce(new Error("write failed"));
+    await expect(accounts.createUser(admin, input)).rejects.toThrow("write failed");
+    expect(email.send).not.toHaveBeenCalled();
+    await accounts.createUser(admin, input);
+    security.createUser.mockResolvedValueOnce({ status: "conflict" });
+    await expect(accounts.createUser(admin, input)).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(email.send).toHaveBeenCalledTimes(1);
+  });
 });
 
 test("bootstrap operations preserve the guarded inputs and outcomes", async () => {

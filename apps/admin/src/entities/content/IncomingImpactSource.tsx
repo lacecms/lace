@@ -1,9 +1,8 @@
-import type { SnapshotEntryReference } from "@lacecms/content";
 import type { LinkUsageSourceDto } from "@lacecms/contracts";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useEffect, useState, type ReactNode } from "react";
-import { errorDescription, useAdminClient } from "../../shared/api/index.js";
+import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
+import { AdminClientError, errorDescription, useAdminClient } from "../../shared/api/index.js";
 import { Button } from "../../shared/ui/Button/index.js";
 import { isIncomingImpactChanged } from "./incoming-impact-error.js";
 
@@ -14,6 +13,7 @@ export function IncomingImpactSource({
   onChanged,
   reportLocations,
   purpose,
+  urlReview,
   renderLocation,
 }: {
   readonly source: LinkUsageSourceDto;
@@ -21,9 +21,14 @@ export function IncomingImpactSource({
   readonly action: "delete" | "unpublish";
   readonly onChanged: () => void;
   readonly reportLocations: (id: string, blocked: boolean) => void;
-  readonly purpose: SnapshotEntryReference["purpose"];
   readonly renderLocation?: (location: LinkUsageSourceDto["locations"][number]) => ReactNode;
-}) {
+} & (
+  | { readonly purpose: "reference"; readonly urlReview?: never }
+  | {
+      readonly purpose: "url";
+      readonly urlReview: { readonly receipt: string; readonly locationEpoch: number };
+    }
+)) {
   const client = useAdminClient();
   const [expanded, setExpanded] = useState(false);
   const locations = useInfiniteQuery({
@@ -35,6 +40,7 @@ export function IncomingImpactSource({
       action,
       source.snapshotId,
       source.nextLocationsCursor,
+      ...(urlReview ? [urlReview.receipt, urlReview.locationEpoch] : []),
     ],
     enabled: expanded && source.nextLocationsCursor !== undefined,
     initialPageParam: source.nextLocationsCursor,
@@ -54,6 +60,11 @@ export function IncomingImpactSource({
       );
       if (page.mode !== "locations")
         throw new Error("The impact response has the wrong pagination mode.");
+      if (urlReview && page.receipt !== urlReview.receipt)
+        throw new AdminClientError({
+          code: "CONTENT_LINK_IMPACT_CHANGED",
+          message: "Incoming links changed. Review the current impact again.",
+        });
       return page;
     },
     getNextPageParam: (page) => page.nextCursor,
@@ -61,7 +72,7 @@ export function IncomingImpactSource({
   useEffect(() => {
     if (isIncomingImpactChanged(locations.error, purpose)) onChanged();
   }, [locations.error, onChanged, purpose]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     reportLocations(
       source.snapshotId,
       expanded && (locations.isPending || locations.isError || locations.isFetching),

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { openMcpRuntime } from "./runtime.mjs";
+import { fixturePassword, openMcpRuntime } from "./runtime.mjs";
 for (const kind of ["SQLite", "D1"]) {
   test(`${kind}: enabled production SDK authority follows roles, rotation, owned revoke and account lifecycle`, async () => {
     const f = await openMcpRuntime(kind);
@@ -54,10 +54,22 @@ for (const kind of ["SQLite", "D1"]) {
           )
         ).status,
       ).toBe(401);
-      // Keep another administrator so role/disable orchestration retains its existing last-admin guard.
-      await f.run(
-        "insert into user(id,name,email,email_verified,role,disabled,created_at,updated_at) values ('other-admin','Other','other@lace.test',1,'admin',0,1,1)",
-      );
+      // Keep a second administrator who can actually sign in during role changes.
+      const now = Date.now();
+      const backup = await f.runtime.security.createInvitation({
+        email: "other@lace.test",
+        invitedBy: f.admin.id,
+        now,
+        role: "admin",
+      });
+      expect(backup.status).toBe("created");
+      await expect(
+        f.runtime.security.acceptInvitation({
+          now,
+          password: fixturePassword,
+          token: backup.token,
+        }),
+      ).resolves.toMatchObject({ status: "accepted" });
       await f.runtime.security.updateUser({ userId: f.admin.id, role: "viewer" });
       expect((await writer.listTools()).tools).toHaveLength(3);
       await expect(

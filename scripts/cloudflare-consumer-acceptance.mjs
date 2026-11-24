@@ -16,7 +16,6 @@ import { parseEnv } from "node:util";
 import { crc32, deflateSync } from "node:zlib";
 import { loadBrowser, visible } from "./acceptance-browser.mjs";
 import { assertSecretFree, scanTree } from "./consumer-security.mjs";
-import { readCompleteBuildExport } from "../packages/test-utils/dist/index.js";
 import { importSampleSmoke } from "./import-smoke.mjs";
 
 /** A structurally valid 3×2 RGB PNG, so upload exercises the Worker image inspector. */
@@ -517,7 +516,7 @@ export async function cloudflareConsumerJourney(parent, operations) {
       .getByRole("link", { name: "Settings", exact: true })
       .click();
     await visible(tab.getByText("CMS version", { exact: true }), "cloudflare-cms-version");
-    await visible(tab.getByText("1.0.0", { exact: true }), "cloudflare-cms-release");
+    await visible(tab.getByText("1.1.0", { exact: true }), "cloudflare-cms-release");
     console.info("Acceptance: cloudflare-browser-complete");
     // Both publications and the Settings assertions are complete. Close the
     // browser context before the API journey to stop background polling.
@@ -945,6 +944,7 @@ async function waitBuild(base, cookie, predicate, timeout, beforeEach = async ()
 
 /** Follows every build-export page and returns the strictly validated assembled export. */
 export async function readExport(base, token) {
+  const { readCompleteBuildExport } = await import("../packages/test-utils/dist/index.js");
   const complete = await readCompleteBuildExport(
     (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(20_000) }),
     new URL(".", base).toString(),

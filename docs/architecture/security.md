@@ -55,11 +55,13 @@ repository test fails when admin source compares it with role names
 
 ### Accounts and the first administrator
 
-Public sign-up is disabled. Only the bootstrap flow creates an account
-directly; every other account is created when its invitee accepts an
-invitation from an administrator with `users:manage`, who also changes roles.
-No administrator ever chooses another person's password, and there is no
-hard-coded default password.
+Public sign-up is disabled. After bootstrap, a browser-session administrator
+with `users:manage` can invite someone or create an enabled account directly.
+An invitation creates an account when the invitee accepts it. Direct creation
+atomically stores the user, an email/password credential awaiting a password
+and the first password-reset verifier. The recipient sets their own password
+before signing in. An administrator awaiting a first password does not count
+toward the last-administrator guard on disable and demotion.
 
 The first administrator comes from a one-time setup token, so the flow is the
 same against local Node and remote Cloudflare: `lace auth bootstrap` prints it
@@ -83,9 +85,10 @@ creation can join a D1 transaction
   keeps working.
 - `api_tokens` holds automation credentials apart from human users. Build and
   import tokens share it and every verifier filters by kind. A build token
-  carries exactly `content:build:read` and authenticates only the build
-  export. An import token carries `content:import`, optionally with
-  `content:publish` ([ADR 0016](../adr/0016-import-credentials.md)).
+  carries exactly `content:build:read` and authenticates only build
+  export and published-media thumbnail reads. An import token carries
+  `content:import`, optionally with `content:publish`
+  ([ADR 0016](../adr/0016-import-credentials.md)).
 - An import token lives 1 to 7 days and is issued with `settings:manage`;
   publication is granted only when the creator holds `content:publish`.
   `Authorization: Bearer` below `/api/v1/admin/` or `/api/v1/account/` is an
@@ -98,9 +101,9 @@ creation can join a D1 transaction
   re-enabling does not restore them.
 
 The route's credential mode drives import eligibility and the REST challenge.
-The import allowlist is derived from those declarations. Build export is
-registered only with a build-token verifier and authenticates before export
-reads and conditional responses.
+The import allowlist is derived from those declarations. Build export and
+build thumbnails are registered only with a build-token verifier and
+authenticate before content or storage reads and conditional responses.
 
 ### Invitations, resets and self-service
 
@@ -183,6 +186,8 @@ per actor) and by the invitation, password-recovery, self-service, MCP and
 OAuth specs. Invitation inspection and acceptance and reset requests and
 confirmations count against the per-client sensitive auth limit; password
 changes count against it per actor. Deployments may lower these limits.
+Direct creation shares the per-administrator invitation and administrative
+password-reset limit.
 Expired buckets are removed by the same scheduled maintenance as expired
 idempotency rows.
 

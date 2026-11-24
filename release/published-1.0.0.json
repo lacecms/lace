@@ -1,0 +1,38 @@
+{
+  "sourceRevision": "357ebbbc8d2eb73acf164ae62db40647dce2a046",
+  "npm": {
+    "@lacecms/content": "sha512-fAOyl2bS0xkfincDGKbNEXbPEUAlNi0M7TafUjlm6nQT1zAtyTV3oMHevHsW5mFckdXirevRB25w9/Y+kcuLHw==",
+    "@lacecms/config": "sha512-Law0sa+h4Ynn9BuFbleSNiAJzpp0lSnjvA5koyRhxE/7s2ooNesv6OJiyxVfk3o21CWp2tQ3hlyRGOlLzMrXqQ==",
+    "@lacecms/domain": "sha512-K6CIhyiB4YvXRIb8g86Lfi7MFucN2iDGOaNhPS5L3ko0KIi9tiSfn+EMZ9rsL+ZaV90tMF4V84Q6Hv5qxhP+rw==",
+    "@lacecms/contracts": "sha512-QWeOU6ysK5M5SD7nO5z+Q+t0cvvdbiW7jm6hc2MdwmzpUFoUkInhWC0CCTGBKAbLW38KWspfPZ3khHwZu5MT1w==",
+    "@lacecms/application": "sha512-B1c1s31WOFdpQvbLxXJ0KJcrjNzCCk810y0NkIavj0P3D2aQf5CaJ5QkNmMVkzS2Hm25yl6mNlxBXY+e44q7ZQ==",
+    "@lacecms/render": "sha512-DNwAjlzvvZ6wEoKOTINTRmXHE+6qf8DydouikSGWx1R2wI6DRCC8BqkWxigsqTVOEIk+ik50GYjNvnrmPeO52w==",
+    "@lacecms/sdk": "sha512-Ry4R/PavjJ9wyZP9lh6/T4dzKjdW6AgeDhgVvj1NI09WIjusR82V/Acws8BRX8jGCc2BgwkwogZtGyrdChwOZw==",
+    "@lacecms/astro": "sha512-y15aYVRh/w49vAaNUYciWbdeU4sk8staBcQGfy6QPPncDctkWPir21HY4zZGcsqXjsQGt7orMGd5S01UNAZQOg==",
+    "@lacecms/auth": "sha512-iaI4w+QKIxPpzKjfkH6GTvuVD4wy5jZOiWYX0ePMTnf0xcneZI/BH+jJ/azTg/vgqSBiPuC/X4wsSRbNQez6pw==",
+    "@lacecms/db": "sha512-M/nl9PiBg4rKZyfGpVqOIH7fRpbSUEP6Y69vVMIaLW0wSe1WvdKuYsdBtiFWt02PsUAKea4UGY8fApoCn3xEWQ==",
+    "@lacecms/mcp": "sha512-3rndiM7cF1RMkUjzuCOFabSj3BwxNiq+TFzXJqoGMVRZ2L5uz1OiZTnIV2QJd0F8avS+JD2OVxLa31/cxG29Pw==",
+    "@lacecms/server": "sha512-xXK2rOZ/xfsZVaqjrxlaEQqVk04zq+KauJOlL5jVQveUNdy2ofya4o3yTcGYOFLDYlrGnDKZsTGZUGTXEUVXbA==",
+    "@lacecms/platform-cloudflare": "sha512-PWX+zdkalDsMVEd+F1iIRMKOw6X5K6N8zAOgDqlDYB/TvJX6z4WGGRvhAXXe//jJimCZdH/RqghSZSTkRB09Ug==",
+    "@lacecms/platform-node": "sha512-z7kRXVyTz5xtoadw7jO9e5YD06fZ0u2N+zh27xs2YMOaSLQ5dv32RI3s9/R02Gvf3nS7L4GmqfZN56snUHpang==",
+    "@lacecms/cli": "sha512-2tagLknCdL8yODWlDxWGjuQUhFJp3AYheNQLIHMp6bjEu6LNOB+aoapC6LRSEdWimGrWBCTNX8T+yMajAxsV6A==",
+    "create-lace": "sha512-TYu5Pt2NOAOPLSzwVNVNLA80y0PG9fUOSTkmucsnyy9yGxLbv2nwaagr67OwY63ICMAFUeJgCMgCeteMPyOi1Q=="
+  },
+  "images": {
+    "api": {
+      "index": "sha256:a46a46e92ce78278d15c90a6725b72cd299838afb3847e0112981219f539abef",
+      "platforms": {
+        "amd64": "sha256:968323a1a5b5a6f0c6e4c47d6dbc76f5f46222e88182d5bf6c6188cf9c440924",
+        "arm64": "sha256:4ceea3a366a72e4636973197e945bb757336a9a232ba95a40da30b2abd8cca8d"
+      }
+    },
+    "builder": {
+      "index": "sha256:78fb828318dc20e1ab5f00495a4ef9776ca8b52b1bd643ad0dccd9ed399aadd1",
+      "platforms": {
+        "amd64": "sha256:9dd8fd61d13b9225daf9fcd1d534d87fc70a6c490988de1fe8d6150b171d7a36",
+        "arm64": "sha256:7c30829cf97027d5970bba9f3f929a5c6e5ef6a20e8d726b8db24c1024bf1859"
+      }
+    }
+  },
+  "generatorSha256": "0b36902f81891a05c80955a4f90faf616d3067f4ed1739489f615d2d193bd85a"
+}

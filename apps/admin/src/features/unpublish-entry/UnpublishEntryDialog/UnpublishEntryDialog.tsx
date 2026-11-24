@@ -7,10 +7,9 @@ import {
   ReferenceImpactReview,
   useReferenceImpactReview,
 } from "../../../entities/content/index.js";
-import type { LinkImpactAcknowledgmentDto } from "@lacecms/contracts";
 import type { ContentModelDto, UnpublishContentEntryResultDto } from "@lacecms/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { type RefObject, useRef } from "react";
+import type { RefObject } from "react";
 import { ulid } from "ulid";
 import {
   AdminClientError,
@@ -18,6 +17,7 @@ import {
   errorDescription,
   technicalDetails,
   useAdminClient,
+  type AdminClient,
 } from "../../../shared/api/index.js";
 import { Button } from "../../../shared/ui/Button/index.js";
 import {
@@ -32,6 +32,7 @@ import {
 import { ErrorState } from "../../../shared/ui/ErrorState/index.js";
 
 const staleCodes = new Set(["CONTENT_NOT_PUBLISHED", "CONTENT_REVISION_CONFLICT"]);
+type UnpublishAttempt = Parameters<AdminClient["unpublishEntry"]>;
 
 function consequence(
   family: ResolvedModelKind["publicFamily"],
@@ -88,23 +89,13 @@ export function UnpublishEntryDialog({
   const queryClient = useQueryClient();
   const impact = useLinkImpactReview(entryId, "unpublish", open);
   const references = useReferenceImpactReview(entryId, "unpublish", open);
-  const attemptKey = useRef<string | undefined>(undefined);
-  const attemptImpact = useRef<LinkImpactAcknowledgmentDto | undefined>(undefined);
   const unpublish = useMutation({
-    mutationFn: (idempotencyKey: string) =>
-      client.unpublishEntry(entryId, {
-        expectedPublishedSnapshotId,
-        idempotencyKey,
-        ...(attemptImpact.current === undefined ? {} : { linkImpact: attemptImpact.current }),
-      }),
+    mutationFn: (attempt: UnpublishAttempt) => client.unpublishEntry(...attempt),
     onError: (error) => {
       if (isLinkImpactChanged(error)) impact.refresh();
       if (isReferenceImpactChanged(error)) references.refresh();
-      if (error instanceof AdminClientError && error.status !== undefined)
-        attemptKey.current = undefined;
     },
     onSuccess: (result) => {
-      attemptKey.current = undefined;
       onOpenChange(false);
       void queryClient.invalidateQueries({ queryKey: adminQueryKeys.references });
       onUnpublished(result);
@@ -114,6 +105,19 @@ export function UnpublishEntryDialog({
     unpublish.error instanceof AdminClientError &&
     unpublish.error.code !== undefined &&
     staleCodes.has(unpublish.error.code);
+  const retry =
+    unpublish.isError &&
+    unpublish.variables[0] === entryId &&
+    !(unpublish.error instanceof AdminClientError && unpublish.error.status !== undefined) &&
+    !isLinkImpactChanged(unpublish.error) &&
+    !isReferenceImpactChanged(unpublish.error)
+      ? unpublish.variables
+      : undefined;
+  const canSubmit =
+    open &&
+    !unpublish.isPending &&
+    !stale &&
+    (retry !== undefined || (impact.ready && references.ready));
   return (
     <Dialog
       onOpenChange={(next) => {
@@ -142,7 +146,13 @@ export function UnpublishEntryDialog({
           />
         )}
         <LinkImpactReview review={impact} />
-        <ReferenceImpactReview review={references} onNavigate={() => onOpenChange(false)} />
+        <ReferenceImpactReview
+          review={references}
+          onNavigate={() => {
+            onOpenChange(false);
+            unpublish.reset();
+          }}
+        />
         <DialogFooter>
           {stale ? (
             <Button
@@ -161,17 +171,31 @@ export function UnpublishEntryDialog({
             </DialogClose>
           )}
           <Button
-            disabled={unpublish.isPending || stale || !impact.ready || !references.ready}
+            disabled={!canSubmit}
             onClick={() => {
-              if (attemptKey.current === undefined) {
-                attemptKey.current = ulid();
-                attemptImpact.current = impact.acknowledgment;
+              if (!canSubmit) return;
+              if (retry) {
+                unpublish.mutate(retry);
+                return;
               }
-              unpublish.mutate(attemptKey.current);
+              unpublish.mutate([
+                entryId,
+                {
+                  expectedPublishedSnapshotId,
+                  idempotencyKey: ulid(),
+                  ...(impact.acknowledgment === undefined
+                    ? {}
+                    : { linkImpact: impact.acknowledgment }),
+                },
+              ]);
             }}
             variant="destructive"
           >
-            {unpublish.isPending ? "Unpublishing…" : "Unpublish"}
+            {unpublish.isPending
+              ? "Unpublishing…"
+              : retry
+                ? "Retry previous unpublish"
+                : "Unpublish"}
           </Button>
         </DialogFooter>
       </DialogContent>

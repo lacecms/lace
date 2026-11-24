@@ -186,7 +186,10 @@ for (const kind of ["empty", "failed"])
     try {
       const phase = vitestPhase(root, "repositories", [
         packageRun("packages/platform-node/src/repository-contract.test.ts"),
-        packageRun("packages/platform-cloudflare/src/repository-contract.test.ts"),
+        packageRun(
+          "packages/platform-cloudflare/src/repository/repository-contract-1.test.ts",
+          "packages/platform-cloudflare/src/repository/repository-contract-2.test.ts",
+        ),
       ]);
       const executed = [];
       let final;

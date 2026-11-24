@@ -3,6 +3,10 @@ import { createHash, randomBytes } from "node:crypto";
 import { copyFile, cp, mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { basename, join } from "node:path";
+import {
+  assertBuildThumbnailReads,
+  serveBuildThumbnail,
+} from "../tests/support/build-thumbnail-fixture.mjs";
 import { guideFiles } from "./consumer-guides.mjs";
 import { assertSecretFree, scanTree } from "./consumer-security.mjs";
 
@@ -232,6 +236,8 @@ export async function existingSiteJourney(parent, operations) {
   secretValues.add(token);
   let exported;
   let exportReads = 0;
+  const thumbnailRequests = [];
+  const thumbnails = { token, thumbnails: new Map(), requests: thumbnailRequests };
   const server = createServer((request, response) => {
     // The build fetches originals under the API origin; lightboxes link the public origin.
     if (/^(?:\/lace)?\/api\/v1\/public\/media\//u.test(request.url ?? "")) {
@@ -239,7 +245,7 @@ export async function existingSiteJourney(parent, operations) {
       response.end(mediaBytes);
       return;
     }
-    exportReads++;
+    if (serveBuildThumbnail(request, response, thumbnails)) return;
     if (
       request.url !== "/api/v1/public/build-export" ||
       request.headers.authorization !== `Bearer ${token}`
@@ -248,6 +254,7 @@ export async function existingSiteJourney(parent, operations) {
       response.end(JSON.stringify({ error: { code: "AUTHORIZATION_DENIED", message: "Denied" } }));
       return;
     }
+    exportReads++;
     response.writeHead(200, { "content-type": "application/json", etag: '"7"' });
     response.end(JSON.stringify(exported));
   });
@@ -292,9 +299,15 @@ export async function existingSiteJourney(parent, operations) {
 
     exported = existingSiteExport(source0);
     exportReads = 0;
+    thumbnailRequests.length = 0;
     await build("existing-build");
     if (exportReads !== 1)
       throw new Error(`existing-build: expected one export read, saw ${exportReads}`);
+    assertBuildThumbnailReads(thumbnailRequests, {
+      "hero-media": 404,
+      "note-media": 404,
+      "post-media": 404,
+    });
     home = await readFile(join(root, "dist/index.html"), "utf8");
     article = await readFile(join(root, "dist/articles/first-post/index.html"), "utf8");
 

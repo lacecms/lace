@@ -11,6 +11,7 @@ import {
 } from "../shared/openapi.js";
 import {
   ContractValidationError,
+  errorEnvelopeSchema,
   MAX_MEDIA_TAG_INPUT_LENGTH,
   MAX_MEDIA_TAGS_PER_ITEM,
   mediaDetailSchema,
@@ -29,14 +30,18 @@ import {
   updateMediaMetadataResultSchema,
   toMediaDetailDto,
 } from "@lacecms/contracts";
+import { MediaThumbnailUnavailableError } from "@lacecms/application";
 import { Hono } from "hono";
 import { resolver } from "hono-openapi";
 import type { RouteContext } from "../composition/route-context.js";
 import { v1Routes } from "../routing/v1-routes.js";
 import {
   conditionalMediaResponse,
+  conditionalThumbnailResponse,
   PUBLIC_MEDIA_CACHE_CONTROL,
   PREVIEW_MEDIA_CACHE_CONTROL,
+  thumbnailParameters,
+  thumbnailResponses,
 } from "./media-binary.js";
 import { readMediaUpload } from "./media-upload.js";
 
@@ -45,7 +50,7 @@ const routes = v1Routes.media;
 export function createMediaRoutes(routeContext: RouteContext) {
   const { actor } = routeContext.actors;
   const { capabilities } = routeContext;
-  const { media, mediaDto } = capabilities;
+  const { media, mediaDto, thumbnails } = capabilities;
   return new Hono()
     .on(
       routes.list.method,
@@ -154,7 +159,14 @@ export function createMediaRoutes(routeContext: RouteContext) {
         const resolvedActor = await actor(context);
         const upload = await readMediaUpload(context.req.raw);
         if (upload instanceof Response) return upload;
-        const created = await media().create({ ...upload, actor: resolvedActor });
+        const defer = capabilities.deferTask(context);
+        const created = await media().create({
+          ...upload,
+          actor: resolvedActor,
+          ...(thumbnails?.canGenerate && {
+            onCommitted: (id) => defer(Promise.resolve().then(() => thumbnails.prepare(id))),
+          }),
+        });
         return response(mediaMetadataSchema, mediaDto(created), 201);
       },
     )
@@ -396,6 +408,43 @@ export function createMediaRoutes(routeContext: RouteContext) {
               PREVIEW_MEDIA_CACHE_CONTROL,
               (item) => media().openBinary(item),
             );
+      },
+    )
+    .on(
+      routes.thumbnail.method,
+      routes.thumbnail.path,
+      describePolicy(routes.thumbnail, {
+        summary: "Read a media thumbnail",
+        description:
+          "Returns the stored or freshly generated static WebP thumbnail of an active media item to a browser session with content:read, including for unpublished media. " +
+          "A matching strong, weak or wildcard If-None-Match returns 304 only for an available thumbnail. Malformed validators are ignored.",
+        tags: ["admin"],
+        parameters: thumbnailParameters,
+        responses: {
+          ...thumbnailResponses,
+          404: {
+            description: "Media is not active or does not exist",
+            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+          },
+          ...authenticationFailure(),
+          ...authorizationFailure(),
+          ...validationFailure(),
+        },
+      }),
+      validate("param", mediaIdParams),
+      async (context) => {
+        const input = {
+          actor: await actor(context),
+          mediaId: mediaId(context.req.valid("param").mediaId),
+        };
+        if (!thumbnails) {
+          if ((await media().resolvePreview(input)) === null) return notFound();
+          throw new MediaThumbnailUnavailableError("transform");
+        }
+        const thumbnail = await thumbnails.read(input);
+        return thumbnail === null
+          ? notFound()
+          : conditionalThumbnailResponse(context.req.raw, thumbnail);
       },
     );
 }

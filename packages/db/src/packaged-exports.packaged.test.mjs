@@ -30,6 +30,7 @@ test("packaged entry point keeps its public exports", async () => {
     "ENTRY_SORT_SQL",
     "ENTRY_SOURCE_SQL",
     "ENTRY_STATUS_SQL",
+    "HAS_SIGN_IN_PASSWORD_SQL",
     "IDEMPOTENCY_PURGE_LIMIT",
     "IMPORT_TOKEN_KIND_SQL",
     "IMPORT_TOKEN_RECORD_USE_SQL",

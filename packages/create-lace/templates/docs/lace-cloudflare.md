@@ -4,7 +4,7 @@ Run the CMS as your own Cloudflare Worker (D1, R2 and the packaged admin): first
 
 Cloudflare operator commands require the project's direct Miniflare dependency, pinned to the version used by Wrangler.
 
-For RC5, keep the existing D1 and R2 bindings. Quiesce writers and schedules, restore a D1 export and matching R2 backup to isolated targets, and follow the [RC5 upgrade procedure](lace-operations.md#upgrading-from-rc5).
+When upgrading from 1.0.0, keep the existing D1 and R2 bindings. Pause writers and schedules, verify a D1 export and matching R2 backup on isolated targets, then follow the [upgrade procedure](lace-operations.md#upgrade-the-cms).
 
 **Working directory:** the CMS installation root that contains `package.json`, `lace.config.ts` and `worker/` (for example `cms/`). Run every command from there.
 
@@ -31,7 +31,7 @@ Site mode: **none**. This project has no site, so it has no static-site workflow
 ## Prerequisites
 
 - Node `>=24.12.0` and pnpm `>=12` (see [tested versions](https://github.com/lacecms/lace/blob/main/docs/compatibility.md#minimum-requirements-and-tested-versions)). The project pins Wrangler in `package.json`; always use it through `pnpm exec wrangler`.
-- Lace `1.0.0` or a later compatible release. The private operator file, `--operator-env`, `lace cloudflare preflight` and Pages deployment tracking are included in this release.
+- Lace `1.1.0` or a later compatible release. The private operator file, `--operator-env`, `lace cloudflare preflight` and Pages deployment tracking are included in this release.
 - For the account part only: a Cloudflare account with Workers, D1 and R2.
 
 ## Run the Worker locally
@@ -133,6 +133,26 @@ Shown for split credentials:
 6. Bootstrap: `pnpm exec lace auth bootstrap --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`, then create the first administrator at `<LACE_PUBLIC_BASE_URL>admin/` on the remote Worker.
 
 Expected result: the remote admin at your Worker origin with its own administrator and empty remote content. Full details and options: [deploy the Worker to your account](lace-operations.md#deploy-the-worker-to-your-account).
+
+## Enable media thumbnails
+
+Add `"images": { "binding": "IMAGES" },` at the top level of
+`worker/wrangler.jsonc` and deploy with the project's pinned Wrangler.
+This also applies to existing Cloudflare projects after they install the
+matching CMS release. Upgrades preserve your Wrangler configuration.
+
+The Worker creates static WebP thumbnails in the existing private `MEDIA`
+bucket after upload and when Admin first requests absent derivatives. Media
+deletion and the minute cron clean up derivatives. Existing media adopt
+thumbnails when browsed. An absent binding or an unsupported source leaves
+a fallback for items without a stored thumbnail. Open the item in Media to
+see its original, including GIF animation.
+
+Review your account's transformation allowance and source constraints.
+Cloudflare counts unique transformations and documents separate limits for
+dimensions, animations and AVIF availability.
+[Images pricing](https://developers.cloudflare.com/images/pricing/) ·
+[Image limits and formats](https://developers.cloudflare.com/images/get-started/limits/)
 
 <!-- lace-site: starter existing -->
 

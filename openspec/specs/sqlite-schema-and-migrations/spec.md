@@ -358,9 +358,7 @@ of them in order, SHALL migrate normally.
 The schema SHALL declare an index whose leading column is each column that
 references `content_snapshots`: the entry draft pointer, the entry published
 pointer, the published-route snapshot and the site-build published snapshot.
-It SHALL also index idempotency-record expiry. One forward migration after the
-baseline SHALL create these indexes with the same SQL for Node SQLite and D1,
-SHALL rewrite no rows, and SHALL leave every existing index in place.
+It SHALL also index idempotency-record expiry. The shipped index definitions SHALL agree on Node SQLite and D1 and remain present across supported forward upgrades.
 
 #### Scenario: Deleting a superseded snapshot uses indexes
 
@@ -377,10 +375,8 @@ SHALL rewrite no rows, and SHALL leave every existing index in place.
 
 #### Scenario: A baseline database receives the migration
 
-- **WHEN** a database at the baseline migration is migrated on Node SQLite or
-  local D1
-- **THEN** the new migration reports as installed, the new indexes exist, and
-  every pre-existing row is unchanged
+- **WHEN** a populated RC5 database completes the forward upgrade on either runtime
+- **THEN** each required index is present once, the indexed lookups retain their plans and the existing records are preserved
 
 ### Requirement: Every index exists in the declared schema
 
@@ -398,8 +394,7 @@ database SHALL NOT create it a second time.
 
 #### Scenario: Declared adoption does not duplicate an index
 
-- **WHEN** a baseline database is migrated after the security indexes are
-  declared
+- **WHEN** a fresh database is initialized or an RC5 database is migrated
 - **THEN** each of those indexes exists exactly once and the migration does
   not fail
 
@@ -451,3 +446,34 @@ The current schema definition SHALL generate the `content_models.kind` CHECK fro
 
 - **WHEN** a later release widens the descriptor key set
 - **THEN** the pre-upgrade database still rejects the new kind, and schema verification requires a new migration before the widened schema can ship on SQLite and D1
+
+### Requirement: RC5 installations upgrade through both runtime migration entry points
+
+The 1.0.0 engine SHALL initialize empty stores and migrate a fully migrated RC5 database in place by applying only its pending checked-in migrations in order. Node and D1 SHALL retain the original ledger identities and existing data. The resulting schema, triggers, seed state and indexes SHALL match a fresh 1.0.0 database. Migration SHALL preserve operator configuration, auth identities and verifiers, content IDs, drafts, publications, media keys, URL references and queued work.
+
+#### Scenario: Populated RC5 database
+
+- **WHEN** the operator runs explicit migration on a populated RC5 SQLite file or D1 database with its real ledger
+- **THEN** the two RC5 entries remain and five later migrations are recorded, existing actors acquire profiles, old URL links retain their meaning, preview starts without published private artifacts, and integrity checks pass
+
+#### Scenario: Repeat after success
+
+- **WHEN** migration is rerun against the upgraded store
+- **THEN** ledger, data, published version and pending work remain the same and the database passes readiness
+
+#### Scenario: Unrecognized migration history
+
+- **WHEN** the supplied ledger includes an unknown migration
+- **THEN** explicit migration refuses before changing the database and gives the operator the existing unsupported-schema diagnostic
+
+### Requirement: Fully migrated 1.0.0 databases are current in 1.1.0
+
+The 1.1.0 migration chain SHALL retain the published 1.0.0 migration identities, hashes and order. The explicit packaged 1.1.0 migration command SHALL succeed against a fully migrated 1.0.0 SQLite or D1 database and apply zero migrations, preserving recorded ledger entries and existing data. Running it again SHALL produce the same result. Fresh database initialization and refusal of an unknown ledger SHALL remain supported and verifiable. No content or original-media transformation SHALL be required for a synchronized 1.0.0 project to start 1.1.0.
+
+#### Scenario: An operator migrates a populated 1.0.0 store
+- **WHEN** the target's packaged migration command runs twice on a fully migrated 1.0.0 store for Node SQLite or D1
+- **THEN** both commands succeed, each adds zero ledger entries, and the schema and full ledger match the pre-upgrade state
+
+#### Scenario: The database has an unknown ledger entry
+- **WHEN** the 1.1.0 migration command encounters an unsupported migration ledger
+- **THEN** it reports the schema incompatibility before writing to the store

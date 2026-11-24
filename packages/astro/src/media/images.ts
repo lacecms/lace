@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ImageDescription } from "@lacecms/render";
+import { blurredPlaceholder } from "./placeholder-image.js";
+import { createThumbnailPlaceholderResolver } from "./thumbnail-placeholder.js";
 
 /** The variant widths Lace renders, each capped at the original width. */
 export const IMAGE_VARIANT_WIDTHS = Object.freeze([960, 1920] as const);
@@ -89,22 +91,6 @@ export function webpHasAlpha(bytes: Uint8Array): boolean {
   return true;
 }
 
-/** An SVG data URL that draws a small WebP blurred to its full box. */
-export function blurredPlaceholder(webp: Uint8Array, width: number, height: number): string {
-  const deviation = Math.max(1, Math.round((width / 24) * 10) / 10);
-  const svg =
-    `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ${width} ${height}'>` +
-    `<filter id='b' color-interpolation-filters='sRGB'><feGaussianBlur stdDeviation='${deviation}'/>` +
-    "<feComponentTransfer><feFuncA type='discrete' tableValues='1 1'/></feComponentTransfer></filter>" +
-    "<image width='100%' height='100%' preserveAspectRatio='none' filter='url(#b)' " +
-    `href='data:image/webp;base64,${Buffer.from(webp).toString("base64")}'/></svg>`;
-  // Percent-encode only what a CSS url() data URL needs; `%` goes first.
-  let escaped = svg;
-  for (const character of ["%", "\u0023", "<", ">"])
-    escaped = escaped.replaceAll(character, encodeURIComponent(character));
-  return `data:image/svg+xml,${escaped}`;
-}
-
 /** The structural part of an Astro local image service that placeholders use. */
 export interface LaceImageService {
   readonly transform?: (
@@ -138,16 +124,15 @@ export interface PlaceholderResolverOptions {
 /** The image fields a placeholder needs. */
 export type PlaceholderSource = Pick<
   ImageDescription,
-  "height" | "mimeType" | "sourceUrl" | "width"
+  "height" | "mimeType" | "sourceUrl" | "thumbnail" | "width"
 >;
 
 /** Resolves the placeholder data URL of an image, or `undefined` when it has none. */
 export type PlaceholderResolver = (image: PlaceholderSource) => Promise<string | undefined>;
 
 /**
- * Creates a placeholder resolver that fetches each original at most once per
- * resolver and caches results on disk by source URL; media bytes never change
- * for a media identifier, so cached placeholders never go stale.
+ * Uses lazy build thumbnails when available, with a separate original-based
+ * cache for standalone and protected-preview images.
  */
 export function createPlaceholderResolver(
   options: PlaceholderResolverOptions,
@@ -156,6 +141,7 @@ export function createPlaceholderResolver(
     options.cacheDirectory ?? join(process.cwd(), "node_modules", ".astro", "lace", "placeholders");
   const fetchImpl = options.fetch ?? globalThis.fetch;
   const pending = new Map<string, Promise<string | null>>();
+  const fromThumbnail = createThumbnailPlaceholderResolver(cacheDirectory);
 
   async function compute(
     sourceUrl: string,
@@ -206,7 +192,7 @@ export function createPlaceholderResolver(
   }
 
   return async (image) => {
-    const { height, mimeType, sourceUrl, width } = image;
+    const { height, mimeType, sourceUrl, thumbnail, width } = image;
     const transform = options.service.transform;
     if (
       sourceUrl === undefined ||
@@ -216,6 +202,19 @@ export function createPlaceholderResolver(
       typeof transform !== "function"
     )
       return undefined;
+    if (thumbnail !== undefined) {
+      if (!(width > 0 && height > 0)) return undefined;
+      return fromThumbnail(thumbnail, async (bytes, dimensions) => {
+        const { data } = await transform.call(
+          options.service,
+          bytes,
+          { ...dimensions, fit: "inside", format: "webp", quality: 50, src: "lace-thumbnail.webp" },
+          options.imageConfig as never,
+          { error: () => {}, info: () => {}, warn: () => {} },
+        );
+        return data;
+      });
+    }
     let result = pending.get(sourceUrl);
     if (result === undefined) {
       result = compute(sourceUrl, { height, width }, transform.bind(options.service));

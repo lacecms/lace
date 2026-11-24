@@ -22,7 +22,7 @@ test("tour mirrors navigation and available actions for each role", () => {
     expect(text.includes("Save to keep a draft")).toBe(role !== "viewer");
     expect(text.includes("Upload supported")).toBe(role !== "viewer");
     for (const instruction of [
-      "Invite people by email",
+      "Create or invite people",
       "Publish a saved",
       "Request a build",
       "retry a failed",

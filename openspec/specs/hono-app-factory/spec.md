@@ -209,7 +209,8 @@ permission checks; handlers SHALL NOT compare role strings.
 ### Requirement: Setup, security administration, and build export have distinct HTTP boundaries
 The HTTP application SHALL expose setup-admin only while setup remains
 incomplete, resolve an administrator actor for user and build-token
-administration, and accept a build credential only at build export. It SHALL
+administration, and accept a build credential only at build export or the
+build thumbnail route. It SHALL
 run the applicable rate-limit check before setup, authentication, token, or
 upload work; an exhausted result SHALL return the shared `RATE_LIMITED` error
 with `Retry-After`. Route handlers SHALL pass portable commands and actors to
@@ -387,34 +388,52 @@ expose identical routes and responses.
 
 ### Requirement: Account routes keep their actor, token and rate-limit boundaries
 The HTTP application SHALL expose these routes on both runtimes with identical
-responses:
+responses.
 
-- **Public, without a session:**
-  - `POST /api/v1/invitations/inspect` and `POST /api/v1/invitations/accept`;
+- **Public, without a session**
+  - `POST /api/v1/invitations/inspect` and `POST /api/v1/invitations/accept`.
   - `POST /api/v1/password-reset/request`, which always returns `202` with an
-    empty accepted body and schedules delivery without awaiting it;
+    empty accepted body and schedules delivery without awaiting it.
   - `POST /api/v1/password-reset/confirm`, which returns `204`.
-- **Any authenticated actor:**
-  - `PATCH /api/v1/account` and `POST /api/v1/account/password`;
-  - `GET /api/v1/account/sessions` and `DELETE /api/v1/account/sessions/:sessionId`;
+- **Any authenticated actor**
+  - `PATCH /api/v1/account` and `POST /api/v1/account/password`.
+  - `GET /api/v1/account/sessions` and `DELETE /api/v1/account/sessions/:sessionId`.
   - `POST /api/v1/account/sessions/revoke-others`.
-- **Requiring `users:manage` through the use cases:**
-  - `GET` and `POST /api/v1/admin/invitations`;
+- **Requiring `users:manage` through the use cases**
+  - `POST /api/v1/admin/users` with a browser session.
+  - `GET` and `POST /api/v1/admin/invitations`.
   - `POST /api/v1/admin/invitations/:invitationId/resend` and
-    `DELETE /api/v1/admin/invitations/:invitationId`;
+    `DELETE /api/v1/admin/invitations/:invitationId`.
   - `POST /api/v1/admin/users/:userId/password-reset` and
     `POST /api/v1/admin/users/:userId/sessions/revoke`.
 
-`POST /api/v1/admin/users` SHALL no longer exist. Tokens SHALL be accepted only
-in JSON bodies, never in paths or queries, and request logs SHALL contain no
-token. Invalid invitation and reset tokens SHALL return a single `410` invalid
-envelope without distinguishing unknown, expired, consumed or revoked tokens.
+The direct creation route SHALL enforce the shared origin and credential
+policy for session mutations. It SHALL return `201` with the shared creation
+result and `Cache-Control: no-store`, the shared `422 VALIDATION_FAILED` envelope for
+invalid requests, and `409 CONFLICT` for an address already used by an account
+or a pending invitation. It SHALL share the existing per-administrator
+invitation and administrative reset budget of at most 20 requests per hour.
+An exhausted budget SHALL return `429 RATE_LIMITED` with `Retry-After` before
+creation work or email delivery.
+
+The HTTP application SHALL accept invitation and reset tokens only in JSON
+bodies and SHALL omit them from paths, queries and request logs. Invalid
+invitation and reset tokens SHALL return a single `410` invalid envelope
+without distinguishing unknown, expired, consumed or revoked tokens.
 Rate-limit checks SHALL run before token lookups and email delivery.
 
 #### Scenario: Removed creation route
 - **WHEN** an administrator posts an email, password and role to
   `/api/v1/admin/users`
-- **THEN** the response is `404` and no user is created
+- **THEN** the response is `422 VALIDATION_FAILED` because the restored route rejects the removed password-bearing request shape, and no user is created
+
+#### Scenario: Direct creation requires session authority
+- **WHEN** a caller without a session, an editor, a viewer, a bearer-token client or a request with an untrusted origin attempts direct creation
+- **THEN** the route returns the existing authentication or authorization denial without creating an account or sending email
+
+#### Scenario: The shared account-management budget is exhausted
+- **WHEN** an administrator exhausts the existing budget through invitation or admin reset operations and then attempts direct creation
+- **THEN** the route returns `429` with `Retry-After` and creates nothing
 
 #### Scenario: Anonymous account request
 - **WHEN** a request without a session calls `GET /api/v1/account/sessions`
@@ -495,6 +514,52 @@ unpublished, deleting, deleted or not visible to the caller never receives
 #### Scenario: A malformed validator is ignored
 - **WHEN** a client sends `If-None-Match: not-a-tag` for published media
 - **THEN** the response is `200` with the complete body and cache headers
+
+### Requirement: Admin thumbnails use private authenticated delivery
+The HTTP application SHALL expose `GET /api/v1/admin/media/:mediaId/thumbnail` as a browser-session-only route and require `content:read` with the original admin preview's active-item eligibility. It SHALL return the bounded derivative as `image/webp` with `Cache-Control: private, no-cache` and a strong `ETag` that identifies the returned bytes independently of the original binary and metadata validators. The response SHALL reveal no private storage location or credential.
+
+Authorization and eligibility SHALL be evaluated before opening the stored derivative, attempting generation or evaluating a validator. A matching `If-None-Match`, including its supported weak or wildcard form, SHALL return `304` with the same cache headers and no body only for an available stored derivative. A malformed validator SHALL be ignored. An unknown or inactive item SHALL receive the existing admin media not-found response. An unavailable derivative for an eligible item SHALL return a sanitized `503 MEDIA_THUMBNAIL_UNAVAILABLE` with `Cache-Control: no-store`. This endpoint SHALL NOT redirect to an original.
+
+#### Scenario: A signed-in viewer reads an unpublished thumbnail
+- **WHEN** a viewer opens the thumbnail route for an active unpublished media item
+- **THEN** the response contains a bounded WebP with private cache control and its own validator
+
+#### Scenario: A previously valid validator is replayed after loss of access
+- **WHEN** a request with a cached thumbnail validator arrives anonymously, with an import or build token, without content read permission, or after the item becomes inactive
+- **THEN** the caller receives the applicable authentication, authorization or not-found response without thumbnail bytes or a `304`
+
+#### Scenario: A thumbnail and original revalidate independently
+- **WHEN** an authorized client sends the original's validator to the thumbnail route and later sends the thumbnail validator
+- **THEN** the first response includes the thumbnail bytes and the second is a bodyless `304` with the thumbnail's cache headers
+
+#### Scenario: A wildcard is sent with an unavailable derivative
+- **WHEN** an authorized thumbnail request contains `If-None-Match: *` and the derivative is unavailable
+- **THEN** the route responds with the sanitized unavailable error and provides no original, redirect or `304`
+
+### Requirement: Build thumbnails have an authenticated published-media route
+On Node and Cloudflare, the HTTP application SHALL register `GET /api/v1/public/build-media/:mediaId/thumbnail` when the published-media capability and build-token verifier are configured. It SHALL require the same verified Bearer credential and 401 challenge as build export, before any eligibility lookup or storage read. For eligible media, it SHALL return the same validated static `image/webp` bytes and strong derivative ETag as the admin route, with `Cache-Control: private, no-cache`. A matching strong, weak or wildcard `If-None-Match` SHALL return a bodyless 304 with the same cache headers only after verifying the token, current published eligibility and derivative availability. Malformed validators SHALL be ignored.
+
+An eligible item with an unavailable derivative SHALL receive the sanitized `503 MEDIA_THUMBNAIL_UNAVAILABLE` response with `Cache-Control: no-store`. Unknown and ineligible items SHALL receive the same 404 as the public original route. Responses SHALL expose no storage location or credential and SHALL never redirect. The route SHALL follow the existing build-route policy and SHALL NOT grant new access to the session-only admin route.
+
+#### Scenario: A valid build token fetches or revalidates a thumbnail
+- **WHEN** a valid build token requests an eligible thumbnail and then requests it with its ETag
+- **THEN** the first response is a bounded WebP and the second is a private bodyless 304
+
+#### Scenario: A shared or unsigned client cannot probe the derivative
+- **WHEN** an anonymous caller, session-only caller, import token, or revoked build token requests the route, even with a matching or wildcard validator
+- **THEN** the server returns the build-token authentication response without checking media or contacting storage
+
+#### Scenario: An unpublish invalidates eligibility
+- **WHEN** an authorized caller uses a previously valid thumbnail ETag after the media loses its last published reference
+- **THEN** the response is 404 and the server does not check derivative storage
+
+#### Scenario: An eligible thumbnail cannot be generated
+- **WHEN** a valid build caller requests eligible media and the derivative is unavailable, even with `If-None-Match: *`
+- **THEN** the route responds with a sanitized and non-cacheable 503
+
+#### Scenario: Build authentication is unavailable
+- **WHEN** the server is composed without a build-token verifier
+- **THEN** no build thumbnail route is registered
 
 ### Requirement: Optional MCP composition preserves the shared request boundary
 The portable HTTP application SHALL accept an optional runtime-neutral MCP
@@ -685,8 +750,8 @@ The document SHALL declare security schemes for the browser session cookie,
 the build token and the import token. Each operation SHALL state which of
 them it accepts:
 
-- public routes: no credential;
-- the build export: build token;
+- anonymous public reads require no credential.
+- the build export and build media thumbnail require a build token.
 - admin and account routes: session;
 - routes on the import allowlist: session or import token, except the route
   that describes the presented import token, which accepts only the import
@@ -727,8 +792,9 @@ registered product route.
 
 - **WHEN** a client reads the generated document
 - **THEN** it finds security schemes for the session cookie, build token and
-  import token. Public reads require none, the build export requires a build
-  token, and allowlisted import routes accept a session or an import token
+  import token. Anonymous public reads require no credentials. The build export and
+  build media thumbnail require a build token. Allowlisted import routes
+  accept a session or an import token
 
 #### Scenario: Drift is caught
 

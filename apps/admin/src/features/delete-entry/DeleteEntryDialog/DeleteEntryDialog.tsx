@@ -63,15 +63,7 @@ export function DeleteEntryDialog({
   const [typed, setTyped] = useState("");
   const deleted = useRef(false);
   const remove = useMutation({
-    mutationFn: () =>
-      references.acknowledgment
-        ? client.deleteEntry(
-            entryId,
-            expectedRevision,
-            impact.acknowledgment,
-            references.acknowledgment,
-          )
-        : client.deleteEntry(entryId, expectedRevision, impact.acknowledgment),
+    mutationFn: (input: Parameters<typeof client.deleteEntry>) => client.deleteEntry(...input),
     onError: (error) => {
       if (isLinkImpactChanged(error)) impact.refresh();
       if (isReferenceImpactChanged(error)) references.refresh();
@@ -124,7 +116,11 @@ export function DeleteEntryDialog({
           className="grid gap-4"
           onSubmit={(event) => {
             event.preventDefault();
-            if (confirmed && !remove.isPending) remove.mutate();
+            if (!confirmed || remove.isPending) return;
+            const input = [entryId, expectedRevision, impact.acknowledgment] as const;
+            remove.mutate(
+              references.acknowledgment ? [...input, references.acknowledgment] : [...input],
+            );
           }}
         >
           {published ? (

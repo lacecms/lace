@@ -93,11 +93,12 @@ export const adminQueryKeys = Object.freeze({
   /** Invalidation prefix covering every media list and detail query. */
   media: ["admin", "media"] as const,
   /** One searched, filtered, and sorted media list; pages are held by the infinite query. */
-  mediaList: (query: Pick<MediaListQuery, "q" | "sort" | "tags" | "type">) =>
+  mediaList: (query: MediaListQuery) =>
     [
       ...adminQueryKeys.media,
       "list",
       {
+        limit: query.limit ?? null,
         q: query.q ?? null,
         sort: query.sort ?? null,
         tags: query.tags === undefined || query.tags.length === 0 ? null : [...query.tags].sort(),

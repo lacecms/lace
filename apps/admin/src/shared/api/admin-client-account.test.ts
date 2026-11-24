@@ -13,6 +13,29 @@ const invitation = {
 const accountToken = "A".repeat(43);
 const acceptLink = `https://lace.test/admin/accept-invite#token=${accountToken}`;
 
+test("creates an enabled user with a credentialed POST and validates the response", async () => {
+  const user = { disabled: false, email: "new@lace.test", id: "new-user", role: "editor" };
+  const input = { email: user.email, role: "editor" } as const;
+  const payload = { delivery: { status: "sent" }, user };
+  const fetcher = vi.fn(async () => Response.json(payload, { status: 201 }));
+  await expect(createAdminClient(fetcher as typeof fetch).createUser(input)).resolves.toEqual(
+    payload,
+  );
+  expect(fetcher).toHaveBeenCalledWith(
+    "/api/v1/admin/users",
+    expect.objectContaining({
+      body: JSON.stringify(input),
+      credentials: "same-origin",
+      method: "POST",
+    }),
+  );
+  await expect(
+    createAdminClient(async () => Response.json({ ...payload, link: acceptLink })).createUser(
+      input,
+    ),
+  ).rejects.toBeInstanceOf(AdminClientError);
+});
+
 test("uses validated credentialed user, status, and token endpoints", async () => {
   const account = { disabled: false, email: "editor@lace.test", id: "user-1", role: "editor" };
   const token = {

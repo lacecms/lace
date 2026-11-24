@@ -2,7 +2,7 @@
 title: Style your site
 description: Target stable data-lace hooks to style blocks, rich text, galleries, images and video players without editing Lace.
 kind: guide
-verifiedAgainst: 1.0.0
+verifiedAgainst: 1.1.0
 ---
 
 Your Astro site owns its presentation. Lace renders blocks through source components installed into your site and marks their output with stable `data-lace-*` attributes, so you can style pages from your own stylesheet without changing content, Admin or a block component. This guide lists those hooks and the behavior of the built-in galleries, images and video players that your CSS works with.
@@ -147,7 +147,7 @@ The starter renders the published `navigation` global in the layout header, outs
 
 ## Style images and the lightbox
 
-Block images are WebP variants with `srcset`. An opaque image carries a blurred inline `background-image` placeholder until it loads, so leave the image's `background-*` properties unset.
+Block images are WebP variants with `srcset`. An eligible opaque still image carries a blurred inline `background-image` at its focal point while the variant loads. Astro makes the blur from the CMS thumbnail during a published build, so it is available in the initial HTML even with JavaScript disabled. Leave the image's `background-*` properties unset to preserve it. Styles must also work when blur is omitted, such as on transparent images, animated GIFs or images with an unavailable thumbnail. See [Astro image delivery](../#optimize-images).
 
 With the _Open full screen_ setting on, the `image` block and each gallery image wrap the `media` image in a `lightbox-trigger` button that opens a `lightbox` `<dialog>` holding a `lightbox-close` button and the original image as `lightbox-media`. The starter resets the trigger button, shows a focus ring, sizes the dialog to the image so the `::backdrop` around it stays clickable, fits the original to the viewport with `object-fit: contain` and pins the close button to the top right.
 

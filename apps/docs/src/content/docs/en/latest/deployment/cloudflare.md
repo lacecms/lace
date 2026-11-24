@@ -2,7 +2,7 @@
 title: Deploy on Cloudflare
 description: Run the CMS as a Worker with D1 and R2, and deploy the static site separately on Pages.
 kind: guide
-verifiedAgainst: 1.0.0
+verifiedAgainst: 1.1.0
 ---
 
 On Cloudflare, the CMS API and Admin run as a Worker with D1 for content and accounts and a private R2 bucket for media. Your Astro site is a separate static deployment, usually on Cloudflare Pages, that reads published content from the Worker at build time. This guide runs the Worker locally, prepares your account, deploys the Worker and connects the site's deployment.
@@ -65,6 +65,30 @@ pnpm exec lace auth bootstrap --target cloudflare-remote --operator-env .lace/cl
 Preflight is read-only: it validates the selected credentials and runs one `SELECT 1` against the selected D1 database. It does not prove deployment permissions or OAuth membership; `whoami` and your permission review do. Finally create the first administrator at `<LACE_PUBLIC_BASE_URL>admin/` on the remote Worker.
 
 For transactional email, prefer the `resend` provider (it works on Workers Free): set `LACE_EMAIL_PROVIDER` and `LACE_EMAIL_FROM` in the Worker vars and store the key with `wrangler secret put LACE_RESEND_API_KEY`. The `cloudflare` provider needs Workers Paid, an onboarded sending domain and the `send_email` binding. Redeploy, then send a test from **Settings → Email delivery**.
+
+## Enable media thumbnails
+
+For a new or existing project, add this top-level entry to your
+`worker/wrangler.jsonc` and redeploy the Worker.
+
+```jsonc
+"images": { "binding": "IMAGES" },
+```
+
+You own the Wrangler configuration. A Lace package or template upgrade leaves
+that file under your control. The binding reads from the existing private
+`MEDIA` bucket. An upload can generate its thumbnail in the background, and the
+first admin request generates a missing thumbnail for existing media. Each
+stored thumbnail is a small static WebP reused by the library, picker and editor.
+The minute cron also reconciles orphaned thumbnails left by interrupted writes.
+
+The Images plan limits unique transformations. Source format, image dimensions
+and animated-image limits can affect generation, including AVIF input
+availability. Check the limits for your account. When generation is
+unavailable, including with the binding omitted, Admin shows a fallback for a
+missing thumbnail. Opening a media item still loads its original, including
+animated GIFs. [Images pricing](https://developers.cloudflare.com/images/pricing/)
+· [Image limits and formats](https://developers.cloudflare.com/images/get-started/limits/)
 
 ## Deploy the site separately
 

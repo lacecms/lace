@@ -47,8 +47,20 @@ export interface RenderableMedia {
   readonly mimeType?: string | undefined;
   /** The URL a site build fetches the original from; absent when optimization is off. */
   readonly sourceUrl?: string | undefined;
+  readonly thumbnail?: ImageThumbnailReader | undefined;
   readonly url: string;
   readonly width: number | null;
+}
+
+/** Optional build-time access supplied by the media resolver. */
+export interface ImageThumbnailReader {
+  readonly cacheKey: string;
+  read(options?: {
+    readonly etag?: string;
+  }): Promise<
+    | { readonly changed: false; readonly etag: string }
+    | { readonly changed: true; readonly etag: string; readonly bytes: Uint8Array }
+  >;
 }
 
 /** Published content available to a block through an authored entry ID. */
@@ -89,6 +101,7 @@ export interface ImageDescription {
   readonly sourceUrl?: string;
   /** The public URL of the original. */
   readonly src: string;
+  readonly thumbnail?: ImageThumbnailReader;
   readonly width?: number;
 }
 
@@ -347,6 +360,7 @@ export function createImageDescriber(
           }),
       ...(media.sourceUrl === undefined ? {} : { sourceUrl: media.sourceUrl }),
       src: media.url,
+      ...(media.thumbnail === undefined ? {} : { thumbnail: media.thumbnail }),
       ...(media.width === null ? {} : { width: media.width }),
     });
   };

@@ -13,7 +13,6 @@ export type {
 } from "./rich-text/types.js";
 
 export {
-  blurredPlaceholder,
   createPlaceholderResolver,
   IMAGE_PLACEHOLDER_WIDTH,
   IMAGE_VARIANT_WIDTHS,
@@ -22,6 +21,7 @@ export {
   variantWidths,
   webpHasAlpha,
 } from "./media/images.js";
+export { blurredPlaceholder } from "./media/placeholder-image.js";
 export type {
   LaceGetImage,
   LaceImageConfig,
