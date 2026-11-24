@@ -46,9 +46,12 @@ The primary routes are `/login`; the public `/accept-invite`,
   from the address bar and keep it only in component state, never in the query
   string, router state, query cache or browser storage
   ([admin-account-screens](../../openspec/specs/admin-account-screens/spec.md)).
-- No admin screen collects another person's password. A link or token shown
-  once (an undelivered invitation or reset, a new build or import token) lives
-  only in its dialog's state
+- Users offers **Create user** and **Invite user** through `users:manage`.
+  Direct creation lists the account as Active immediately and sends a link
+  to set its first password. Without delivery, the dialog shows the link for
+  private handoff. Each user chooses their own password.
+- Links or tokens shown once (an undelivered invitation, first-password link
+  or reset, a new build or import token) live only in their dialog state
   ([admin-users-and-settings](../../openspec/specs/admin-users-and-settings/spec.md)).
 - Settings shows administrators a read-only MCP section in both states, read
   from the authenticated settings status; "enabled" describes configuration,

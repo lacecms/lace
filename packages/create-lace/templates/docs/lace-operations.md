@@ -389,11 +389,13 @@ Keep SMTP passwords and API keys in the private `.env` or as Worker secrets (`pn
 
 ## Accounts and invitations
 
-After setup, add people from Admin → Users → Invite user with an email address and a role. Lace never asks an administrator for another person's password: the invitee opens a single-use link, valid for 72 hours, and chooses their own password. Pending invitations can be resent (which replaces the link) or revoked. When email is configured the link is emailed; otherwise, or when delivery fails, the invite dialog shows the link once so you can pass it on another way. Links carry their token after `#`, so it never reaches server logs.
+After setup, use **Admin → Users → Create user** with an email address and a role to create an active account immediately. Lace emails a single-use link to set the first password, valid for one hour. If email is disabled or sending fails, copy the link from the dialog and share it privately. **Send password reset** on the user's row issues a fresh link when needed.
+
+**Invite user** creates a pending invitation with an email address and role. The account is created when the invitee opens the single-use 72-hour link and chooses a password. Pending invitations can be resent with a new link or revoked. If the email was not sent, the dialog shows the link once for private handoff. First-password, invitation and reset tokens travel after `#` in these links.
 
 Anyone can request a password reset from the sign-in screen ("Forgot password?"); the answer is the same whether or not the address has an account, and the one-hour link signs the account out everywhere once used. Administrators can also send a reset or sign a user out everywhere from the Users list, and disabling an account ends its sessions. Every signed-in user can change their display name and password and review or end their sessions under Account in the user menu.
 
-Invitations and resets need no step beyond `pnpm db:migrate`; deploy the API and admin artifacts together.
+Deploy the API and admin artifacts together. Direct creation uses the existing account and password-reset tables.
 
 ## Configuration, routes, renderers and styling
 

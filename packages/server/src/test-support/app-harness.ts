@@ -364,6 +364,11 @@ export function accountSecurity(overrides: Partial<SecurityService> = {}) {
       acceptInvitation: record("acceptInvitation", { status: "invalid" }),
       changePassword: record("changePassword", { revoked: 1, status: "changed" }),
       confirmPasswordReset: record("confirmPasswordReset", { status: "invalid" }),
+      createUser: record("createUser", {
+        status: "created",
+        token: opaqueTokenSecret(TOKEN),
+        user: { disabled: false, email: "new@lace.test", id: "new-user", role: "editor" },
+      }),
       createInvitation: record("createInvitation", {
         invitation: {
           createdAt: unixMilliseconds(1_000),

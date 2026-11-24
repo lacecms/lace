@@ -39,7 +39,7 @@ closes, a notification names the affected account and change, and the lists
 refresh from remote state. A failed mutation SHALL keep its dialog open, show
 the error inside it, and leave the listed role, status and invitations at their
 last confirmed values; a final-administrator rejection SHALL be explained as
-"The final active administrator cannot be disabled or demoted." Cancelling a
+"At least one active administrator with a password must remain." Cancelling a
 dialog SHALL issue no request and return focus to the control that opened it.
 
 #### Scenario: Administrator invites a user with email delivery
@@ -64,7 +64,7 @@ dialog SHALL issue no request and return focus to the control that opened it.
 - **THEN** the screen sends only the role change and shows the new role badge after confirmation
 
 #### Scenario: Final administrator change is rejected
-- **WHEN** the API rejects a role change or disable action that would remove the final active administrator
+- **WHEN** the API rejects a role change or disable action that would remove the last active administrator with a password
 - **THEN** the dialog shows the final-administrator explanation and the row retains its previously confirmed role and active status
 
 #### Scenario: Administrator disables and re-enables a user
@@ -99,6 +99,43 @@ dialog SHALL issue no request and return focus to the control that opened it.
 #### Scenario: Editor opens Users directly
 - **WHEN** an editor opens `/users`
 - **THEN** the screen shows access denied and issues no user-list or invitation-list request
+
+### Requirement: Administrators create an active account from Users
+The Users screen SHALL show **Create user** alongside **Invite user** for
+sessions with the server-derived `users:manage` permission, irrespective of
+email configuration. Its dialog SHALL collect a valid required email and a
+Lace role using the existing role descriptions, default to Viewer, and explain
+that creation enables the account immediately and the recipient sets their own
+password. The dialog SHALL prevent duplicate submission while the request is
+pending. Cancelling before submission SHALL send no request and restore focus
+to **Create user**.
+
+Only a confirmed API success SHALL refresh the Users list and totals from
+the server and announce the newly created active account. When delivery is
+`sent`, the dialog SHALL close and report that the access email was sent.
+When delivery fails, the dialog SHALL confirm that the account was created,
+explain the delivery outcome, and offer **Copy link** and **Done** for the
+first-password link. It SHALL explain that the link is single-use and expires
+in one hour. The link SHALL exist only in transient dialog state, including
+while the list refreshes. The dialog SHALL clear it on close, and the user row
+SHALL offer a fresh link through **Send password reset**. An API error SHALL
+keep the form open, preserve the entered values and show the error inline.
+
+#### Scenario: Administrator creates a user without SMTP or another email provider
+- **WHEN** an administrator submits a valid email and role with provider `none`
+- **THEN** the Users list reflects the new Active account and the dialog shows a copyable first-password link, with no link shown after closing or reopening it
+
+#### Scenario: Administrator creates a user with email delivery
+- **WHEN** creation succeeds and the configured provider accepts the access email
+- **THEN** the dialog closes, confirmation distinguishes account creation and email sending, and the Users list refreshes
+
+#### Scenario: The address conflicts
+- **WHEN** the API refuses creation because the address belongs to an account or a pending invitation
+- **THEN** the dialog retains the email and role, explains the conflict and adds no row
+
+#### Scenario: An editor or viewer opens Users
+- **WHEN** a session lacks `users:manage`
+- **THEN** the screen exposes neither creation nor invitation controls
 
 ### Requirement: Users and invitations can be paged independently
 The Users screen SHALL load the first user and invitation pages independently

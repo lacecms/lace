@@ -216,6 +216,11 @@ unpublishes.
 
 ### Account endpoints
 
+`POST /api/v1/admin/users` requires a browser session with `users:manage`.
+It creates an enabled account and reports the email outcome. On failed
+delivery the response also carries a single-use first-password link for
+private handoff.
+
 Invitation and reset tokens travel only in JSON bodies, never in paths or
 queries. An invalid token returns one `410` envelope without distinguishing
 unknown, expired, consumed or revoked tokens. A reset request always returns

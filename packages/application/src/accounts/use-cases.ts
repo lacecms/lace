@@ -1,6 +1,7 @@
 import type {
   InvitationRecord,
   AccountSecurityPort,
+  ManagedUser,
   SessionSecurityPort,
   UserProfileReader,
 } from "../ports/security.js";
@@ -131,6 +132,21 @@ export function passwordChangedEmailTemplate(input: { readonly siteUrl: string }
   });
 }
 
+function accessGrantedEmailTemplate(input: {
+  readonly link: string;
+  readonly role: SecurityRole;
+  readonly siteUrl: string;
+}): RenderedEmail {
+  return renderEmail({
+    link: input.link,
+    paragraphs: [
+      `An administrator gave you ${ROLE_LABELS[input.role]} access to the Lace CMS at ${input.siteUrl}.`,
+      `Open the link below to set your first password. The link works once and expires in ${hours(PASSWORD_RESET_TTL_MS)} hour.`,
+    ],
+    subject: "You have access to Lace CMS",
+  });
+}
+
 /** Builds a link whose token travels only in the URL fragment. */
 export function accountLink(
   publicBaseUrl: string,
@@ -212,6 +228,30 @@ export class AccountUseCases {
   public async listUsers(actor: Actor, input: CursorPageInput) {
     requireSessionActor(actor, "users:manage");
     return this.input.security.listUsers(input);
+  }
+
+  public async createUser(
+    actor: Actor,
+    input: { readonly email: string; readonly role: SecurityRole },
+  ): Promise<LinkIssueResult & { readonly user: ManagedUser }> {
+    requireSessionActor(actor, "users:manage");
+    const created = await this.input.security.createUser({
+      email: normalizeAccountEmail(input.email),
+      now: this.now(),
+      requestedBy: actor.id,
+      role: input.role,
+    });
+    if (created.status === "conflict") throw new AccountError("CONFLICT");
+    const link = accountLink(this.input.publicBaseUrl, "admin/reset-password", created.token);
+    const message = accessGrantedEmailTemplate({
+      link,
+      role: created.user.role,
+      siteUrl: this.input.publicBaseUrl,
+    });
+    return Object.freeze({
+      ...(await this.deliver(message, created.user.email, link)),
+      user: created.user,
+    });
   }
 
   public async updateUser(actor: Actor, input: Parameters<AccountSecurityPort["updateUser"]>[0]) {

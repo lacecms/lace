@@ -141,6 +141,8 @@ export * from "./preview/commands.js";
 export {
   setupStateSchema,
   setupAdminRequestSchema,
+  userCreateRequestSchema,
+  userCreateResultSchema,
   userUpdateRequestSchema,
   managedUserSchema,
   managedUserListSchema,
@@ -149,6 +151,7 @@ export {
 } from "./accounts/users.js";
 export type {
   SetupStateDto,
+  UserCreateResultDto,
   PermissionDto,
   AdminSessionDto,
   ManagedUserDto,

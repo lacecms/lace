@@ -57,7 +57,7 @@ test("keeps the dialog open with the final-administrator explanation", async () 
   );
   await user.click(within(dialog).getByRole("button", { name: "Save role" }));
   expect(await within(dialog).findByRole("alert")).toHaveTextContent(
-    "The final active administrator cannot be disabled or demoted.",
+    "At least one active administrator with a password must remain.",
   );
   expect(screen.getByRole("dialog", { name: "Change role" })).toBeInTheDocument();
 });

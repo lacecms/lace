@@ -301,6 +301,8 @@ test("packaged entry point keeps its public exports", async () => {
     "unpublishContentEntryResultSchema",
     "updateMediaMetadataRequestSchema",
     "updateMediaMetadataResultSchema",
+    "userCreateRequestSchema",
+    "userCreateResultSchema",
     "userUpdateRequestSchema",
     "validationError",
     "validationErrorDetailsSchema",

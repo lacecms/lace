@@ -99,6 +99,9 @@ export const v1Routes = {
   },
   adminUsers: {
     users: defineRoute("GET", "/admin/users", "session"),
+    createUser: defineRoute("POST", "/admin/users", "session", {
+      rateLimit: { operation: "invite", scope: "actor" },
+    }),
     invitations: defineRoute("GET", "/admin/invitations", "session"),
     invite: defineRoute("POST", "/admin/invitations", "session", {
       rateLimit: { operation: "invite", scope: "actor" },

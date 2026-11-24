@@ -55,11 +55,13 @@ repository test fails when admin source compares it with role names
 
 ### Accounts and the first administrator
 
-Public sign-up is disabled. Only the bootstrap flow creates an account
-directly; every other account is created when its invitee accepts an
-invitation from an administrator with `users:manage`, who also changes roles.
-No administrator ever chooses another person's password, and there is no
-hard-coded default password.
+Public sign-up is disabled. After bootstrap, a browser-session administrator
+with `users:manage` can invite someone or create an enabled account directly.
+An invitation creates an account when the invitee accepts it. Direct creation
+atomically stores the user, an email/password credential awaiting a password
+and the first password-reset verifier. The recipient sets their own password
+before signing in. An administrator awaiting a first password does not count
+toward the last-administrator guard on disable and demotion.
 
 The first administrator comes from a one-time setup token, so the flow is the
 same against local Node and remote Cloudflare: `lace auth bootstrap` prints it
@@ -184,6 +186,8 @@ per actor) and by the invitation, password-recovery, self-service, MCP and
 OAuth specs. Invitation inspection and acceptance and reset requests and
 confirmations count against the per-client sensitive auth limit; password
 changes count against it per actor. Deployments may lower these limits.
+Direct creation shares the per-administrator invitation and administrative
+password-reset limit.
 Expired buckets are removed by the same scheduled maintenance as expired
 idempotency rows.
 

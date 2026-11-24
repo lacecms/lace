@@ -227,6 +227,7 @@ test("both runtimes share one sensitive-limit mapping for account routes", () =>
     ["PATCH", "/api/v1/account", undefined],
     ["GET", "/api/v1/account/sessions", undefined],
     ["GET", "/api/v1/admin/invitations", undefined],
+    ["POST", "/api/v1/admin/users", { operation: "invite", scope: "actor" }],
     ["POST", "/api/v1/admin/invitations", { operation: "invite", scope: "actor" }],
     ["POST", "/api/v1/admin/invitations/inv-1/resend", { operation: "invite", scope: "actor" }],
     ["DELETE", "/api/v1/admin/invitations/inv-1", { operation: "invite", scope: "actor" }],

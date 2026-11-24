@@ -156,6 +156,7 @@ export function stubClient(overrides: Partial<AdminClient> = {}): AdminClient {
     retryBuild: async () => ({ coalesced: false, eventId: "event-1", targetVersion: 0 }),
     updateUser: async () => ({}) as never,
     listUsers: async () => ({ items: [], total: 0, disabledCount: 0 }),
+    createUser: async () => ({}) as never,
     signOutUser: async () => ({ revoked: 0 }),
     sendPasswordReset: async () => ({ delivery: { status: "sent" as const } }),
     listInvitations: async () => ({ items: [] }),

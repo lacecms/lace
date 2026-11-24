@@ -1,6 +1,7 @@
 import { getRouteApi } from "@tanstack/react-router";
 import { Users } from "lucide-react";
 import { useSession, useSessionRecovery } from "../../../entities/session/index.js";
+import { CreateUserDialog } from "../../../features/create-user/index.js";
 import { InviteUserDialog } from "../../../features/invite-user/index.js";
 import {
   adminQueryKeys,
@@ -50,13 +51,16 @@ function UsersManager() {
               : accountSummary(counts.total, counts.disabledCount)}
           </p>
         </div>
-        {/* One stable instance: the lists refreshing must not unmount a shown link. */}
-        <InviteUserDialog />
+        {/* Keep both dialogs mounted while their lists refresh. */}
+        <div className="flex flex-wrap gap-2">
+          <InviteUserDialog />
+          <CreateUserDialog />
+        </div>
       </div>
       {users.query.isPending ? <LoadingState label="Loading users" lines={4} /> : undefined}
       {items?.length === 0 ? (
         <EmptyState
-          description="Use Invite user to add each person who edits or reviews this site."
+          description="Use Create user or Invite user to give someone access to this site."
           icon={Users}
           title="No users found"
         />

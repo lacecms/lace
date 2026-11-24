@@ -1,13 +1,13 @@
 ---
 title: Users, roles and accounts
-description: Invite users, recover passwords, manage your account and sessions, and create build and import tokens.
+description: Create and invite users, recover passwords, manage your account and sessions, and create build and import tokens.
 kind: guide
 verifiedAgainst: 0.1.0-rc2
 ---
 
 Lace has three roles. Administrators manage users, publication and Settings;
 editors write drafts and upload media; viewers inspect content without changing
-it. This guide covers inviting people, password recovery, your own account and
+it. This guide covers creating and inviting users, password recovery, your own account and
 sessions, and the tokens that let a site build or an import script read or
 write content.
 
@@ -18,8 +18,8 @@ write content.
   ([Getting started](../../getting-started/)); after setup the endpoint closes
   for good. Recovering the last administrator is an operator task
   ([Operations](../../operations/)).
-- Optional: configured email delivery. Without it, invitation and reset links
-  are shown once in Admin for you to hand over.
+- Email delivery is optional. Without it, Admin shows first-password,
+  invitation and administrator reset links once for private handoff.
 
 The server enforces every permission, also for direct API requests; hiding a
 control in Admin is not the security boundary.
@@ -29,6 +29,20 @@ control in Admin is not the security boundary.
 | Administrator | Everything: publish and unpublish, manage users, invitations, Settings and tokens                             |
 | Editor        | Read content, create and save drafts, duplicate, revert and delete unpublished entries, upload and edit media |
 | Viewer        | Read content and media                                                                                        |
+
+## Create a user
+
+1. Open **Users**, choose **Create user**, and enter the person's email address
+   and role. Their account appears as **Active** immediately.
+2. With email delivery configured, Lace sends an access email with a link to
+   set the first password. If email is disabled or sending fails, choose
+   **Copy link** and share it privately with the user.
+3. The user opens the one-hour, single-use link, chooses their password and
+   signs in. If the link expires or is lost, use **Send password reset** on
+   their row to issue a fresh one.
+
+The email must be unused by an existing account or an unexpired pending
+invitation. To switch an open invitation to direct creation, revoke it first.
 
 ## Invite a user
 
@@ -51,9 +65,9 @@ shows one generic error.
 Administrators change a user's role, disable or enable an account, send a
 password reset and **Sign out everywhere** from the Users list. A role change
 applies to the user's next request. Disabling an account ends all its
-sessions; enabling it again requires a fresh sign-in. Lace refuses to disable
-or demote the last active administrator. An administrator never sets another
-person's password.
+sessions, and enabling it again requires a fresh sign-in. Lace protects the
+last active administrator who has set a password. Each user chooses their own
+password.
 
 ## Recover a password
 

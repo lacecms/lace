@@ -17,6 +17,10 @@ export const INVITATION_COLUMNS_SQL =
 /** An invitation that is neither accepted nor revoked; expiry is checked separately. */
 export const ACTIVE_INVITATION_SQL = "accepted_at is null and revoked_at is null";
 
+/** A user has the credential that Better Auth looks up for email sign-in. */
+export const HAS_SIGN_IN_PASSWORD_SQL =
+  "exists (select 1 from account where user_id = user.id and account_id = user.id and provider_id = 'credential' and password <> '')";
+
 export function normalizedEmail(value: string): string {
   const email = value.trim().toLowerCase();
   if (email.length === 0 || !email.includes("@")) throw new TypeError("Invalid email.");

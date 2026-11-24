@@ -43,6 +43,11 @@ export class NodeSecurityService implements SecurityService {
   public readUserProfile(userId: string): ReturnType<UserProfileReader["readUserProfile"]> {
     return this.account.readUserProfile(userId);
   }
+  public createUser(
+    input: Parameters<AccountSecurityPort["createUser"]>[0],
+  ): ReturnType<AccountSecurityPort["createUser"]> {
+    return this.account.createUser(input);
+  }
   public listUsers(input: CursorPageInput): ReturnType<AccountSecurityPort["listUsers"]> {
     return this.account.listUsers(input);
   }

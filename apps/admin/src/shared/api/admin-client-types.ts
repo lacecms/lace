@@ -43,6 +43,7 @@ import {
   type MediaSortDto,
   type ManagedUserDto,
   type ManagedUserListDto,
+  type UserCreateResultDto,
   type PublishContentEntryResultDto,
   type SeoInputDto,
   type UnpublishContentEntryResultDto,
@@ -84,6 +85,7 @@ export interface AdminClient {
     input: { disabled?: boolean; role?: "admin" | "editor" | "viewer" },
   ): Promise<ManagedUserDto>;
   listUsers(after?: string): Promise<ManagedUserListDto>;
+  createUser(input: { email: string; role: ManagedUserDto["role"] }): Promise<UserCreateResultDto>;
   /** Ends every session of another account and reports how many ended. */
   signOutUser(userId: string): Promise<SessionRevocationResultDto>;
   /** Issues a reset for another account; the link is present only when the email was not sent. */

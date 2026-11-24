@@ -267,6 +267,7 @@ write permission returns `403 AUTHORIZATION_DENIED`.
 | Method | Path                                              | Purpose                                                          | Credential        |
 | ------ | ------------------------------------------------- | ---------------------------------------------------------------- | ----------------- |
 | GET    | `/api/v1/admin/users`                             | Page through users and return total and disabled account counts. | `users:manage`    |
+| POST   | `/api/v1/admin/users`                             | Create an active user with an email address and role.            | `users:manage`    |
 | PATCH  | `/api/v1/admin/users/{userId}`                    | Change a user's role or disable or enable the account.           | `users:manage`    |
 | POST   | `/api/v1/admin/users/{userId}/password-reset`     | Send a password reset to a user.                                 | `users:manage`    |
 | POST   | `/api/v1/admin/users/{userId}/sessions/revoke`    | Sign a user out everywhere.                                      | `users:manage`    |
@@ -276,6 +277,15 @@ write permission returns `403 AUTHORIZATION_DENIED`.
 | DELETE | `/api/v1/admin/invitations/{invitationId}`        | Revoke an invitation.                                            | `users:manage`    |
 | GET    | `/api/v1/admin/settings/status`                   | Read engine version, readiness, email and MCP status.            | `settings:manage` |
 | POST   | `/api/v1/admin/settings/email-test`               | Send a test email to the signed-in administrator.                | `settings:manage` |
+
+Direct creation takes a JSON body containing `email` and `role`, with a role of
+`admin`, `editor` or `viewer`. It returns `201` with the enabled `user` and the
+closed `delivery` outcome. If delivery fails, the response includes a `link` to
+set the first password. The link works once and expires after one hour.
+Invalid fields return `422 VALIDATION_FAILED`. An email already used by an
+account or a pending invitation returns `409 CONFLICT`. Creation shares the
+invitation and administrator reset limit of 20 requests per hour per
+administrator.
 
 Outside `/api/v1`, `/health/live` and `/health/ready` report liveness and readiness, `/api/v1/openapi.json` serves the contract and `/api/docs` the optional interactive reference.
 

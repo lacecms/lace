@@ -54,6 +54,7 @@ export default defineConfig({
           name: "cross-runtime",
           include: [
             "tests/cross-runtime-product.acceptance.mjs",
+            "tests/admin-user-creation.acceptance.mjs",
             "tests/video-embed.acceptance.mjs",
             "tests/content-import.acceptance.mjs",
             "tests/conditional-fields.acceptance.mjs",

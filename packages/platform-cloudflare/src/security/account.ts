@@ -1,5 +1,6 @@
 import {
   ACTIVE_INVITATION_SQL,
+  HAS_SIGN_IN_PASSWORD_SQL,
   INVITATION_COLUMNS_SQL,
   importTokenUserInvalidationSql,
   invitationRecord,
@@ -118,6 +119,49 @@ export class D1AccountSecurity implements UserProfileReader, AccountSecurityPort
 
   public listUsers(input: CursorPageInput) {
     return readManagedUserPage(this.readRows, input);
+  }
+
+  public async createUser(
+    input: Parameters<AccountSecurityPort["createUser"]>[0],
+  ): ReturnType<AccountSecurityPort["createUser"]> {
+    const email = normalizedEmail(input.email);
+    const role = securityRole(input.role);
+    const now = Number(input.now);
+    const id = randomHex(16);
+    const token = tokenSecret();
+    const [created] = await this.database.batch([
+      bindStatement(
+        this.database,
+        `insert into user (id, name, email, role, created_at, updated_at)
+         select ?1, ?2, ?2, ?3, ?4, ?4
+         where not exists (select 1 from user where email = ?2)
+           and not exists (select 1 from invitations where email = ?2 and ${ACTIVE_INVITATION_SQL} and expires_at > ?4)
+         returning id, email, role, disabled`,
+        id,
+        email,
+        role,
+        now,
+      ),
+      bindStatement(
+        this.database,
+        "insert into account (id, account_id, provider_id, user_id, created_at, updated_at) select 'credential-' || id, id, 'credential', id, ?2, ?2 from user where id = ?1",
+        id,
+        now,
+      ),
+      bindStatement(
+        this.database,
+        "insert into password_reset_tokens (token_hash, user_id, created_at, expires_at, requested_by) select ?2, id, ?3, ?4, ?5 from user where id = ?1",
+        id,
+        await digest(token),
+        now,
+        now + PASSWORD_RESET_TTL_MS,
+        input.requestedBy,
+      ),
+    ]);
+    const row = created?.results[0];
+    return row === undefined
+      ? { status: "conflict" }
+      : { status: "created", token, user: managedUser(row) };
   }
 
   public async updateUser(input: {
@@ -584,7 +628,7 @@ export class D1AccountSecurity implements UserProfileReader, AccountSecurityPort
     return managedUser(value);
   }
 
-  /** One statement applies the change only while another active administrator remains. */
+  /** The write protects the last enabled administrator with a sign-in password. */
   private async mutateUser(
     id: string,
     nextRole?: SecurityRole,
@@ -593,7 +637,12 @@ export class D1AccountSecurity implements UserProfileReader, AccountSecurityPort
     const [changed, , , , row] = await this.database.batch([
       bindStatement(
         this.database,
-        "update user set role = coalesce(?1, role), disabled = coalesce(?2, disabled), updated_at = ?3 where id = ?4 and not (role = 'admin' and disabled = 0 and (coalesce(?2, 0) = 1 or coalesce(?1, 'admin') <> 'admin') and (select count(*) from user where role = 'admin' and disabled = 0) <= 1) returning id",
+        `update user set role = coalesce(?1, role), disabled = coalesce(?2, disabled), updated_at = ?3
+         where id = ?4 and not (
+           role = 'admin' and disabled = 0 and ${HAS_SIGN_IN_PASSWORD_SQL}
+           and (coalesce(?2, 0) = 1 or coalesce(?1, 'admin') <> 'admin')
+           and (select count(*) from user where role = 'admin' and disabled = 0 and ${HAS_SIGN_IN_PASSWORD_SQL}) <= 1
+         ) returning id`,
         nextRole === undefined ? null : securityRole(nextRole),
         disabled === undefined ? null : Number(disabled),
         Number(this.now()),
