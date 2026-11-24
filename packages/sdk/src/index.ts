@@ -1,5 +1,10 @@
 // Directory dependencies: client ← site ← preview.
 export * from "./client/client.js";
+export type {
+  BuildThumbnailOptions,
+  BuildThumbnailReader,
+  BuildThumbnailResult,
+} from "./client/build-thumbnail.js";
 export * from "./client/errors.js";
 export * from "./site/published-site.js";
 export type * from "./site/types.js";

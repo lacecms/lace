@@ -79,7 +79,7 @@ export function authorizationFailure(alsoMeans?: string): { readonly 403: Envelo
 
 /** Security requirements per credential boundary (ADR 0016, architecture §14). */
 const security: Readonly<Record<RestCredentialMode, Record<string, string[]>[]>> = Object.freeze({
-  /** The public build export. */
+  /** Authenticated published build reads. */
   build: [{ buildToken: [] }],
   /** Routes on `IMPORT_ROUTE_ALLOWLIST`: a session or an import token. */
   "session-or-import": [{ session: [] }, { importToken: [] }],

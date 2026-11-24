@@ -183,6 +183,7 @@ export function createCapabilities(input: LaceAppInput) {
     oauthConnections: input.oauthConnections,
     publicBaseUrl: input.publicBaseUrl,
     publicContent: input.publicContent,
+    publishedMedia: input.publicBaseUrl === undefined ? undefined : input.media,
     publicMediaUrl,
     readiness: input.readiness,
     seoModels,

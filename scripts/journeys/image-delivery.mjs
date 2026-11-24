@@ -167,6 +167,8 @@ export async function verifyImageDelivery(project, html) {
   assert.ok(photo.includes("<dialog"));
   const transparent = figure("image-delivery-transparent");
   assert.ok(!transparent.includes("background-image"));
+  const missing = figure("image-delivery-missing");
+  assert.ok(!missing.includes("background-image") && missing.includes("800w"));
   const animated = figure("image-delivery-gif");
   assert.ok(!animated.includes("background-image"));
   assert.ok(animated.includes('href="/image-destination"'));
@@ -184,6 +186,10 @@ export async function verifyImageDelivery(project, html) {
     /<section[^>]*data-lace-block-key="image-delivery-gallery"[^>]*>([\s\S]*?)<\/section>/u,
   )?.[1];
   assert.ok(gallery?.includes('href="/gallery-destination"'));
+  assert.match(
+    figure("image-delivery-poster"),
+    /data-lace-part="preview"[^>]*>\s*<img\b[^>]*background-image:[^>]*>/u,
+  );
   assert.equal(
     gallery.match(/<dialog\b/gu)?.length,
     1,

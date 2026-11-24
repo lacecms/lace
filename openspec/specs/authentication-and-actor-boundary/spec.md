@@ -237,13 +237,14 @@ not resolve to an active actor. This covers:
   is read;
 - a malformed, unknown, expired, revoked or wrong-kind import Bearer value on
   an allowlisted import route;
-- a missing, malformed or rejected build token on the build export.
+- a missing, malformed or rejected build token on the build export or build
+  thumbnail route.
 
 That `401` envelope is the unauthenticated response named by other
 requirements. It SHALL carry a sanitized message that does not reveal which
 check failed, `Cache-Control: no-store`, and a `WWW-Authenticate` header:
 
-- `Bearer realm="lace"` on the build export;
+- `Bearer realm="lace"` on the build export and build thumbnail route;
 - `Session realm="lace", Bearer realm="lace"` on import-allowlisted routes;
 - `Session realm="lace"` on every other protected route.
 

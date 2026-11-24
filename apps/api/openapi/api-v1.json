@@ -13898,6 +13898,130 @@
         "tags": ["public"]
       }
     },
+    "/api/v1/public/build-media/{mediaId}/thumbnail": {
+      "get": {
+        "description": "Returns a static WebP thumbnail of media used by a current publication. A matching strong, weak or wildcard If-None-Match returns 304 after build authorization, eligibility and availability checks. Malformed validators are ignored.",
+        "operationId": "getApiV1PublicBuildMediaByMediaIdThumbnail",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "mediaId",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/webp": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Static WebP thumbnail up to 320 pixels and 96 KiB",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "enum": ["private, no-cache"],
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "description": "Strong validator of the returned WebP bytes",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The cached thumbnail is still valid",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "enum": ["private, no-cache"],
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "description": "Strong validator of the returned WebP bytes",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Authentication required (AUTHENTICATION_REQUIRED)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Media is not published or does not exist"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The request did not satisfy the API contract (VALIDATION_FAILED)"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thumbnail unavailable (MEDIA_THUMBNAIL_UNAVAILABLE)",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "enum": ["no-store"],
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "buildToken": []
+          }
+        ],
+        "summary": "Read a published media thumbnail for a site build",
+        "tags": ["public"]
+      }
+    },
     "/api/v1/public/collections/{modelKey}": {
       "get": {
         "operationId": "getApiV1PublicCollectionsByModelKey",

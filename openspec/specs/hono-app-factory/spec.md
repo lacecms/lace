@@ -209,7 +209,8 @@ permission checks; handlers SHALL NOT compare role strings.
 ### Requirement: Setup, security administration, and build export have distinct HTTP boundaries
 The HTTP application SHALL expose setup-admin only while setup remains
 incomplete, resolve an administrator actor for user and build-token
-administration, and accept a build credential only at build export. It SHALL
+administration, and accept a build credential only at build export or the
+build thumbnail route. It SHALL
 run the applicable rate-limit check before setup, authentication, token, or
 upload work; an exhausted result SHALL return the shared `RATE_LIMITED` error
 with `Retry-After`. Route handlers SHALL pass portable commands and actors to
@@ -517,6 +518,31 @@ Authorization and eligibility SHALL be evaluated before opening the stored deriv
 - **WHEN** an authorized thumbnail request contains `If-None-Match: *` and the derivative is unavailable
 - **THEN** the route responds with the sanitized unavailable error and provides no original, redirect or `304`
 
+### Requirement: Build thumbnails have an authenticated published-media route
+On Node and Cloudflare, the HTTP application SHALL register `GET /api/v1/public/build-media/:mediaId/thumbnail` when the published-media capability and build-token verifier are configured. It SHALL require the same verified Bearer credential and 401 challenge as build export, before any eligibility lookup or storage read. For eligible media, it SHALL return the same validated static `image/webp` bytes and strong derivative ETag as the admin route, with `Cache-Control: private, no-cache`. A matching strong, weak or wildcard `If-None-Match` SHALL return a bodyless 304 with the same cache headers only after verifying the token, current published eligibility and derivative availability. Malformed validators SHALL be ignored.
+
+An eligible item with an unavailable derivative SHALL receive the sanitized `503 MEDIA_THUMBNAIL_UNAVAILABLE` response with `Cache-Control: no-store`. Unknown and ineligible items SHALL receive the same 404 as the public original route. Responses SHALL expose no storage location or credential and SHALL never redirect. The route SHALL follow the existing build-route policy and SHALL NOT grant new access to the session-only admin route.
+
+#### Scenario: A valid build token fetches or revalidates a thumbnail
+- **WHEN** a valid build token requests an eligible thumbnail and then requests it with its ETag
+- **THEN** the first response is a bounded WebP and the second is a private bodyless 304
+
+#### Scenario: A shared or unsigned client cannot probe the derivative
+- **WHEN** an anonymous caller, session-only caller, import token, or revoked build token requests the route, even with a matching or wildcard validator
+- **THEN** the server returns the build-token authentication response without checking media or contacting storage
+
+#### Scenario: An unpublish invalidates eligibility
+- **WHEN** an authorized caller uses a previously valid thumbnail ETag after the media loses its last published reference
+- **THEN** the response is 404 and the server does not check derivative storage
+
+#### Scenario: An eligible thumbnail cannot be generated
+- **WHEN** a valid build caller requests eligible media and the derivative is unavailable, even with `If-None-Match: *`
+- **THEN** the route responds with a sanitized and non-cacheable 503
+
+#### Scenario: Build authentication is unavailable
+- **WHEN** the server is composed without a build-token verifier
+- **THEN** no build thumbnail route is registered
+
 ### Requirement: Optional MCP composition preserves the shared request boundary
 The portable HTTP application SHALL accept an optional runtime-neutral MCP
 request handler and explicit MCP-enabled state from its composition root. It
@@ -706,8 +732,8 @@ The document SHALL declare security schemes for the browser session cookie,
 the build token and the import token. Each operation SHALL state which of
 them it accepts:
 
-- public routes: no credential;
-- the build export: build token;
+- anonymous public reads require no credential.
+- the build export and build media thumbnail require a build token.
 - admin and account routes: session;
 - routes on the import allowlist: session or import token, except the route
   that describes the presented import token, which accepts only the import
@@ -748,8 +774,9 @@ registered product route.
 
 - **WHEN** a client reads the generated document
 - **THEN** it finds security schemes for the session cookie, build token and
-  import token. Public reads require none, the build export requires a build
-  token, and allowlisted import routes accept a session or an import token
+  import token. Anonymous public reads require no credentials. The build export and
+  build media thumbnail require a build token. Allowlisted import routes
+  accept a session or an import token
 
 #### Scenario: Drift is caught
 

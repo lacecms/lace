@@ -5,12 +5,13 @@ import {
   field,
   validateRichTextDocument,
 } from "@lacecms/content";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import type { RenderableBlock, RenderableEntry } from "./blocks.js";
 import type { LinkResolver } from "./links.js";
 import type { RichTextDescriptionNode, RichTextElementDescription } from "./rich-text.js";
 import {
   LaceRenderError,
+  createImageDescriber,
   defineBlockMap,
   describeRichText,
   parseBlock,
@@ -294,6 +295,23 @@ test("image descriptions carry the media type and build source of resolved media
   const withoutSource = describedEntry(() => ({ ...resolvedMedia.office, mimeType: "image/png" }));
   expect(withoutSource("office")).not.toHaveProperty("sourceUrl");
   expect(withoutSource("office").mimeType).toBe("image/png");
+});
+
+test("entry images and global video posters forward the same lazy reader and their own alt text", () => {
+  const thumbnail = { cacheKey: "office", read: vi.fn() };
+  const media = () => ({ ...resolvedMedia.office, thumbnail });
+  const image = describedEntry(media)("office", "Gallery alt");
+  const poster = createImageDescriber(
+    { modelKey: "settings", id: "global-1", blocks: [], media },
+    () => "",
+    { modelKey: "settings", entryId: "global-1", blockKey: "video-poster" },
+  )("office", "Poster alt");
+  expect(image.alt).toBe("Gallery alt");
+  expect(poster.alt).toBe("Poster alt");
+  expect(image.thumbnail).toBe(thumbnail);
+  expect(poster.thumbnail).toBe(thumbnail);
+  expect(thumbnail.read).not.toHaveBeenCalled();
+  expect(describedEntry()("office")).not.toHaveProperty("thumbnail");
 });
 
 test("image descriptions omit the object position without a focal point", () => {

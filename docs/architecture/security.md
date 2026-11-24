@@ -83,9 +83,10 @@ creation can join a D1 transaction
   keeps working.
 - `api_tokens` holds automation credentials apart from human users. Build and
   import tokens share it and every verifier filters by kind. A build token
-  carries exactly `content:build:read` and authenticates only the build
-  export. An import token carries `content:import`, optionally with
-  `content:publish` ([ADR 0016](../adr/0016-import-credentials.md)).
+  carries exactly `content:build:read` and authenticates only build
+  export and published-media thumbnail reads. An import token carries
+  `content:import`, optionally with `content:publish`
+  ([ADR 0016](../adr/0016-import-credentials.md)).
 - An import token lives 1 to 7 days and is issued with `settings:manage`;
   publication is granted only when the creator holds `content:publish`.
   `Authorization: Bearer` below `/api/v1/admin/` or `/api/v1/account/` is an
@@ -98,9 +99,9 @@ creation can join a D1 transaction
   re-enabling does not restore them.
 
 The route's credential mode drives import eligibility and the REST challenge.
-The import allowlist is derived from those declarations. Build export is
-registered only with a build-token verifier and authenticates before export
-reads and conditional responses.
+The import allowlist is derived from those declarations. Build export and
+build thumbnails are registered only with a build-token verifier and
+authenticate before content or storage reads and conditional responses.
 
 ### Invitations, resets and self-service
 

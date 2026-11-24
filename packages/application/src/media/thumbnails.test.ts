@@ -22,6 +22,7 @@ const read = { actor: mediaViewer, mediaId: id };
 
 function fixture() {
   let status = "active" as "active" | "deleting";
+  let published = true;
   const objects = new Map<string, Uint8Array>();
   const media = {
     loadMedia: vi.fn(async (id: string) =>
@@ -48,7 +49,12 @@ function fixture() {
     list: async () => ({ keys: [...objects.keys()] }),
   };
   const generate = vi.fn<ThumbnailGenerator["generate"]>(async () => translucent);
-  const dependencies = { media, originals, storage };
+  const publishedMedia = {
+    resolvePublic: vi.fn(async ({ mediaId }: { mediaId: typeof id }) =>
+      published && status === "active" && mediaId === id ? media.loadMedia(mediaId) : null,
+    ),
+  };
+  const dependencies = { media, originals, storage, publishedMedia };
   const thumbnails = new MediaThumbnails({ ...dependencies, generator: { generate } });
   return {
     thumbnails,
@@ -58,11 +64,54 @@ function fixture() {
     media,
     objects,
     dependencies,
+    unpublish: () => {
+      published = false;
+    },
     deactivate: () => {
       status = "deleting";
     },
   };
 }
+
+test("published and admin reads share the stored winner and later builds open no original", async () => {
+  const f = fixture();
+  const input = { mediaId: id };
+  const [build, admin] = await Promise.all([
+    f.thumbnails.readPublished(input),
+    f.thumbnails.read(read),
+  ]);
+  expect(build).toMatchObject({ bytes: translucent });
+  expect(admin).toEqual(build);
+  expect(f.storage.putIfAbsent).toHaveBeenCalledOnce();
+  expect(f.generate).toHaveBeenCalledOnce();
+  f.originals.get.mockClear();
+  await expect(new MediaThumbnails(f.dependencies).readPublished(input)).resolves.toEqual(build);
+  expect(f.originals.get).not.toHaveBeenCalled();
+});
+
+test.each(["unpublished", "inactive", "unknown"])(
+  "published reads deny %s items before storage",
+  async (state) => {
+    const f = fixture();
+    if (state === "unpublished") f.unpublish();
+    if (state === "inactive") f.deactivate();
+    const input = { mediaId: state === "unknown" ? mediaId("unknown") : id };
+    await expect(f.thumbnails.readPublished(input)).resolves.toBeNull();
+    expect(f.storage.get).not.toHaveBeenCalled();
+    expect(f.originals.get).not.toHaveBeenCalled();
+  },
+);
+
+test("unpublication during an asynchronous stored read prevents thumbnail delivery", async () => {
+  const f = fixture();
+  f.storage.get.mockImplementationOnce(async () => {
+    f.unpublish();
+    return bytes(opaque);
+  });
+  await expect(f.thumbnails.readPublished({ mediaId: id })).resolves.toBeNull();
+  expect(f.storage.get).toHaveBeenCalledOnce();
+  expect(f.originals.get).not.toHaveBeenCalled();
+});
 
 test("legacy media with stale dimensions uses actual original dimensions and persists one shared result", async () => {
   const f = fixture();

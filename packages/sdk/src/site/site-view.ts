@@ -224,7 +224,12 @@ export function assembleSiteView<Entry extends EntryData>({
       resolveSeo({
         ...(defaults === undefined ? {} : { defaults }),
         entry,
-        image: (mediaId: string) => lookup.image(mediaId),
+        image: (mediaId: string) => {
+          const image = lookup.image(mediaId);
+          if (image?.thumbnail === undefined) return image;
+          const { thumbnail: _thumbnail, ...metadata } = image;
+          return Object.freeze(metadata);
+        },
         indexing,
         ...(Object.hasOwn(mappings, entry.modelKey) ? { mapping: mappings[entry.modelKey] } : {}),
         ...(siteUrl === undefined ? {} : { siteUrl }),

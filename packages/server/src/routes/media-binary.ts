@@ -1,11 +1,39 @@
 import { bodyResponse } from "../shared/http.js";
 import { binaryStream, isNotModified } from "../shared/binary.js";
 import type { MediaUseCases, MediaBinary, MediaThumbnail } from "@lacecms/application";
+import { errorEnvelopeSchema } from "@lacecms/contracts";
+import { resolver, type DescribeRouteOptions } from "hono-openapi";
 
 type EligibleMedia = Exclude<Awaited<ReturnType<MediaUseCases["resolvePublic"]>>, null>;
 
 export const PUBLIC_MEDIA_CACHE_CONTROL = "public, max-age=86400";
 export const PREVIEW_MEDIA_CACHE_CONTROL = "private, no-cache";
+
+const thumbnailHeaders = {
+  "Cache-Control": { schema: { type: "string" as const, enum: [PREVIEW_MEDIA_CACHE_CONTROL] } },
+  ETag: {
+    description: "Strong validator of the returned WebP bytes",
+    schema: { type: "string" as const },
+  },
+};
+
+export const thumbnailParameters = [
+  { in: "header" as const, name: "If-None-Match", schema: { type: "string" as const } },
+];
+
+export const thumbnailResponses: NonNullable<DescribeRouteOptions["responses"]> = {
+  200: {
+    description: "Static WebP thumbnail up to 320 pixels and 96 KiB",
+    headers: thumbnailHeaders,
+    content: { "image/webp": { schema: { type: "string" as const, format: "binary" } } },
+  },
+  304: { description: "The cached thumbnail is still valid", headers: thumbnailHeaders },
+  503: {
+    description: "Thumbnail unavailable (MEDIA_THUMBNAIL_UNAVAILABLE)",
+    headers: { "Cache-Control": { schema: { type: "string" as const, enum: ["no-store"] } } },
+    content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
+  },
+};
 
 /**
  * Stored media bytes never change, so the binary tag identifies the item

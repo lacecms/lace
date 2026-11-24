@@ -26,6 +26,7 @@ current composition.
 | `/api/auth/*` | browser | Better Auth sign-in and session. |
 | `/api/v1/public/*` | anonymous | Published snapshots only; cacheable. |
 | `/api/v1/public/build-export` | build token | A build-token verifier is required for registration. |
+| `/api/v1/public/build-media/:mediaId/thumbnail` | build token | Published media eligibility and a build-token verifier are required. |
 | `/api/v1/admin/*` | session actor | Permissions are checked by the use cases. |
 | `/api/v1/admin/*` | import token | Only a fixed route allowlist accepts it. |
 | `/api/v1/account/*` | session actor | Each actor manages their own account. |
@@ -43,8 +44,8 @@ tokens reach only the allowlist in
 ### Public endpoints
 
 Public routes cover pages, globals, collection lists and items, lookup by
-path, media and the build export. They return published snapshots only, never
-a draft, revision, editor name or other editorial key; the shapes are in
+path, media, the build export and build thumbnails. Content reads return
+published snapshots only, never a draft, revision, editor name or other editorial key. The shapes are in
 [rest-contracts](../../openspec/specs/rest-contracts/spec.md) ("Public content
 responses return published entries").
 
@@ -136,6 +137,15 @@ before conditional evaluation, so unpublished or deleted media never receives
 "Media binary responses carry cache validators"). The public route caches for
 one day, so a browser may keep media up to a day after it stops being
 published; unbounded or `immutable` caching is deliberately not used.
+
+The build thumbnail route verifies the build token before media or storage
+work. It uses the public original's current eligibility before and after
+reading the same bounded, private derivative used by the admin. It returns
+WebP or a conditional `304` with `Cache-Control: private, no-cache` and a
+derivative ETag. Ineligible media returns the public media `404`. Unavailable
+derivatives return `503 MEDIA_THUMBNAIL_UNAVAILABLE` with `Cache-Control:
+no-store`. Build thumbnails are served directly and their URLs stay out of
+the export and static site.
 
 ### Admin endpoints
 

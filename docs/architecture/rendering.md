@@ -194,9 +194,15 @@ Adapter invariants:
   client bundle.
 - `RichText.astro` renders with Astro's escaping and never uses `set:html`;
   overrides receive only the validated element and its rendered children.
-- Image placeholders are cached in `node_modules/.astro/lace/placeholders/`
-  by source URL. Sites declare `sharp`, which Astro's image service loads from
-  the site.
+- Optimized published media carries lazy server-side access to its CMS
+  thumbnail. Astro uses it for inline blur on eligible opaque still images.
+  The versioned cache in `node_modules/.astro/lace/placeholders/` keys this
+  blur by API base, media ID and recipe. A new build revalidates with the
+  derivative ETag through its authorized reader before using a cached blur.
+  Variants use the original, and the lightbox uses the public URL. Sourced
+  images without a reader, including protected previews, keep the source-URL
+  placeholder cache. Sites declare `sharp`, which Astro's image service
+  loads from the site.
 
 ### 13.5 Block registry and `lace add block`
 

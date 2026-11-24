@@ -40,17 +40,12 @@ import {
   conditionalThumbnailResponse,
   PUBLIC_MEDIA_CACHE_CONTROL,
   PREVIEW_MEDIA_CACHE_CONTROL,
+  thumbnailParameters,
+  thumbnailResponses,
 } from "./media-binary.js";
 import { readMediaUpload } from "./media-upload.js";
 
 const routes = v1Routes.media;
-const thumbnailHeaders = {
-  "Cache-Control": { schema: { type: "string" as const, enum: [PREVIEW_MEDIA_CACHE_CONTROL] } },
-  ETag: {
-    description: "Strong validator of the returned WebP bytes",
-    schema: { type: "string" as const },
-  },
-};
 
 export function createMediaRoutes(routeContext: RouteContext) {
   const { actor } = routeContext.actors;
@@ -424,27 +419,11 @@ export function createMediaRoutes(routeContext: RouteContext) {
           "Returns the stored or freshly generated static WebP thumbnail of an active media item to a browser session with content:read, including for unpublished media. " +
           "A matching strong, weak or wildcard If-None-Match returns 304 only for an available thumbnail. Malformed validators are ignored.",
         tags: ["admin"],
-        parameters: [
-          {
-            in: "header",
-            name: "If-None-Match",
-            schema: { type: "string" },
-          },
-        ],
+        parameters: thumbnailParameters,
         responses: {
-          200: {
-            description: "Static WebP thumbnail up to 320 pixels and 96 KiB",
-            headers: thumbnailHeaders,
-            content: { "image/webp": { schema: { type: "string", format: "binary" } } },
-          },
-          304: { description: "The cached thumbnail is still valid", headers: thumbnailHeaders },
+          ...thumbnailResponses,
           404: {
             description: "Media is not active or does not exist",
-            content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
-          },
-          503: {
-            description: "Thumbnail unavailable (MEDIA_THUMBNAIL_UNAVAILABLE)",
-            headers: { "Cache-Control": { schema: { type: "string", enum: ["no-store"] } } },
             content: { "application/json": { schema: resolver(errorEnvelopeSchema) } },
           },
           ...authenticationFailure(),

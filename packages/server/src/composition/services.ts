@@ -160,6 +160,7 @@ export function composeLaceServices(input: LaceServicesInput): LaceServices {
     new MediaThumbnails({
       ...input.thumbnails,
       media: repository,
+      publishedMedia: media,
       originals: input.storage,
     });
   const links = new ContentLinkUseCases(repository, routeLessModelKeys(input.config.content));

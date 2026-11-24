@@ -12,8 +12,9 @@ import { CompleteImageContainerInspector, inspectStaticWebp } from "./image-cont
 import { MAX_MEDIA_BYTES } from "./limits.js";
 import { validateDimensions } from "./projection.js";
 import { ThumbnailAdmission, withThumbnailDeadline } from "./thumbnail-admission.js";
-import type { GetMediaUseCaseInput } from "./types.js";
+import type { GetMediaUseCaseInput, PublicMediaBinaryUseCaseInput } from "./types.js";
 import { collectMediaBytes, detectMediaMimeType } from "./upload.js";
+import type { MediaUseCases } from "./use-cases.js";
 
 export const MAX_MEDIA_THUMBNAIL_EDGE = 320;
 export const MAX_MEDIA_THUMBNAIL_BYTES = 96 * 1024;
@@ -88,6 +89,7 @@ export class MediaThumbnails {
   public constructor(
     private readonly dependencies: {
       readonly media: MediaReadPort;
+      readonly publishedMedia?: Pick<MediaUseCases, "resolvePublic">;
       readonly originals: Pick<ObjectStorage, "get">;
       readonly storage: ThumbnailStorage;
       readonly generator?: ThumbnailGenerator;
@@ -98,6 +100,13 @@ export class MediaThumbnails {
   public async read(input: GetMediaUseCaseInput): Promise<MediaThumbnail | null> {
     requirePermission(input.actor, "content:read");
     return this.readOrCreate(input.mediaId);
+  }
+
+  public async readPublished(input: PublicMediaBinaryUseCaseInput): Promise<MediaThumbnail | null> {
+    const { publishedMedia } = this.dependencies;
+    if (!publishedMedia || !(await publishedMedia.resolvePublic(input))) return null;
+    const thumbnail = await this.readOrCreate(input.mediaId);
+    return thumbnail && (await publishedMedia.resolvePublic(input)) ? thumbnail : null;
   }
 
   public get canGenerate(): boolean {

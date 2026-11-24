@@ -130,6 +130,7 @@ export const v1Routes = {
     collectionItem: defineRoute("GET", "/public/collections/:modelKey/:slug", "public"),
     byPath: defineRoute("GET", "/public/content/by-path", "public"),
     buildExport: defineRoute("GET", "/public/build-export", "build"),
+    buildThumbnail: defineRoute("GET", "/public/build-media/:mediaId/thumbnail", "build"),
   },
   setupSession: {
     setupState: defineRoute("GET", "/setup/state", "public"),

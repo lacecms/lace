@@ -196,7 +196,7 @@ SHALL be an operational failure, not an empty successful media result.
   empty object as though it were the uploaded media
 
 ### Requirement: Active media has a bounded private thumbnail
-A thumbnail read SHALL require the same active media eligibility and content read permission as an original admin preview, including for unpublished media. The original and its media identity SHALL be sufficient to derive a thumbnail for existing and new eligible items, including records without a stored SHA-256. Generation SHALL leave the original bytes, media metadata and publication state intact.
+An admin thumbnail read SHALL require the same active media eligibility and content read permission as an original admin preview, including for unpublished media. The original and its media identity SHALL be sufficient to derive a thumbnail for existing and new eligible items, including records without a stored SHA-256. Generation SHALL leave the original bytes, media metadata and publication state intact.
 
 The resulting thumbnail SHALL be a single-frame WebP with a maximum longest edge of 320 pixels and a maximum body size of 96 KiB. Generation SHALL preserve display orientation, aspect ratio and transparency and SHALL avoid cropping and upscaling. Its input for a GIF SHALL be the first display frame, including its canvas and transparency. Thumbnail identity SHALL depend on the media item and thumbnail recipe, independent of the admin view, focal point and session. The stored derivative SHALL be reusable as an image source, with its media type and dimensions available to CMS callers.
 
@@ -235,6 +235,21 @@ When a valid derivative cannot be generated, stored or read, the system SHALL re
 #### Scenario: A source exceeds the runtime transform capability
 - **WHEN** a provider rejects a valid original or returns a derivative outside the declared bounds
 - **THEN** the thumbnail is unavailable and an authorized reader can still request the verified original
+
+### Requirement: Site builds can read thumbnails of currently published media
+A verified build caller SHALL be able to read the same bounded derivative used in the admin when the media is active and eligible for the public original route. The use case SHALL check that eligibility before reading derivative storage or attempting generation and again before returning a successful result after asynchronous work. It SHALL reuse the existing stored bytes or recover a confirmed miss through the same bounded generation path. Draft-only, inactive, unreferenced and unknown media SHALL produce the same not-found outcome.
+
+#### Scenario: A build reads an existing admin derivative
+- **WHEN** a build asks for a currently published item whose thumbnail already exists
+- **THEN** it receives the stored bytes and the lookup opens no original and performs no transformation
+
+#### Scenario: A published legacy image has no derivative
+- **WHEN** a build asks for a currently published media item with a confirmed missing thumbnail
+- **THEN** it can create the same durable derivative as an admin read, and concurrent successful readers receive the stored winner
+
+#### Scenario: The last published reference disappears during the read
+- **WHEN** an item loses its last published reference after the read starts but before the final eligibility check
+- **THEN** the build receives no thumbnail bytes even when generation succeeded and the media still exists as an active item
 
 ### Requirement: Media object deletion is asynchronously recoverable
 The system SHALL process a requested media deletion only through durable

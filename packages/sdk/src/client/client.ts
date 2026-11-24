@@ -22,6 +22,11 @@ import type {
 } from "@lacecms/contracts";
 import * as v from "valibot";
 import {
+  requestBuildThumbnail,
+  type BuildThumbnailOptions,
+  type BuildThumbnailResult,
+} from "./build-thumbnail.js";
+import {
   LaceContractError,
   LaceHttpError,
   LaceLinkManifestError,
@@ -114,6 +119,11 @@ export interface LaceClient {
   getBuildExport(options?: BuildExportOptions): Promise<BuildExportResult>;
   /** Reads one tolerant-validated export page; a first page may be conditional. */
   getBuildExportPage(options?: BuildExportPageOptions): Promise<BuildExportPageResult>;
+  /** Reads bounded thumbnail bytes over the authenticated build API. */
+  getBuildThumbnail(
+    mediaId: string,
+    options?: BuildThumbnailOptions,
+  ): Promise<BuildThumbnailResult>;
   getByPath(path: string, options?: LaceRequestOptions): Promise<PublicContentEntryDto>;
   getCollection(modelKey: string, options?: CollectionOptions): Promise<PublicContentListDto>;
   getCollectionBySlug(
@@ -566,6 +576,18 @@ export function createLaceClient(options: LaceClientOptions): LaceClient {
 
     getBuildExportPage(requestOptions = {}) {
       return readBuildExportPage(requestOptions);
+    },
+
+    getBuildThumbnail(mediaId, requestOptions = {}) {
+      const id = assertIdentifier(mediaId, "mediaId");
+      if (id === "." || id === "..") throw new TypeError("mediaId must be a media identifier.");
+      const url = publicUrl(baseUrl, ["build-media", id, "thumbnail"]);
+      return requestBuildThumbnail(
+        (init) => fetchImplementation(url, init),
+        token,
+        requestOptions,
+        timeoutMs,
+      );
     },
 
     getByPath(path, requestOptions = {}) {

@@ -60,6 +60,7 @@ export default defineConfig({
             "tests/media-detachment.acceptance.mjs",
             "tests/media-thumbnail-storage.acceptance.mjs",
             "tests/media-thumbnail-generators.acceptance.mjs",
+            "tests/build-thumbnail.acceptance.mjs",
           ],
           fileParallelism: false,
           maxWorkers: 1,

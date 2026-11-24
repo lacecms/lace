@@ -8,6 +8,12 @@ import { promisify } from "node:util";
 import { expect, test } from "vitest";
 import { verifyNaturalGalleryImage } from "./gallery-layout.browser.mjs";
 import { verifyVideoEmbeds } from "./video-embed.browser.mjs";
+import { verifyImagePlaceholderPaint } from "../../../tests/support/image-placeholder-browser.mjs";
+import {
+  assertBuildThumbnailReads,
+  fixtureThumbnail,
+  serveBuildThumbnail,
+} from "../../../tests/support/build-thumbnail-fixture.mjs";
 
 const exec = promisify(execFile);
 // Astro's own sharp generates the originals the local media origin serves.
@@ -56,6 +62,10 @@ function serveMedia(originals, requests, request, response) {
   const match = /^\/lace\/api\/v1\/public\/media\/([\w-]+)$/u.exec(request.url ?? "");
   const original = match === null ? undefined : originals.get(match[1]);
   if (original === undefined) return false;
+  if (request.headers.authorization !== undefined) {
+    response.writeHead(400).end();
+    return true;
+  }
   requests.push(match[1]);
   response.writeHead(200, {
     "cache-control": "public, max-age=86400",
@@ -545,33 +555,128 @@ test("a fixture build without a site URL and with indexing off writes no sitemap
   }
 }, 30_000);
 
-test("a fixture build against a served media origin renders WebP variants, placeholders and lightboxes", async () => {
+test("the live fixture revalidates CMS thumbnails and renders variants and publicly linked originals", async () => {
   const originals = await fixtureMedia();
+  originals.set("missing-thumbnail", originals.get("post-media"));
+  const exported = structuredClone(fixture);
+  exported.media["missing-thumbnail"] = {
+    ...exported.media["post-media"],
+    id: "missing-thumbnail",
+    alt: "Missing thumbnail",
+  };
+  exported.entries
+    .find(({ path }) => path === "/notes/first-note")
+    .blocks.push({
+      key: "note-missing-thumbnail",
+      type: "image",
+      schemaVersion: 4,
+      position: 3000,
+      settings: {},
+      data: { media: "missing-thumbnail" },
+    });
+  const token = "reference-served-media-build-token";
+  const thumbnails = new Map(
+    await Promise.all(
+      ["hero-media", "post-media", "note-media"].map(async (id) => [
+        id,
+        await fixtureThumbnail(sharp, originals.get(id).body),
+      ]),
+    ),
+  );
+  // Give the hero derivative a distinct color so Chromium's pixel samples can
+  // distinguish the CSS background from the decoded responsive asset.
+  thumbnails.set(
+    "hero-media",
+    await sharp({
+      create: { width: 320, height: 168, channels: 3, background: "#2962c8" },
+    })
+      .webp()
+      .toBuffer(),
+  );
   const requests = [];
+  const thumbnailRequests = [];
+  let exports = 0;
   const server = createServer((request, response) => {
-    if (!serveMedia(originals, requests, request, response)) response.writeHead(404).end();
+    if (
+      serveMedia(originals, requests, request, response) ||
+      serveBuildThumbnail(request, response, {
+        basePath: "/lace",
+        token,
+        thumbnails,
+        requests: thumbnailRequests,
+      })
+    )
+      return;
+    if (
+      request.url === "/lace/api/v1/public/build-export" &&
+      request.headers.authorization === `Bearer ${token}`
+    ) {
+      exports++;
+      response
+        .writeHead(200, { "content-type": "application/json", etag: '"7"' })
+        .end(JSON.stringify(exported));
+    } else response.writeHead(404).end();
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const origin = `http://127.0.0.1:${server.address().port}/lace`;
-  try {
-    await exec("pnpm", ["run", "build"], {
+  const read = (path) => readFileSync(join(siteRoot, "dist", path), "utf8");
+  const build = () =>
+    exec("pnpm", ["run", "build"], {
       cwd: siteRoot,
       env: {
         ...process.env,
-        // A new port is a new media origin, so cached placeholders do not apply.
         LACE_API_BASE_URL: origin,
+        LACE_BUILD_TOKEN: token,
         LACE_BUILD_SITE_URL: "https://site.example",
-        LACE_SITE_DATA_MODE: "fixture",
+        LACE_SITE_DATA_MODE: "live",
+        LACE_PUBLIC_BASE_URL: "https://cms.example.test/lace",
       },
     });
+  try {
+    await build();
+    const output = read("index.html");
+    const cold = { originals: requests.splice(0), thumbnails: thumbnailRequests.splice(0) };
+    assertBuildThumbnailReads(cold.thumbnails, {
+      "hero-media": 200,
+      "post-media": 200,
+      "note-media": 200,
+      "missing-thumbnail": 404,
+    });
+    await build();
+    expect(read("index.html")).toBe(output);
+    assertBuildThumbnailReads(thumbnailRequests, {
+      "hero-media": 304,
+      "post-media": 304,
+      "note-media": 200,
+      "missing-thumbnail": 404,
+    });
+    expect(exports).toBe(2);
+    expect(cold.originals.sort()).toEqual([
+      "hero-media",
+      "missing-thumbnail",
+      "note-media",
+      "post-media",
+      "sketch-media",
+    ]);
+    expect(requests).toEqual([]);
+    console.info(
+      "MP2 reference requests",
+      JSON.stringify({ cold, warm: { originals: requests, thumbnails: thumbnailRequests } }),
+    );
+    for (const path of outputFiles().filter((path) => path.endsWith(".html"))) {
+      const html = readFileSync(path, "utf8");
+      expect(html).not.toContain(token);
+      expect(html).not.toContain("/build-media/");
+    }
   } finally {
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
   }
-  const read = (path) => readFileSync(join(siteRoot, "dist", path), "utf8");
   const home = read("index.html");
   const post = read("blog/first-post/index.html");
   const note = read("notes/first-note/index.html");
+  const about = read("about/index.html");
+  expect(about).toMatch(/data-lace-part="preview"[^>]*>\s*<img\b[^>]*background-image:[^>]*>/u);
   const images = (html) =>
     [...entryScope(html).matchAll(/<img\b[^>]*data-lace-part="media"[^>]*>/gu)].map(
       (match) => match[0],
@@ -633,10 +738,12 @@ test("a fixture build against a served media origin renders WebP variants, place
     '<a data-lace-part="link" href="https://lace.example/desk"><img alt="A quiet desk"',
   );
   expect(entryScope(note)).not.toContain("<dialog");
-  // Every original was fetched from the build source, never from the public URL.
-  expect(new Set(requests)).toEqual(
-    new Set(["hero-media", "note-media", "post-media", "sketch-media"]),
+  const paint = await verifyImagePlaceholderPaint(
+    siteRoot,
+    variants(hero).map(([url]) => url),
+    sharp,
   );
+  console.info("MP2 Chromium paint", JSON.stringify(paint));
   // The natural sketch keeps its width when it fits and shrinks without overflow.
   await verifyNaturalGalleryImage(siteRoot);
 }, 90_000);
@@ -648,6 +755,10 @@ test("a live build reads one export, keeps the token out of output and rejects u
   let calls = 0;
   const server = createServer((request, response) => {
     if (serveMedia(originals, [], request, response)) return;
+    if (request.url?.startsWith("/lace/api/v1/public/build-media/")) {
+      response.writeHead(404).end();
+      return;
+    }
     calls++;
     if (
       request.url !== "/lace/api/v1/public/build-export" ||

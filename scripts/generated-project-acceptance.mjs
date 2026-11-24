@@ -55,6 +55,11 @@ import { parseEnv } from "node:util";
 import { readCompleteBuildExport } from "../packages/test-utils/dist/index.js";
 import { buildReferenceSite, referenceSiteExport } from "../tests/fixtures/reference-site.mjs";
 import {
+  assertBuildThumbnailReads,
+  fixtureThumbnail,
+  serveBuildThumbnail,
+} from "../tests/support/build-thumbnail-fixture.mjs";
+import {
   assertSecretFree,
   assertImageFileList,
   checkImageIdentity,
@@ -1152,18 +1157,39 @@ async function starterJourney(project) {
     "base64",
   );
   const starterMedia = new Map(Object.keys(exported.media).map((id) => [id, starterPng]));
+  const sharp = createRequire(join(project, "site/package.json"))("sharp");
+  const starterThumbnail = await fixtureThumbnail(sharp, starterPng);
+  const thumbnails = new Map([
+    ["hero-media", starterThumbnail],
+    ["post-media", starterThumbnail],
+  ]);
+  const imageRequests = new Map();
   const starterPort = await freePort();
   const pages = ["site/dist/index.html", "site/dist/blog/first-post/index.html"];
   const build = async (label, body, siteEnvironment) => {
     let requests = 0;
+    const evidence = { thumbnails: [], originals: [] };
+    imageRequests.set(label, evidence);
     const server = createHttpServer((request, response) => {
       // The build fetches media originals for image variants.
       const media = /^\/api\/v1\/public\/media\/([\w-]+)$/u.exec(request.url ?? "");
       if (media !== null && starterMedia.has(media[1])) {
-        response.writeHead(200, { "content-type": body.media[media[1]].mimeType });
+        if (request.headers.authorization !== undefined) {
+          response.writeHead(400).end();
+          return;
+        }
+        evidence.originals.push(media[1]);
+        response.writeHead(200, {
+          "content-type": body.media[media[1]].mimeType,
+          "cache-control": "public, max-age=86400",
+        });
         response.end(starterMedia.get(media[1]));
         return;
       }
+      if (
+        serveBuildThumbnail(request, response, { token, thumbnails, requests: evidence.thumbnails })
+      )
+        return;
       requests++;
       if (
         request.url !== "/api/v1/public/build-export" ||
@@ -1360,7 +1386,6 @@ async function starterJourney(project) {
     throw new Error("starter-build-without-globals: robots.txt is not allow-all without a sitemap");
   await scanTree(join(project, "site/dist"), secretValues, "starter static output");
   // Extra image cases run only after the baseline markup/SEO assertions.
-  const sharp = createRequire(join(project, "site/package.json"))("sharp");
   const imageExport = structuredClone(exported);
   const cases = [
     [
@@ -1389,10 +1414,21 @@ async function starterJourney(project) {
         .toBuffer(),
     ],
     ["gif", "image/gif", 320, 240, gifFixtureFrames()],
+    [
+      "missing",
+      "image/jpeg",
+      800,
+      600,
+      await sharp({ create: { width: 800, height: 600, channels: 3, background: "#5588cc" } })
+        .jpeg()
+        .toBuffer(),
+    ],
   ];
   for (const [name, mimeType, width, height, bytes] of cases) {
     const id = `image-delivery-${name}`;
     starterMedia.set(id, bytes);
+    if (name === "photo" || name === "transparent")
+      thumbnails.set(id, await fixtureThumbnail(sharp, bytes));
     imageExport.media[id] = {
       id,
       mimeType,
@@ -1432,6 +1468,18 @@ async function starterJourney(project) {
     },
     settings: { lightbox: true },
   });
+  imageExport.entries[0].blocks.push({
+    type: "videoEmbed",
+    schemaVersion: 2,
+    key: "image-delivery-poster",
+    position: 21000,
+    data: {
+      url: "https://youtu.be/dQw4w9WgXcQ",
+      title: "Image delivery poster",
+      poster: "image-delivery-photo",
+    },
+    settings: {},
+  });
   const optimized = await build("image-delivery-starter-images", imageExport, {
     LACE_BUILD_SITE_URL: siteUrl,
   });
@@ -1442,6 +1490,37 @@ async function starterJourney(project) {
   });
   if (optimized[0] !== repeated[0]) throw new Error("Image cache changed rendered output");
   await verifyImageDelivery(project, repeated[0]);
+  const cold = imageRequests.get("image-delivery-starter-images");
+  const warm = imageRequests.get("image-delivery-starter-images-warm");
+  assertBuildThumbnailReads(
+    cold.thumbnails.filter(({ id }) => id.startsWith("image-delivery-")),
+    {
+      "image-delivery-photo": 200,
+      "image-delivery-transparent": 200,
+      "image-delivery-missing": 404,
+    },
+  );
+  assertBuildThumbnailReads(
+    warm.thumbnails.filter(({ id }) => id.startsWith("image-delivery-")),
+    {
+      "image-delivery-photo": 304,
+      "image-delivery-transparent": 200,
+      "image-delivery-missing": 404,
+    },
+  );
+  const builtOriginals = cold.originals.filter((id) => id.startsWith("image-delivery-")).sort();
+  if (
+    JSON.stringify(builtOriginals) !==
+      JSON.stringify(cases.map(([name]) => `image-delivery-${name}`).sort()) ||
+    warm.originals.length !== 0
+  )
+    throw new Error("starter-build: unexpected build-side original requests");
+  for (const html of [...optimized, ...repeated]) {
+    if (html.includes("/build-media/"))
+      throw new Error("starter-build: thumbnail URL in static HTML");
+  }
+  await scanTree(join(project, "site/dist"), secretValues, "starter thumbnail static output");
+  console.info("MP2 packed starter requests", JSON.stringify({ cold, warm }));
   await validateImportSample({ project, run, workspace });
   const references = await buildReferenceSite(
     referenceSiteExport(),

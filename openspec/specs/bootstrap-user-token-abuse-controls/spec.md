@@ -64,9 +64,9 @@ the `content:build:read` capability, display its plaintext value exactly once,
 and persist only a non-reversible verifier, display prefix, metadata, and
 lifecycle timestamps. It SHALL compare presented credentials without
 secret-dependent timing, reject an expired-or-revoked credential, and update
-`last_used_at` only after a successful build-export authorization. Browser
-sessions and credentials with any other capability SHALL not authenticate a
-build export through this mechanism.
+`last_used_at` only after successful authorization for a build export or published-media thumbnail.
+Browser sessions and credentials with any other capability SHALL not
+authenticate either operation through this mechanism.
 
 #### Scenario: Build credential is issued
 - **WHEN** an authorized administrator creates a build credential

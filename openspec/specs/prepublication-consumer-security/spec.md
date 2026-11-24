@@ -25,7 +25,7 @@ Acceptance SHALL exercise generation, installation, migration, sync, bootstrap, 
 - **THEN** the same content identifiers, published data and uploaded object bytes remain readable
 
 ### Requirement: Essential authorization and snapshot isolation pass
-Acceptance SHALL verify editor and viewer publication denial, anonymous draft/admin denial, and build-token access to published export only without admin/draft permissions. A later unpublished draft SHALL not change public export or generated output. Setup credentials SHALL cease working after setup and token listings SHALL exclude plaintext build credentials.
+Acceptance SHALL verify editor and viewer publication denial, anonymous draft/admin denial, and build-token access to the published export without admin/draft permissions. Build credentials also allow eligible published-media thumbnail reads. A later unpublished draft SHALL not change public export or generated output. Setup credentials SHALL cease working after setup and token listings SHALL exclude plaintext build credentials.
 
 #### Scenario: Restricted consumers request protected operations
 - **WHEN** editor/viewer sessions attempt publication or anonymous/build-token consumers request drafts or admin resources

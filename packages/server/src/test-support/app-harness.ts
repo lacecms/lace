@@ -223,6 +223,7 @@ export async function fixture({
     ...(thumbnailStorage && {
       thumbnails: new MediaThumbnails({
         media: store,
+        publishedMedia: media,
         originals: storage,
         storage: thumbnailStorage,
       }),
