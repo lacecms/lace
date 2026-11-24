@@ -1,9 +1,9 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { useRef, useState } from "react";
 import { expect, test, vi } from "vitest";
 import { renderInRouter, stubClient } from "../../../app/testing/index.js";
-import { AdminClientError } from "../../../shared/api/index.js";
+import { AdminClientError, type AdminClient } from "../../../shared/api/index.js";
 import { DeleteEntryDialog } from "./index.js";
 
 function Harness({
@@ -110,6 +110,98 @@ test("cancelling sends no request, clears the typed title, and returns focus to 
   expect(deleteEntry).not.toHaveBeenCalled();
   await user.click(opener);
   expect(screen.getByRole("textbox", { name: "Type “First” to confirm" })).toHaveValue("");
+});
+
+test("deletion submits only the current acknowledged impact after a refresh or conflict", async () => {
+  const user = userEvent.setup();
+  let receipt = "first";
+  const linkSource = {
+    entryId: "source",
+    snapshotId: "published",
+    modelKey: "posts",
+    phase: "published" as const,
+    locations: [
+      { sourceKey: "$fields", area: "fields" as const, pointer: "/url", delivered: true },
+    ],
+  };
+  const deleteEntry = vi
+    .fn<AdminClient["deleteEntry"]>()
+    .mockImplementationOnce(async () => {
+      receipt = "third";
+      throw new AdminClientError({
+        code: "CONTENT_LINK_IMPACT_CHANGED",
+        message: "The incoming links changed before deletion.",
+        status: 409,
+      });
+    })
+    .mockResolvedValueOnce(undefined);
+  const { queryClient } = renderInRouter(<Harness published />, {
+    client: stubClient({
+      deleteEntry,
+      linkImpact: async () => ({
+        mode: "sources",
+        sources: [{ ...linkSource, title: `Link source ${receipt}` }],
+        hasPublishedUsages: true,
+        receipt,
+      }),
+      referenceImpact: async () => ({
+        mode: "sources",
+        sources: [
+          { ...linkSource, title: "Reference source", phase: "draft", snapshotId: "draft" },
+        ],
+        hasDraftUsages: true,
+        hasPublishedBlockers: false,
+        receipt: "references",
+      }),
+    }),
+  });
+  await user.click(await screen.findByRole("button", { name: "Open delete" }));
+  const dialog = within(screen.getByRole("dialog"));
+  const confirm = dialog.getByRole("button", { name: "Delete entry" });
+  const title = dialog.getByRole("textbox", { name: "Type “First” to confirm" });
+  const linkCheckbox = () => dialog.getByRole("checkbox", { name: /published links/ });
+  await user.type(title, "First");
+  await user.click(await dialog.findByRole("checkbox", { name: /published links/ }));
+  const referenceCheckbox = await dialog.findByRole("checkbox", {
+    name: /drafts will keep missing selections/,
+  });
+  await user.click(referenceCheckbox);
+  expect(confirm).toBeEnabled();
+
+  receipt = "second";
+  await act(async () => queryClient.refetchQueries({ queryKey: ["admin", "link-impact"] }));
+  expect(await dialog.findByRole("link", { name: "Link source second" })).toBeVisible();
+  expect(linkCheckbox()).not.toBeChecked();
+  expect(confirm).toBeDisabled();
+  await user.click(title);
+  await user.keyboard("{Enter}");
+  expect(deleteEntry).not.toHaveBeenCalled();
+
+  await user.click(linkCheckbox());
+  await user.click(confirm);
+  expect(await dialog.findByRole("alert")).toHaveTextContent("changed before deletion");
+  expect(await dialog.findByRole("link", { name: "Link source third" })).toBeVisible();
+  expect(deleteEntry).toHaveBeenCalledExactlyOnceWith(
+    "entry-1",
+    4,
+    { receipt: "second", acknowledgePublishedLinks: true },
+    { receipt: "references", acknowledgeDraftReferences: true },
+  );
+  expect(linkCheckbox()).not.toBeChecked();
+  expect(confirm).toBeDisabled();
+  expect(title).toHaveValue("First");
+  expect(referenceCheckbox).toBeChecked();
+
+  await user.click(linkCheckbox());
+  await user.click(confirm);
+  expect(deleteEntry).toHaveBeenNthCalledWith(
+    2,
+    "entry-1",
+    4,
+    { receipt: "third", acknowledgePublishedLinks: true },
+    { receipt: "references", acknowledgeDraftReferences: true },
+  );
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 });
 
 test("separately reviews link and draft reference receipts and refreshes a new hard blocker", async () => {

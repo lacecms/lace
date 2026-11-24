@@ -69,10 +69,16 @@ block anchor does not update them, and Lace does not check that they work.
 When you delete or unpublish an entry, the confirmation dialog lists every
 entry that links to it, grouped into drafts, published links and links in
 hidden content, with their exact fields. When published content would lose a
-working link, the dialog adds a checkbox that you must tick before confirming.
-If the set of incoming links changes while the dialog is open, Lace reloads it
-and asks you to review it again. The impact list never grants permissions:
-deleting or unpublishing still needs the usual role.
+working link, the dialog adds a checkbox for the list shown. If Lace detects a
+change during a background refresh or when you submit, it clears the checkbox
+and shows the latest list. Review it and tick the checkbox again if published
+content would still lose a working link. Deleting and unpublishing require the
+usual permissions.
+
+If you submit **Unpublish** and the connection drops before you get a response,
+choose **Retry previous unpublish** to resend that request. If Lace reports
+that the incoming links have changed, review the current list before submitting
+a new request.
 
 After the target is gone, the linking content stays unchanged. The next site
 build renders those links as unavailable: a Link block, Hero or CTA shows its
