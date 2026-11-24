@@ -6,6 +6,7 @@ import {
 } from "./journeys/list-settings-mcp-proxy.mjs";
 import { rc5Cutover } from "./journeys/rc5-cutover.mjs";
 import { pinAcceptancePnpm } from "./acceptance-pnpm.mjs";
+import { verifyPrebuiltWorkspace } from "./ci-workspace-build.mjs";
 import { acquireArtifactLock } from "./release-lock.mjs";
 import { persistAcceptance } from "./release-evidence.mjs";
 import {
@@ -52,7 +53,6 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
-import { readCompleteBuildExport } from "../packages/test-utils/dist/index.js";
 import { buildReferenceSite, referenceSiteExport } from "../tests/fixtures/reference-site.mjs";
 import {
   assertBuildThumbnailReads,
@@ -332,6 +332,7 @@ async function verifyPrivateBucket(stage) {
 
 /** Follows every build-export page and returns the strictly validated assembled export. */
 async function readExport(base, token) {
+  const { readCompleteBuildExport } = await import("../packages/test-utils/dist/index.js");
   const complete = await readCompleteBuildExport(
     (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(20_000) }),
     new URL("/", base).toString(),
@@ -1413,7 +1414,7 @@ async function starterJourney(project) {
         .png()
         .toBuffer(),
     ],
-    ["gif", "image/gif", 320, 240, gifFixtureFrames()],
+    ["gif", "image/gif", 320, 240, await gifFixtureFrames()],
     [
       "missing",
       "image/jpeg",
@@ -2311,6 +2312,10 @@ async function listSettingsNodeJourney(context, session) {
 
 async function main() {
   const phase = process.argv[2] ?? "all";
+  const usePrebuilt = process.argv[3] === "--prebuilt";
+  if (usePrebuilt && (process.argv.length !== 5 || !["starter", "existing-site"].includes(phase))) {
+    throw new Error("--prebuilt <workspace-build-directory> requires starter or existing-site");
+  }
   if (
     ![
       "release",
@@ -2529,7 +2534,12 @@ async function main() {
     return;
   }
   const tarballDirectory = join(parent, "tarballs");
-  await run("build", "pnpm", ["build"]);
+  if (usePrebuilt) {
+    verifyPrebuiltWorkspace(workspace, resolve(process.argv[4]));
+    console.info("Acceptance: using the restored workspace build");
+  } else {
+    await run("build", "pnpm", ["build"]);
+  }
   await verifySnapshots(parent);
   await run("mkdir-tarballs", "mkdir", ["-p", tarballDirectory]);
   const tarballs = await packConsumerGraph(tarballDirectory);

@@ -137,5 +137,12 @@ test("publication workflow has one serialization boundary and no PR write path",
   expect(workflow.jobs.deploy.permissions["id-token"]).toBe("write");
   const ci = yamlDocuments(read(".github/workflows/ci.yml"))[0];
   expect(ci.on.pull_request ?? {}).not.toHaveProperty("paths");
-  expect(ci.jobs.quality.steps.some((step) => step.run?.includes("pnpm docs:check"))).toBe(true);
+  expect(ci.jobs.quality.needs).toEqual(
+    expect.arrayContaining(["build", "typecheck", "source-tests", "docs-variants"]),
+  );
+  expect(ci.jobs.build.steps).toContainEqual(expect.objectContaining({ run: "pnpm build" }));
+  expect(ci.jobs["docs-variants"].needs).toBe("build");
+  expect(ci.jobs["docs-variants"].steps).toContainEqual(
+    expect.objectContaining({ run: "pnpm --filter @lacecms/app-docs test:variants" }),
+  );
 });

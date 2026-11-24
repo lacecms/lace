@@ -3,10 +3,10 @@ import { randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { gifFixture } from "../../packages/test-utils/dist/index.js";
 
 /** Three visibly different frames prevent encoders coalescing identical frames. */
-export function gifFixtureFrames() {
+export async function gifFixtureFrames() {
+  const { gifFixture } = await import("../../packages/test-utils/dist/index.js");
   const bytes = Buffer.from(
     gifFixture({
       width: 320,
@@ -43,7 +43,7 @@ export async function imageDeliveryJourney({ base, cookie, project, proxyBase })
     assert.ok(response.ok, `${path}: ${response.status} ${JSON.stringify(body)}`);
     return { response, body };
   };
-  const gif = gifFixtureFrames();
+  const gif = await gifFixtureFrames();
   const form = new FormData();
   form.append("file", new Blob([gif], { type: "image/gif" }), "image-delivery.gif");
   const uploaded = await invoke("admin/media", { method: "POST", body: form });

@@ -216,7 +216,10 @@ export async function main(args = process.argv.slice(2)) {
       "repositories",
       [
         packageRun("packages/platform-node/src/repository-contract.test.ts"),
-        packageRun("packages/platform-cloudflare/src/repository-contract.test.ts"),
+        packageRun(
+          "packages/platform-cloudflare/src/repository/repository-contract-1.test.ts",
+          "packages/platform-cloudflare/src/repository/repository-contract-2.test.ts",
+        ),
       ],
       ["--maxWorkers=2"],
     ),

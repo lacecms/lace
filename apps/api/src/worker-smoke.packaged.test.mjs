@@ -271,7 +271,7 @@ test("Worker bundle smoke: health, auth, R2 upload, publish, deploy hook, export
         method: "POST",
       })
     ).response.status,
-  ).toBe(404);
+  ).toBe(422);
 
   const form = new FormData();
   form.append("file", new Blob([png()], { type: "image/png" }), "cover.png");

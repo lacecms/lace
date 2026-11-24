@@ -375,6 +375,25 @@ CLI processes have explicit integration deadlines; ordinary unit tests keep
 Vitest's default timeout. The human and JSON sync/bootstrap cases run separately
 with fresh databases so neither mode consumes the other's deadline.
 
+On GitHub, [CI](.github/workflows/ci.yml) runs formatting, lint, OpenSpec
+validation, the workspace build, and source tests in parallel. The source gate
+includes two Admin shards, two local D1 repository-contract jobs, the other
+Cloudflare tests, and the remaining workspace suites. The build job publishes
+an artifact for the checked-out revision. Typecheck, packaged and root tests,
+MCP compatibility, OpenAPI, documentation variants, and generated-project
+acceptance restore that artifact. `CI / quality` reports the combined result.
+
+Use **Re-run failed jobs** on the existing Actions run to retry failures.
+Successful independent jobs keep their results. A retried job still installs
+dependencies using the pnpm store cache and can restore a successful build from
+that run. To reproduce an individual test job locally, use its filter or shard
+with the same worker limit:
+
+```sh
+pnpm --filter @lacecms/app-admin test --shard=1/2 --maxWorkers=2
+pnpm --filter @lacecms/platform-cloudflare test src/repository/repository-contract-1.test.ts --maxWorkers=2
+```
+
 Generated-consumer acceptance runs outside this checkout. `pnpm
 acceptance:generated` runs generated-consumer regression journeys, including
 upgrades from the latest published template fixtures, against a workspace-packed

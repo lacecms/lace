@@ -12,72 +12,252 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  quality:
+  checks:
+    name: ${{ matrix.command }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        command: ["format:check", lint, "spec:validate"]
+    outputs:
+      format: ${{ matrix.command == 'format:check' && job.status == 'success' && 'success' || '' }}
+      lint: ${{ matrix.command == 'lint' && job.status == 'success' && 'success' || '' }}
+      openspec: ${{ matrix.command == 'spec:validate' && job.status == 'success' && 'success' || '' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-workspace
+
+      - name: Run ${{ matrix.command }}
+        env:
+          CHECK_COMMAND: ${{ matrix.command }}
+        run: pnpm run "$CHECK_COMMAND"
+
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-workspace
+
+      - name: Build workspace
+        run: pnpm build
+
+      - name: Pack workspace outputs
+        run: node scripts/ci-workspace-build.mjs pack "$RUNNER_TEMP/workspace-build"
+
+      - name: Upload workspace build
+        id: upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: workspace-build-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/workspace-build
+          if-no-files-found: error
+          compression-level: 0
+
+  typecheck:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-workspace
+      - uses: ./.github/actions/restore-workspace-build
+        with:
+          artifact-id: ${{ needs.build.outputs.artifact-id }}
+
+      - name: Typecheck using restored build prerequisites
+        run: |
+          node scripts/ci-workspace-build.mjs check-typecheck
+          pnpm typecheck
+
+  admin-tests:
+    name: Admin tests (${{ matrix.shard }}/2)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    outputs:
+      one: ${{ matrix.shard == 1 && job.status == 'success' && 'success' || '' }}
+      two: ${{ matrix.shard == 2 && job.status == 'success' && 'success' || '' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-workspace
+
+      - name: Run Admin shard
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: pnpm --filter @lacecms/app-admin test --shard="$SHARD/2" --maxWorkers=2
+
+  d1-tests:
+    name: D1 repository contract (${{ matrix.partition }}/2)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [1, 2]
+    outputs:
+      one: ${{ matrix.partition == 1 && job.status == 'success' && 'success' || '' }}
+      two: ${{ matrix.partition == 2 && job.status == 'success' && 'success' || '' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-workspace
+
+      - name: Run D1 contract partition
+        env:
+          PARTITION: ${{ matrix.partition }}
+        run: pnpm --filter @lacecms/platform-cloudflare test "src/repository/repository-contract-$PARTITION.test.ts" --maxWorkers=2
+
+  cloudflare-tests:
+    name: Cloudflare source tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-workspace
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
+      - name: Run remaining Cloudflare tests
+        run: pnpm --filter @lacecms/platform-cloudflare test --exclude '**/repository-contract-[12].test.ts' --maxWorkers=2
+
+  source-tests:
+    name: Workspace source tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-workspace
+
+      - name: Run remaining workspace tests
+        run: >-
+          pnpm exec turbo run test --filter='!@lacecms/app-admin'
+          --filter='!@lacecms/platform-cloudflare' --concurrency=2 -- --maxWorkers=2
+
+  packaged-tests:
+    name: Packaged tests
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-workspace
+      - uses: ./.github/actions/restore-workspace-build
         with:
-          node-version: 24.12.0
-          package-manager-cache: false
-
-      - name: Enable the pinned pnpm release
-        run: |
-          corepack enable
-          corepack prepare pnpm@12.21.0 --activate
-
-      - name: Find pnpm store
-        id: pnpm-store
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: ${{ runner.os }}-node-24.12.0-pnpm-12.21.0-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install frozen dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Verify lockfile is unchanged
-        run: git diff --exit-code -- pnpm-lock.yaml
-
-      - name: Check formatting
-        run: pnpm format:check
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Typecheck
-        run: pnpm typecheck
+          artifact-id: ${{ needs.build.outputs.artifact-id }}
 
       - name: Install Chromium for browser tests
         run: pnpm --filter @lacecms/app-admin exec playwright install --with-deps chromium
 
-      - name: Test
-        run: pnpm test
+      - name: Run packaged tests against restored outputs
+        run: pnpm exec turbo run test:packaged --only --concurrency=2 -- --maxWorkers=2
 
-      - name: Build
-        run: pnpm build
+  root-tests:
+    name: Root repository tests
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-workspace
+      - uses: ./.github/actions/restore-workspace-build
+        with:
+          artifact-id: ${{ needs.build.outputs.artifact-id }}
 
-      - name: Verify MCP compatibility
-        run: pnpm compat:mcp
+      - name: Run root Vitest suite
+        run: pnpm exec vitest run --dir tests --maxWorkers=2 --exclude 'fixtures/**'
 
-      - name: Build the packed generated starter
-        run: pnpm acceptance:starter
+  build-checks:
+    name: ${{ matrix.command }}
+    runs-on: ubuntu-latest
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        command: ["compat:mcp", "openapi:check"]
+    outputs:
+      mcp: ${{ matrix.command == 'compat:mcp' && job.status == 'success' && 'success' || '' }}
+      openapi: ${{ matrix.command == 'openapi:check' && job.status == 'success' && 'success' || '' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-workspace
+      - uses: ./.github/actions/restore-workspace-build
+        with:
+          artifact-id: ${{ needs.build.outputs.artifact-id }}
 
-      - name: Build an existing Astro site with a generated CMS
-        run: pnpm acceptance:existing-site
+      - name: Run ${{ matrix.command }}
+        env:
+          CHECK_COMMAND: ${{ matrix.command }}
+        run: pnpm run "$CHECK_COMMAND"
 
-      - name: Verify public documentation
+  acceptance:
+    name: Generated project (${{ matrix.phase }})
+    runs-on: ubuntu-latest
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        phase: [starter, existing-site]
+    outputs:
+      starter: ${{ matrix.phase == 'starter' && job.status == 'success' && 'success' || '' }}
+      existing-site: ${{ matrix.phase == 'existing-site' && job.status == 'success' && 'success' || '' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-workspace
+      - uses: ./.github/actions/restore-workspace-build
+        with:
+          artifact-id: ${{ needs.build.outputs.artifact-id }}
+
+      - name: Install Chromium for starter browser tests
+        if: ${{ matrix.phase == 'starter' }}
+        run: pnpm --filter @lacecms/app-admin exec playwright install --with-deps chromium
+
+      - name: Verify generated project
+        env:
+          ACCEPTANCE_PHASE: ${{ matrix.phase }}
+        run: pnpm "acceptance:$ACCEPTANCE_PHASE" --prebuilt "$RUNNER_TEMP/workspace-build"
+
+  docs-variants:
+    name: Documentation variants
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-workspace
+      - uses: ./.github/actions/restore-workspace-build
+        with:
+          artifact-id: ${{ needs.build.outputs.artifact-id }}
+
+      - name: Verify public documentation variants
+        run: pnpm --filter @lacecms/app-docs test:variants
+
+  quality:
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs:
+      - checks
+      - build
+      - typecheck
+      - admin-tests
+      - d1-tests
+      - cloudflare-tests
+      - source-tests
+      - packaged-tests
+      - root-tests
+      - build-checks
+      - acceptance
+      - docs-variants
+    steps:
+      - name: Require every quality job to succeed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        # Each matrix leg supplies a distinct result. A cancelled leg can leave
+        # the shared matrix result at success without publishing its output.
         run: |
-          pnpm docs:check
-          pnpm --filter @lacecms/app-docs test:variants
-
-      - name: Verify generated OpenAPI
-        run: pnpm openapi:check
-
-      - name: Validate OpenSpec
-        run: pnpm spec:validate
+          jq -e '
+            def legs_passed($legs): [$legs[] as $leg | .outputs[$leg]] | all(. == "success");
+            map_values(.result) as $results |
+            $results,
+            (
+              all($results[]; . == "success")
+              and (.checks | legs_passed(["format", "lint", "openspec"]))
+              and (."admin-tests" | legs_passed(["one", "two"]))
+              and (."d1-tests" | legs_passed(["one", "two"]))
+              and (."build-checks" | legs_passed(["mcp", "openapi"]))
+              and (.acceptance | legs_passed(["starter", "existing-site"]))
+            )
+          ' <<< "$NEEDS"

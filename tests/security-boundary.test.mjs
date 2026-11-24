@@ -751,11 +751,11 @@ for (const kind of ["node", "cloudflare"]) {
         404,
       );
     await deny("/api/auth/list-sessions", { cookie: cookies.viewer }, 404);
-    // The password-based creation route is gone.
+    // User creation rejects a caller-supplied password.
     await deny(
       "/api/v1/admin/users",
       { cookie: cookies.admin, json: { email: "direct@lace.test", password, role: "viewer" } },
-      404,
+      422,
     );
     expect(await f.query("select * from session order by rowid")).toEqual(sessions);
     await deny("/api/auth/sign-out", {
