@@ -2,7 +2,7 @@
 title: API reference
 description: Every REST endpoint of the versioned API with its audience and required credential, the OpenAPI contract and the query grammar.
 kind: reference
-verifiedAgainst: 1.0.0
+verifiedAgainst: 1.1.0
 ---
 
 The REST contract is versioned under `/api/v1`. Admin and account operations require a signed-in browser session with the listed permission; public build export and build thumbnail reads require a build token. Runtime validation, revisions and concurrency checks apply to direct requests too. The [MCP content server](../mcp/) is a separate OAuth endpoint.

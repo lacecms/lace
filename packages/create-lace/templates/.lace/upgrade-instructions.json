@@ -1,12 +1,11 @@
 {
   "schemaVersion": 1,
-  "templateVersion": "0.52.0",
+  "templateVersion": "0.53.0",
   "database": [
-    "Start from fully migrated and synchronized RC5 (template 0.50.0). Rehearse on a private copy. Quiesce writers and take a coordinated database, media, configuration and site backup. Apply five forward migrations in place using pnpm db:migrate with the Compose API and dispatcher stopped, or lace db migrate --target cloudflare-remote with the intended operator environment. Confirm readiness and the installed ledger."
+    "Start from fully migrated and synchronized 1.0.0 (template 0.52.0). Rehearse on a private copy. Pause writers and back up the database, media, configuration, project files and served output together. Run the explicit migration check using pnpm db:migrate with the Compose API and dispatcher stopped, pnpm cf:db:migrate for local D1, or lace db migrate --target cloudflare-remote with the intended operator environment. Expect zero new ledger entries."
   ],
   "configuration": [
-    "Template 0.52.0 keeps the RC5 production ingress. Review the managed-file plan and resolve conflicts, keep operator overrides and the same site mode/path. Align all Lace packages, the user-owned Astro dependencies and lockfile, installed components and both image overrides at 1.0.0. Synchronize configuration, rebuild and verify the original draft, publication, sign-in and media. Restore matching RC5 files, services, database and objects on failure.",
-    "Node Compose now uses the pinned SILO image and retires the unchanged managed deploy/minio.Dockerfile. Before starting SILO on existing media, follow the storage switch procedure in docs/lace-operations.md: preserve the prior image, Compose project and volume, back up the stopped volume and SQLite together, and verify old and new media before resuming writes.",
-    "Protected draft preview stays off on upgrade. Review the managed development Compose override and preview ingress changes. Apply the preview migrations, merge the settings you need into your ignored .env or operator-owned Wrangler configuration, and follow the matching generated guide before setting LACE_PREVIEW_ENABLED=true. Use the same project and retain the existing storage and release volumes."
+    "Review and apply the managed template plan, preserve operator overrides and use matching 1.1.0 packages and images. Keep the existing database and object store. Check configuration, original sign-in, content and media.",
+    "Cloudflare operators can optionally add the IMAGES binding to worker/wrangler.jsonc and redeploy. Update the site's SDK and Astro packages after deploying the CMS, then rebuild. Restore the coordinated 1.0.0 project, runtime, database, media and site backup if the cutover fails."
   ]
 }

@@ -512,12 +512,21 @@ Complete exact-artifact acceptance for the new build set before recording
 
 ## After EX7A — CMS 1.0.0 release preparation
 
-Local qualification completed on 2026-11-22. All 16 stable packages and four
-platform images were prepared from `357ebbbc`. Exact-artifact acceptance
-verified the direct RC5 upgrade and restore on Node and Cloudflare-local.
-The owner's real deployments, independent-site restore and publication decision
-are pending. [Candidate handoff](../openspec/changes/prepare-cms-1-0-0/handoff.md)
-and [support floor](adr/0035-stable-rc5-upgrade-origin.md).
+Local qualification verified the direct RC5 upgrade and restore on Node and
+Cloudflare-local. `1.0.0` was published from `357ebbbc`. The GitHub release,
+all 16 npm packages and both GHCR image indexes were verified on 2026-11-24.
+[Release evidence](../release/published-1.0.0.json)
+and [historical support floor](adr/0035-stable-rc5-upgrade-origin.md).
+
+## CMS 1.1.0 release preparation
+
+This session follows MP1, MP2, AC1 and the link-review fix. It selects template
+`0.53.0`, preserves the `LaceClient` contract and verifies populated upgrades
+and restores from published `1.0.0` on Node/SQLite and Worker/local D1. Local
+qualification passed 25 saved-artifact journeys. Both migration runs per
+runtime applied zero steps. Real staging and publication are owner actions.
+[Verification](../openspec/changes/archive/2026-11-24-prepare-cms-1-1-0/verification.md) ·
+[Release handoff](../openspec/changes/archive/2026-11-24-prepare-cms-1-1-0/handoff.md).
 
 ## 6. Progress log
 
@@ -530,7 +539,7 @@ recorded event.
 | 2026-11-24 | MP1 | [Admin media performance](../openspec/changes/archive/2026-11-24-add-admin-media-thumbnails/verification.md) | done. Chromium verified five 24-item batches on Node and local Worker. The first batch transferred 0.54 MiB, and a fresh runtime read persisted derivatives without reopening originals. The isolated real Images binding produced static WebP for all seven representative inputs. |
 | 2026-11-24 | MP2 | [Published Astro image placeholders](../openspec/changes/archive/2026-11-24-use-media-thumbnails-for-astro-placeholders/verification.md) | done. Node and local Worker passed build-token and publication eligibility checks. The reference and packed starter builds revalidated cached blur. Chromium painted the inline blur before the responsive asset arrived and kept the image bounds stable. |
 | 2026-11-24 | AC1 | [Direct admin account creation](../openspec/changes/archive/2026-11-24-add-admin-user-creation/tasks.md) | done. Node/SQLite and local D1 passed the account lifecycle and administrator guard checks. Chromium verified first sign-in and invitation flows with email disabled and with an accepting test provider. Five specs synchronized. |
-| 2026-11-22 | CMS 1.0.0 | [RC5 upgrade and release qualification](../openspec/changes/prepare-cms-1-0-0/verification.md) | Locally verified, awaiting owner staging and publication |
+| 2026-11-22 | CMS 1.0.0 | [RC5 upgrade and release qualification](../openspec/changes/archive/2026-11-24-prepare-cms-1-0-0/verification.md) | Published. Local qualification is recorded in the change. |
 | 2026-11-22 | EX7A | [pnpm release toolchain](../openspec/changes/archive/2026-11-22-ex07a-upgrade-pnpm-toolchain/verification.md) | done. Verified the frozen install, native SQLite, packed starter and local Worker with pnpm 12.21.0. Both Linux platforms passed API and builder smoke checks. Full acceptance on linux/arm64 matched the 16 tarballs and host images from revision `0f8f8be0`. |
 | 2026-11-22 | EX5A | [Model kind descriptors](../openspec/changes/archive/2026-11-22-ex05a-model-kind-descriptors/) | done. Synchronized both specs after verification on both Node SQLite modes and local D1. The [comparison inventory and verification](#ex5a-model-kind-comparisons) record the results. |
 | 2026-11-16 | EX4D | [HTTP consistency](../openspec/changes/archive/2026-11-16-ex04d-http-consistency/) | done. Verified entry tags and protected cursor pages through Node/SQLite and Worker/local D1, 105-build traversal on both SQLite modes and local D1, and continuation recovery and refresh in Admin. OpenAPI, docs, typecheck, lint, format and strict OpenSpec validation passed. |

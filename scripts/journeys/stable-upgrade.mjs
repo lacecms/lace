@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { cp, mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { parseEnv } from "node:util";
 import { createRequire } from "node:module";
@@ -11,15 +11,12 @@ import {
   withVariable,
   workerCommand,
 } from "../cloudflare-consumer-acceptance.mjs";
-import { inspectCutover, seedPendingWork } from "./rc5-state.mjs";
-import { siteProbe } from "./rc5-site.mjs";
+import { digest, inspectCutover, seedPendingWork } from "./upgrade-state.mjs";
+import { siteProbe } from "./upgrade-site.mjs";
+import { verifySdkDeclarations } from "./sdk-upgrade-compatibility.mjs";
 
-const rc5 = "0.1.0-rc5";
-const images = {
-  api: "ghcr.io/lacecms/api@sha256:0359eae1c62cdde3b71a201588a332b3fdbcc9746b8f3caec5a3ac64bdfabc5a",
-  builder:
-    "ghcr.io/lacecms/builder@sha256:2c9aeb850f75801e43236893d635cc3eb19e9c2ffd1d323f26b760dc2b4dcfd0",
-};
+const originVersion = "1.0.0";
+const targetVersion = "1.1.0";
 const env = { CI: "true", WRANGLER_SEND_METRICS: "false" };
 const copyProject = (from, to) =>
   cp(from, to, { recursive: true, filter: (file) => basename(file) !== "node_modules" });
@@ -30,21 +27,35 @@ async function dbPackage(project) {
   return realpath(join(platform, "../db"));
 }
 
-export async function rc5Cutover(parent, kind, ops) {
+export async function stableUpgrade(parent, kind, ops) {
   const { run, workspace, secretValues, installPackedConsumer } = ops;
   const edge = kind === "cloudflare";
-  const root = join(await realpath(parent), "rc5-" + kind);
+  const root = join(await realpath(parent), "stable-upgrade-" + kind);
   const project = (phase) => join(root, phase, "acceptance-site");
   const original = project("original"),
     stable = project("stable"),
     target = project("target"),
     restored = project("restored");
+  const provenance = JSON.parse(await readFile(join(workspace, "release/upgrade-origin.json")));
+  assert.equal(provenance.generator, "create-lace@" + originVersion);
+  const recorded = JSON.parse(await readFile(join(workspace, "release/published-1.0.0.json")));
+  assert.equal(recorded.sourceRevision, provenance.sourceRevision);
+  assert.equal(recorded.generatorSha256, provenance.archiveSha256);
+  const images = Object.fromEntries(
+    Object.entries(recorded.images).map(([name, { index }]) => [
+      name,
+      `ghcr.io/lacecms/${name}@${index}`,
+    ]),
+  );
   const fixture = JSON.parse(
     await readFile(
-      join(workspace, "tests/fixtures/template-0.50.0", edge ? "cloudflare.json" : "default.json"),
+      join(
+        workspace,
+        `tests/fixtures/template-${provenance.templateVersion}`,
+        edge ? "cloudflare.json" : "default.json",
+      ),
     ),
   );
-  const provenance = JSON.parse(await readFile(join(workspace, "release/upgrade-origin.json")));
   assert.deepEqual(fixture.provenance, provenance);
   for (const [file, bytes] of Object.entries(fixture.files)) {
     await mkdir(dirname(join(original, file)), { recursive: true });
@@ -57,8 +68,19 @@ export async function rc5Cutover(parent, kind, ops) {
     sharp({ create: { width: 2, height: 2, channels: 3, background } })
       .png()
       .toBuffer();
-  const probe = siteProbe(base, secretValues, await png("#1188ee"));
-  const label = "rc5-" + kind + "-";
+  const originalPng = await png("#1188ee");
+  const probe = siteProbe(base, secretValues, originalPng);
+  const localWebp = (await sharp(originalPng).webp().toBuffer()).toString("base64");
+  const configPath = join(original, "lace.config.ts");
+  const config = await readFile(configPath, "utf8");
+  const reference = 'relatedEntry: field.reference({ models: ["home"] })';
+  const seededConfig = config.replace(
+    'relatedUrl: field.url({ label: "Related page" })',
+    'relatedUrl: field.url({ label: "Related page" }), ' + reference,
+  );
+  assert.notEqual(seededConfig, config);
+  await writeFile(configPath, seededConfig);
+  const label = "stable-upgrade-" + kind + "-";
   const invoke = (stage, cmd, args, cwd, extra = {}) =>
     run(label + stage, cmd, args, { cwd, env, ...extra });
   const script = (dir, name, args = [], extra = {}) =>
@@ -66,7 +88,7 @@ export async function rc5Cutover(parent, kind, ops) {
   const migrate = (dir) => script(dir, edge ? "cf:db:migrate" : "db:migrate", ["--json"]);
   const sync = (dir) => script(dir, edge ? "cf:content:sync" : "content:sync", ["--json"]);
   const groups = new Map([
-    [original, "lace-rc5-" + randomUUID()],
+    [original, "lace-origin-" + randomUUID()],
     [stable, "lace-stable-" + randomUUID()],
     [restored, "lace-restored-" + randomUUID()],
   ]);
@@ -80,11 +102,13 @@ export async function rc5Cutover(parent, kind, ops) {
   const docker = (...args) => invoke("docker", "docker", args, original);
   let worker;
   const started = new Set();
-  async function start(dir) {
+  async function start(dir, useImages = false) {
     started.add(dir);
     if (edge) {
       const manifest = JSON.parse(await readFile(join(dir, "package.json")));
-      worker = startWorker(dir, workerCommand(manifest.scripts["cf:dev"], port));
+      const args = workerCommand(manifest.scripts["cf:dev"], port);
+      if (useImages) args.splice(1, 0, "worker/upgrade-images-probe.ts");
+      worker = startWorker(dir, args);
       await waitReady(worker, base, label + "ready", ops.sanitize);
     } else {
       await compose(dir, "up", "-d", "--wait", "--wait-timeout", "120", "web");
@@ -139,7 +163,8 @@ export async function rc5Cutover(parent, kind, ops) {
     await script(original, "install", ["--no-frozen-lockfile"]);
     await script(original, "install", ["--frozen-lockfile"]);
     const originalDb = JSON.parse(await readFile(join(await dbPackage(original), "package.json")));
-    assert.equal(originalDb.version, rc5);
+    assert.equal(originalDb.version, originVersion);
+    const originalDatabasePackage = await dbPackage(original);
     await script(original, "env:prepare");
     const settings = parseEnv(await readFile(join(original, ".env"), "utf8"));
     for (const [name, value] of Object.entries(settings))
@@ -156,7 +181,7 @@ export async function rc5Cutover(parent, kind, ops) {
       await configure(original, { LACE_PUBLIC_BASE_URL: base }, "worker/.dev.vars");
     } else {
       for (const image of Object.values(images)) await docker("pull", image);
-      await compose(original, "build", "minio");
+      await compose(original, "pull", "minio");
     }
     await migrate(original);
     await sync(original);
@@ -169,12 +194,12 @@ export async function rc5Cutover(parent, kind, ops) {
     secretValues.add(bootstrap);
     await start(original);
     await probe.seed(bootstrap);
-    await probe.verify(rc5);
+    await probe.verify(originVersion);
     const priorOutput = await probe.rebuild(original, run, label + "original-build");
     await stop(original);
     await seedPendingWork(original, kind);
     const before = await inspectCutover(original, kind);
-    assert.equal(before.ledger.length, 2);
+    assert.ok(before.ledger.length > 0);
     await copyProject(original, stable);
     await copyProject(original, restored);
     if (!edge) {
@@ -223,44 +248,64 @@ export async function rc5Cutover(parent, kind, ops) {
         LACE_API_IMAGE: ops.images.api.imageId,
         LACE_BUILDER_IMAGE: ops.images.builder.imageId,
       });
+    await verifySdkDeclarations(original, stable, ops);
     await migrate(stable);
     const after = await inspectCutover(stable, kind);
+    assert.deepEqual(after, before);
     const installedDb = await dbPackage(stable);
-    const journal = JSON.parse(await readFile(join(installedDb, "drizzle/meta/_journal.json")));
-    assert.equal(journal.entries.length, 7);
-    assert.deepEqual(after.ledger.slice(0, 2), before.ledger);
-    assert.deepEqual(
-      after.ledger.map((row) => (edge ? row.name : row.created_at)),
-      journal.entries.map((step) => (edge ? step.tag + ".sql" : step.when)),
-    );
-    assert.equal(after.state, before.state);
-    const data = join(stable, ".lace/data");
-    await rename(data, join(root, "upgraded-data"));
-    try {
-      await migrate(stable);
-      assert.equal(await inspectCutover(stable, kind, true), after.schema);
-    } finally {
-      await rename(data, join(root, "fresh-data"));
-      await rename(join(root, "upgraded-data"), data);
-    }
+    const chain = async (root) => {
+      const journal = await readFile(join(root, "drizzle/meta/_journal.json"));
+      const scripts = await Promise.all(
+        JSON.parse(journal).entries.map(({ tag }) => readFile(join(root, "drizzle", tag + ".sql"))),
+      );
+      return digest(Buffer.concat([journal, ...scripts]));
+    };
+    assert.equal(await chain(installedDb), await chain(originalDatabasePackage));
+    assert.equal(await chain(installedDb), await chain(join(workspace, "packages/db")));
     await migrate(stable);
     assert.deepEqual(await inspectCutover(stable, kind), after);
     await sync(stable);
     await start(stable);
-    await probe.verify("1.0.0");
+    await probe.verify(targetVersion);
+    await probe.verifyLegacySdk(original);
+    await probe.verifyThumbnail(!edge);
     const replacement = await probe.upload("stable", await png("#ee5511"));
+    if (edge) {
+      await writeFile(
+        join(stable, "worker/upgrade-images-probe.ts"),
+        `
+import worker from "./index";
+const images = {
+  input: (stream: ReadableStream<Uint8Array>) => ({
+    transform: () => ({
+      output: async () => {
+        await new Response(stream).arrayBuffer();
+        const bytes = Uint8Array.from(atob(${JSON.stringify(localWebp)}), char => char.charCodeAt(0));
+        return { response: () => new Response(bytes, { headers: { "content-type": "image/webp" } }) };
+      },
+    }),
+  }),
+};
+export default {
+  ...worker,
+  fetch: (request: Request, env: Parameters<typeof worker.fetch>[1], ctx: Parameters<typeof worker.fetch>[2]) =>
+    worker.fetch(request, { ...env, IMAGES: images }, ctx),
+};
+`,
+      );
+    }
     await stop(stable);
-    await start(stable);
-    await probe.verify("1.0.0");
+    await start(stable, edge);
+    await probe.verify(targetVersion);
     await probe.mediaRead(replacement);
+    await probe.verifyThumbnail(true);
     const stableOutput = await probe.rebuild(stable, run, label + "stable-build");
     await stop(stable);
     const restoredState = await inspectCutover(restored, kind);
     assert.deepEqual(restoredState, before);
     await script(restored, "install", ["--frozen-lockfile"]);
-    if (!edge) await compose(restored, "build", "minio");
     await start(restored);
-    await probe.verify(rc5);
+    await probe.verify(originVersion);
     await probe.verifyMissing(replacement.id);
     const restoredOutput = await probe.served(restored);
     assert.equal(restoredOutput, priorOutput);
@@ -276,6 +321,15 @@ export async function rc5Cutover(parent, kind, ops) {
       newMediaSha256: replacement.sha256,
       originalMediaSha256: probe.originalMediaSha256(),
       migrationsApplied: after.ledger.length - before.ledger.length,
+      ledgerFingerprint: digest(JSON.stringify(before.ledger)),
+      upgradedLedgerFingerprint: digest(JSON.stringify(after.ledger)),
+      restoredLedgerFingerprint: digest(JSON.stringify(restoredState.ledger)),
+      schemaFingerprint: before.schema,
+      upgradedSchemaFingerprint: after.schema,
+      restoredSchemaFingerprint: restoredState.schema,
+      originImages: recorded.images,
+      oldSdkReads: true,
+      thumbnailChecks: true,
     };
   } finally {
     if (edge) await stopWorker(worker);

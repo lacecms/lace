@@ -4,7 +4,7 @@ import {
   verifyListSettingsStarter,
   tlsEdgeProxy,
 } from "./journeys/list-settings-mcp-proxy.mjs";
-import { rc5Cutover } from "./journeys/rc5-cutover.mjs";
+import { stableUpgrade } from "./journeys/stable-upgrade.mjs";
 import { pinAcceptancePnpm } from "./acceptance-pnpm.mjs";
 import { verifyPrebuiltWorkspace } from "./ci-workspace-build.mjs";
 import { acquireArtifactLock } from "./release-lock.mjs";
@@ -2335,8 +2335,8 @@ async function main() {
       "credentials",
       "field-trial",
       "draft-preview",
-      "rc5-node",
-      "rc5-cloudflare",
+      "upgrade-node",
+      "upgrade-cloudflare",
     ].includes(phase)
   ) {
     throw new Error(`Unknown acceptance phase: ${phase}`);
@@ -2386,6 +2386,9 @@ async function main() {
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
+    // Host-side probes import built helpers. Generated projects still install
+    // their runtime dependencies exclusively from the saved artifacts below.
+    await run("build-release-harness", "pnpm", ["build"]);
     const platform = `linux/${process.arch === "arm64" ? "arm64" : "amd64"}`;
     const artifacts = await loadConsumerArtifacts(
       resolve(args[1]),
@@ -2428,20 +2431,24 @@ async function main() {
     const context = await prepareCompose(project, parent, artifacts);
     context.shipping = shipping;
     context.sdkTarball = basename(artifacts.tarballs.get("@lacecms/sdk"));
-    const rc5Cutovers = {};
-    if (phase === "release" && artifacts.inventory.release.version === "1.0.0") {
+    const stableUpgrades = {};
+    if (phase === "release" && artifacts.inventory.release.version === "1.1.0") {
       for (const kind of ["node", "cloudflare"]) {
-        rc5Cutovers[kind === "node" ? "node" : "cloudflareLocal"] = await rc5Cutover(parent, kind, {
-          workspace,
-          run,
-          freePort,
-          sanitize,
-          secretValues,
-          images: artifacts.images,
-          generator: artifacts.generator,
-          cli: join(project, "node_modules/@lacecms/cli/dist/bin.js"),
-          installPackedConsumer: (dir) => installPackedConsumer(dir, artifacts.tarballs),
-        });
+        stableUpgrades[kind === "node" ? "node" : "cloudflareLocal"] = await stableUpgrade(
+          parent,
+          kind,
+          {
+            workspace,
+            run,
+            freePort,
+            sanitize,
+            secretValues,
+            images: artifacts.images,
+            generator: artifacts.generator,
+            cli: join(project, "node_modules/@lacecms/cli/dist/bin.js"),
+            installPackedConsumer: (dir) => installPackedConsumer(dir, artifacts.tarballs),
+          },
+        );
       }
     }
     const session = await nodeJourney(context);
@@ -2473,7 +2480,7 @@ async function main() {
       workspace,
     });
     journeys.push(
-      ...Object.keys(rc5Cutovers).map((kind) => "rc5-cutover-and-restore-" + kind),
+      ...Object.keys(stableUpgrades).map((kind) => "stable-upgrade-and-restore-" + kind),
       "node-contracts-media",
       "consumer-security-probes",
       "gif-proxy-cache",
@@ -2525,7 +2532,7 @@ async function main() {
         source: artifacts.inventory.source,
         builds: context.buildEvidence,
         journeys,
-        ...(Object.keys(rc5Cutovers).length ? { rc5Cutovers } : {}),
+        ...(Object.keys(stableUpgrades).length ? { stableUpgrades } : {}),
         packages: artifacts.inventory.packages,
         images: Object.values(artifacts.images),
       },
@@ -2689,10 +2696,10 @@ async function main() {
     secretValues,
     workspace,
   };
-  if (phase === "rc5-cloudflare" || phase === "rc5-node") {
-    const kind = phase.slice(4);
+  if (phase === "upgrade-cloudflare" || phase === "upgrade-node") {
+    const kind = phase.slice("upgrade-".length);
     const context = kind === "node" ? await prepareCompose(project, parent) : undefined;
-    await rc5Cutover(parent, kind, {
+    const proof = await stableUpgrade(parent, kind, {
       ...upgradeOperations,
       freePort,
       sanitize,
@@ -2702,6 +2709,9 @@ async function main() {
       },
       installPackedConsumer: (dir) => installPackedConsumer(dir, tarballs),
     });
+    console.info(
+      `Published 1.0.0 ${kind} upgrade and restore passed (${proof.migrationsApplied} migrations applied)`,
+    );
     return;
   }
   if (phase === "upgrade") {

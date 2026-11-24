@@ -206,6 +206,7 @@ export async function main(args = process.argv.slice(2)) {
         "run",
         "build",
         "--filter=@lacecms/app-api",
+        "--filter=@lacecms/cli",
         "--filter=@lacecms/test-utils",
         "--filter=@lacecms/sdk",
         "--filter=@lacecms/render",

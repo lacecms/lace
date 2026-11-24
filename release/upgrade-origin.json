@@ -1,7 +1,7 @@
 {
-  "generator": "create-lace@0.1.0-rc5",
-  "templateVersion": "0.50.0",
-  "sourceRevision": "bb3d17e813f504c2133a7664af0174c5e0a60cf0",
-  "registryIntegrity": "sha512-mNsYs5GJeCUAPGgxEYpt7SoJ1Mj0hDxLnadUuhi0eCF8BEO9ad69m5Fz1PbRgLVh1dPs0vjX2ScFrWVvDgRV+g==",
-  "archiveSha256": "a436e4b08913ad512a35b734c50c04a772cd3b92e841960746da5e303be22260"
+  "generator": "create-lace@1.0.0",
+  "templateVersion": "0.52.0",
+  "sourceRevision": "357ebbbc8d2eb73acf164ae62db40647dce2a046",
+  "registryIntegrity": "sha512-TYu5Pt2NOAOPLSzwVNVNLA80y0PG9fUOSTkmucsnyy9yGxLbv2nwaagr67OwY63ICMAFUeJgCMgCeteMPyOi1Q==",
+  "archiveSha256": "0b36902f81891a05c80955a4f90faf616d3067f4ed1739489f615d2d193bd85a"
 }

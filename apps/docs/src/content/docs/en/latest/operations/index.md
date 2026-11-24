@@ -2,10 +2,10 @@
 title: Operate and recover Lace
 description: Observe, back up, restore, upgrade and roll back an installation, and rotate its credentials.
 kind: guide
-verifiedAgainst: 1.0.0
+verifiedAgainst: 1.1.0
 ---
 
-Running Lace means keeping its database, media and configuration consistent, telling content publication apart from site deployment, and changing versions and credentials deliberately. This guide covers observation, backup and restore, upgrades from RC5, rollback and credential rotation for both runtimes. The generated `docs/lace-operations.md` contains the exact commands for your project's layout.
+Running Lace means keeping its database, media and configuration consistent, telling content publication apart from site deployment, and changing versions and credentials deliberately. This guide covers observation, backup and restore, upgrades from 1.0.0, rollback and credential rotation for both runtimes. The generated `docs/lace-operations.md` contains the exact commands for your project's layout.
 
 ## Before you start
 
@@ -39,29 +39,29 @@ It includes a stopped volume backup for restoring on-disk storage metadata.
 
 ## Upgrade and roll back
 
-RC5 upgrades directly to 1.0.0. Five forward migrations backfill actor profiles, add the invitation index, install preview state and classify existing entry references as URL links. Rehearse the upgrade and recovery on a private copy with verified backups before the live cutover.
+Upgrade a fully migrated and synchronized **1.0.0** installation from template **0.52.0** to **0.53.0**. Rehearse the upgrade and recovery on a private copy with verified backups. RC5 installations first follow the [published 1.0.0 upgrade procedure](https://github.com/lacecms/lace/blob/v1.0.0/docs/compatibility.md#upgrading-from-rc5), which applies the five forward migrations.
 
 1. **Back up** configuration, source, package locks, deployment settings, the database and media objects together, as above.
 2. **Update managed project files.** Generate a pristine project with the target `create-lace` release in a separate directory, using the same project name, site mode and `--cloudflare` choice. From your project, review the plan, then apply it:
 
    ```sh
    mkdir -p /work/upgrade-target && cd /work/upgrade-target
-   pnpm dlx create-lace@1.0.0 create my-site --starter
+   pnpm dlx create-lace@1.1.0 create my-site --starter
    cd /work/my-site
-   pnpm dlx @lacecms/cli@1.0.0 upgrade --template /work/upgrade-target/my-site
-   pnpm dlx @lacecms/cli@1.0.0 upgrade --template /work/upgrade-target/my-site --apply
+   pnpm dlx @lacecms/cli@1.1.0 upgrade --template /work/upgrade-target/my-site
+   pnpm dlx @lacecms/cli@1.1.0 upgrade --template /work/upgrade-target/my-site --apply
    ```
 
    Replace the paths and the site-mode flag with your own.
 
    The plan is read-only. Files you edited conflict instead of being overwritten; apply then changes nothing and writes proposed files and diffs under `.lace/conflicts/` for you to merge. `lace.config.ts`, the site, README and environment files are never changed. `lace upgrade` does not install packages, migrate databases or contact services.
 
-3. **Update packages and images together.** Install the reviewed dependencies, update the site's Lace packages to the same release, and set `LACE_API_IMAGE` and `LACE_BUILDER_IMAGE` (Compose) to the matching images. Update installed block components with `lace add block` as described in [Connect an Astro site](../astro-integration/#update-installed-components).
-4. **Migrate the database explicitly.** Compose: stop `api` and `dispatcher`, then run `pnpm db:migrate`. Local Cloudflare: `pnpm cf:db:migrate`. Remote Cloudflare: `pnpm exec lace db migrate --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`. Local `cf:*` commands never migrate your account.
+3. **Update packages and images together.** Install the reviewed CMS dependencies and set `LACE_API_IMAGE` and `LACE_BUILDER_IMAGE` (Compose) to the matching images. Update installed block components with `lace add block` as described in [Connect an Astro site](../astro-integration/#update-installed-components).
+4. **Migrate the database explicitly.** Compose: stop `api` and `dispatcher`, then run `pnpm db:migrate`. Local Cloudflare: `pnpm cf:db:migrate`. Remote Cloudflare: `pnpm exec lace db migrate --target cloudflare-remote --operator-env .lace/cloudflare-operator.env`. Use the installed ledger to confirm zero new migration entries on a fully migrated 1.0.0 database. Local `cf:*` commands target local D1.
 5. **Synchronize configuration** with `pnpm content:sync` or the selected Cloudflare target.
-6. **Restart or redeploy and rebuild.** Run `pnpm prod:start`, or deploy the Worker, then rebuild the site and check it on the selected runtime: CMS version, sign-in, media and a successful build.
+6. **Restart or redeploy and rebuild.** Run `pnpm prod:start` or deploy the Worker. Update the site's Lace packages, rebuild, and check the result on the selected runtime: CMS version, sign-in, media and a successful build.
 
-RC5 already uses private API ingress. Preserve your working proxy overrides. For the Node storage switch verify existing and new media after a SILO restart before reopening traffic. On Cloudflare use the same D1/R2 bindings and secrets when deploying the matching Worker. Confirm the five pending steps were recorded, verify the original draft and published values, gallery, sign-in and role, then fetch media from the rebuilt site. Keep protected preview off until explicitly configured.
+Preserve the existing proxy and storage configuration, including D1 and R2 bindings. Verify the original draft and published values, gallery, sign-in and role, then compare original media bytes. Thumbnails for existing images are generated on request. Cloudflare operators can enable the optional [Images binding](../deployment/cloudflare/#enable-media-thumbnails) in their `worker/wrangler.jsonc` and redeploy. Deploy the CMS before updating the site's SDK and Astro adapter together, then rebuild and verify the served site.
 
 Rollback means restoring the backed-up packages, images, configuration, source, database and media together. `lace upgrade --rollback` restores only the managed project files of the latest upgrade; it does not undo database migrations, uploaded media or content. Migrations are forward-only and a newer engine may store shapes an older one cannot read, so a package-only downgrade is not supported. Builder and Pages caches are disposable and never part of a backup.
 

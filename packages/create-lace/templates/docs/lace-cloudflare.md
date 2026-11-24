@@ -4,7 +4,7 @@ Run the CMS as your own Cloudflare Worker (D1, R2 and the packaged admin): first
 
 Cloudflare operator commands require the project's direct Miniflare dependency, pinned to the version used by Wrangler.
 
-For RC5, keep the existing D1 and R2 bindings. Quiesce writers and schedules, restore a D1 export and matching R2 backup to isolated targets, and follow the [RC5 upgrade procedure](lace-operations.md#upgrading-from-rc5).
+When upgrading from 1.0.0, keep the existing D1 and R2 bindings. Pause writers and schedules, verify a D1 export and matching R2 backup on isolated targets, then follow the [upgrade procedure](lace-operations.md#upgrade-the-cms).
 
 **Working directory:** the CMS installation root that contains `package.json`, `lace.config.ts` and `worker/` (for example `cms/`). Run every command from there.
 
@@ -31,7 +31,7 @@ Site mode: **none**. This project has no site, so it has no static-site workflow
 ## Prerequisites
 
 - Node `>=24.12.0` and pnpm `>=12` (see [tested versions](https://github.com/lacecms/lace/blob/main/docs/compatibility.md#minimum-requirements-and-tested-versions)). The project pins Wrangler in `package.json`; always use it through `pnpm exec wrangler`.
-- Lace `1.0.0` or a later compatible release. The private operator file, `--operator-env`, `lace cloudflare preflight` and Pages deployment tracking are included in this release.
+- Lace `1.1.0` or a later compatible release. The private operator file, `--operator-env`, `lace cloudflare preflight` and Pages deployment tracking are included in this release.
 - For the account part only: a Cloudflare account with Workers, D1 and R2.
 
 ## Run the Worker locally

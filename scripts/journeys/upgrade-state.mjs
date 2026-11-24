@@ -36,11 +36,11 @@ export async function seedPendingWork(project, kind) {
     db.exec(`pragma foreign_keys=on;
       begin immediate;
       insert into site_builds (id,reason,status,target_version,published_snapshot_id,requested_by,requested_at)
-      select 'rc5-pending','publication','pending',s.version,e.published_snapshot_id,e.created_by,1
+      select 'upgrade-pending','publication','pending',s.version,e.published_snapshot_id,e.created_by,1
       from published_state s, content_entries e where e.published_snapshot_id is not null
       and not exists (select 1 from site_builds where status='pending') limit 1;
       insert into outbox_events (id,type,payload_json,available_at,created_at)
-      select 'rc5-event','site.build.requested','{}',4102444800000,1
+      select 'upgrade-event','site.build.requested','{}',4102444800000,1
       where not exists(select 1 from outbox_events where type='site.build.requested' and processed_at is null and locked_at is null);
       commit;`);
   } finally {
@@ -48,7 +48,7 @@ export async function seedPendingWork(project, kind) {
   }
 }
 
-export async function inspectCutover(project, kind, schemaOnly = false) {
+export async function inspectCutover(project, kind) {
   const db = new DatabaseSync(await databasePath(project, kind), { readOnly: true });
   const rows = (sql) => db.prepare(sql).all();
   try {
@@ -62,10 +62,10 @@ export async function inspectCutover(project, kind, schemaOnly = false) {
     const schema = rows(
       "select type,name,sql from sqlite_master where name not like 'sqlite_%' order by type,name",
     );
-    if (schemaOnly) return digest(JSON.stringify(schema));
     const tables = [
       "user",
       "account",
+      "content_actor_profiles",
       "api_tokens",
       "media",
       "content_entries",
@@ -93,19 +93,17 @@ export async function inspectCutover(project, kind, schemaOnly = false) {
       rows("select 1 from account where provider_id='credential' and password is not null").length,
     );
     const links = rows(
-      "select snapshot_id,source_key,area,field_path,target_entry_id,delivered from content_entry_link_references order by rowid",
+      "select snapshot_id,source_key,area,field_path,target_entry_id,delivered,purpose from content_entry_link_references order by rowid",
     );
     assert.ok(links.length);
-    if (ledger.length === 7) {
-      assert.deepEqual(
-        rows("select actor_id,display_name,role from content_actor_profiles order by actor_id"),
-        rows("select id as actor_id,name as display_name,role from user order by id"),
-      );
-      assert.equal(
-        rows("select count(*) as n from content_entry_link_references where purpose='url'")[0].n,
-        links.length,
-      );
-    }
+    assert.deepEqual(
+      rows("select actor_id,display_name,role from content_actor_profiles order by actor_id"),
+      rows("select id as actor_id,name as display_name,role from user order by id"),
+    );
+    assert.deepEqual([...new Set(links.map(({ purpose }) => purpose))].sort(), [
+      "reference",
+      "url",
+    ]);
     return {
       ledger,
       state: digest(JSON.stringify([...fingerprints, links])),

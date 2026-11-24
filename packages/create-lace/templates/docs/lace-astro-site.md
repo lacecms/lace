@@ -1,7 +1,7 @@
 # Connect an existing Astro site
 
 Use this guide when your Astro site already exists and the Lace CMS lives in a
-subdirectory generated with `pnpm create lace@1.0.0 cms`. The CMS never
+subdirectory generated with `pnpm create lace@1.1.0 cms`. The CMS never
 modifies your site; every file below is yours. For build-site selection,
 mounts and the Compose builder, see
 [Selecting the build site](lace-operations.md#selecting-the-build-site).
@@ -22,7 +22,7 @@ my-site/                 your Astro project (lockfile root)
 Astro `^7.3.1` must already be a dependency. In the site root:
 
 ```sh
-pnpm add @lacecms/astro@1.0.0 @lacecms/render@1.0.0 @lacecms/sdk@1.0.0 @lacecms/content@1.0.0 sharp@0.35.5
+pnpm add @lacecms/astro@1.1.0 @lacecms/render@1.1.0 @lacecms/sdk@1.1.0 @lacecms/content@1.1.0 sharp@0.35.5
 ```
 
 `@lacecms/sdk` loads published content, `@lacecms/render` validates blocks and
@@ -891,7 +891,7 @@ reviewing the new renderer.
 ### Adopt the shared player in an existing site
 
 For definitions already at `videoEmbed` version 2 or `gallery` version 6, use
-the matching CLI and site packages from `1.0.0`. Review the update, apply it
+the matching CLI and site packages from `1.1.0`. Review the update, apply it
 and rebuild from the same published export:
 
 ```sh

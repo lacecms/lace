@@ -4,14 +4,17 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { json, login, readExport } from "../cloudflare-consumer-acceptance.mjs";
-import { digest } from "./rc5-state.mjs";
+import { digest } from "./upgrade-state.mjs";
+import { verifyLegacySdk } from "./sdk-upgrade-compatibility.mjs";
 
 export function siteProbe(base, secretValues, png) {
   const password = randomBytes(24).toString("hex");
-  const email = "rc5-owner@lace.test";
+  const email = "upgrade-owner@lace.test";
   const origin = new URL(base).origin;
-  const publishedTitle = "RC5 published gallery";
-  const draftTitle = "RC5 unpublished changes";
+  const publishedTitle = "Published upgrade gallery";
+  const draftTitle = "Unpublished upgrade changes";
+  const slug = "stable-upgrade";
+  const pagePath = `/blog/${slug}`;
   let cookie, token, entryId, original;
   secretValues.add(password);
   const call = (path, options) =>
@@ -45,12 +48,16 @@ export function siteProbe(base, secretValues, png) {
       method: "POST",
       json: { expectedRevision: 1 },
     });
-    const fields = { summary: "RC5 summary", relatedUrl: "entry:" + home.id };
+    const fields = {
+      summary: "Upgrade summary",
+      relatedUrl: "entry:" + home.id,
+      relatedEntry: home.id,
+    };
     const created = await call("admin/models/posts/entries", {
       method: "POST",
       json: {
         title: publishedTitle,
-        slug: "rc5-cutover",
+        slug,
         fields,
         blocks: [
           {
@@ -59,7 +66,7 @@ export function siteProbe(base, secretValues, png) {
             position: 1024,
             schemaVersion: 6,
             settings: { lightbox: true },
-            data: { images: [{ media: original.id, alt: "RC5 image" }] },
+            data: { images: [{ media: original.id, alt: "Upgrade image" }] },
           },
         ],
       },
@@ -80,7 +87,7 @@ export function siteProbe(base, secretValues, png) {
         title: draftTitle,
       },
     });
-    token = (await call("admin/api-tokens", { method: "POST", json: { name: "rc5-rebuild" } }))
+    token = (await call("admin/api-tokens", { method: "POST", json: { name: "upgrade-rebuild" } }))
       .token;
     assert.ok(token);
     secretValues.add(token);
@@ -88,11 +95,23 @@ export function siteProbe(base, secretValues, png) {
   async function verify(version) {
     cookie = await login(base, email, password, secretValues);
     assert.equal((await call("admin/settings/status")).engineVersion, version);
+    const users = (await call("admin/users")).items;
+    assert.equal(users.find((user) => user.email === email)?.role, "admin");
     assert.equal((await call("admin/entries/" + entryId)).draft.title, draftTitle);
     const exported = await readExport(base, token);
     const entry = exported.entries.find((item) => item.id === entryId);
     assert.equal(entry?.title, publishedTitle);
     await mediaRead(original);
+  }
+  async function thumbnail() {
+    const response = await fetch(
+      new URL(`api/v1/public/build-media/${original.id}/thumbnail`, base),
+      {
+        headers: { authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(15000),
+      },
+    );
+    return response;
   }
   async function rebuild(project, run, stage) {
     await run(stage, "pnpm", ["build"], {
@@ -108,9 +127,9 @@ export function siteProbe(base, secretValues, png) {
   }
   // Serve the generated route from the saved static output, independent of the CMS.
   async function served(project) {
-    const file = join(project, "site/dist/blog/rc5-cutover/index.html");
+    const file = join(project, "site/dist/blog", slug, "index.html");
     const server = createServer(async (req, res) => {
-      if (req.url !== "/blog/rc5-cutover/") {
+      if (req.url !== `${pagePath}/`) {
         res.writeHead(404).end();
         return;
       }
@@ -124,9 +143,7 @@ export function siteProbe(base, secretValues, png) {
       server.once("error", reject).listen(0, "127.0.0.1", accept),
     );
     try {
-      const response = await fetch(
-        "http://127.0.0.1:" + server.address().port + "/blog/rc5-cutover/",
-      );
+      const response = await fetch(`http://127.0.0.1:${server.address().port}${pagePath}/`);
       assert.equal(response.status, 200);
       const html = await response.text();
       assert.ok(
@@ -146,6 +163,20 @@ export function siteProbe(base, secretValues, png) {
     served,
     upload,
     mediaRead,
+    async verifyThumbnail(available) {
+      const response = await thumbnail();
+      if (available) {
+        assert.equal(response.status, 200);
+        assert.equal(response.headers.get("content-type"), "image/webp");
+        assert.ok((await response.arrayBuffer()).byteLength > 0);
+      } else {
+        assert.equal(response.status, 503);
+        await response.arrayBuffer();
+      }
+      await mediaRead(original);
+    },
+    verifyLegacySdk: (originalProject) =>
+      verifyLegacySdk(originalProject, base, token, pagePath, entryId),
     originalMediaSha256: () => original.sha256,
     async verifyMissing(id) {
       const response = await fetch(new URL("api/v1/admin/media/" + id + "/preview", base), {

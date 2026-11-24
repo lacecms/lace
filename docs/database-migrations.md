@@ -62,8 +62,8 @@ are no longer checked in. It is refused, not upgraded:
 - the Node API and the Worker report not ready, because the baseline is not
   in their ledger.
 
-Such installations are unsupported; the public upgrade guidance starts at
-rc2. A contributor's engine-repository state from before the baseline is
+Such installations are unsupported. The current public upgrade guidance starts
+with 1.0.0 for the 1.1.0 release. A contributor's engine-repository state from before the baseline is
 discarded and recreated: `pnpm dev:reset -- --confirm` for the Node stack, or
 delete `packages/platform-node/lace.sqlite` and the `dev-data/cloudflare/`
 state, then migrate, synchronize and bootstrap again.

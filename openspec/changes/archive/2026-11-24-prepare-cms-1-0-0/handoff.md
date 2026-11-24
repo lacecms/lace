@@ -50,12 +50,12 @@ publication are pending.
    `pnpm db:migrate` and `pnpm content:sync`. Verify readiness, original login
    and roles, draft/public separation, gallery, entry URL and media readback.
    Upload another object, restart, recheck both checksums, rebuild and request the
-   page through the staged TLS ingress. [Node operator procedure](../../../packages/create-lace/templates/docs/lace-operations.md#upgrading-from-rc5)
+   page through the staged TLS ingress. [Node operator procedure](https://github.com/lacecms/lace/blob/v1.0.0/packages/create-lace/templates/docs/lace-operations.md#upgrading-from-rc5)
 5. For **Cloudflare staging**, restore D1 and R2 to isolated bindings and record
    the previous Worker and Pages deployments. Verify the selected account and
    D1 ID. Use the site's staged CLI to run the following commands from its root.
    Deploy the matching Pages site, check build tracking, public ETags and media
-   after restart, then repeat migration to confirm it is current. [Cloudflare handoff](../../../docs/cloudflare-deployment-handoff.md)
+   after restart, then repeat migration to confirm it is current. [Cloudflare handoff](../../../../docs/cloudflare-deployment-handoff.md)
 
    ```sh
    pnpm exec lace db migrate --target cloudflare-remote --operator-env .lace/cloudflare-operator.env
@@ -69,7 +69,7 @@ publication are pending.
    compare its publication and media checksums. Record recovery duration,
    data-loss window, results, residual risks and private evidence references.
    Keep the production site on RC5 until its owner accepts the rehearsal.
-   [Real infrastructure and independent-site checklist](../../../docs/verification.md#owner-checks-on-real-infrastructure)
+   [Real infrastructure and independent-site checklist](../../../../docs/verification.md#owner-checks-on-real-infrastructure)
 
 ## Publication decision
 
@@ -100,4 +100,4 @@ when reopening release preparation. The release model rejects reuse of a
 published version. Keep the previous
 production release and its restore point for the agreed retention period.
 Optional release-directory cleanup has a read-only preview, then an explicit
-`--apply`. [Publication and cleanup runbook](../../../docs/alpha-release.md)
+`--apply`. [Publication and cleanup runbook](../../../../docs/alpha-release.md)

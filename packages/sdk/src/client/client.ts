@@ -119,11 +119,6 @@ export interface LaceClient {
   getBuildExport(options?: BuildExportOptions): Promise<BuildExportResult>;
   /** Reads one tolerant-validated export page; a first page may be conditional. */
   getBuildExportPage(options?: BuildExportPageOptions): Promise<BuildExportPageResult>;
-  /** Reads bounded thumbnail bytes over the authenticated build API. */
-  getBuildThumbnail(
-    mediaId: string,
-    options?: BuildThumbnailOptions,
-  ): Promise<BuildThumbnailResult>;
   getByPath(path: string, options?: LaceRequestOptions): Promise<PublicContentEntryDto>;
   getCollection(modelKey: string, options?: CollectionOptions): Promise<PublicContentListDto>;
   getCollectionBySlug(
@@ -137,6 +132,14 @@ export interface LaceClient {
   listRecords(modelKey: string, options?: CollectionOptions): Promise<PublicRecordListDto>;
   getPage(modelKey: string, options?: LaceRequestOptions): Promise<PublicContentEntryDto>;
   getPublicMediaUrl(mediaId: string): string;
+}
+
+export interface LaceClientWithBuildThumbnails extends LaceClient {
+  /** Reads bounded thumbnail bytes over the authenticated build API. */
+  getBuildThumbnail(
+    mediaId: string,
+    options?: BuildThumbnailOptions,
+  ): Promise<BuildThumbnailResult>;
 }
 
 interface RequestContext {
@@ -331,7 +334,7 @@ async function parseFailure(response: Response): Promise<never> {
   throw new LaceHttpError(response.status, envelope.output.error);
 }
 
-export function createLaceClient(options: LaceClientOptions): LaceClient {
+export function createLaceClient(options: LaceClientOptions): LaceClientWithBuildThumbnails {
   const baseUrl = normalizeBaseUrl(options.baseUrl);
   const fetchImplementation = resolveFetch(options.fetch);
   const timeoutMs = options.timeoutMs;

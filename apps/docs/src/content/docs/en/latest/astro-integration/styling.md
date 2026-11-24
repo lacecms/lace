@@ -2,7 +2,7 @@
 title: Style your site
 description: Target stable data-lace hooks to style blocks, rich text, galleries, images and video players without editing Lace.
 kind: guide
-verifiedAgainst: 1.0.0
+verifiedAgainst: 1.1.0
 ---
 
 Your Astro site owns its presentation. Lace renders blocks through source components installed into your site and marks their output with stable `data-lace-*` attributes, so you can style pages from your own stylesheet without changing content, Admin or a block component. This guide lists those hooks and the behavior of the built-in galleries, images and video players that your CSS works with.

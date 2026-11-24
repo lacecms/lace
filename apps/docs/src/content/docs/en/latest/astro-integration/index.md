@@ -2,7 +2,7 @@
 title: Connect an Astro site
 description: Install source-owned block components, read published content at build time and keep installed components up to date.
 kind: guide
-verifiedAgainst: 1.0.0
+verifiedAgainst: 1.1.0
 ---
 
 Lace does not render your website. Your Astro site reads published content from the CMS at build time through the Lace SDK and renders it with block components that are installed into the site as editable source. This guide connects a site, reads pages, collections and globals, renders blocks, rich text, images and video, and updates installed components safely.
@@ -21,7 +21,7 @@ Starter mode includes an editable Astro site in `site/`. Existing-site mode crea
 Starter projects are already connected; skip to [Read published content](#read-published-content). For an existing site, install the matching packages in the Astro project and commit its lockfile:
 
 ```sh
-pnpm add @lacecms/astro@1.0.0 @lacecms/render@1.0.0 @lacecms/sdk@1.0.0 @lacecms/content@1.0.0 sharp
+pnpm add @lacecms/astro@1.1.0 @lacecms/render@1.1.0 @lacecms/sdk@1.1.0 @lacecms/content@1.1.0 sharp
 ```
 
 Upgrade these four Lace packages together. Then install the block components from the CMS root, using your site's actual relative path:
@@ -174,7 +174,7 @@ Unedited files are updated. An edited component, stylesheet or block map is repo
 ### Adopt the shared video player
 
 For a site already using `videoEmbed` version 2 or `gallery` version 6, use the
-matching CLI and site packages from `1.0.0`. Review the renderer update
+matching CLI and site packages from `1.1.0`. Review the renderer update
 from the CMS directory, then apply it using your site path:
 
 ```sh

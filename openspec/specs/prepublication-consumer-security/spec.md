@@ -10,7 +10,7 @@ Proves an exact prepared alpha release supports an independent local consumer wh
 Release acceptance SHALL require a complete clean-source inventory, verify archive checksums, package contents and selected platform image identity/version/revision, and generate using the packed generator. It SHALL install the exact packed dependency graph outside the engine checkout with test-only resolution overrides, reject source-workspace resolution, and leave delivered templates and ownership metadata unchanged. Each run SHALL isolate its project, ports and volumes and clean them on success or failure.
 
 #### Scenario: Exact clean artifacts
-- **WHEN** a complete clean-source alpha inventory and supported platform are supplied
+- **WHEN** a complete clean-source stable or prerelease inventory and supported platform are supplied
 - **THEN** acceptance uses its exact packages and API/builder image IDs and records their source identity and versions
 
 #### Scenario: Ineligible or altered artifacts
@@ -95,3 +95,29 @@ These journeys SHALL use only local stubs and SHALL NOT contact a real Cloudflar
 #### Scenario: Guide drift
 - **WHEN** a generated guide in the packed consumer omits or reorders a command of its reviewed sequence
 - **THEN** acceptance fails naming that guide
+
+### Requirement: Exact stable acceptance proves the RC5 cutover
+
+The historical 1.0.0 acceptance receipt SHALL require both a fresh consumer and a populated RC5 upgrade on Node/SQLite with private object storage and Worker/local D1/R2. The upgrade SHALL originate from authenticated RC5 artifacts and use the exact 1.0.0 inventory. It SHALL verify existing sign-in and roles, distinct draft and published values and pointers, gallery version 6, URL targets, durable build state, original media bytes and a successful post-upgrade build. A disposable restore SHALL verify the coordinated recovery point with the compatible RC5 services. The receipt SHALL identify the source/target artifacts and completed stages without secrets, production data or backups.
+
+#### Scenario: Both runtime journeys pass
+
+- **WHEN** the packed 1.0.0 target upgrades both populated RC5 consumers and builds from the upgraded content
+- **THEN** their original identifiers, published output and media checksums match the recorded expectations, and the run records both runtime outcomes and successful restore checks
+
+#### Scenario: A media object changes or a recovery check fails
+
+- **WHEN** an original object's checksum differs or a restored RC5 installation cannot serve the saved content
+- **THEN** acceptance stops with sanitized diagnostics, leaves the release unapproved and writes no success receipt
+
+### Requirement: Exact 1.1.0 acceptance proves both populated upgrades and restores
+
+The 1.1.0 exact-artifact acceptance SHALL require fresh-install coverage and populated upgrades from verified 1.0.0 artifacts on Node/file-backed SQLite with SILO and on Worker/local D1 with R2. Each journey SHALL use the candidate packages and selected image identities from the verified inventory. It SHALL record original IDs, sign-in and roles, distinct draft and published values and pointers, gallery and link behavior, outstanding durable work and original-media checksums. It SHALL verify these through upgrade and restart, then build and serve the upgraded site and exercise thumbnail behavior without changing original media. A recovery drill SHALL restore the coordinated 1.0.0 state in isolation and verify sign-in, media and served output. The receipt SHALL identify source and target artifacts, runtime and completed stages without secrets, backup bytes or production data. Local D1 evidence SHALL be reported as local evidence.
+
+#### Scenario: Both runtime upgrades pass
+- **WHEN** the exact 1.1.0 inventory passes the fresh-install journeys and both 1.0.0 upgrades and restores
+- **THEN** the receipt records both source and target identities, both zero-migration results and restore outcomes alongside the candidate inventory identity
+
+#### Scenario: Persistence or restore fails on one runtime
+- **WHEN** either runtime reports an unexpected ledger change, lost content, a changed original-media checksum, a failed build or a failed restore
+- **THEN** qualification fails with sanitized diagnostics and withholds the success receipt

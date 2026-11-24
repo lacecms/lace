@@ -2,7 +2,7 @@
 title: Deploy on Cloudflare
 description: Run the CMS as a Worker with D1 and R2, and deploy the static site separately on Pages.
 kind: guide
-verifiedAgainst: 1.0.0
+verifiedAgainst: 1.1.0
 ---
 
 On Cloudflare, the CMS API and Admin run as a Worker with D1 for content and accounts and a private R2 bucket for media. Your Astro site is a separate static deployment, usually on Cloudflare Pages, that reads published content from the Worker at build time. This guide runs the Worker locally, prepares your account, deploys the Worker and connects the site's deployment.

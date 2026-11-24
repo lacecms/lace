@@ -1,5 +1,5 @@
 import { createLaceClient } from "../client/client.js";
-import type { LaceClient, LaceFetch } from "../client/client.js";
+import type { LaceClient, LaceClientWithBuildThumbnails, LaceFetch } from "../client/client.js";
 import type { BuildThumbnailOptions } from "../client/build-thumbnail.js";
 import {
   LaceHttpError,
@@ -69,7 +69,7 @@ export class LacePublishedSiteError extends LaceSdkError {
 }
 
 interface ResolvedConfiguration {
-  readonly client: LaceClient;
+  readonly client: LaceClientWithBuildThumbnails;
   readonly expectedVersion?: number;
   readonly indexing: boolean;
   readonly mediaClient: LaceClient;
@@ -105,7 +105,7 @@ export function createPublishedSiteLoader(
     );
   }
 
-  function client(baseUrl: string, setting: string, token?: string): LaceClient {
+  function client(baseUrl: string, setting: string, token?: string): LaceClientWithBuildThumbnails {
     try {
       return createLaceClient({
         baseUrl,

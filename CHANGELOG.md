@@ -3,6 +3,13 @@
 Important changes and required upgrade actions; preparation alone does not
 announce publication. See [release status and evidence](docs/alpha-release.md).
 
+## 1.1.0
+
+- The media library and picker load results in pages and use private, cached thumbnails. Optimized Astro builds can use the same thumbnails for image placeholders.
+- Administrators can create users directly and share a first-password link when mail delivery is unavailable.
+- Link-impact confirmation for unpublishing and deleting entries stays tied to the usages the editor reviewed.
+- Upgrade directly from published 1.0.0 to template `0.53.0`. The SQLite and D1 migration chain is unchanged. Cloudflare thumbnail generation uses an optional Images binding. [Upgrade procedure](docs/compatibility.md#upgrading-from-100)
+
 ## 1.0.0
 
 - Upgrade directly from RC5. Back up the database and media together, adopt matching packages, images and template 0.52.0, apply five forward migrations, synchronize and rebuild. [Upgrade procedure](docs/compatibility.md#upgrading-from-rc5)
